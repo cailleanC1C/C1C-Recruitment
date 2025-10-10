@@ -1,0 +1,49 @@
+{
+  "milestone": "Guardrails v1 — Planning",
+  "defaults": {
+    "labels": ["bot:matchmaker", "docs", "ready"],
+    "assignees": []
+  },
+  "issues": [
+    {
+      "title": "Document guardrails structure and ADR scaffolding",
+      "body": "Author the docs landing page, operations guide, and ADR template described in the migration plan. Ensure root Markdown placement guidance is captured.",
+      "acceptance_criteria": [
+        "docs/README.md explains doc placement + links to guardrails artifacts.",
+        "docs/OPERATIONS.md inventories required config/tooling files (with gaps).",
+        "docs/ADR/ exists with README + template committed."
+      ],
+      "labels": ["devx"]
+    },
+    {
+      "title": "Stand up module guardrails for core bot surfaces",
+      "body": "Create REVIEW/MODULE_matchmaker and REVIEW/MODULE_welcome folders with scope notes, surface maps, and guardrails checklists covering each runtime component.",
+      "acceptance_criteria": [
+        "Module folders exist with README/checklist drafts.",
+        "Surface maps note dependencies (Sheets, HTTP server, Discord gateway).",
+        "Follow-up testing expectations captured for each module."
+      ],
+      "labels": ["architecture"]
+    },
+    {
+      "title": "Align label canon and issue batches",
+      "body": "Introduce .github/labels/harmonized.json and update all issue batches to use only canonical labels. Document mapping decisions in guardrails notes.",
+      "acceptance_criteria": [
+        ".github/labels/harmonized.json mirrors labels.json metadata.",
+        "Issue batch files reference only canon labels.",
+        "Docs map/glossary updated to reference harmonized labels."
+      ],
+      "labels": ["config"]
+    },
+    {
+      "title": "Fix automation drift for label syncing and CI planning",
+      "body": "Update sync-labels workflow to monitor labels.json, note manual run instructions, and capture next steps for CI/test automation in planning docs.",
+      "acceptance_criteria": [
+        "sync-labels.yml watches labels.json and documents manual trigger usage.",
+        "Guardrails plan records CI/test workflow gaps + ownership.",
+        "Stakeholders acknowledge automation updates in acceptance checklist."
+      ],
+      "labels": ["infra", "observability"]
+    }
+  ]
+}
