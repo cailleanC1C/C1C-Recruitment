@@ -1,0 +1,1541 @@
+{
+  "statistics": {
+    "detectionDate": "2025-10-10T12:10:06.679Z",
+    "formats": {
+      "markdown": {
+        "sources": {
+          "work/WelcomeCrew/REVIEW/BOOTSTRAP_GUARDRAILS/MIGRATION_PLAN.md": {
+            "lines": 25,
+            "tokens": 578,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/BOOTSTRAP_GUARDRAILS/INVENTORY.md": {
+            "lines": 15,
+            "tokens": 254,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/BOOTSTRAP_GUARDRAILS/GAP_ANALYSIS.md": {
+            "lines": 6,
+            "tokens": 239,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/BOOTSTRAP_GUARDRAILS/ACCEPTANCE_CHECKLIST.md": {
+            "lines": 11,
+            "tokens": 380,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/docs/DOCS_MAP.md": {
+            "lines": 65,
+            "tokens": 812,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/docs/DOCS_GLOSSARY.md": {
+            "lines": 9,
+            "tokens": 379,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/TODOS.md": {
+            "lines": 7,
+            "tokens": 154,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/THREATS.md": {
+            "lines": 20,
+            "tokens": 472,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/TESTPLAN.md": {
+            "lines": 23,
+            "tokens": 476,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/REVIEW.md": {
+            "lines": 160,
+            "tokens": 1586,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/PERF_NOTES.md": {
+            "lines": 2,
+            "tokens": 106,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/FINDINGS.md": {
+            "lines": 1,
+            "tokens": 28,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/REVIEW/ARCH_MAP.md": {
+            "lines": 17,
+            "tokens": 567,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/requirements.txt": {
+            "lines": 3,
+            "tokens": 9,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/README.md": {
+            "lines": 225,
+            "tokens": 2815,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/CHANGELOG.md": {
+            "lines": 4,
+            "tokens": 168,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/ADR/ADR-003-label-dialect.md": {
+            "lines": 8,
+            "tokens": 88,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/ADR/ADR-002-shards-ux-manual-first.md": {
+            "lines": 11,
+            "tokens": 120,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/ADR/ADR-001-emojis-json.md": {
+            "lines": 15,
+            "tokens": 176,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/UI_FLOW_MAP.md": {
+            "lines": 21,
+            "tokens": 509,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/SPEC_DIFF.md": {
+            "lines": 9,
+            "tokens": 357,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/SHARDS_AUDIT.md": {
+            "lines": 13,
+            "tokens": 538,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/READY_TO_IMPLEMENT.md": {
+            "lines": 5,
+            "tokens": 175,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/ORGANIZE_REPORT.md": {
+            "lines": 10,
+            "tokens": 207,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/EMOJI_AUDIT.md": {
+            "lines": 11,
+            "tokens": 328,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/MODULE_SHARD/ACCEPTANCE_CHECKLIST.md": {
+            "lines": 3,
+            "tokens": 192,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/TYPECHECK_REPORT.md": {
+            "lines": 6,
+            "tokens": 78,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/TODOS.md": {
+            "lines": 4,
+            "tokens": 199,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/THREATS.md": {
+            "lines": 19,
+            "tokens": 330,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/TESTPLAN.md": {
+            "lines": 13,
+            "tokens": 607,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/REVIEW.md": {
+            "lines": 27,
+            "tokens": 562,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/PERF_NOTES.md": {
+            "lines": 3,
+            "tokens": 227,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/LINT_REPORT.md": {
+            "lines": 6,
+            "tokens": 69,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/FINDINGS.md": {
+            "lines": 82,
+            "tokens": 1088,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/REVIEW/CODEREVIEW_20251005/ARCH_MAP.md": {
+            "lines": 29,
+            "tokens": 371,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/ENGINEERING.md": {
+            "lines": 28,
+            "tokens": 311,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/DEVELOPMENT.md": {
+            "lines": 100,
+            "tokens": 1419,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/docs/CODEX_TEMPLATES.md": {
+            "lines": 43,
+            "tokens": 300,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/PULL_REQUEST_TEMPLATE.md": {
+            "lines": 10,
+            "tokens": 92,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/requirements.txt": {
+            "lines": 7,
+            "tokens": 21,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/README.md": {
+            "lines": 103,
+            "tokens": 1203,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/CHANGELOG.md": {
+            "lines": 39,
+            "tokens": 605,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 1218,
+          "tokens": 19195,
+          "sources": 42,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "yaml": {
+        "sources": {
+          "work/WelcomeCrew/.github/workflows/sync-labels.yml": {
+            "lines": 22,
+            "tokens": 120,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 22,
+            "duplicatedTokens": 120,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/.github/workflows/migrate-labels.yml": {
+            "lines": 112,
+            "tokens": 999,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 112,
+            "duplicatedTokens": 999,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/.github/workflows/batch-issues.yml": {
+            "lines": 129,
+            "tokens": 1092,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 120,
+            "duplicatedTokens": 1049,
+            "percentage": 93.02,
+            "percentageTokens": 96.06,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/.github/workflows/add-to-cross-bot-project.yml": {
+            "lines": 94,
+            "tokens": 851,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 94,
+            "duplicatedTokens": 851,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/sync-labels.yml": {
+            "lines": 22,
+            "tokens": 120,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 22,
+            "duplicatedTokens": 120,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/migrate-labels.yml": {
+            "lines": 112,
+            "tokens": 999,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 112,
+            "duplicatedTokens": 999,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/guardrails.yml": {
+            "lines": 94,
+            "tokens": 240,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/feature-setup-shards-mercy.yml": {
+            "lines": 20,
+            "tokens": 112,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/batch-issues.yml": {
+            "lines": 130,
+            "tokens": 1093,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 120,
+            "duplicatedTokens": 1049,
+            "percentage": 92.31,
+            "percentageTokens": 95.97,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/workflows/add-to-cross-bot-project.yml": {
+            "lines": 94,
+            "tokens": 851,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 94,
+            "duplicatedTokens": 851,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/ISSUE_TEMPLATE/feature.yml": {
+            "lines": 29,
+            "tokens": 242,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/render.yaml": {
+            "lines": 6,
+            "tokens": 49,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 864,
+          "tokens": 6768,
+          "sources": 12,
+          "clones": 4,
+          "duplicatedLines": 348,
+          "duplicatedTokens": 3019,
+          "percentage": 40.28,
+          "percentageTokens": 44.61,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "json": {
+        "sources": {
+          "work/WelcomeCrew/.github/labels/labels.json": {
+            "lines": 51,
+            "tokens": 1041,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 51,
+            "duplicatedTokens": 1041,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/.github/issue-batches/issues.json": {
+            "lines": 37,
+            "tokens": 256,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/WelcomeCrew/.github/issue-batches/guardrails-rollout.json": {
+            "lines": 31,
+            "tokens": 232,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/labels/harmonized.json": {
+            "lines": 51,
+            "tokens": 1041,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 51,
+            "duplicatedTokens": 1041,
+            "percentage": 100,
+            "percentageTokens": 100,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/issue-batches/shards-planning.json": {
+            "lines": 59,
+            "tokens": 304,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/issue-batches/shards-epic-refresh.json": {
+            "lines": 74,
+            "tokens": 368,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.github/issue-batches/issues.json": {
+            "lines": 99,
+            "tokens": 589,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/.devcontainer/devcontainer.json": {
+            "lines": 8,
+            "tokens": 42,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 410,
+          "tokens": 3873,
+          "sources": 8,
+          "clones": 1,
+          "duplicatedLines": 51,
+          "duplicatedTokens": 1041,
+          "percentage": 12.44,
+          "percentageTokens": 26.88,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "python": {
+        "sources": {
+          "work/Achievements/cogs/shards/views.py": {
+            "lines": 131,
+            "tokens": 1975,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/sheets_adapter.py": {
+            "lines": 280,
+            "tokens": 2978,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 10,
+            "duplicatedTokens": 158,
+            "percentage": 3.57,
+            "percentageTokens": 5.31,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/renderer.py": {
+            "lines": 69,
+            "tokens": 676,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/ocr.py": {
+            "lines": 457,
+            "tokens": 4393,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/constants.py": {
+            "lines": 33,
+            "tokens": 262,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/cog.py": {
+            "lines": 691,
+            "tokens": 6599,
+            "sources": 1,
+            "clones": 10,
+            "duplicatedLines": 104,
+            "duplicatedTokens": 1158,
+            "percentage": 15.05,
+            "percentageTokens": 17.55,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/shards/__init__.py": {
+            "lines": 3,
+            "tokens": 31,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/claims/middleware/coreops_prefix_old.py": {
+            "lines": 114,
+            "tokens": 780,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/claims/middleware/coreops_prefix.py": {
+            "lines": 14,
+            "tokens": 105,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/tests/test_ocr_label_key.py": {
+            "lines": 39,
+            "tokens": 327,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 12,
+            "duplicatedTokens": 135,
+            "percentage": 30.77,
+            "percentageTokens": 41.28,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/tests/test_ocr_counts.py": {
+            "lines": 31,
+            "tokens": 324,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 12,
+            "duplicatedTokens": 135,
+            "percentage": 38.71,
+            "percentageTokens": 41.67,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/core/prefix.py": {
+            "lines": 32,
+            "tokens": 312,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/cogs/ops.py": {
+            "lines": 305,
+            "tokens": 2910,
+            "sources": 1,
+            "clones": 4,
+            "duplicatedLines": 68,
+            "duplicatedTokens": 690,
+            "percentage": 22.3,
+            "percentageTokens": 23.71,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/claims/ops.py": {
+            "lines": 189,
+            "tokens": 1732,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "work/Achievements/claims/help.py": {
+            "lines": 143,
+            "tokens": 968,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 2531,
+          "tokens": 24372,
+          "sources": 15,
+          "clones": 9,
+          "duplicatedLines": 103,
+          "duplicatedTokens": 1138,
+          "percentage": 4.07,
+          "percentageTokens": 4.67,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "javascript": {
+        "sources": {
+          "work/Achievements/.github/scripts/feature-setup-shards-mercy.js": {
+            "lines": 283,
+            "tokens": 2252,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 283,
+          "tokens": 2252,
+          "sources": 1,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      }
+    },
+    "total": {
+      "lines": 5306,
+      "tokens": 56460,
+      "sources": 78,
+      "clones": 14,
+      "duplicatedLines": 502,
+      "duplicatedTokens": 5198,
+      "percentage": 9.46,
+      "percentageTokens": 9.21,
+      "newDuplicatedLines": 0,
+      "newClones": 0
+    }
+  },
+  "duplicates": [
+    {
+      "format": "python",
+      "lines": 6,
+      "fragment": ".get_all_records():\n        if str(r.get(\"clan_tag\")) == clan_tag:\n            tid = _toi(r.get(\"thread_id\") or 0) or None\n            mid = _toi(r.get(\"pinned_message_id\") or 0) or None\n            return tid, mid\n    return",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/sheets_adapter.py",
+        "start": 132,
+        "end": 137,
+        "startLoc": {
+          "line": 132,
+          "column": 4,
+          "position": 1145
+        },
+        "endLoc": {
+          "line": 137,
+          "column": 7,
+          "position": 1224
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/sheets_adapter.py",
+        "start": 123,
+        "end": 128,
+        "startLoc": {
+          "line": 123,
+          "column": 3,
+          "position": 1037
+        },
+        "endLoc": {
+          "line": 128,
+          "column": 7,
+          "position": 1116
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 14,
+      "fragment": "{}\n\n                if not any(parsed.values()):\n                    await i2.followup.send(\"No numbers provided.\", ephemeral=True)\n                    return\n\n                clan_tag = self._clan_tag_for_thread(message.channel.id) or \"\"\n                SA.append_snapshot(\n                    message.author.id, message.author.display_name, clan_tag, parsed, \"manual\", message.jump_url\n                )\n                await self._refresh_summary_for_clan(clan_tag)\n                await i2.followup.send(\"Counts saved. Summary updated.\", ephemeral=True)\n\n            async def _retry",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 248,
+        "end": 261,
+        "startLoc": {
+          "line": 248,
+          "column": 2,
+          "position": 2478
+        },
+        "endLoc": {
+          "line": 261,
+          "column": 7,
+          "position": 2608
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 222,
+        "end": 235,
+        "startLoc": {
+          "line": 222,
+          "column": 2,
+          "position": 2227
+        },
+        "endLoc": {
+          "line": 235,
+          "column": 8,
+          "position": 2357
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 6,
+      "fragment": "(self, ctx: commands.Context, sub: Optional[str] = None, *, tail: Optional[str] = None):\n        if not isinstance(ctx.channel, discord.Thread) or not self._is_shard_thread(ctx.channel):\n            await ctx.reply(\"This command only works in your clan’s shard thread.\")\n            return\n        sub = (sub or \"\").lower()\n        if sub ==",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 454,
+        "end": 459,
+        "startLoc": {
+          "line": 454,
+          "column": 10,
+          "position": 4369
+        },
+        "endLoc": {
+          "line": 459,
+          "column": 3,
+          "position": 4477
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 386,
+        "end": 392,
+        "startLoc": {
+          "line": 386,
+          "column": 11,
+          "position": 3675
+        },
+        "endLoc": {
+          "line": 392,
+          "column": 3,
+          "position": 3784
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 6,
+      "fragment": "{\n            \"ts_utc\": datetime.now(UTC).strftime(\"%Y-%m-%dT%H:%M:%SZ\"),\n            \"actor_discord_id\": str(ctx.author.id),\n            \"target_discord_id\": str(ctx.author.id),\n            \"clan_tag\": self._clan_tag_for_thread(ctx.channel.id) or \"\",\n            \"shard_type\"",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 537,
+        "end": 542,
+        "startLoc": {
+          "line": 537,
+          "column": 2,
+          "position": 5224
+        },
+        "endLoc": {
+          "line": 542,
+          "column": 13,
+          "position": 5292
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 491,
+        "end": 496,
+        "startLoc": {
+          "line": 491,
+          "column": 21,
+          "position": 4808
+        },
+        "endLoc": {
+          "line": 496,
+          "column": 7,
+          "position": 4876
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 15,
+      "fragment": "if data.get(\"legendary\", False):\n                rows.append(\n                    {\n                        **base,\n                        \"type\": \"legendary\",\n                        \"rarity\": \"legendary\",\n                        \"qty\": 1,\n                        \"note\": \"guaranteed\" if guar else (\"extra\" if extra else \"\"),\n                        \"guaranteed_flag\": guar,\n                        \"extra_legendary_flag\": extra,\n                        \"index_in_batch\": N - int(data.get(\"legendary_left\", 0)),\n                        \"resets_pity\": not (guar or extra),\n                    }\n                )\n        elif shard == ShardType.PRIMAL",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 595,
+        "end": 609,
+        "startLoc": {
+          "line": 595,
+          "column": 13,
+          "position": 5717
+        },
+        "endLoc": {
+          "line": 609,
+          "column": 7,
+          "position": 5856
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 580,
+        "end": 594,
+        "startLoc": {
+          "line": 580,
+          "column": 13,
+          "position": 5574
+        },
+        "endLoc": {
+          "line": 594,
+          "column": 7,
+          "position": 5713
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 16,
+      "fragment": ":\n            if data.get(\"legendary\", False):\n                rows.append(\n                    {\n                        **base,\n                        \"type\": \"legendary\",\n                        \"rarity\": \"legendary\",\n                        \"qty\": 1,\n                        \"note\": \"guaranteed\" if guar else (\"extra\" if extra else \"\"),\n                        \"guaranteed_flag\": guar,\n                        \"extra_legendary_flag\": extra,\n                        \"index_in_batch\": N - int(data.get(\"legendary_left\", 0)),\n                        \"resets_pity\": not (guar or extra),\n                    }\n                )\n            if",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 609,
+        "end": 624,
+        "startLoc": {
+          "line": 609,
+          "column": 7,
+          "position": 5857
+        },
+        "endLoc": {
+          "line": 624,
+          "column": 3,
+          "position": 5991
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/shards/cog.py",
+        "start": 594,
+        "end": 594,
+        "startLoc": {
+          "line": 594,
+          "column": 7,
+          "position": 5714
+        },
+        "endLoc": {
+          "line": 594,
+          "column": 5,
+          "position": 5705
+        }
+      }
+    },
+    {
+      "format": "yaml",
+      "lines": 23,
+      "fragment": "name: Sync Labels\non:\n  workflow_dispatch: {}\n  push:\n    paths:\n      - .github/labels/labels.yml\n\njobs:\n  sync:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      issues: write\n      pull-requests: write\n    steps:\n      - uses: actions/checkout@v4\n\n      # Uses a well-maintained action that reads YAML/JSON and syncs labels safely.\n      - name: Sync labels from registry\n        uses: EndBug/label-sync@v2\n        with:\n          config-file: .github/labels/labels.json\n          delete-other-labels: false",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/.github/workflows/sync-labels.yml",
+        "start": 1,
+        "end": 23,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 23,
+          "column": 6,
+          "position": 120
+        }
+      },
+      "secondFile": {
+        "name": "work/WelcomeCrew/.github/workflows/sync-labels.yml",
+        "start": 1,
+        "end": 23,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 23,
+          "column": 6,
+          "position": 120
+        }
+      }
+    },
+    {
+      "format": "yaml",
+      "lines": 113,
+      "fragment": "name: Migrate area:* → bot:* + comp:*\n\non:\n  workflow_dispatch:\n    inputs:\n      bot_label:\n        description: \"bot:* label to apply (leave blank to auto-detect from repo name)\"\n        required: false\n        default: \"\"\n        type: string\n      state:\n        description: \"Which items to migrate\"\n        required: false\n        default: \"open\"\n        type: choice\n        options:\n          - open\n          - all\n\njobs:\n  migrate:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      issues: write\n      pull-requests: write\n    steps:\n      - name: Run migration\n        uses: actions/github-script@v7\n        with:\n          script: |\n            const inputBot = (core.getInput('bot_label') || '').trim();\n            const state = core.getInput('state') || 'open';\n            const { owner, repo } = context.repo;\n\n            // Auto-detect bot:* from repo name when input is empty\n            function detectBotLabel(repoName) {\n              const r = repoName.toLowerCase();\n              if (r.includes('reminder'))    return 'bot:reminder';\n              if (r.includes('welcome'))     return 'bot:welcomecrew';\n              if (r.includes('match'))       return 'bot:matchmaker';\n              if (r.includes('achiev') ||\n                  r.includes('claim')  ||\n                  r.includes('shard'))       return 'bot:achievements';\n              return null;\n            }\n\n            let BOT_LABEL = inputBot || detectBotLabel(repo);\n            const allowed = new Set(['bot:reminder','bot:welcomecrew','bot:matchmaker','bot:achievements']);\n            if (!BOT_LABEL || !allowed.has(BOT_LABEL)) {\n              core.setFailed(`Could not determine a valid bot label. Got '${BOT_LABEL ?? ''}'. Pass workflow input 'bot_label' explicitly (one of ${[...allowed].join(', ')}).`);\n              return;\n            }\n\n            // Map old area labels → new labels to add (besides the bot label)\n            const map = new Map([\n              ['area:reminder',       ['bot:reminder']],\n              ['area:welcomecrew',    ['bot:welcomecrew']],\n              ['area:matchmaker',     ['bot:matchmaker']],\n              ['area:achievements',   ['bot:achievements']],\n              ['area:claims',         ['bot:achievements']],   // historical alias\n              ['areaclaims',          ['bot:achievements']],   // historical alias\n              ['area:shards',         ['comp:shards']],\n              ['areashards',          ['comp:shards']],        // historical alias\n              ['area:ops',            ['comp:ops-contract']],\n              ['areaops',             ['comp:ops-contract']],  // historical alias\n            ]);\n\n            // Helper: safe add (no blanks)\n            const addIfValid = (set, name) => {\n              if (typeof name === 'string') {\n                const v = name.trim();\n                if (v.length > 0) set.add(v);\n              }\n            };\n\n            // Fetch all issues/PRs with pagination\n            const items = await github.paginate(\n              github.rest.issues.listForRepo,\n              { owner, repo, state, per_page: 100 }\n            );\n\n            let changed = 0, scanned = 0;\n\n            for (const it of items) {\n              scanned++;\n              const current = (it.labels || []).map(l => typeof l === 'string' ? l : l.name).filter(Boolean);\n              const set = new Set(current);\n\n              // Ensure exactly one bot:* (if none present, add the chosen one)\n              if (![...set].some(n => typeof n === 'string' && n.startsWith('bot:'))) {\n                addIfValid(set, BOT_LABEL);\n              }\n\n              // Replace mapped area:* labels\n              let didReplace = false;\n              for (const [oldName, addList] of map.entries()) {\n                if (set.has(oldName)) {\n                  set.delete(oldName);\n                  for (const n of addList) addIfValid(set, n);\n                  didReplace = true;\n                }\n              }\n\n              if (!didReplace) continue; // nothing to do\n\n              await github.rest.issues.setLabels({\n                owner, repo, issue_number: it.number, labels: [...set]\n              });\n              changed++;\n            }\n\n            core.notice(`Scanned ${scanned} items; updated ${changed}. BOT_LABEL=${BOT_LABEL}, state=${state}`);",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/.github/workflows/migrate-labels.yml",
+        "start": 1,
+        "end": 113,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 113,
+          "column": 4,
+          "position": 999
+        }
+      },
+      "secondFile": {
+        "name": "work/WelcomeCrew/.github/workflows/migrate-labels.yml",
+        "start": 1,
+        "end": 113,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 113,
+          "column": 4,
+          "position": 999
+        }
+      }
+    },
+    {
+      "format": "yaml",
+      "lines": 121,
+      "fragment": "jobs:\n  create:\n    runs-on: ubuntu-latest\n    permissions:\n      issues: write\n      contents: read\n\n    steps:\n      - uses: actions/checkout@v4\n\n      - name: Ensure jq & yq\n        run: |\n          sudo apt-get update\n          sudo apt-get install -y jq yq\n\n      - name: Validate input file exists\n        id: pick\n        run: |\n          FILE=\"${{ github.event.inputs.file }}\"\n          if [ ! -f \"$FILE\" ]; then\n            echo \"File not found: $FILE\" >&2\n            exit 1\n          fi\n          echo \"file=$FILE\" >> \"$GITHUB_OUTPUT\"\n\n      - name: Normalize issues file to JSON\n        run: |\n          FILE=\"${{ steps.pick.outputs.file }}\"\n          case \"$FILE\" in\n            *.yml|*.yaml) yq -o=json \"$FILE\" > issues.json ;;\n            *.json) cp \"$FILE\" issues.json ;;\n            *) echo \"Unsupported file type: $FILE\" >&2; exit 1 ;;\n          esac\n          echo \"Normalized count:\"\n          jq 'length' issues.json\n\n      - name: Create labels and issues (GitHub API)\n        uses: actions/github-script@v7\n        with:\n          script: |\n            const fs = require('fs');\n            const repo = { owner: context.repo.owner, repo: context.repo.repo };\n            const raw = fs.readFileSync('issues.json','utf8');\n\n            // Accept either a flat array OR { milestone, defaults, issues:[...] }\n            let payload;\n            try { payload = JSON.parse(raw); }\n            catch (e) { core.setFailed(\"issues.json is not valid JSON: \" + e.message); return; }\n\n            let items = [];\n            let milestoneTitle = null;\n            let defaultLabels = [];\n            let defaultAssignees = [];\n\n            if (Array.isArray(payload)) {\n              items = payload;\n            } else if (payload && typeof payload === 'object' && Array.isArray(payload.issues)) {\n              milestoneTitle   = payload.milestone || null;\n              defaultLabels    = Array.isArray(payload.defaults?.labels) ? payload.defaults.labels : [];\n              defaultAssignees = Array.isArray(payload.defaults?.assignees) ? payload.defaults.assignees : [];\n              items = payload.issues.map(it => {\n                const labels = [...new Set([...(it.labels || []), ...defaultLabels])];\n                let body = it.body || \"\";\n                if (Array.isArray(it.acceptance_criteria) && it.acceptance_criteria.length) {\n                  body += \"\\n\\nAcceptance\\n- \" + it.acceptance_criteria.join(\"\\n- \");\n                }\n                const assignees = Array.isArray(it.assignees) ? it.assignees : defaultAssignees;\n                return { title: it.title, body, labels, assignees };\n              });\n            } else {\n              core.setFailed(\"Issues file must be an array or { milestone, defaults, issues:[...] }.\");\n              return;\n            }\n\n            core.info(`Found ${items.length} issues in batch`);\n\n            // Ensure labels exist (standard + any custom from the batch)\n            const std = [\n              \"severity:critical\",\"severity:high\",\"severity:medium\",\"severity:low\",\n              \"area:scheduler\",\"area:infra\",\"area:reminders\",\"area:data\",\"area:commands\",\"area:ops\",\"area:devx\",\n              \"type:bug\",\"type:perf\",\"type:hardening\",\"type:security\",\"type:tooling\"\n            ];\n            const custom = [...new Set(items.flatMap(i => Array.isArray(i.labels) ? i.labels : []))]\n              .filter(x => !std.includes(x));\n            const allLabels = [...new Set([...std, ...custom])];\n\n            for (const name of allLabels) {\n              try {\n                await github.rest.issues.createLabel({ ...repo, name, color: \"cccccc\", description: name });\n                core.info(`Created label: ${name}`);\n              } catch (e) {\n                if (e.status === 422) core.info(`Label exists: ${name}`);\n                else core.warning(`Label \"${name}\" error: ${e.message}`);\n              }\n            }\n\n            // Optional milestone\n            let milestoneNumber = undefined;\n            if (milestoneTitle) {\n              const list = await github.rest.issues.listMilestones({ ...repo, state: \"open\" });\n              const found = list.data.find(m => m.title === milestoneTitle);\n              if (found) milestoneNumber = found.number;\n              else {\n                const created = await github.rest.issues.createMilestone({ ...repo, title: milestoneTitle });\n                milestoneNumber = created.data.number;\n              }\n              core.info(`Using milestone: ${milestoneTitle} #${milestoneNumber}`);\n            }\n\n            // Create issues\n            for (const it of items) {\n              await github.rest.issues.create({\n                ...repo,\n                title: it.title || \"(missing title)\",\n                body: it.body || \"\",\n                labels: Array.isArray(it.labels) ? it.labels : [],\n                assignees: Array.isArray(it.assignees) ? it.assignees : [],\n                milestone: milestoneNumber\n              });\n              core.info(`Created: ${it.title}`);\n            }",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/.github/workflows/batch-issues.yml",
+        "start": 11,
+        "end": 131,
+        "startLoc": {
+          "line": 11,
+          "column": 1,
+          "position": 44
+        },
+        "endLoc": {
+          "line": 131,
+          "column": 2,
+          "position": 1093
+        }
+      },
+      "secondFile": {
+        "name": "work/WelcomeCrew/.github/workflows/batch-issues.yml",
+        "start": 11,
+        "end": 130,
+        "startLoc": {
+          "line": 11,
+          "column": 1,
+          "position": 44
+        },
+        "endLoc": {
+          "line": 130,
+          "column": 2,
+          "position": 1092
+        }
+      }
+    },
+    {
+      "format": "yaml",
+      "lines": 95,
+      "fragment": "name: Add issues to Cross-Bot Hotlist\non:\n  issues:\n    types: [opened, reopened, labeled, edited, transferred]\n\njobs:\n  add:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Set Priority field from P* label\n        env:\n          GH_TOKEN: ${{ secrets.PROJECTS_TOKEN }}\n          PROJECT_OWNER: cailleanC1C\n          PROJECT_NUMBER: 1   # <-- just the number, e.g. 5 (no quotes)\n          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}\n          ISSUE_LABELS_JSON: ${{ toJson(github.event.issue.labels) }}\n        run: |\n          set -euo pipefail\n\n          # 1) Determine P* from labels\n          PRIORITY=$(printf '%s' \"$ISSUE_LABELS_JSON\" | jq -r 'map(.name) | map(select(test(\"^P[0-4]$\"))) | first // empty')\n          if [ -z \"$PRIORITY\" ]; then\n            echo \"No P* label; skipping Priority update.\"\n            exit 0\n          fi\n          echo \"Detected priority: $PRIORITY\"\n\n          # 2) Build a query with PROJECT_NUMBER as a literal Int\n          read -r -d '' QUERY <<'GRAPHQL' || true\n          query($owner:String!) {\n            user(login:$owner) {\n              projectV2(number: __NUM__) {\n                id\n                fields(first:50) {\n                  nodes {\n                    ... on ProjectV2SingleSelectField {\n                      id\n                      name\n                      options { id name }\n                    }\n                  }\n                }\n              }\n            }\n          }\n          GRAPHQL\n          QUERY=\"${QUERY/__NUM__/${PROJECT_NUMBER}}\"\n\n          # 3) Fetch project + Priority field + options\n          PROJ_JSON=$(gh api graphql -F owner=\"$PROJECT_OWNER\" -f query=\"$QUERY\")\n          PROJECT_ID=$(jq -r '.data.user.projectV2.id' <<<\"$PROJ_JSON\")\n          FIELD_ID=$(jq -r '.data.user.projectV2.fields.nodes[] | select(.name==\"Priority\") | .id' <<<\"$PROJ_JSON\")\n          OPTION_ID=$(jq -r --arg P \"$PRIORITY\" '.data.user.projectV2.fields.nodes[] | select(.name==\"Priority\") | .options[] | select(.name==$P) | .id' <<<\"$PROJ_JSON\")\n\n          if [ -z \"$PROJECT_ID\" ] || [ -z \"$FIELD_ID\" ] || [ -z \"$OPTION_ID\" ]; then\n            echo \"Could not resolve project/field/option ids\"; exit 1\n          fi\n\n          # 4) Ensure the item exists in the project; get item id\n          ITEMS_JSON=$(gh api graphql -F id=\"$ISSUE_NODE_ID\" -f query='\n            query($id:ID!) {\n              node(id:$id) {\n                ... on Issue {\n                  projectItems(first:50, includeArchived:false) {\n                    nodes { id project { id } }\n                  }\n                }\n              }\n            }')\n          ITEM_ID=$(jq -r --arg PID \"$PROJECT_ID\" '.data.node.projectItems.nodes[] | select(.project.id==$PID) | .id' <<<\"$ITEMS_JSON\")\n\n          if [ -z \"$ITEM_ID\" ] || [ \"$ITEM_ID\" = \"null\" ]; then\n            ADD_JSON=$(gh api graphql -F projectId=\"$PROJECT_ID\" -F contentId=\"$ISSUE_NODE_ID\" -f query='\n              mutation($projectId:ID!, $contentId:ID!) {\n                addProjectV2ItemById(input:{projectId:$projectId, contentId:$contentId}) { item { id } }\n              }')\n            ITEM_ID=$(jq -r '.data.addProjectV2ItemById.item.id' <<<\"$ADD_JSON\")\n          fi\n\n          # 5) Set the Priority value\n          gh api graphql \\\n            -F projectId=\"$PROJECT_ID\" \\\n            -F itemId=\"$ITEM_ID\" \\\n            -F fieldId=\"$FIELD_ID\" \\\n            -F optionId=\"$OPTION_ID\" \\\n            -f query='\n              mutation($projectId:ID!, $itemId:ID!, $fieldId:ID!, $optionId:String!) {\n                updateProjectV2ItemFieldValue(input:{\n                  projectId:$projectId,\n                  itemId:$itemId,\n                  fieldId:$fieldId,\n                  value:{ singleSelectOptionId:$optionId }\n                }) { clientMutationId }\n              }'\n          echo \"Priority updated to $PRIORITY.\"",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/.github/workflows/add-to-cross-bot-project.yml",
+        "start": 1,
+        "end": 95,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 95,
+          "column": 12,
+          "position": 851
+        }
+      },
+      "secondFile": {
+        "name": "work/WelcomeCrew/.github/workflows/add-to-cross-bot-project.yml",
+        "start": 1,
+        "end": 95,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 95,
+          "column": 12,
+          "position": 851
+        }
+      }
+    },
+    {
+      "format": "json",
+      "lines": 52,
+      "fragment": "[\n  { \"name\": \"bug\", \"color\": \"d73a4a\", \"description\": \"Broken behavior or incorrect output\" },\n  { \"name\": \"perf\", \"color\": \"0e8a16\", \"description\": \"Performance regression or optimization\" },\n  { \"name\": \"robustness\", \"color\": \"0366d6\", \"description\": \"Resilience: retries, backoff, failure handling\" },\n  { \"name\": \"security\", \"color\": \"b60205\", \"description\": \"Vulnerabilities, secrets, permissions/ACL\" },\n  { \"name\": \"observability\", \"color\": \"1d76db\", \"description\": \"Logs, metrics, traces, health, diagnostics\" },\n  { \"name\": \"infra\", \"color\": \"6f42c1\", \"description\": \"Hosting, deployment, CI/CD, runtime\" },\n  { \"name\": \"architecture\", \"color\": \"5319e7\", \"description\": \"Cross-cutting design, interfaces, carve-outs\" },\n  { \"name\": \"devx\", \"color\": \"c2e0c6\", \"description\": \"Developer experience, tooling friction\" },\n  { \"name\": \"docs\", \"color\": \"0b75a8\", \"description\": \"README, guides, runbooks\" },\n  { \"name\": \"lint\", \"color\": \"cccccc\", \"description\": \"Ruff/formatting cleanups\" },\n  { \"name\": \"typecheck\", \"color\": \"bfdadc\", \"description\": \"mypy/pyright typing issues\" },\n  { \"name\": \"tests\", \"color\": \"a2eeef\", \"description\": \"Unit/integration/e2e tests\" },\n  { \"name\": \"commands\", \"color\": \"7057ff\", \"description\": \"Text/slash command behavior, permissions, UX\" },\n  { \"name\": \"data\", \"color\": \"168700\", \"description\": \"Sheets schema, caching, adapters, migrations\" },\n  { \"name\": \"config\", \"color\": \"006b75\", \"description\": \"Env vars, toggles, YAML/JSON config, secrets\" },\n\n  { \"name\": \"P0\", \"color\": \"ee0701\", \"description\": \"CRITICAL — user-visible breakage / hotfix\" },\n  { \"name\": \"P1\", \"color\": \"fbca04\", \"description\": \"HIGH — core function degraded / urgent\" },\n  { \"name\": \"P2\", \"color\": \"0e8a16\", \"description\": \"MEDIUM — important, not blocking\" },\n  { \"name\": \"P3\", \"color\": \"cccccc\", \"description\": \"LOW — cleanup/polish\" },\n  { \"name\": \"P4\", \"color\": \"e6e6e6\", \"description\": \"VERY LOW — icebox/backlog\" },\n\n  { \"name\": \"severity:critical\", \"color\": \"ee0701\", \"description\": \"Mirrors P0\" },\n  { \"name\": \"severity:high\", \"color\": \"d93f0b\", \"description\": \"Mirrors P1\" },\n  { \"name\": \"severity:medium\", \"color\": \"fbca04\", \"description\": \"Mirrors P2\" },\n  { \"name\": \"severity:low\", \"color\": \"cccccc\", \"description\": \"Mirrors P3/P4\" },\n\n  { \"name\": \"bot:reminder\", \"color\": \"0052cc\", \"description\": \"Reminder bot\" },\n  { \"name\": \"bot:welcomecrew\", \"color\": \"0052cc\", \"description\": \"WelcomeCrew bot\" },\n  { \"name\": \"bot:matchmaker\", \"color\": \"0052cc\", \"description\": \"Matchmaker bot\" },\n  { \"name\": \"bot:achievements\", \"color\": \"0052cc\", \"description\": \"Achievements/Claims bot\" },\n\n  { \"name\": \"comp:commands\", \"color\": \"7057ff\", \"description\": \"Text/slash, permissions, UX\" },\n  { \"name\": \"comp:scheduler\", \"color\": \"0366d6\", \"description\": \"Jobs, timers, offsets\" },\n  { \"name\": \"comp:health\", \"color\": \"1d76db\", \"description\": \"Health endpoint, digest, diagnostics\" },\n  { \"name\": \"comp:config\", \"color\": \"006b75\", \"description\": \"Env vars, toggles, secrets, YAML/JSON\" },\n  { \"name\": \"comp:data-sheets\", \"color\": \"168700\", \"description\": \"Google Sheets schema, reads/writes, adapters\" },\n  { \"name\": \"comp:cache\", \"color\": \"0e8a16\", \"description\": \"Caching layers / TTL / cold start\" },\n  { \"name\": \"comp:roles\", \"color\": \"c27ba0\", \"description\": \"Role grants, achievements, approvals\" },\n  { \"name\": \"comp:onboarding\", \"color\": \"c27ba0\", \"description\": \"Tickets, welcome flow, forms\" },\n  { \"name\": \"comp:placement\", \"color\": \"c27ba0\", \"description\": \"Clan matching, recruiters, moves\" },\n  { \"name\": \"comp:ocr\", \"color\": \"5319e7\", \"description\": \"Image parsing pipeline\" },\n  { \"name\": \"comp:shards\", \"color\": \"5319e7\", \"description\": \"Shard/mercy tracking logic\" },\n  { \"name\": \"comp:ops-contract\", \"color\": \"6f42c1\", \"description\": \"Ops parity: ping/health/digest/reload\" },\n\n  { \"name\": \"needs:triage\", \"color\": \"fef2c0\", \"description\": \"Awaiting label & priority\" },\n  { \"name\": \"ready\", \"color\": \"0e8a16\", \"description\": \"Groomed and ready for pickup\" },\n  { \"name\": \"blocked\", \"color\": \"b60205\", \"description\": \"Blocked by dependency or decision\" },\n  { \"name\": \"help wanted\", \"color\": \"008672\", \"description\": \"Community contributions welcome\" },\n  { \"name\": \"good first issue\", \"color\": \"7057ff\", \"description\": \"Low-risk starter task\" }\n]",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/.github/labels/harmonized.json",
+        "start": 1,
+        "end": 52,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 52,
+          "column": 2,
+          "position": 1041
+        }
+      },
+      "secondFile": {
+        "name": "work/WelcomeCrew/.github/labels/labels.json",
+        "start": 1,
+        "end": 52,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 52,
+          "column": 2,
+          "position": 1041
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 13,
+      "fragment": "ROOT = Path(__file__).resolve().parents[1]\n\nif \"cogs\" not in sys.modules:\n    cogs_pkg = types.ModuleType(\"cogs\")\n    cogs_pkg.__path__ = [str(ROOT / \"cogs\")]\n    sys.modules[\"cogs\"] = cogs_pkg\n\nif \"cogs.shards\" not in sys.modules:\n    shards_pkg = types.ModuleType(\"cogs.shards\")\n    shards_pkg.__path__ = [str(ROOT / \"cogs\" / \"shards\")]\n    sys.modules[\"cogs.shards\"] = shards_pkg\n\nocr",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/tests/test_ocr_counts.py",
+        "start": 6,
+        "end": 18,
+        "startLoc": {
+          "line": 6,
+          "column": 1,
+          "position": 21
+        },
+        "endLoc": {
+          "line": 18,
+          "column": 4,
+          "position": 156
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/tests/test_ocr_label_key.py",
+        "start": 8,
+        "end": 20,
+        "startLoc": {
+          "line": 8,
+          "column": 1,
+          "position": 26
+        },
+        "endLoc": {
+          "line": 20,
+          "column": 10,
+          "position": 161
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 12,
+      "fragment": "(self, ctx: commands.Context):\n        ok, msg = _coreops_guard(ctx)\n        if not ok:\n            return await ctx.send(msg)\n\n        try:\n            latency_ms = int(getattr(self.bot, \"latency\", 0.0) * 1000)\n        except Exception:\n            latency_ms = None\n        last_age = app._last_event_age_s()\n\n        # destinations + ok/— flags",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/ops.py",
+        "start": 111,
+        "end": 122,
+        "startLoc": {
+          "line": 111,
+          "column": 11,
+          "position": 931
+        },
+        "endLoc": {
+          "line": 122,
+          "column": 28,
+          "position": 1033
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/ops.py",
+        "start": 60,
+        "end": 71,
+        "startLoc": {
+          "line": 60,
+          "column": 11,
+          "position": 368
+        },
+        "endLoc": {
+          "line": 71,
+          "column": 8,
+          "position": 470
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 24,
+      "fragment": "summary = {\n            \"runtime\": {\n                \"uptime\": app.uptime_str(),\n                \"ready\": getattr(self.bot, \"is_ready\", lambda: False)(),\n                \"latency_ms\": latency_ms,\n                \"last_event_age_s\": last_age,\n            },\n            \"gateway\": {\"connected\": app.BOT_CONNECTED},\n            \"config\": {\n                \"source\": app.CONFIG_META.get(\"source\") or \"—\",\n                \"loaded_at\": app.CONFIG_META[\"loaded_at\"].strftime(\"%Y-%m-%d %H:%M UTC\")\n                if app.CONFIG_META.get(\"loaded_at\")\n                else \"—\",\n                \"status\": app.CONFIG_META.get(\"status\", \"—\"),\n                \"ready\": app.CONFIG_READY.is_set(),\n                \"last_error\": app.CONFIG_META.get(\"last_error\"),\n            },\n            \"counts\": {\n                \"ach\": len(app.ACHIEVEMENTS),\n                \"cat\": len(app.CATEGORIES),\n                \"lvls\": len(app.LEVELS),\n                \"reasons\": len(app.REASONS),\n            },\n            \"flags\"",
+      "tokens": 0,
+      "firstFile": {
+        "name": "work/Achievements/cogs/ops.py",
+        "start": 132,
+        "end": 155,
+        "startLoc": {
+          "line": 132,
+          "column": 9,
+          "position": 1204
+        },
+        "endLoc": {
+          "line": 155,
+          "column": 8,
+          "position": 1447
+        }
+      },
+      "secondFile": {
+        "name": "work/Achievements/cogs/ops.py",
+        "start": 71,
+        "end": 94,
+        "startLoc": {
+          "line": 71,
+          "column": 9,
+          "position": 470
+        },
+        "endLoc": {
+          "line": 94,
+          "column": 10,
+          "position": 713
+        }
+      }
+    }
+  ]
+}
