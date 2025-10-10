@@ -5,6 +5,9 @@
   - cailleanC1C/C1C-Achievements (Matchmaker)
   - cailleanC1C/c1c-welcomecrew (WelcomeCrew)
 - Acquisition: Cloned on GitHub Actions runner (no Codex).
+- Vendored copies available at:
+  - AUDIT/20251010_src/MM/
+  - AUDIT/20251010_src/WC/
 
 ## Artifacts
 - FILEMAP.md
@@ -13,6 +16,3 @@
 - APISURF.md
 - DUPLICATES.md / DUPLICATES.json
 - PRIOR_REVIEWS/*
-
-## Notes
-- Facts-only inventory; see file:line cites inside scan files.
