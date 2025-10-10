@@ -1,0 +1,140 @@
+*** Begin Patch
+*** Add File: .github/workflows/mmwc-crossrepo-audit.yml
++name: Cross-repo Audit — Matchmaker + WelcomeCrew
++
++on:
++  workflow_dispatch:
++    inputs:
++      date_tag:
++        description: "YYYYMMDD tag for output folder"
++        required: true
++        default: "20251010"
++
++jobs:
++  audit:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Checkout destination repo (C1C-Recruitment)
++        uses: actions/checkout@v4
++
++      - name: Set up tooling
++        uses: actions/setup-node@v4
++        with:
++          node-version: "20"
++
++      - name: Install JSCPD (duplicate detector)
++        run: npm i -g jscpd@3.5.10
++
++      - name: Prepare workspace
++        run: |
++          set -euo pipefail
++          mkdir -p work && cd work
++          git clone --depth=1 https://github.com/cailleanC1C/C1C-Achievements.git Achievements
++          git clone --depth=1 https://github.com/cailleanC1C/c1c-welcomecrew.git WelcomeCrew
++          ls -la
++
++      - name: Run JSCPD across both repos
++        run: |
++          set -euo pipefail
++          jscpd --min-tokens 50 --threshold 0 \
++            --reporters "markdown,json" \
++            --output "work/jscpd" \
++            "work/Achievements" "work/WelcomeCrew" || true
++
++      - name: Generate FILEMAP, APISURF, and scans
++        run: |
++          set -euo pipefail
++          OUT="AUDIT/${{ github.event.inputs.date_tag }}_init_audit_MM_WC"
++          mkdir -p "$OUT"
++
++          # FILEMAPs
++          echo "# FILEMAP — Achievements" > "$OUT/FILEMAP.md"
++          (cd work/Achievements && git ls-files | sort | sed 's/^/- /') >> "$OUT/FILEMAP.md"
++          echo "" >> "$OUT/FILEMAP.md"
++          echo "# FILEMAP — WelcomeCrew" >> "$OUT/FILEMAP.md"
++          (cd work/WelcomeCrew && git ls-files | sort | sed 's/^/- /') >> "$OUT/FILEMAP.md"
++
++          # Simple command/prefix/health scans (heuristic, factual)
++          echo "# Command & Prefix Scan" > "$OUT/COMMAND_SCAN.md"
++          echo "## Achievements" >> "$OUT/COMMAND_SCAN.md"
++          grep -RInE "@commands\.command|@bot\.command|commands\.BotCommand|app_commands\.command|^!|prefix" work/Achievements || true >> "$OUT/COMMAND_SCAN.md"
++          echo "" >> "$OUT/COMMAND_SCAN.md"
++          echo "## WelcomeCrew" >> "$OUT/COMMAND_SCAN.md"
++          grep -RInE "@commands\.command|@bot\.command|commands\.BotCommand|app_commands\.command|^!|prefix" work/WelcomeCrew || true >> "$OUT/COMMAND_SCAN.md"
++
++          echo "# Health/self-ping Scan" > "$OUT/HEALTH_SCAN.md"
++          grep -RInE "/health|/version|aiohttp|fastapi|keepalive|self[-_ ]?ping" work/Achievements || true >> "$OUT/HEALTH_SCAN.md"
++          grep -RInE "/health|/version|aiohttp|fastapi|keepalive|self[-_ ]?ping" work/WelcomeCrew || true >> "$OUT/HEALTH_SCAN.md"
++
++          # API surface (Discord & Google Sheets heuristics)
++          echo "# APISURF" > "$OUT/APISURF.md"
++          echo "## Discord usage (heuristics)" >> "$OUT/APISURF.md"
++          grep -RInE "discord\.|app_commands|commands\." work/Achievements work/WelcomeCrew || true >> "$OUT/APISURF.md"
++          echo "" >> "$OUT/APISURF.md"
++          echo "## Google Sheets / HTTP" >> "$OUT/APISURF.md"
++          grep -RInE "gspread|googleapiclient|requests\.|httpx\.|urllib\.request" work/Achievements work/WelcomeCrew || true >> "$OUT/APISURF.md"
++
++          # Copy prior REVIEW folders for reconciliation
++          mkdir -p "$OUT/PRIOR_REVIEWS/Achievements" "$OUT/PRIOR_REVIEWS/WelcomeCrew"
++          if [ -d "work/Achievements/REVIEW" ]; then
++            cp -R work/Achievements/REVIEW/* "$OUT/PRIOR_REVIEWS/Achievements/" || true
++          fi
++          if [ -d "work/WelcomeCrew/REVIEW" ]; then
++            cp -R work/WelcomeCrew/REVIEW/* "$OUT/PRIOR_REVIEWS/WelcomeCrew/" || true
++          fi
++
++          # JSCPD reports
++          if [ -d "work/jscpd" ]; then
++            cp work/jscpd/report.md "$OUT/DUPLICATES.md" || true
++            cp work/jscpd/jscpd-report.json "$OUT/DUPLICATES.json" || true
++          else
++            echo "_JSCPD did not produce a report._" > "$OUT/DUPLICATES.md"
++            echo "{}" > "$OUT/DUPLICATES.json"
++          fi
++
++          # Minimal AUDIT_SUMMARY scaffold (factual provenance)
++          {
++            echo "# AUDIT_SUMMARY"
++            echo ""
++            echo "- Date: ${{ github.event.inputs.date_tag }}"
++            echo "- Source repos: cailleanC1C/C1C-Achievements (Matchmaker), cailleanC1C/c1c-welcomecrew (WelcomeCrew)"
++            echo "- Acquisition: GitHub Actions cloned default branches on GitHub runner (no Codex)."
++            echo ""
++            echo "## What’s included"
++            echo "- FILEMAP.md (both repos)"
++            echo "- COMMAND_SCAN.md (heuristic scan of commands/prefixes)"
++            echo "- HEALTH_SCAN.md (health/keepalive endpoints)"
++            echo "- APISURF.md (Discord/Sheets/HTTP surfaces)"
++            echo "- DUPLICATES.md / DUPLICATES.json (JSCPD results)"
++            echo "- PRIOR_REVIEWS/* (copied from each repo’s REVIEW/)"
++            echo ""
++            echo "## Notes"
++            echo "- This is a facts-only, runner-side audit. No speculation."
++            echo "- For each concrete claim, see file:line citations in the scan files."
++          } > "$OUT/AUDIT_SUMMARY.md"
++
++      - name: Create Pull Request with results
++        uses: peter-evans/create-pull-request@v6
++        with:
++          branch: audit/mm-wc-${{ github.event.inputs.date_tag }}
++          commit-message: "Audit: Matchmaker + WelcomeCrew — initial cross-repo audit (${{ github.event.inputs.date_tag }})"
++          title: "Audit: Matchmaker + WelcomeCrew — Initial codebase audit (${{ github.event.inputs.date_tag }})"
++          body: |
++            This PR adds an automated cross-repo audit for:
++            - **cailleanC1C/C1C-Achievements** (Matchmaker-related code)
++            - **cailleanC1C/c1c-welcomecrew** (WelcomeCrew bot)
++
++            Artifacts are placed under:
++            `AUDIT/${{ github.event.inputs.date_tag }}_init_audit_MM_WC/`
++
++            Contents:
++            - **AUDIT_SUMMARY.md** — provenance and artifact index
++            - **FILEMAP.md** — file inventories for both repos
++            - **COMMAND_SCAN.md** — commands/prefixes scan (heuristic)
++            - **HEALTH_SCAN.md** — health endpoints / keepalive scan
++            - **APISURF.md** — Discord & Sheets/HTTP call surface (grep-based)
++            - **DUPLICATES.md / DUPLICATES.json** — JSCPD results across both trees
++            - **PRIOR_REVIEWS/** — copied prior REVIEW docs from each source repo
++
++            This runs fully on GitHub Actions (no external Codex network needed).
+*** End Patch
