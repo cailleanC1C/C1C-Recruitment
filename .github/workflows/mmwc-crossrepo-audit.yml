@@ -32,14 +32,25 @@ jobs:
       - name: Install JSCPD (duplicate detector)
         run: npm i -g jscpd@3.5.10
 
-      - name: Prepare workspace & clone source repos
+      - name: Prepare workspace
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p work && cd work
-          git clone --depth=1 https://github.com/cailleanC1C/C1C-Achievements.git Achievements
-          git clone --depth=1 https://github.com/cailleanC1C/c1c-welcomecrew.git WelcomeCrew
-          ls -la
+          mkdir -p work
+
+      - name: Checkout source repos (public) via actions/checkout
+        uses: actions/checkout@v4
+        with:
+          repository: cailleanC1C/C1C-Achievements
+          path: work/Achievements
+          fetch-depth: 1
+
+      - name: Checkout WelcomeCrew repo
+        uses: actions/checkout@v4
+        with:
+          repository: cailleanC1C/c1c-welcomecrew
+          path: work/WelcomeCrew
+          fetch-depth: 1
 
       - name: Run JSCPD across both repos
         shell: bash
