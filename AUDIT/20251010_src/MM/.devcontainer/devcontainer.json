@@ -1,9 +1,0 @@
-{
-  "name": "C1C Bots",
-  "postCreateCommand": "npm install -g @openai/codex",
-  "customizations": {
-    "vscode": {
-      "extensions": ["github.vscode-github-actions"]
-    }
-  }
-}
