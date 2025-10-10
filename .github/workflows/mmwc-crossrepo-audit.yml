@@ -155,7 +155,7 @@ jobs:
       - name: Create Pull Request with results
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GH_PAT }}  # create a fine-grained PAT secret with PR & contents write
+          token: ${{ github.token }}
           branch: audit/mm-wc-${{ github.event.inputs.date_tag }}
           commit-message: "Audit: Matchmaker + WelcomeCrew — initial cross-repo audit (${{ github.event.inputs.date_tag }})"
           title: "Audit: Matchmaker + WelcomeCrew — Initial codebase audit (${{ github.event.inputs.date_tag }})"
