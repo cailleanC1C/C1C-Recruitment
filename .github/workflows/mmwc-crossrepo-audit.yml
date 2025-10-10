@@ -50,12 +50,28 @@ jobs:
             --output "work/jscpd" \
             "work/Achievements" "work/WelcomeCrew" || true
 
-      - name: Generate FILEMAP, APISURF, and scans
+      - name: Generate FILEMAP, APISURF, scans, and vendor sources
         shell: bash
         run: |
           set -euo pipefail
           OUT="AUDIT/${{ github.event.inputs.date_tag }}_init_audit_MM_WC"
-          mkdir -p "$OUT"
+          SRC_MM="AUDIT/${{ github.event.inputs.date_tag }}_src/MM"
+          SRC_WC="AUDIT/${{ github.event.inputs.date_tag }}_src/WC"
+          mkdir -p "$OUT" "$SRC_MM" "$SRC_WC"
+
+          # === Vendor full source trees (minus noise) so Codex can read them locally ===
+          rsync -a --delete \
+            --exclude='.git/' --exclude='__pycache__/' --exclude='.mypy_cache/' \
+            --exclude='.pytest_cache/' --exclude='node_modules/' \
+            --exclude='*.png' --exclude='*.jpg' --exclude='*.jpeg' --exclude='*.gif' --exclude='*.webp' --exclude='*.pdf' \
+            --exclude='.venv/' --exclude='venv/' \
+            work/Achievements/ "$SRC_MM/"
+          rsync -a --delete \
+            --exclude='.git/' --exclude='__pycache__/' --exclude='.mypy_cache/' \
+            --exclude='.pytest_cache/' --exclude='node_modules/' \
+            --exclude='*.png' --exclude='*.jpg' --exclude='*.jpeg' --exclude='*.gif' --exclude='*.webp' --exclude='*.pdf' \
+            --exclude='.venv/' --exclude='venv/' \
+            work/WelcomeCrew/ "$SRC_WC/"
 
           # FILEMAPs
           {
@@ -105,7 +121,7 @@ jobs:
             cp -R work/WelcomeCrew/REVIEW/* "$OUT/PRIOR_REVIEWS/WelcomeCrew/" || true
           fi
 
-          # JSCPD reports
+          # JSCPD reports (already run in prior step)
           if [ -d "work/jscpd" ]; then
             cp work/jscpd/report.md "$OUT/DUPLICATES.md" || true
             cp work/jscpd/jscpd-report.json "$OUT/DUPLICATES.json" || true
@@ -123,6 +139,9 @@ jobs:
             echo "  - cailleanC1C/C1C-Achievements (Matchmaker)"
             echo "  - cailleanC1C/c1c-welcomecrew (WelcomeCrew)"
             echo "- Acquisition: Cloned on GitHub Actions runner (no Codex)."
+            echo "- Vendored copies available at:"
+            echo "  - ${SRC_MM}/"
+            echo "  - ${SRC_WC}/"
             echo
             echo "## Artifacts"
             echo "- FILEMAP.md"
@@ -131,14 +150,12 @@ jobs:
             echo "- APISURF.md"
             echo "- DUPLICATES.md / DUPLICATES.json"
             echo "- PRIOR_REVIEWS/*"
-            echo
-            echo "## Notes"
-            echo "- Facts-only inventory; see file:line cites inside scan files."
           } > "$OUT/AUDIT_SUMMARY.md"
 
       - name: Create Pull Request with results
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ secrets.GH_PAT }}  # create a fine-grained PAT secret with PR & contents write
           branch: audit/mm-wc-${{ github.event.inputs.date_tag }}
           commit-message: "Audit: Matchmaker + WelcomeCrew — initial cross-repo audit (${{ github.event.inputs.date_tag }})"
           title: "Audit: Matchmaker + WelcomeCrew — Initial codebase audit (${{ github.event.inputs.date_tag }})"
@@ -149,6 +166,8 @@ jobs:
 
             Artifacts are placed under:
             `AUDIT/${{ github.event.inputs.date_tag }}_init_audit_MM_WC/`
+            Vendored source copies for Codex/local review:
+            `AUDIT/${{ github.event.inputs.date_tag }}_src/MM/` and `AUDIT/${{ github.event.inputs.date_tag }}_src/WC/`
 
             Contents:
             - **AUDIT_SUMMARY.md** — provenance & artifact index
