@@ -41,8 +41,8 @@ jobs:
       - name: Checkout source repos (public) via actions/checkout
         uses: actions/checkout@v4
         with:
-          repository: cailleanC1C/C1C-Achievements
-          path: work/Achievements
+          repository: cailleanC1C/C1C-Matchmaker
+          path: work/Matchmaker
           fetch-depth: 1
 
       - name: Checkout WelcomeCrew repo
@@ -59,7 +59,7 @@ jobs:
           jscpd --min-tokens 50 --threshold 0 \
             --reporters "markdown,json" \
             --output "work/jscpd" \
-            "work/Achievements" "work/WelcomeCrew" || true
+            "work/Matchmaker" "work/WelcomeCrew" || true
 
       - name: Generate FILEMAP, APISURF, scans, and vendor sources
         shell: bash
@@ -76,7 +76,7 @@ jobs:
             --exclude='.pytest_cache/' --exclude='node_modules/' \
             --exclude='*.png' --exclude='*.jpg' --exclude='*.jpeg' --exclude='*.gif' --exclude='*.webp' --exclude='*.pdf' \
             --exclude='.venv/' --exclude='venv/' \
-            work/Achievements/ "$SRC_MM/"
+            work/Matchmaker/ "$SRC_MM/"
           rsync -a --delete \
             --exclude='.git/' --exclude='__pycache__/' --exclude='.mypy_cache/' \
             --exclude='.pytest_cache/' --exclude='node_modules/' \
@@ -86,8 +86,8 @@ jobs:
 
           # FILEMAPs
           {
-            echo "# FILEMAP — Achievements"
-            (cd work/Achievements && git ls-files | sort | sed 's/^/- /')
+            echo "# FILEMAP — Matchmaker"
+            (cd work/Matchmaker && git ls-files | sort | sed 's/^/- /')
             echo
             echo "# FILEMAP — WelcomeCrew"
             (cd work/WelcomeCrew && git ls-files | sort | sed 's/^/- /')
@@ -97,8 +97,8 @@ jobs:
           {
             echo "# Command & Prefix Scan"
             echo
-            echo "## Achievements"
-            grep -RInE "@(commands\.command|app_commands\.command)|prefix|^!|discord\.app_commands" work/Achievements || true
+            echo "## Matchmaker"
+            grep -RInE "@(commands\.command|app_commands\.command)|prefix|^!|discord\.app_commands" work/Matchmaker || true
             echo
             echo "## WelcomeCrew"
             grep -RInE "@(commands\.command|app_commands\.command)|prefix|^!|discord\.app_commands" work/WelcomeCrew || true
@@ -108,7 +108,7 @@ jobs:
           {
             echo "# Health/self-ping Scan"
             echo
-            grep -RInE "/health|/version|aiohttp|fastapi|keepalive|self[-_ ]?ping" work/Achievements || true
+            grep -RInE "/health|/version|aiohttp|fastapi|keepalive|self[-_ ]?ping" work/Matchmaker || true
             grep -RInE "/health|/version|aiohttp|fastapi|keepalive|self[-_ ]?ping" work/WelcomeCrew || true
           } > "$OUT/HEALTH_SCAN.md"
 
@@ -117,16 +117,16 @@ jobs:
             echo "# APISURF"
             echo
             echo "## Discord usage (heuristics)"
-            grep -RInE "\bdiscord\.|app_commands|commands\." work/Achievements work/WelcomeCrew || true
+            grep -RInE "\bdiscord\.|app_commands|commands\." work/Matchmaker work/WelcomeCrew || true
             echo
             echo "## Google Sheets / HTTP"
-            grep -RInE "gspread|googleapiclient|requests\.|httpx\.|urllib\.request" work/Achievements work/WelcomeCrew || true
+            grep -RInE "gspread|googleapiclient|requests\.|httpx\.|urllib\.request" work/Matchmaker work/WelcomeCrew || true
           } > "$OUT/APISURF.md"
 
           # Copy prior REVIEW folders for reconciliation
-          mkdir -p "$OUT/PRIOR_REVIEWS/Achievements" "$OUT/PRIOR_REVIEWS/WelcomeCrew"
-          if [ -d "work/Achievements/REVIEW" ]; then
-            cp -R work/Achievements/REVIEW/* "$OUT/PRIOR_REVIEWS/Achievements/" || true
+          mkdir -p "$OUT/PRIOR_REVIEWS/Matchmaker" "$OUT/PRIOR_REVIEWS/WelcomeCrew"
+          if [ -d "work/Matchmaker/REVIEW" ]; then
+            cp -R work/Matchmaker/REVIEW/* "$OUT/PRIOR_REVIEWS/Matchmaker/" || true
           fi
           if [ -d "work/WelcomeCrew/REVIEW" ]; then
             cp -R work/WelcomeCrew/REVIEW/* "$OUT/PRIOR_REVIEWS/WelcomeCrew/" || true
@@ -147,7 +147,7 @@ jobs:
             echo
             echo "- Date: ${{ github.event.inputs.date_tag }}"
             echo "- Source repos:"
-            echo "  - cailleanC1C/C1C-Achievements (Matchmaker)"
+            echo "  - cailleanC1C/C1C-Matchmaker (Matchmaker)"
             echo "  - cailleanC1C/c1c-welcomecrew (WelcomeCrew)"
             echo "- Acquisition: Cloned on GitHub Actions runner (no Codex)."
             echo "- Vendored copies available at:"
@@ -172,7 +172,7 @@ jobs:
           title: "Audit: Matchmaker + WelcomeCrew — Initial codebase audit (${{ github.event.inputs.date_tag }})"
           body: |
             This PR adds an automated cross-repo audit for:
-            - **cailleanC1C/C1C-Achievements** (Matchmaker-related code)
+            - **cailleanC1C/C1C-Matchmaker** (Matchmaker-related code)
             - **cailleanC1C/c1c-welcomecrew** (WelcomeCrew bot)
 
             Artifacts are placed under:
