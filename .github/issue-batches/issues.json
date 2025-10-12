@@ -1,4 +1,50 @@
 [
+      {
+      "title": "P0 — De-block Google Sheets access in hot paths (F-01)",
+      "body": "Synchronous gspread calls in interaction handlers, daily poster, and !clan freeze the event loop and risk disconnects. See REVIEW.md (F-01) and FINDINGS.md. Move all Sheets work off the loop, track call sites, and add a latency regression test.",
+      "acceptance_criteria": [
+        "With 1–3s artificial Sheets delay, interactions remain responsive and heartbeats unaffected.",
+        "Daily poster fires on time.",
+        "Tests prove no direct sync I/O on the event loop in hot paths."
+      ],
+      "labels": ["P0-robustness", "tests", "matchmaker"]
+    },
+    {
+      "title": "P1 — Welcome log channel must be configurable (F-02)",
+      "body": "Replace hard-coded channel ID with environment-driven config (`WELCOME_LOG_CHANNEL_ID`, fallback `LOG_CHANNEL_ID`). Update README/ops. See REVIEW.md (F-02) and FINDINGS.md.",
+      "acceptance_criteria": [
+        "On a fresh guild with only env set, log posting goes to the configured channel.",
+        "Docs updated."
+      ],
+      "labels": ["P1-config", "docs", "welcome"]
+    },
+    {
+      "title": "P1 — Fail-fast HTTP health server startup (F-03)",
+      "body": "Ensure health server bind failures abort boot; add unit that attempts to bind an occupied port and asserts failure path; structured log on failure. See REVIEW.md (F-03).",
+      "acceptance_criteria": [
+        "Port conflict yields immediate boot failure with clear logs (port + exception).",
+        "CI test covers failure mode."
+      ],
+      "labels": ["P1-startup", "observability", "infra"]
+    },
+    {
+      "title": "P2 — Profile & prune remaining sync I/O; memoize header scans",
+      "body": "After F-01 lands, profile for any remaining sync I/O in hot paths; memoize `_locate_summary_headers` indices; document thumbnail fan-out limits. See PERF_NOTES.md.",
+      "acceptance_criteria": [
+        "Perf notes updated with before/after timings.",
+        "Header scan cost reduced >50% on refresh."
+      ],
+      "labels": ["perf", "maintenance"]
+    },
+    {
+      "title": "P2 — Logging hygiene & role-gate hardening (Threats)",
+      "body": "Redact sensitive sheet columns from logs; add structured fields (guild_id/message_id); prep decorators for future override/move flows (no behavior change yet). See THREATS.md.",
+      "acceptance_criteria": [
+        "Logs exclude raw PII while remaining traceable via IDs.",
+        "Threat doc updated to reflect mitigations."
+      ],
+      "labels": ["security", "observability", "docs"]
+    }
   {
     "title": "SEC: Gate all prefix admin commands behind Manage Server",
     "labels": ["welcomecrew", "security", "P0"],
@@ -34,5 +80,65 @@
     "labels": ["welcomecrew", "performance", "P2"],
     "milestone": "WC v1.0 Hardening",
     "body": "Future-proof dedupe performance if dupes become common.\n\n**Acceptance Criteria**\n- Dedupe uses batched deletes/writes where supported.\n- Guarded by telemetry-driven threshold (only optimize if needed).\n- No regression in correctness; before/after timings captured.\n"
+  },
+  {
+    "title": "EPIC: C1C Bot Harmonization Master Plan",
+    "labels": ["docs", "architecture", "bot:welcomecrew", "bot:matchmaker", "P0"],
+    "milestone": "Harmonize v1",
+    "body": "📘 **Overview**\n\nMerge WelcomeCrew and Matchmaker into a single, modular, environment-safe bot with **no functionality loss**.\n\n---\n\n### 📦 Phases\n- [ ] Phase 1 – Shared Core Infrastructure\n- [ ] Phase 2 – Per-Environment Configuration\n- [ ] Phase 3 – Sheets Access Layer (Async + Cached)\n- [ ] Phase 3b – Shared Ops Commands\n- [ ] Phase 4 – Sheet-Based Feature Toggles\n- [ ] Phase 5 – Shared Data Providers\n- [ ] Phase 5b – Module Restructure & Prefix Binding\n- [ ] Phase 6 – Runtime Merge\n- [ ] Phase 7 – Final Polish"
+  },
+  {
+    "title": "PHASE 1: Extract Shared Core Infrastructure",
+    "labels": ["infra", "comp:health", "P0", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Extract duplicated infra into shared modules.\n\n### ✅ Tasks\n- [ ] `shared/health.py` with `/healthz`, `/ready` including `env`, `uptime`, `connected`, `last_event_age_s` (match current payload)\n- [ ] `shared/watchdog.py` starvation detection + safe restart (env `WATCHDOG_RESTART_GRACE_S`)\n- [ ] `shared/socket_heartbeat.py` tracks last socket events; feed watchdog + health\n- [ ] Wire shared infra into both modules (test + prod)\n\n### ⚠️ No-Regression Checks\n- [ ] `/healthz` payload unchanged\n- [ ] Watchdog restart logic identical\n- [ ] Timestamps/connected flags update correctly"
+  },
+  {
+    "title": "PHASE 2: Per-Environment Configuration",
+    "labels": ["config", "comp:config", "P0", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Centralize env-specific settings.\n\n### ✅ Tasks\n- [ ] `shared/settings.py` loads tokens, guild/channel/role IDs, Sheet IDs\n- [ ] Remove hardcoded IDs\n- [ ] Enforce `GUILD_IDS` allow-list per ENV\n\n### ⚠️ No-Regression Checks\n- [ ] Prod behavior unchanged\n- [ ] Test service only acts in test guild(s)"
+  },
+  {
+    "title": "PHASE 3: Sheets Access Layer (Async + Cached)",
+    "labels": ["data", "comp:data-sheets", "comp:cache", "P0", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Safe, non-blocking Sheets read/write with caching.\n\n### ✅ Tasks\n- [ ] `shared/sheets.py` (RO/RW clients, to_thread, retry/backoff)\n- [ ] Cache policy:\n  * `bot_info` hourly refresh\n  * `clanlist` at startup\n  * `WelcomeTemplates` lazy load\n  * `Sheet1`/`Sheet4` read-before-write only\n- [ ] Admin-only refresh commands (`!refresh botinfo`, `!refresh cache`)\n\n### ⚠️ No-Regression Checks\n- [ ] Ticket logs + welcome reads behave exactly as today\n- [ ] No gateway-thread blocking"
+  },
+  {
+    "title": "PHASE 3b: Shared Ops Commands",
+    "labels": ["commands", "infra", "comp:ops-contract", "P1", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Centralize admin ops with prefix awareness.\n\n### ✅ Tasks\n- [ ] `shared/ops.py` with:\n  * `!<prefix> reboot`\n  * `!<prefix> whereami`\n  * `!<prefix> refresh botinfo`\n  * `!<prefix> refresh cache`\n- [ ] Enforce `ADMIN_ROLE_IDS`; commands respect `!mm`/`!wc` prefixes\n\n### ⚠️ No-Regression Checks\n- [ ] Reboot/refresh parity with current behavior"
+  },
+  {
+    "title": "PHASE 4: Sheet-Based Feature Toggles",
+    "labels": ["data", "config", "comp:config", "P1", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Toggle modules per ENV via `FeatureToggles` tab.\n\n### ✅ Tasks\n- [ ] Add `FeatureToggles` to both env sheets (`feature_name`, `enabled_in_test`, `enabled_in_prod`)\n- [ ] `shared/features.py` loads + caches toggles\n- [ ] Register modules only when enabled for current ENV\n\n### ⚠️ No-Regression Checks\n- [ ] Existing features unchanged unless intentionally disabled"
+  },
+  {
+    "title": "PHASE 5: Shared Data Providers",
+    "labels": ["data", "comp:data-sheets", "P1", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Provide common data layer for welcome and matchmaker.\n\n### ✅ Tasks\n- [ ] `shared/welcome_data.py` loads/caches WelcomeTemplates + clanlist\n- [ ] Both modules use this layer\n\n### ⚠️ No-Regression Checks\n- [ ] `!welcome` text matches current output\n- [ ] Ticket close panel dropdowns identical"
+  },
+  {
+    "title": "PHASE 5b: Module Restructure & Prefix Binding",
+    "labels": ["commands", "architecture", "P2", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Carve modules and bind command sets to prefixes.\n\n### ✅ Tasks\n- [ ] Move code into `matchmaker/` and `welcomecrew/`\n- [ ] Load modules only if toggle is ON\n- [ ] All commands respect prefix routing\n\n### ⚠️ No-Regression Checks\n- [ ] All current commands still work"
+  },
+  {
+    "title": "PHASE 6: Runtime Merge",
+    "labels": ["infra", "architecture", "P1", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Single runtime hosting both modules.\n\n### ✅ Tasks\n- [ ] One Discord client, shared watchdog + health\n- [ ] Load both modules conditionally\n\n### ⚠️ No-Regression Checks\n- [ ] No behavior drift in either module"
+  },
+  {
+    "title": "PHASE 7: Final Polish",
+    "labels": ["docs", "infra", "devx", "P2", "bot:welcomecrew", "bot:matchmaker"],
+    "milestone": "Harmonize v1",
+    "body": "**Goal:** Production-ready polish + docs.\n\n### ✅ Tasks\n- [ ] `!whereami` (ENV, guild id, sheet id)\n- [ ] Presence: `Playing: test | v1.0`\n- [ ] `.env.sample` grouped keys\n- [ ] README: test/prod setup\n\n### ⚠️ No-Regression Checks\n- [ ] Nothing breaks in prod"
   }
 ]
