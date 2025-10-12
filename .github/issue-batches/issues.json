@@ -44,7 +44,7 @@
         "Threat doc updated to reflect mitigations."
       ],
       "labels": ["security", "observability", "docs"]
-    }
+    },
   {
     "title": "SEC: Gate all prefix admin commands behind Manage Server",
     "labels": ["welcomecrew", "security", "P0"],
