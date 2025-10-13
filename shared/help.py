@@ -19,5 +19,5 @@ def build_help_embed(*, prefix: str, is_staff: bool) -> discord.Embed:
     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
     if is_staff:
         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
-    e.set_footer(text=f"Bot v{bot_version} 🔹 CoreOps v1 🔹 runtime-only")
+    e.set_footer(text=f"🔹Bot v{bot_version}🔹CoreOps v1.0.0 🔹")
     return e
