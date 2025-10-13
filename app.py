@@ -41,8 +41,13 @@ def _bang_prefixes():
     return (f"!{base}", f"!{base} ")
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(*_bang_prefixes()),
-    intents=INTENTS
+    command_prefix=commands.when_mentioned_or(
+        f"!{get_command_prefix()} ",  # with space
+        f"!{get_command_prefix()}",   # without space
+        get_command_prefix(),         # plain (no bang)
+        f"{get_command_prefix()} "    # plain with space
+    ),
+    intents=INTENTS,
 )
 
 _watchdog_started = False  # guard to start once
@@ -89,6 +94,14 @@ async def on_resumed():
 @bot.event
 async def on_message(message: discord.Message):
     hb.touch()
+    if bot.user and message.author.id == bot.user.id:
+        return
+
+    # DEBUG: show how discord.py parsed this message
+    ctx: commands.Context = await bot.get_context(message)
+    log.info("ctx: valid=%s invoked_with=%r prefix=%r content=%r",
+             ctx.valid, ctx.invoked_with, ctx.prefix, message.content)
+
     await bot.process_commands(message)
 
 @bot.event
