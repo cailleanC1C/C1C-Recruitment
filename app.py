@@ -50,6 +50,7 @@ bot = commands.Bot(
     intents=INTENTS,
 )
 
+# ---- Watchdog -----------------------------------------------
 _watchdog_started = False  # guard to start once
 
 @bot.event
@@ -57,6 +58,7 @@ async def on_ready():
     global _watchdog_started
     hb.note_ready()  # mark as fresh as soon as we're ready
     log.info(f"Bot ready as {bot.user} | env={get_env_name()} | prefix={BOT_PREFIX}")
+    bot._c1c_started_mono = _STARTED_MONO  # expose uptime for CoreOps
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
@@ -90,19 +92,6 @@ async def on_connect():
 @bot.event
 async def on_resumed():
     hb.note_connected()
-
-@bot.event
-async def on_message(message: discord.Message):
-    hb.touch()
-    if bot.user and message.author.id == bot.user.id:
-        return
-
-    # DEBUG: show how discord.py parsed this message
-    ctx: commands.Context = await bot.get_context(message)
-    log.info("ctx: valid=%s invoked_with=%r prefix=%r content=%r",
-             ctx.valid, ctx.invoked_with, ctx.prefix, message.content)
-
-    await bot.process_commands(message)
 
 @bot.event
 async def on_socket_response(payload):
@@ -139,7 +128,6 @@ async def on_command_error(ctx: commands.Context, error: Exception):
                 f"user={ctx.author.id} err={error!r}")
 
 # ---- Minimal CoreOps smoke command ------------------------------------------
-
 @bot.command(name="ping")
 async def ping(ctx):
     try:
@@ -147,9 +135,27 @@ async def ping(ctx):
     except Exception:
         pass
 
+# ---- CoreOps shims (Phase 1) -----------------------------------------------
+import time
+from typing import Optional
+
+BOT_VERSION = os.getenv("BOT_VERSION", "dev")
+_STARTED_MONO = time.monotonic()
+
+def uptime_seconds() -> float:
+    return max(0.0, time.monotonic() - _STARTED_MONO)
+
+def latency_seconds(bot) -> Optional[float]:
+    try:
+        return float(getattr(bot, "latency", None)) if bot.latency is not None else None
+    except Exception:
+        return None
+
+# Config placeholders for Phase 1 (no Sheets yet)
+CONFIG_META = {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
+CFG = {}
 
 # ---- Health server bootstrap -------------------------------------------------
-
 async def boot_health_server():
     site = await health_srv.start_server(
         heartbeat_probe=hb.age_seconds,
@@ -160,9 +166,7 @@ async def boot_health_server():
     )
     return site
 
-
 # ---- Main entry --------------------------------------------------------------
-
 async def main():
     # Start health server immediately so Render checks pass
     await boot_health_server()
@@ -170,10 +174,13 @@ async def main():
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         raise RuntimeError("DISCORD_TOKEN not set")
+        
+    # Load CoreOps cog (Phase 1)
+    from modules.coreops import cog as coreops_cog
+    await coreops_cog.setup(bot)
 
     # Login+run until closed. Watchdog starts in on_ready().
     await bot.start(token)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
