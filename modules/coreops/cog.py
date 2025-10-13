@@ -3,42 +3,36 @@ from __future__ import annotations
 import os, sys, time
 from typing import Optional
 
-import discord
 from discord.ext import commands
 
 from config.runtime import (
     get_env_name, get_bot_name, get_command_prefix,
     get_keepalive_interval_sec, get_watchdog_stall_sec, get_watchdog_disconnect_grace_sec,
-    get_admin_ids,
 )
 from shared import socket_heartbeat as hb
 from shared.coreops_render import (
     build_digest_line, build_health_embed, build_env_embed,
 )
-from shared.coreops_prefix import prefix_hint
+from shared.coreops_rbac import is_staff_member
 from shared.help import build_help_embed
 
-def _is_staff(user: discord.abc.User | discord.Member) -> bool:
-    try:
-        return int(user.id) in set(get_admin_ids())
-    except Exception:
-        return False
 
 def staff_only():
     async def predicate(ctx: commands.Context):
-        if _is_staff(ctx.author):
+        if is_staff_member(ctx.author):
             return True
-        # friendly hint for non-staff
         try:
-            await ctx.reply(embed=prefix_hint(get_command_prefix()))
+            await ctx.reply("Staff only")
         except Exception:
             pass
         return False
     return commands.check(predicate)
 
+
 def _uptime_sec(bot: commands.Bot) -> float:
     started = getattr(bot, "_c1c_started_mono", None)
     return max(0.0, time.monotonic() - started) if started else 0.0
+
 
 def _latency_sec(bot: commands.Bot) -> Optional[float]:
     try:
@@ -46,11 +40,13 @@ def _latency_sec(bot: commands.Bot) -> Optional[float]:
     except Exception:
         return None
 
+
 def _config_meta_from_app() -> dict:
     # Try to read CONFIG_META from app; else fallback
     app = sys.modules.get("app")
     meta = getattr(app, "CONFIG_META", None) if app else None
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
+
 
 class CoreOps(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -105,14 +101,15 @@ class CoreOps(commands.Cog):
         )
         await ctx.reply(embed=embed)
 
-@commands.command(name="help")
-async def help_(self, ctx: commands.Context):
-    e = build_help_embed(
-        prefix=get_command_prefix(),
-        is_staff=_is_staff(ctx.author),
-        bot_version=os.getenv("BOT_VERSION", "dev"),
-    )
-    await ctx.reply(embed=e)
+    @commands.command(name="help")
+    async def help_(self, ctx: commands.Context):
+        e = build_help_embed(
+            prefix=get_command_prefix(),
+            is_staff=is_staff_member(ctx.author),
+            bot_version=os.getenv("BOT_VERSION", "dev"),
+        )
+        await ctx.reply(embed=e)
+
 
 async def setup(bot):
     await bot.add_cog(CoreOps(bot))

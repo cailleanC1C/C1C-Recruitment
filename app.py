@@ -22,6 +22,8 @@ from config.runtime import (
 from shared import socket_heartbeat as hb
 from shared import health as health_srv
 from shared import watchdog
+from shared.coreops_prefix import maybe_admin_coreops_message
+from shared.coreops_rbac import is_admin_member
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -35,6 +37,7 @@ INTENTS = discord.Intents.default()
 INTENTS.message_content = True  # needed for !ping smoke test
 
 BOT_PREFIX = get_command_prefix()
+COREOPS_COMMANDS = {"health", "digest", "env", "help"}
 
 def _bang_prefixes():
     base = BOT_PREFIX
@@ -122,6 +125,14 @@ async def on_message(message: discord.Message):
     # TEMP: visibility probe
     log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
              f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
+    synthetic = maybe_admin_coreops_message(
+        message,
+        prefix=BOT_PREFIX,
+        commands=COREOPS_COMMANDS,
+        is_admin=is_admin_member,
+    )
+    if synthetic is not None:
+        await bot.process_commands(synthetic)
     await bot.process_commands(message)
 
 @bot.event
