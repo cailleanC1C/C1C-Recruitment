@@ -22,7 +22,7 @@ from config.runtime import (
 from shared import socket_heartbeat as hb
 from shared import health as health_srv
 from shared import watchdog
-from shared.coreops_prefix import maybe_admin_coreops_message
+from shared.coreops_prefix import maybe_admin_bang_message
 from shared.coreops_rbac import is_admin_member
 
 logging.basicConfig(
@@ -133,6 +133,7 @@ async def on_message(message: discord.Message):
     )
     if synthetic is not None:
         await bot.process_commands(synthetic)
+    await bot.process_commands(message)
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: Exception):
