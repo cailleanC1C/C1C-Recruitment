@@ -1,0 +1,309 @@
+diff --git a/app.py b/app.py
+index 7bd4b6a..55c0666 100644
+--- a/app.py
++++ b/app.py
+@@ -22,6 +22,8 @@ from config.runtime import (
+ from shared import socket_heartbeat as hb
+ from shared import health as health_srv
+ from shared import watchdog
++from shared.coreops_prefix import maybe_admin_coreops_message
++from shared.coreops_rbac import is_admin_member
+ 
+ logging.basicConfig(
+     level=os.getenv("LOG_LEVEL", "INFO"),
+@@ -35,6 +37,7 @@ INTENTS = discord.Intents.default()
+ INTENTS.message_content = True  # needed for !ping smoke test
+ 
+ BOT_PREFIX = get_command_prefix()
++COREOPS_COMMANDS = {"health", "digest", "env", "help"}
+ 
+ def _bang_prefixes():
+     base = BOT_PREFIX
+@@ -122,6 +125,14 @@ async def on_message(message: discord.Message):
+     # TEMP: visibility probe
+     log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
+              f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
++    synthetic = maybe_admin_coreops_message(
++        message,
++        prefix=BOT_PREFIX,
++        commands=COREOPS_COMMANDS,
++        is_admin=is_admin_member,
++    )
++    if synthetic is not None:
++        await bot.process_commands(synthetic)
+     await bot.process_commands(message)
+ 
+ @bot.event
+diff --git a/modules/coreops/cog.py b/modules/coreops/cog.py
+index 4620be1..449ee05 100644
+--- a/modules/coreops/cog.py
++++ b/modules/coreops/cog.py
+@@ -3,55 +3,51 @@ from __future__ import annotations
+ import os, sys, time
+ from typing import Optional
+ 
+-import discord
+ from discord.ext import commands
+ 
+ from config.runtime import (
+     get_env_name, get_bot_name, get_command_prefix,
+     get_keepalive_interval_sec, get_watchdog_stall_sec, get_watchdog_disconnect_grace_sec,
+-    get_admin_ids,
+ )
+ from shared import socket_heartbeat as hb
+ from shared.coreops_render import (
+     build_digest_line, build_health_embed, build_env_embed,
+ )
+-from shared.coreops_prefix import prefix_hint
++from shared.coreops_rbac import is_staff_member
+ from shared.help import build_help_embed
+ 
+-def _is_staff(user: discord.abc.User | discord.Member) -> bool:
+-    try:
+-        return int(user.id) in set(get_admin_ids())
+-    except Exception:
+-        return False
+ 
+ def staff_only():
+     async def predicate(ctx: commands.Context):
+-        if _is_staff(ctx.author):
++        if is_staff_member(ctx.author):
+             return True
+-        # friendly hint for non-staff
+         try:
+-            await ctx.reply(embed=prefix_hint(get_command_prefix()))
++            await ctx.reply("Staff only")
+         except Exception:
+             pass
+         return False
+     return commands.check(predicate)
+ 
++
+ def _uptime_sec(bot: commands.Bot) -> float:
+     started = getattr(bot, "_c1c_started_mono", None)
+     return max(0.0, time.monotonic() - started) if started else 0.0
+ 
++
+ def _latency_sec(bot: commands.Bot) -> Optional[float]:
+     try:
+         return float(getattr(bot, "latency", None)) if bot.latency is not None else None
+     except Exception:
+         return None
+ 
++
+ def _config_meta_from_app() -> dict:
+     # Try to read CONFIG_META from app; else fallback
+     app = sys.modules.get("app")
+     meta = getattr(app, "CONFIG_META", None) if app else None
+     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
+ 
++
+ class CoreOps(commands.Cog):
+     def __init__(self, bot: commands.Bot):
+         self.bot = bot
+@@ -105,14 +101,15 @@ class CoreOps(commands.Cog):
+         )
+         await ctx.reply(embed=embed)
+ 
+-@commands.command(name="help")
+-async def help_(self, ctx: commands.Context):
+-    e = build_help_embed(
+-        prefix=get_command_prefix(),
+-        is_staff=_is_staff(ctx.author),
+-        bot_version=os.getenv("BOT_VERSION", "dev"),
+-    )
+-    await ctx.reply(embed=e)
++    @commands.command(name="help")
++    async def help_(self, ctx: commands.Context):
++        e = build_help_embed(
++            prefix=get_command_prefix(),
++            is_staff=is_staff_member(ctx.author),
++            bot_version=os.getenv("BOT_VERSION", "dev"),
++        )
++        await ctx.reply(embed=e)
++
+ 
+ async def setup(bot):
+     await bot.add_cog(CoreOps(bot))
+diff --git a/shared/coreops_prefix.py b/shared/coreops_prefix.py
+index 8591e2b..7dc205a 100644
+--- a/shared/coreops_prefix.py
++++ b/shared/coreops_prefix.py
+@@ -1,12 +1,41 @@
+ # shared/coreops_prefix.py
+ from __future__ import annotations
++
++from copy import copy
++from typing import Callable, Collection, Optional
++
+ import discord
+ 
+-def prefix_hint(prefix: str) -> discord.Embed:
+-    e = discord.Embed(
+-        title="Try this command with the bot prefix",
+-        description=f"Use `!{prefix} <command>` (or mention the bot).",
+-        colour=discord.Colour.orange(),
+-    )
+-    e.add_field(name="Examples", value=f"`!{prefix} health`\n`!{prefix} env`", inline=False)
+-    return e
++
++AdminCheck = Callable[[discord.abc.User | discord.Member], bool]
++
++
++def maybe_admin_coreops_message(
++    message: discord.Message,
++    *,
++    prefix: str,
++    commands: Collection[str],
++    is_admin: AdminCheck,
++) -> Optional[discord.Message]:
++    """Return a synthetic message with the prefix injected for admin overrides."""
++
++    if not commands or not callable(is_admin):
++        return None
++    if not is_admin(message.author):
++        return None
++
++    raw = (message.content or "").strip()
++    if not raw:
++        return None
++
++    first_word = raw.split(None, 1)[0]
++    lowered_commands = {cmd.lower() for cmd in commands}
++    if first_word.lower() not in lowered_commands:
++        return None
++
++    rewritten = f"{prefix} {raw}".strip()
++    clone = copy(message)
++    # discord.py stores the raw content on _cs_content; updating it keeps the
++    # properties (like .content) consistent for downstream consumers.
++    clone._cs_content = rewritten  # type: ignore[attr-defined]
++    return clone
+diff --git a/shared/coreops_rbac.py b/shared/coreops_rbac.py
+new file mode 100644
+index 0000000..e638889
+--- /dev/null
++++ b/shared/coreops_rbac.py
+@@ -0,0 +1,84 @@
++"""Role helpers for CoreOps gating (Phase 1).
++
++These mirror the legacy bots' behavior: staff/admin gating is done via role IDs
++from the environment instead of user IDs. The helpers here intentionally ignore
++non-numeric tokens so we can safely reuse old .env files without causing hard
++crashes if a value is malformed.
++"""
++from __future__ import annotations
++
++import os
++import re
++from functools import lru_cache
++from typing import Iterable, Optional, Set
++
++import discord
++
++_ROLE_SPLIT_RE = re.compile(r"[,\s]+")
++
++
++def _parse_role_tokens(raw: str) -> Iterable[str]:
++    raw = (raw or "").strip()
++    if not raw:
++        return []
++    return (tok for tok in _ROLE_SPLIT_RE.split(raw) if tok)
++
++
++def _safe_int(tok: str) -> Optional[int]:
++    try:
++        return int(tok)
++    except (TypeError, ValueError):
++        return None
++
++
++@lru_cache(maxsize=1)
++def get_admin_role_id() -> Optional[int]:
++    """Return the single admin role id, or None if unset/invalid."""
++    for tok in _parse_role_tokens(os.getenv("ADMIN_ROLE_ID", "")):
++        value = _safe_int(tok)
++        if value is not None:
++            return value
++    return None
++
++
++@lru_cache(maxsize=1)
++def get_staff_role_ids() -> Set[int]:
++    """Return the (possibly empty) set of staff role ids."""
++    ids: Set[int] = set()
++    for tok in _parse_role_tokens(os.getenv("STAFF_ROLE_IDS", "")):
++        value = _safe_int(tok)
++        if value is not None:
++            ids.add(value)
++    return ids
++
++
++def _member_role_ids(member: discord.abc.User | discord.Member) -> Set[int]:
++    if not isinstance(member, discord.Member):
++        return set()
++    role_ids: Set[int] = set()
++    for role in getattr(member, "roles", []) or []:
++        role_id = getattr(role, "id", None)
++        if role_id is not None:
++            try:
++                role_ids.add(int(role_id))
++            except (TypeError, ValueError):
++                continue
++    return role_ids
++
++
++def is_staff_member(member: discord.abc.User | discord.Member) -> bool:
++    member_roles = _member_role_ids(member)
++    if not member_roles:
++        return False
++    admin_role_id = get_admin_role_id()
++    if admin_role_id is not None and admin_role_id in member_roles:
++        return True
++    staff_ids = get_staff_role_ids()
++    return bool(staff_ids.intersection(member_roles))
++
++
++def is_admin_member(member: discord.abc.User | discord.Member) -> bool:
++    admin_role_id = get_admin_role_id()
++    if admin_role_id is None:
++        return False
++    return admin_role_id in _member_role_ids(member)
+diff --git a/shared/help.py b/shared/help.py
+index fe5ade7..afc984d 100644
+--- a/shared/help.py
++++ b/shared/help.py
+@@ -4,6 +4,7 @@ import discord
+ from datetime import datetime
+ from zoneinfo import ZoneInfo
+ 
++
+ def _vienna_now_str() -> str:
+     """Return 'YYYY-MM-DD HH:MM Europe/Vienna' (fallback to UTC on any issue)."""
+     try:
+@@ -14,7 +15,8 @@ def _vienna_now_str() -> str:
+         pass
+     # Fallback (should rarely happen)
+     return datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+-    
++
++
+ def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discord.Embed:
+     e = discord.Embed(title="🌿C1C Recruitment Helper · help", colour=discord.Color.blurple())
+     user_cmds = [
+@@ -25,11 +27,13 @@ def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discor
+         ("digest", "→ One-line status digest"),
+         ("env", "→ Environment/config snapshot (no secrets)"),
+     ]
+-    def fmt(items): 
++
++    def fmt(items):
+         return "\n".join(f"🔹 `!{prefix} {cmd}` — {desc}" for cmd, desc in items)
+ 
+     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
+     if is_staff:
+         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
+-    e.set_footer(text=f"🔹Bot v{bot_version}🔹CoreOps v1.0.0 🔹")
++    footer_time = _vienna_now_str()
++    e.set_footer(text=f"Bot v{bot_version} • CoreOps v1.0.0 • {footer_time}")
+     return e
