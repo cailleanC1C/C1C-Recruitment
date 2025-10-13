@@ -24,7 +24,6 @@ def _is_staff(user: discord.abc.User | discord.Member) -> bool:
     except Exception:
         return False
 
-
 def staff_only():
     async def predicate(ctx: commands.Context):
         if _is_staff(ctx.author):
@@ -37,11 +36,9 @@ def staff_only():
         return False
     return commands.check(predicate)
 
-
 def _uptime_sec(bot: commands.Bot) -> float:
     started = getattr(bot, "_c1c_started_mono", None)
     return max(0.0, time.monotonic() - started) if started else 0.0
-
 
 def _latency_sec(bot: commands.Bot) -> Optional[float]:
     try:
@@ -49,13 +46,11 @@ def _latency_sec(bot: commands.Bot) -> Optional[float]:
     except Exception:
         return None
 
-
 def _config_meta_from_app() -> dict:
     # Try to read CONFIG_META from app; else fallback
     app = sys.modules.get("app")
     meta = getattr(app, "CONFIG_META", None) if app else None
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
-
 
 class CoreOps(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -112,7 +107,11 @@ class CoreOps(commands.Cog):
 
 @commands.command(name="help")
 async def help_(self, ctx: commands.Context):
-    e = build_help_embed(prefix=get_command_prefix(), is_staff=_is_staff(ctx.author))
+    e = build_help_embed(
+        prefix=get_command_prefix(),
+        is_staff=_is_staff(ctx.author),
+        bot_version=os.getenv("BOT_VERSION", "dev"),
+    )
     await ctx.reply(embed=e)
 
 async def setup(bot: commands.Bot):
