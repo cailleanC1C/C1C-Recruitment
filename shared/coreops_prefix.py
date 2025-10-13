@@ -35,7 +35,9 @@ def maybe_admin_coreops_message(
 
     rewritten = f"{prefix} {raw}".strip()
     clone = copy(message)
-    # discord.py stores the raw content on _cs_content; updating it keeps the
-    # properties (like .content) consistent for downstream consumers.
-    clone._cs_content = rewritten  # type: ignore[attr-defined]
+    # discord.py stores the dispatchable text on ``content``; make sure we update it
+    # and bust any cached clean-content so the synthetic command is processed.
+    clone.content = rewritten  # type: ignore[attr-defined]
+    if hasattr(clone, "_clean_content"):
+        clone._clean_content = None  # type: ignore[attr-defined]
     return clone
