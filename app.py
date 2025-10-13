@@ -22,7 +22,7 @@ from config.runtime import (
 from shared import socket_heartbeat as hb
 from shared import health as health_srv
 from shared import watchdog
-from shared.coreops_prefix import maybe_admin_bang_message
+from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import is_admin_member
 
 logging.basicConfig(
@@ -122,18 +122,26 @@ async def on_message(message: discord.Message):
     hb.touch()
     if bot.user and message.author.id == bot.user.id:
         return
+
     # TEMP: visibility probe
-    log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
-             f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
-    synthetic = maybe_admin_bang_message(
-        message,
-        prefix=BOT_PREFIX,
-        commands=COREOPS_COMMANDS,
-        is_admin=is_admin_member,
+    log.info(
+        "seen msg: guild=%s chan=%s content=%r",
+        getattr(message.guild, "id", None),
+        getattr(message.channel, "id", None),
+        message.content,
     )
-    if synthetic is not None:
-        log.info("bang-bridge: rewrote %r -> %r", message.content, synthetic.content)
-        await bot.process_commands(synthetic)
+
+    # Admin bang shortcuts: !health / !env / !digest / !help
+    cmd_name = detect_admin_bang_command(
+        message, commands=COREOPS_COMMANDS, is_admin=is_admin_member
+    )
+    if cmd_name:
+        ctx = await bot.get_context(message)
+        cmd = bot.get_command(cmd_name)
+        if cmd:
+            await cmd.callback(cmd.cog, ctx)  # invoke directly
+            return
+
     await bot.process_commands(message)
 
 @bot.event
