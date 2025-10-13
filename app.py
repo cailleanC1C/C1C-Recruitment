@@ -113,7 +113,6 @@ except Exception:
     # older lib versions may not have this; the other events are enough
     pass
 
-
 @bot.event
 async def on_disconnect():
     hb.note_disconnected()
@@ -126,15 +125,14 @@ async def on_message(message: discord.Message):
     # TEMP: visibility probe
     log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
              f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
-    synthetic = maybe_admin_coreops_message(
-        message,
-        prefix=BOT_PREFIX,
-        commands=COREOPS_COMMANDS,
-        is_admin=is_admin_member,
-    )
-    if synthetic is not None:
-        await bot.process_commands(synthetic)
-    await bot.process_commands(message)
+synthetic = maybe_admin_bang_message(
+    message,
+    prefix=BOT_PREFIX,
+    commands=COREOPS_COMMANDS,
+    is_admin=is_admin_member,
+)
+if synthetic is not None:
+    await bot.process_commands(synthetic)
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: Exception):
@@ -193,7 +191,6 @@ async def main():
     from modules.coreops import cog as coreops_cog
     await coreops_cog.setup(bot)
     log.info("CoreOps cog loaded successfully")
-
 
     # Login+run until closed. Watchdog starts in on_ready().
     await bot.start(token)
