@@ -25,8 +25,13 @@ def _parse_role_tokens(raw: str) -> Iterable[str]:
 
 
 def _safe_int(tok: str) -> Optional[int]:
+    if not tok:
+        return None
+    match = re.search(r"\d+", tok)
+    if not match:
+        return None
     try:
-        return int(tok)
+        return int(match.group(0))
     except (TypeError, ValueError):
         return None
 
