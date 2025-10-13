@@ -49,6 +49,8 @@ bot = commands.Bot(
     ),
     intents=INTENTS,
 )
+# Disable discord.py's default help so our CoreOps help can register
+bot.remove_command("help")
 
 # ---- Watchdog -----------------------------------------------
 _watchdog_started = False  # guard to start once
