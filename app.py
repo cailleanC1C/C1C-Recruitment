@@ -42,9 +42,7 @@ bot = commands.Bot(
     intents=INTENTS
 )
 
-
 _watchdog_started = False  # guard to start once
-
 
 @bot.event
 async def on_ready():
@@ -54,12 +52,13 @@ async def on_ready():
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
+        # small grace so the gateway settles before we start enforcing staleness
+        await asyncio.sleep(5)
         asyncio.create_task(
             watchdog.run(hb.age_seconds, stall_after_sec=stall, check_every=30)
         )
         _watchdog_started = True
         log.info(f"Watchdog started (stall_after={stall}s)")
-
 
 # Touch heartbeat on a few high-volume signals.
 @bot.event
@@ -74,6 +73,11 @@ async def on_resumed():
 async def on_message(message: discord.Message):
     hb.touch()
     await bot.process_commands(message)
+
+@bot.event
+async def on_socket_response(payload):
+    # Fires for every gateway event; guarantees our heartbeat stays fresh.
+    hb.touch()
 
 # If your discord.py version supports it, this is the best “every packet” tap:
 try:
