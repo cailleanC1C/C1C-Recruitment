@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # shared/socket_heartbeat.py
 """
 Lightweight gateway heartbeat tracker.
@@ -16,7 +18,6 @@ Design:
 - Async-safe; uses an asyncio.Lock so calls from multiple tasks are fine.
 - Cheap: only stores a monotonic timestamp.
 """
-from __future__ import annotations
 
 import asyncio
 import time
