@@ -1,0 +1,27 @@
+# .github/workflows/render-deploy.yml
+name: Deploy to Render (filtered)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "app.py"
+      - "shared/**"
+      - "modules/**"
+      - "config/**"
+      - "scripts/**"
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - "Dockerfile"
+      - ".dockerignore"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK"
