@@ -125,14 +125,14 @@ async def on_message(message: discord.Message):
     # TEMP: visibility probe
     log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
              f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
-synthetic = maybe_admin_bang_message(
-    message,
-    prefix=BOT_PREFIX,
-    commands=COREOPS_COMMANDS,
-    is_admin=is_admin_member,
-)
-if synthetic is not None:
-    await bot.process_commands(synthetic)
+    synthetic = maybe_admin_bang_message(
+        message,
+        prefix=BOT_PREFIX,
+        commands=COREOPS_COMMANDS,
+        is_admin=is_admin_member,
+    )
+    if synthetic is not None:
+        await bot.process_commands(synthetic)
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error: Exception):
