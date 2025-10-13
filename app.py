@@ -23,7 +23,11 @@ from shared import socket_heartbeat as hb
 from shared import health as health_srv
 from shared import watchdog
 from shared.coreops_prefix import detect_admin_bang_command
-from shared.coreops_rbac import is_admin_member
+from shared.coreops_rbac import (
+    get_admin_role_id,
+    get_staff_role_ids,
+    is_admin_member,
+)
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -64,6 +68,11 @@ async def on_ready():
     global _watchdog_started
     hb.note_ready()  # mark as fresh as soon as we're ready
     log.info(f"Bot ready as {bot.user} | env={get_env_name()} | prefix={BOT_PREFIX}")
+    log.info(
+        "CoreOps RBAC: admin_role_id=%s staff_role_ids=%s",
+        get_admin_role_id(),
+        sorted(get_staff_role_ids()),
+    )
     bot._c1c_started_mono = _STARTED_MONO  # expose uptime for CoreOps
 
     if not _watchdog_started:
@@ -138,9 +147,11 @@ async def on_message(message: discord.Message):
     if cmd_name:
         ctx = await bot.get_context(message)
         cmd = bot.get_command(cmd_name)
-        if cmd:
-            await cmd.callback(cmd.cog, ctx)  # invoke directly
-            return
+        if cmd is not None:
+            ctx.command = cmd
+            ctx.invoked_with = cmd_name
+            await bot.invoke(ctx)
+        return
 
     await bot.process_commands(message)
 
