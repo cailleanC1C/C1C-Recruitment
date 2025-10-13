@@ -16,7 +16,7 @@ from shared.coreops_render import (
     build_digest_line, build_health_embed, build_env_embed,
 )
 from shared.coreops_prefix import prefix_hint
-
+from shared.help import build_help_embed
 
 def _is_staff(user: discord.abc.User | discord.Member) -> bool:
     try:
@@ -110,14 +110,10 @@ class CoreOps(commands.Cog):
         )
         await ctx.reply(embed=embed)
 
-    @commands.command(name="help")
-    async def help_(self, ctx: commands.Context):
-        # keep simple: point users to prefix usage; staff sees list via health/digest/env
-        if _is_staff(ctx.author):
-            await ctx.reply(f"`!{get_command_prefix()} health` · `digest` · `env` · `ping`")
-        else:
-            await ctx.reply(embed=prefix_hint(get_command_prefix()))
-
+@commands.command(name="help")
+async def help_(self, ctx: commands.Context):
+    e = build_help_embed(prefix=get_command_prefix(), is_staff=_is_staff(ctx.author))
+    await ctx.reply(embed=e)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(CoreOps(bot))
