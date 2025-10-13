@@ -1,7 +1,37 @@
-      - uses: actions/setup-node@v4
+name: Deploy to Render (queued, latest-wins)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "app.py"
+      - "shared/**"
+      - "modules/**"
+      - "config/**"
+      - "scripts/**"
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - "Dockerfile"
+      - ".dockerignore"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (shallow)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Ensure Node has what we need for the inline script
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      # Wait until no active Render deploys (cancel in-flight), then continue
       - name: Wait for lane (cancel older)
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
@@ -12,8 +42,8 @@
           const key = process.env.RENDER_API_KEY;
           const svc = process.env.RENDER_SERVICE_ID;
           if(!key || !svc){ console.log('No API key/service id; skipping wait.'); process.exit(0); }
-          const hdr = { 'accept': 'application/json', 'authorization': `Bearer ${key}` };
 
+          const hdr = { 'accept': 'application/json', 'authorization': `Bearer ${key}` };
           const active = s => ['build_in_progress','update_in_progress','live_update_in_progress','build_queued','update_queued'].includes((s||'').toLowerCase());
 
           async function req(url, opts={}) {
@@ -23,8 +53,8 @@
           }
 
           async function latest(){
-            const j = await req(`https://api.render.com/v1/services/${svc}/deploys?limit=1`);
-            return j && j[0];
+            const list = await req(`https://api.render.com/v1/services/${svc}/deploys?limit=1`);
+            return list && list[0];
           }
 
           async function cancel(id){
@@ -39,7 +69,10 @@
               const st = d?.status || d?.deploy?.status || '';
               const id = d?.id || d?.deploy?.id || '';
               if(active(st)){
-                if(id){ try{ await cancel(id); console.log('Canceled', id, st); } catch(e){ console.log('Cancel failed:', e.message); } }
+                if(id){
+                  try { await cancel(id); console.log('Canceled', id, st); }
+                  catch(e){ console.log('Cancel failed:', e.message); }
+                }
                 await new Promise(r=>setTimeout(r, 5000));
                 if(Date.now()-start > timeoutMs) throw new Error('Timeout waiting for lane');
               } else {
@@ -54,3 +87,8 @@
           npm init -y >/dev/null
           npm install node-fetch@3 >/dev/null
           node wait_render.js
+
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK"
