@@ -1,32 +1,31 @@
-# syntax=docker/dockerfile:1
-
-# ---- base ----
-FROM python:3.11-slim
+# ---- Base ----
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# ---- system deps: Tesseract + libs Pillow needs ----
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        libtesseract-dev \
-        libleptonica-dev \
-        gcc \
-        libjpeg62-turbo-dev \
-        zlib1g-dev \
-        libpng-dev \
-    && rm -rf /var/lib/apt/lists/*
+# System deps kept minimal for Render free tier
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl tini \
+ && rm -rf /var/lib/apt/lists/*
 
-# ---- app ----
+# Create non-root user
+RUN useradd -m appuser
 WORKDIR /app
 
-# Install Python deps first for better layer caching
+# Copy only requirements first to leverage Docker layer caching
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 
-# Copy source
+# Copy the rest
 COPY . /app
 
-# ---- run ----
-CMD ["python", "-u", "c1c_recruitment.py"]
+# Expose the health server port (Render sets $PORT; this is just doc)
+EXPOSE 10000
+
+# Use tini as init to reap zombies
+ENTRYPOINT ["/usr/bin/tini","--"]
+
+# Start the bot; ensure your app.py binds health server to $PORT (Render provides it)
+CMD ["python","app.py"]
