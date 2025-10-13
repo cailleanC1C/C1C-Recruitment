@@ -1,4 +1,4 @@
-"""Phase 1 health server stub: /ready, /healthz (see docs/contracts/core_infra.md)."""
+from __future__ import annotations
 # shared/health.py
 """
 Tiny aiohttp health server with /ready and /healthz.
@@ -18,21 +18,16 @@ Example:
         stale_after_sec=120,
     )
 """
-from __future__ import annotations
-
 import json
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Dict, Any
 
 from aiohttp import web
 
-
 ProbeFn = Callable[[], Awaitable[float]]
-
 
 async def _ready(_: web.Request) -> web.Response:
     return web.Response(text="ok")
-
 
 def _json(data: Dict[str, Any], status: int = 200) -> web.Response:
     return web.Response(
@@ -40,7 +35,6 @@ def _json(data: Dict[str, Any], status: int = 200) -> web.Response:
         text=json.dumps(data, separators=(",", ":")),
         content_type="application/json",
     )
-
 
 def _build_app(
     heartbeat_probe: ProbeFn,
@@ -67,7 +61,6 @@ def _build_app(
 
     app.router.add_get("/healthz", healthz)
     return app
-
 
 async def start_server(
     *,
