@@ -88,8 +88,11 @@ except Exception:
 # ---- Minimal CoreOps smoke command ------------------------------------------
 
 @bot.command(name="ping")
-async def ping(ctx: commands.Context):
-    await ctx.reply("pong")
+async def ping(ctx):
+    try:
+        await ctx.message.add_reaction("🏓")
+    except Exception:
+        pass
 
 
 # ---- Health server bootstrap -------------------------------------------------
