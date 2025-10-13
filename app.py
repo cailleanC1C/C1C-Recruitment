@@ -32,7 +32,16 @@ INTENTS = discord.Intents.default()
 INTENTS.message_content = True  # needed for !ping smoke test
 
 BOT_PREFIX = get_command_prefix()
-bot = commands.Bot(command_prefix=BOT_PREFIX, intents=INTENTS)
+
+def _bang_prefixes():
+    base = BOT_PREFIX
+    return (f"!{base}", f"!{base} ")
+
+bot = commands.Bot(
+    command_prefix=commands.when_mentioned_or(*_bang_prefixes()),
+    intents=INTENTS
+)
+
 
 _watchdog_started = False  # guard to start once
 
