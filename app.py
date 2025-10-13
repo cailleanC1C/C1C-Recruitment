@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # app.py v0.1.0
+
 import asyncio
 import logging
 import os
@@ -109,6 +110,20 @@ except Exception:
 async def on_disconnect():
     hb.note_disconnected()
 
+@bot.event
+async def on_message(message: discord.Message):
+    hb.touch()
+    if bot.user and message.author.id == bot.user.id:
+        return
+    # TEMP: visibility probe
+    log.info(f"seen msg: guild={getattr(message.guild,'id',None)} "
+             f"chan={getattr(message.channel,'id',None)} content={message.content!r}")
+    await bot.process_commands(message)
+
+@bot.event
+async def on_command_error(ctx: commands.Context, error: Exception):
+    log.warning(f"cmd error: cmd={getattr(ctx.command,'name',None)} "
+                f"user={ctx.author.id} err={error!r}")
 
 # ---- Minimal CoreOps smoke command ------------------------------------------
 
