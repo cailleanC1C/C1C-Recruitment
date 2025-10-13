@@ -18,14 +18,16 @@ def _vienna_now_str() -> str:
 def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discord.Embed:
     e = discord.Embed(title="🌿C1C Recruitment Helper · help", colour=discord.Color.blurple())
     user_cmds = [
-        ("🔹ping", "Basic reachability check"),
+        ("ping", "→ Basic reachability check"),
     ]
     staff_cmds = [
-        ("🔹health", "→ Detailed runtime/heartbeat info"),
-        ("🔹digest", "→ One-line status digest"),
-        ("🔹env", "→ Environment/config snapshot (no secrets)"),
+        ("health", "→ Detailed runtime/heartbeat info"),
+        ("digest", "→ One-line status digest"),
+        ("env", "→ Environment/config snapshot (no secrets)"),
     ]
-    fmt = lambda items: "\n".join(f"`!{prefix} {c}` — {d}" for c, d in items)
+    def fmt(items): 
+        return "\n".join(f"🔹 `!{prefix} {cmd}` — {desc}" for cmd, desc in items)
+
     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
     if is_staff:
         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
