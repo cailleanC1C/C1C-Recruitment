@@ -42,7 +42,7 @@ INTENTS.message_content = True  # needed for !ping smoke test
 INTENTS.members = True
 
 BOT_PREFIX = get_command_prefix()
-COREOPS_COMMANDS = {"health", "digest", "env", "help"}
+COREOPS_COMMANDS = {"health", "digest", "env", "help", "ping"}
 
 def _bang_prefixes():
     base = BOT_PREFIX
