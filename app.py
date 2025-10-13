@@ -180,6 +180,8 @@ async def main():
     # Load CoreOps cog (Phase 1)
     from modules.coreops import cog as coreops_cog
     await coreops_cog.setup(bot)
+    log.info("CoreOps cog loaded successfully")
+
 
     # Login+run until closed. Watchdog starts in on_ready().
     await bot.start(token)
