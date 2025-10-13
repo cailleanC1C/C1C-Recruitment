@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# app.py v0.1
+# app.py v0.1.0
 import asyncio
 import logging
 import os
