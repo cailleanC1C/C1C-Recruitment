@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # shared/watchdog.py
 """
 Simple watchdog that restarts the container if the gateway heartbeat
@@ -8,7 +10,6 @@ It runs as an asyncio background task:
 
 On Render the process exit will trigger a clean restart.
 """
-from __future__ import annotations
 
 import asyncio
 import logging
