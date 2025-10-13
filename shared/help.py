@@ -1,9 +1,22 @@
 # shared/help.py
 from __future__ import annotations
 import discord
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-def build_help_embed(*, prefix: str, is_staff: bool) -> discord.Embed:
-    e = discord.Embed(title="🌿C1C Recruitment Helper · help", colour=discord.Colour.green())
+def _vienna_now_str() -> str:
+    """Return 'YYYY-MM-DD HH:MM Europe/Vienna' (fallback to UTC on any issue)."""
+    try:
+        if ZoneInfo is not None:
+            tz = ZoneInfo("Europe/Vienna")
+            return datetime.now(tz).strftime("%Y-%m-%d %H:%M Europe/Vienna")
+    except Exception:
+        pass
+    # Fallback (should rarely happen)
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    
+def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discord.Embed:
+    e = discord.Embed(title="🌿C1C Recruitment Helper · help", colour=discord.Color.blurple())
     user_cmds = [
         ("🔹ping", "Basic reachability check"),
     ]
@@ -12,10 +25,7 @@ def build_help_embed(*, prefix: str, is_staff: bool) -> discord.Embed:
         ("🔹digest", "→ One-line status digest"),
         ("🔹env", "→ Environment/config snapshot (no secrets)"),
     ]
-
-    def fmt(cmds):
-        return "\n".join(f"`!{prefix} {c}` — {d}" for c, d in cmds)
-
+    fmt = lambda items: "\n".join(f"`!{prefix} {c}` — {d}" for c, d in items)
     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
     if is_staff:
         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
