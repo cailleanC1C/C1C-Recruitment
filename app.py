@@ -132,6 +132,7 @@ async def on_message(message: discord.Message):
         is_admin=is_admin_member,
     )
     if synthetic is not None:
+        log.info("bang-bridge: rewrote %r -> %r", message.content, synthetic.content)
         await bot.process_commands(synthetic)
     await bot.process_commands(message)
 
