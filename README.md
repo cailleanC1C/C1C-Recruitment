@@ -1,4 +1,4 @@
-# C1C Unified Bot (WelcomeCrew + Matchmaker)
+# C1C Recruitment Bot
 
 Community bot for recruiting and welcoming flows.
 
