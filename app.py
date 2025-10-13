@@ -14,6 +14,8 @@ from config.runtime import (
     get_env_name,
     get_bot_name,
     get_watchdog_stall_sec,
+    get_watchdog_disconnect_grace_sec,
+    get_keepalive_interval_sec,
     get_command_prefix,
 )
 from shared import socket_heartbeat as hb
@@ -47,27 +49,41 @@ _watchdog_started = False  # guard to start once
 @bot.event
 async def on_ready():
     global _watchdog_started
-    hb.touch()  # mark as fresh as soon as we're ready
+    hb.note_ready()  # mark as fresh as soon as we're ready
     log.info(f"Bot ready as {bot.user} | env={get_env_name()} | prefix={BOT_PREFIX}")
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
+        keepalive = get_keepalive_interval_sec()
+        disconnect_grace = get_watchdog_disconnect_grace_sec(stall)
         # small grace so the gateway settles before we start enforcing staleness
         await asyncio.sleep(5)
         asyncio.create_task(
-            watchdog.run(hb.age_seconds, stall_after_sec=stall, check_every=30)
+            watchdog.run(
+                hb.age_seconds,
+                stall_after_sec=stall,
+                check_every=keepalive,
+                state_probe=hb.snapshot,
+                disconnect_grace_sec=disconnect_grace,
+                latency_probe=lambda: getattr(bot, "latency", None),
+            )
         )
         _watchdog_started = True
-        log.info(f"Watchdog started (stall_after={stall}s)")
+        log.info(
+            "Watchdog started (stall_after=%ss, interval=%ss, disconnect_grace=%ss)",
+            stall,
+            keepalive,
+            disconnect_grace,
+        )
 
 # Touch heartbeat on a few high-volume signals.
 @bot.event
 async def on_connect():
-    hb.touch()
+    hb.note_connected()
 
 @bot.event
 async def on_resumed():
-    hb.touch()
+    hb.note_connected()
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -87,6 +103,11 @@ try:
 except Exception:
     # older lib versions may not have this; the other events are enough
     pass
+
+
+@bot.event
+async def on_disconnect():
+    hb.note_disconnected()
 
 
 # ---- Minimal CoreOps smoke command ------------------------------------------
