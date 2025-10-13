@@ -35,6 +35,7 @@ log = logging.getLogger("c1c.app")
 
 INTENTS = discord.Intents.default()
 INTENTS.message_content = True  # needed for !ping smoke test
+INTENTS.members = True
 
 BOT_PREFIX = get_command_prefix()
 COREOPS_COMMANDS = {"health", "digest", "env", "help"}
