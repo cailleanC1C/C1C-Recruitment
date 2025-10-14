@@ -16,6 +16,9 @@ from shared.config import (
     get_watchdog_disconnect_grace_sec,
     get_keepalive_interval_sec,
     get_command_prefix,
+    get_allowed_guild_ids,
+    is_guild_allowed,
+    get_config_snapshot,
 )
 from shared import socket_heartbeat as hb
 from shared import watchdog
@@ -70,6 +73,28 @@ async def on_ready():
         sorted(get_staff_role_ids()),
     )
     bot._c1c_started_mono = _STARTED_MONO
+
+    allowed_guilds = get_allowed_guild_ids()
+    if allowed_guilds:
+        unauthorized = [g for g in bot.guilds if not is_guild_allowed(g.id)]
+        if unauthorized:
+            names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
+            log.error(
+                "Guild allow-list violation: %s. allowed=%s",
+                names,
+                sorted(allowed_guilds),
+            )
+            await bot.close()
+            return
+        log.info(
+            "Guild allow-list verified",
+            extra={
+                "allowed": sorted(allowed_guilds),
+                "connected": [g.id for g in bot.guilds],
+            },
+        )
+    else:
+        log.warning("Guild allow-list empty; gating disabled")
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
@@ -184,8 +209,13 @@ def latency_seconds(bot: commands.Bot) -> Optional[float]:
         return None
 
 
-CONFIG_META = {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
-CFG = {}
+CONFIG_META = {
+    "source": "shared.config",
+    "status": "ok",
+    "loaded_at": None,
+    "last_error": None,
+}
+CFG = get_config_snapshot()
 
 
 async def main() -> None:
