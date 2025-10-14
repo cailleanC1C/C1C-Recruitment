@@ -15,6 +15,7 @@ __all__ = [
     "get_env_name",
     "get_bot_name",
     "get_keepalive_interval_sec",
+    "get_watchdog_check_sec",
     "get_watchdog_stall_sec",
     "get_watchdog_disconnect_grace_sec",
     "get_command_prefix",
@@ -75,6 +76,7 @@ def _int_set(raw: str) -> Set[int]:
 
 def _load_config() -> Dict[str, object]:
     keepalive = _runtime.get_keepalive_interval_sec()
+    watchdog_check = _runtime.get_watchdog_check_sec()
     stall = _runtime.get_watchdog_stall_sec()
     disconnect_grace = _runtime.get_watchdog_disconnect_grace_sec(stall)
 
@@ -104,6 +106,7 @@ def _load_config() -> Dict[str, object]:
         "BOT_NAME": _runtime.get_bot_name(),
         "COMMAND_PREFIX": _runtime.get_command_prefix(),
         "KEEPALIVE_INTERVAL_SEC": keepalive,
+        "WATCHDOG_CHECK_SEC": watchdog_check,
         "WATCHDOG_STALL_SEC": stall,
         "WATCHDOG_DISCONNECT_GRACE_SEC": disconnect_grace,
         "ADMIN_IDS": _runtime.get_admin_ids(),
@@ -164,6 +167,13 @@ def get_keepalive_interval_sec(
 ) -> int:
     fallback = _runtime.get_keepalive_interval_sec(default_prod, default_nonprod)
     return int(_CONFIG.get("KEEPALIVE_INTERVAL_SEC", fallback))
+
+
+def get_watchdog_check_sec(
+    default_prod: int = 120, default_nonprod: int = 60
+) -> int:
+    fallback = _runtime.get_watchdog_check_sec(default_prod, default_nonprod)
+    return int(_CONFIG.get("WATCHDOG_CHECK_SEC", fallback))
 
 
 def get_watchdog_stall_sec(default: Optional[int] = None) -> int:
