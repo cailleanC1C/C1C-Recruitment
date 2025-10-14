@@ -55,44 +55,31 @@ def _coerce_int(value: Optional[str], fallback: int) -> int:
         return fallback
 
 
-def get_keepalive_interval_sec(
-    default_prod: int = 360,
-    default_nonprod: int = 60,
-) -> int:
-    """
-    Interval (seconds) between watchdog keepalive checks.
+def get_watchdog_check_sec(default: int = 30) -> int:
+    """Interval (seconds) between watchdog health checks."""
 
-    Defaults:
-        - prod-like envs → 360s (6 min) within the 300–600s window.
-        - dev/test/stage → 60s for quicker feedback.
-    Override via KEEPALIVE_INTERVAL_SEC.
-    """
-
-    env = get_env_name().lower()
-    fallback = default_nonprod if env in {"dev", "development", "test", "qa", "stage"} else default_prod
-
-    override = os.getenv("KEEPALIVE_INTERVAL_SEC")
+    override = os.getenv("WATCHDOG_CHECK_SEC")
     if override is not None:
-        return _coerce_int(override, fallback)
+        return _coerce_int(override, default)
 
-    return fallback
+    return default
 
 
 def get_watchdog_stall_sec(default: Optional[int] = None) -> int:
     """
     Returns the watchdog stall threshold.
 
-    If WATCHDOG_STALL_SEC is unset we derive it from the keepalive cadence:
-        stall = keepalive * 3 + 30 (matches the legacy watchdog heuristics)
+    If WATCHDOG_STALL_SEC is unset we derive it from the watchdog check cadence:
+        stall = check * 3 + 30 (matches the legacy watchdog heuristics)
     """
 
     override = os.getenv("WATCHDOG_STALL_SEC")
     if override is not None:
-        fallback = default if default is not None else get_keepalive_interval_sec() * 3 + 30
+        fallback = default if default is not None else get_watchdog_check_sec() * 3 + 30
         return _coerce_int(override, fallback)
 
-    keepalive = get_keepalive_interval_sec()
-    derived = keepalive * 3 + 30
+    check = get_watchdog_check_sec()
+    derived = check * 3 + 30
     if default is not None:
         return derived if derived else default
     return derived
