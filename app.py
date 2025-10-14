@@ -57,6 +57,39 @@ bot.remove_command("help")
 _watchdog_started = False
 
 
+async def _enforce_guild_allow_list(
+    *, log_when_empty: bool = False, log_success: bool = True
+) -> bool:
+    allowed_guilds = get_allowed_guild_ids()
+    if not allowed_guilds:
+        if log_when_empty:
+            log.warning("Guild allow-list empty; gating disabled")
+        return True
+
+    unauthorized = [g for g in bot.guilds if not is_guild_allowed(g.id)]
+    if unauthorized:
+        names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
+        log.error(
+            "Guild allow-list violation: %s. allowed=%s",
+            names,
+            sorted(allowed_guilds),
+        )
+        try:
+            await bot.close()
+        finally:
+            return False
+
+    if log_success:
+        log.info(
+            "Guild allow-list verified",
+            extra={
+                "allowed": sorted(allowed_guilds),
+                "connected": [g.id for g in bot.guilds],
+            },
+        )
+    return True
+
+
 @bot.event
 async def on_ready():
     global _watchdog_started
@@ -74,27 +107,8 @@ async def on_ready():
     )
     bot._c1c_started_mono = _STARTED_MONO
 
-    allowed_guilds = get_allowed_guild_ids()
-    if allowed_guilds:
-        unauthorized = [g for g in bot.guilds if not is_guild_allowed(g.id)]
-        if unauthorized:
-            names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
-            log.error(
-                "Guild allow-list violation: %s. allowed=%s",
-                names,
-                sorted(allowed_guilds),
-            )
-            await bot.close()
-            return
-        log.info(
-            "Guild allow-list verified",
-            extra={
-                "allowed": sorted(allowed_guilds),
-                "connected": [g.id for g in bot.guilds],
-            },
-        )
-    else:
-        log.warning("Guild allow-list empty; gating disabled")
+    if not await _enforce_guild_allow_list(log_when_empty=True):
+        return
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
@@ -146,6 +160,12 @@ except Exception:
 @bot.event
 async def on_disconnect():
     hb.note_disconnected()
+
+
+@bot.event
+async def on_guild_join(_guild: discord.Guild):
+    hb.touch()
+    await _enforce_guild_allow_list(log_success=False)
 
 
 @bot.event
