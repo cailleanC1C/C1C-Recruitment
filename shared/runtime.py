@@ -313,12 +313,14 @@ class Runtime:
     async def load_extensions(self) -> None:
         """Load all feature modules into the shared bot instance."""
 
+        from modules.coreops import cog as coreops_cog
         from recruitment import search as recruitment_search
         from recruitment import welcome as recruitment_welcome
         from onboarding import watcher_welcome as onboarding_welcome
         from onboarding import watcher_promo as onboarding_promo
         from ops import ops as ops_cog
 
+        await coreops_cog.setup(self.bot)
         await recruitment_search.setup(self.bot)
         await recruitment_welcome.setup(self.bot)
         await onboarding_welcome.setup(self.bot)
