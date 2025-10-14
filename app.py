@@ -22,6 +22,7 @@ from config.runtime import (
 from shared import socket_heartbeat as hb
 from shared import health as health_srv
 from shared import watchdog
+from shared.config import get_shared_config, redacted_items
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
     get_admin_role_id,
@@ -42,7 +43,7 @@ INTENTS.message_content = True  # needed for !ping smoke test
 INTENTS.members = True
 
 BOT_PREFIX = get_command_prefix()
-COREOPS_COMMANDS = {"health", "digest", "env", "help", "ping"}
+COREOPS_COMMANDS = {"config", "health", "digest", "env", "help", "ping"}
 
 def _bang_prefixes():
     base = BOT_PREFIX
@@ -62,6 +63,53 @@ bot.remove_command("help")
 
 # ---- Watchdog -----------------------------------------------
 _watchdog_started = False  # guard to start once
+_allowlist_verified = False
+_config_logged = False
+
+
+async def _ensure_guild_allowlist() -> bool:
+    global _allowlist_verified
+    if _allowlist_verified:
+        return True
+
+    cfg = get_shared_config()
+    allowed_ids = set(cfg.guild_ids)
+    if not allowed_ids:
+        log.critical("GUILD_IDS not configured; refusing to run")
+        await bot.close()
+        return False
+
+    unauthorized = [g for g in bot.guilds if g.id not in allowed_ids]
+    if unauthorized:
+        names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
+        log.critical(
+            "Connected to unauthorized guild(s): %s | allow-list=%s",
+            names,
+            sorted(allowed_ids),
+        )
+        await bot.close()
+        return False
+
+    _allowlist_verified = True
+    log.info("Guild allow-list ok: %s", sorted(allowed_ids))
+    return True
+
+
+def _log_config_once() -> None:
+    global _config_logged
+    if _config_logged:
+        return
+    items = redacted_items()
+    log.info(
+        "config snapshot: env=%s prefix=%s guilds=%s tabs=%s log_channel=%s token=%s",
+        items["ENV_NAME"],
+        items["COMMAND_PREFIX"],
+        len(items["GUILD_IDS"]),
+        ", ".join(items["ENABLED_TABS"]) or "—",
+        items["LOG_CHANNEL_ID"] or "—",
+        items["DISCORD_TOKEN"],
+    )
+    _config_logged = True
 
 @bot.event
 async def on_ready():
@@ -74,6 +122,11 @@ async def on_ready():
         sorted(get_staff_role_ids()),
     )
     bot._c1c_started_mono = _STARTED_MONO  # expose uptime for CoreOps
+
+    if not await _ensure_guild_allowlist():
+        return
+
+    _log_config_once()
 
     if not _watchdog_started:
         stall = get_watchdog_stall_sec()
@@ -204,10 +257,10 @@ async def main():
     # Start health server immediately so Render checks pass
     await boot_health_server()
 
-    token = os.environ.get("DISCORD_TOKEN")
+    token = get_shared_config().discord_token
     if not token:
         raise RuntimeError("DISCORD_TOKEN not set")
-        
+
     # Load CoreOps cog (Phase 1)
     from modules.coreops import cog as coreops_cog
     await coreops_cog.setup(bot)

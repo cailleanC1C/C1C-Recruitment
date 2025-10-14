@@ -13,6 +13,7 @@ from shared import socket_heartbeat as hb
 from shared.coreops_render import (
     build_digest_line, build_health_embed, build_env_embed,
 )
+from ops.ops import build_config_summary
 from shared.coreops_rbac import is_staff_member
 from shared.help import build_help_embed
 
@@ -100,6 +101,12 @@ class CoreOps(commands.Cog):
             cfg_meta=_config_meta_from_app(),
         )
         await ctx.reply(embed=embed)
+
+    @commands.command(name="config")
+    @staff_only()
+    async def config(self, ctx: commands.Context):
+        summary = build_config_summary(self.bot)
+        await ctx.reply(f"```\n{summary}\n```")
 
     @commands.command(name="help")
     async def help_(self, ctx: commands.Context):
