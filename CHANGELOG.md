@@ -1,5 +1,19 @@
 # Changelog
 
+## Phase 2 — 2025-11-05
+
+### Added
+- Unified single-bot runtime covering recruitment search, welcome, and onboarding watchers.
+- Centralized per-environment configuration with shared key set and Config tab requirements.
+- Guild allow-list gating at startup and consolidated logging to #bot-production.
+
+### Changed
+- CoreOps command surface harmonized to shared `!help`, `!ping`, `!health`, and `!reload` handlers.
+- Watchdog defaults aligned across environments with configurable cadence, stall, and grace values.
+
+### Deprecated
+- Legacy duplicate environment keys and multi-bot deployment instructions removed from docs.
+
 ## v0.1.0 — 2025-10-14
 
 ### Added
