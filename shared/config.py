@@ -24,6 +24,8 @@ __all__ = [
     "get_allowed_guild_ids",
     "is_guild_allowed",
     "get_log_channel_id",
+    "get_refresh_times",
+    "get_refresh_timezone",
     "get_sheet_tab_names",
     "get_google_sheet_id",
     "redact_token",
@@ -82,6 +84,9 @@ def _load_config() -> Dict[str, object]:
     log_channel_env = _first_int(os.getenv("LOG_CHANNEL_ID", ""))
     log_channel = log_channel_env if log_channel_env else _DEFAULT_LOG_CHANNEL_ID
 
+    refresh_times = os.getenv("REFRESH_TIMES", "02:00,10:00,18:00")
+    refresh_timezone = os.getenv("TIMEZONE", "Europe/Vienna")
+
     sheet_config_tab = os.getenv("SHEET_CONFIG_TAB", _DEFAULT_SHEET_CONFIG_TAB)
     worksheet_name = os.getenv("WORKSHEET_NAME", _DEFAULT_WORKSHEET_NAME)
     welcome_tab = (
@@ -107,6 +112,8 @@ def _load_config() -> Dict[str, object]:
         "GUILD_IDS": guild_ids,
         "LOG_CHANNEL_ID": log_channel,
         "LOG_CHANNEL_OVERRIDDEN": bool(log_channel_env),
+        "REFRESH_TIMES": refresh_times,
+        "TIMEZONE": refresh_timezone,
         "SHEET_CONFIG_TAB": sheet_config_tab,
         "WORKSHEET_NAME": worksheet_name,
         "WELCOME_TEMPLATES_TAB": welcome_tab,
@@ -231,6 +238,25 @@ def get_log_channel_id() -> int:
         return int(value)
     except (TypeError, ValueError):
         return _DEFAULT_LOG_CHANNEL_ID
+
+
+def get_refresh_times(default: Iterable[str] = ("02:00", "10:00", "18:00")) -> list[str]:
+    raw = _CONFIG.get("REFRESH_TIMES")
+    if isinstance(raw, str):
+        values = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        values = [str(part).strip() for part in raw if str(part).strip()]
+    else:
+        values = []
+    fallback = [str(x) for x in default]
+    return values or fallback
+
+
+def get_refresh_timezone(default: str = "Europe/Vienna") -> str:
+    raw = _CONFIG.get("TIMEZONE")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return default
 
 
 def get_sheet_tab_names() -> Dict[str, str]:
