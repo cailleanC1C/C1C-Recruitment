@@ -11,7 +11,7 @@ Set these variables in Render:
 - `DISCORD_TOKEN` — your apps discord token
 - `ENV_NAME` — test/prod
 - `HEALTH_PORT` — Port exposed for the aiohttp health server.
-- `KEEPALIVE_INTERVAL_SEC` — Default 360 in production, 60 in non-production.
+- `WATCHDOG_CHECK_SEC` — Default 360 in production, 60 in non-production.
 - `STAFF_ROLE_IDS` — Comma or space separated list of numeric staff role IDs.
 - `WATCHDOG_STALL_SEC` — Optional; defaults based on keepalive interval when unset.
 - `WATCHDOG_DISCONNECT_GRACE_SEC` — Optional; defaults to the stall interval.

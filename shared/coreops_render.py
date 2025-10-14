@@ -50,7 +50,7 @@ def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str
     e.add_field(name="config", value=f"{src} ({status})", inline=True)
     # Show a few safe vars for sanity (no secrets)
     safe = []
-    for k in ("COMMAND_PREFIX", "KEEPALIVE_INTERVAL_SEC", "WATCHDOG_STALL_SEC", "WATCHDOG_DISCONNECT_GRACE_SEC"):
+    for k in ("COMMAND_PREFIX", "WATCHDOG_CHECK_SEC", "WATCHDOG_STALL_SEC", "WATCHDOG_DISCONNECT_GRACE_SEC"):
         v = os.getenv(k)
         if v:
             safe.append(f"{k}={v}")
