@@ -7,8 +7,8 @@ from discord.ext import commands
 from shared.config import (
     get_env_name,
     get_allowed_guild_ids,
-    get_sheet_tab_names,
-    get_google_sheet_id,
+    get_onboarding_sheet_id,
+    get_recruitment_sheet_id,
     redact_ids,
 )
 from shared.coreops_rbac import is_staff_member
@@ -38,19 +38,15 @@ class Ops(commands.Cog):
     async def config_summary(self, ctx: commands.Context) -> None:
         env = get_env_name()
         allow = get_allowed_guild_ids()
-        tabs = get_sheet_tab_names()
-        tab_line = ", ".join(f"{label}={name}" for label, name in tabs.items() if name)
-        if not tab_line:
-            tab_line = "—"
-
-        sheet_state = "set" if get_google_sheet_id() else "missing"
+        recruitment_sheet = "set" if get_recruitment_sheet_id() else "missing"
+        onboarding_sheet = "set" if get_onboarding_sheet_id() else "missing"
 
         lines = [
             f"env: `{env}`",
             f"allow-list: {len(allow)} ({redact_ids(sorted(allow))})",
             f"connected guilds: {len(self.bot.guilds)}",
-            f"tabs: {tab_line}",
-            f"sheet id: {sheet_state}",
+            f"recruitment sheet: {recruitment_sheet}",
+            f"onboarding sheet: {onboarding_sheet}",
         ]
 
         await ctx.reply("\n".join(lines))
