@@ -1,16 +1,21 @@
 # Operations
 
 ## Environment configuration
-Set these variables in Render (or your hosting platform):
+Set these variables in Render:
 
 - `ADMIN_ROLE_ID` — Single numeric Discord role ID with admin access.
-- `STAFF_ROLE_IDS` — Comma or space separated list of numeric staff role IDs.
+- `BOT_NAME` — Name of the Bot for later cross-bot shared modules
+- `BOT_VERSION` — Version string included in the help footer.
+- `COMMAND_PREFIX` — Version string included in the help footer.
+- `DISCORD_TOKEN` — your apps discord token
+- `ENV_NAME` — test/prod
+- `HEALTH_PORT` — Port exposed for the aiohttp health server.
 - `KEEPALIVE_INTERVAL_SEC` — Default 360 in production, 60 in non-production.
+- `STAFF_ROLE_IDS` — Comma or space separated list of numeric staff role IDs.
 - `WATCHDOG_STALL_SEC` — Optional; defaults based on keepalive interval when unset.
 - `WATCHDOG_DISCONNECT_GRACE_SEC` — Optional; defaults to the stall interval.
-- `BOT_VERSION` — Version string included in the help footer.
-- `LOG_LEVEL` — Standard Python logging level (INFO recommended).
-- `PORT` — Port exposed for the aiohttp health server.
+- `WATCHDOG_STALL_SEC` — .
+
 
 ## Discord intents
 - Enable the Server Members intent in the Discord Developer Portal.
