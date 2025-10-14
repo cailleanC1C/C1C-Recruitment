@@ -7,7 +7,7 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 - `DISCORD_TOKEN` (required)
 - `ADMIN_ROLE_IDS` (comma/space numeric)
 - `STAFF_ROLE_IDS` (comma/space numeric)
-- `KEEPALIVE_INTERVAL_SEC` (prod default 360; non-prod 60)
+- `WATCHDOG_CHECK_SEC` (prod default 360; non-prod 60)
 - `WATCHDOG_STALL_SEC` (defaults to keepalive*3+30 if unset)
 - `WATCHDOG_DISCONNECT_GRACE_SEC` (defaults to stall)
 - `BOT_VERSION` (optional)
@@ -27,7 +27,7 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 ## Watchdog & Heartbeat
 - Heartbeat source: gateway events (connect/ready/socket receive).
 - Config:
-  - check interval = `KEEPALIVE_INTERVAL_SEC`
+  - check interval = `WATCHDOG_CHECK_SEC`
   - stall = `WATCHDOG_STALL_SEC` (or derived)
   - disconnect grace = `WATCHDOG_DISCONNECT_GRACE_SEC` (or stall)
 - Exit conditions:
