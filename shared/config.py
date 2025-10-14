@@ -19,7 +19,7 @@ __all__ = [
     "get_watchdog_disconnect_grace_sec",
     "get_command_prefix",
     "get_admin_ids",
-    "get_admin_role_id",
+    "get_admin_role_ids",
     "get_staff_role_ids",
     "get_allowed_guild_ids",
     "is_guild_allowed",
@@ -76,7 +76,7 @@ def _load_config() -> Dict[str, object]:
     stall = _runtime.get_watchdog_stall_sec()
     disconnect_grace = _runtime.get_watchdog_disconnect_grace_sec(stall)
 
-    admin_role = _first_int(os.getenv("ADMIN_ROLE_ID", ""))
+    admin_roles = _int_set(os.getenv("ADMIN_ROLE_IDS", ""))
     staff_roles = _int_set(os.getenv("STAFF_ROLE_IDS", ""))
     guild_ids = _int_set(os.getenv("GUILD_IDS", ""))
     log_channel_env = _first_int(os.getenv("LOG_CHANNEL_ID", ""))
@@ -102,7 +102,7 @@ def _load_config() -> Dict[str, object]:
         "WATCHDOG_STALL_SEC": stall,
         "WATCHDOG_DISCONNECT_GRACE_SEC": disconnect_grace,
         "ADMIN_IDS": _runtime.get_admin_ids(),
-        "ADMIN_ROLE_ID": admin_role,
+        "ADMIN_ROLE_IDS": admin_roles,
         "STAFF_ROLE_IDS": staff_roles,
         "GUILD_IDS": guild_ids,
         "LOG_CHANNEL_ID": log_channel,
@@ -187,13 +187,13 @@ def get_admin_ids() -> List[int]:
     return list(raw) if isinstance(raw, list) else []
 
 
-def get_admin_role_id() -> Optional[int]:
-    from shared.coreops_rbac import get_admin_role_id as _get
+def get_admin_role_ids() -> Set[int]:
+    from shared.coreops_rbac import get_admin_role_ids as _get
 
     try:
-        return _get()
+        return set(_get())
     except Exception:
-        return None
+        return set()
 
 
 def get_staff_role_ids() -> Set[int]:
@@ -271,7 +271,7 @@ def redact_value(key: str, value: object) -> str:
         return redact_token(str(value) if value is not None else "")
     if key in {"GOOGLE_SERVICE_ACCOUNT_JSON", "GSPREAD_CREDENTIALS"}:
         return _SECRET_VALUE if value else _MISSING_VALUE
-    if key in {"ADMIN_IDS", "STAFF_ROLE_IDS", "GUILD_IDS"}:
+    if key in {"ADMIN_IDS", "ADMIN_ROLE_IDS", "STAFF_ROLE_IDS", "GUILD_IDS"}:
         try:
             iterable = list(value)  # type: ignore[arg-type]
         except TypeError:
