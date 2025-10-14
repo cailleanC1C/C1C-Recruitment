@@ -232,7 +232,7 @@ class Runtime:
         disconnect_grace: Optional[int] = None,
         delay_sec: float = 0.0,
     ) -> tuple[bool, int, int, int]:
-        check = check_sec or get_watchdog_check_sec()
+        check = check_sec if check_sec is not None else get_watchdog_check_sec()
         stall = stall_sec or get_watchdog_stall_sec()
         disconnect = disconnect_grace or get_watchdog_disconnect_grace_sec(stall)
 
