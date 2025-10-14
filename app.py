@@ -12,16 +12,12 @@ from discord.ext import commands
 from shared.config import (
     get_env_name,
     get_bot_name,
-    get_watchdog_stall_sec,
-    get_watchdog_disconnect_grace_sec,
-    get_keepalive_interval_sec,
     get_command_prefix,
     get_allowed_guild_ids,
     is_guild_allowed,
     get_config_snapshot,
 )
 from shared import socket_heartbeat as hb
-from shared import watchdog
 from shared.runtime import Runtime
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
@@ -54,7 +50,7 @@ bot = commands.Bot(
 )
 bot.remove_command("help")
 
-_watchdog_started = False
+runtime = Runtime(bot)
 
 
 async def _enforce_guild_allow_list(
@@ -64,35 +60,46 @@ async def _enforce_guild_allow_list(
     if not allowed_guilds:
         if log_when_empty:
             log.warning("Guild allow-list empty; gating disabled")
+            await runtime.send_log_message("⚠️ Guild allow-list empty; gating disabled")
         return True
 
     unauthorized = [g for g in bot.guilds if not is_guild_allowed(g.id)]
     if unauthorized:
         names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
+        allowed_sorted = sorted(allowed_guilds)
         log.error(
             "Guild allow-list violation: %s. allowed=%s",
             names,
-            sorted(allowed_guilds),
+            allowed_sorted,
         )
         try:
+            await runtime.send_log_message(
+                "🚫 Guild allow-list violation: "
+                f"{names}. allowed={allowed_sorted}"
+            )
             await bot.close()
         finally:
             return False
 
     if log_success:
+        allowed_sorted = sorted(allowed_guilds)
+        connected_ids = [g.id for g in bot.guilds]
         log.info(
             "Guild allow-list verified",
             extra={
-                "allowed": sorted(allowed_guilds),
-                "connected": [g.id for g in bot.guilds],
+                "allowed": allowed_sorted,
+                "connected": connected_ids,
             },
+        )
+        await runtime.send_log_message(
+            "✅ Guild allow-list verified: "
+            f"allowed={allowed_sorted} connected={connected_ids}"
         )
     return True
 
 
 @bot.event
 async def on_ready():
-    global _watchdog_started
     hb.note_ready()
     log.info(
         "Bot ready as %s | env=%s | prefix=%s",
@@ -104,34 +111,22 @@ async def on_ready():
         "CoreOps RBAC: admin_role_ids=%s staff_role_ids=%s",
         sorted(get_admin_role_ids()),
         sorted(get_staff_role_ids()),
-    )
+        )
     bot._c1c_started_mono = _STARTED_MONO
 
     if not await _enforce_guild_allow_list(log_when_empty=True):
         return
 
-    if not _watchdog_started:
-        stall = get_watchdog_stall_sec()
-        keepalive = get_keepalive_interval_sec()
-        disconnect_grace = get_watchdog_disconnect_grace_sec(stall)
-        await asyncio.sleep(5)
-        asyncio.create_task(
-            watchdog.run(
-                hb.age_seconds,
-                stall_after_sec=stall,
-                check_every=keepalive,
-                state_probe=hb.snapshot,
-                disconnect_grace_sec=disconnect_grace,
-                latency_probe=lambda: getattr(bot, "latency", None),
+    started, interval, stall, grace = runtime.watchdog(delay_sec=5.0)
+    if started:
+        async def announce() -> None:
+            await asyncio.sleep(5.0)
+            await runtime.send_log_message(
+                "✅ Watchdog started — interval="
+                f"{interval}s stall={stall}s disconnect_grace={grace}s"
             )
-        )
-        _watchdog_started = True
-        log.info(
-            "Watchdog started (stall_after=%ss, interval=%ss, disconnect_grace=%ss)",
-            stall,
-            keepalive,
-            disconnect_grace,
-        )
+
+        runtime.scheduler.spawn(announce(), name="watchdog_announce")
 
 
 @bot.event
@@ -204,6 +199,13 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         getattr(ctx.author, "id", None),
         error,
     )
+    try:
+        await runtime.send_log_message(
+            "⚠️ Command error: cmd="
+            f"{getattr(ctx.command, 'name', None)} user={getattr(ctx.author, 'id', None)} err={error!r}"
+        )
+    except Exception:
+        log.exception("failed to send command error to log channel")
 
 
 @bot.command(name="ping")
@@ -239,7 +241,6 @@ CFG = get_config_snapshot()
 
 
 async def main() -> None:
-    runtime = Runtime(bot)
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         raise RuntimeError("DISCORD_TOKEN not set")
