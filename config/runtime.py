@@ -78,6 +78,26 @@ def get_keepalive_interval_sec(
     return fallback
 
 
+def get_watchdog_check_sec(
+    default_prod: int = 120,
+    default_nonprod: int = 60,
+) -> int:
+    """Interval (seconds) between watchdog heartbeat checks."""
+
+    env = get_env_name().lower()
+    fallback = (
+        default_nonprod
+        if env in {"dev", "development", "test", "qa", "stage"}
+        else default_prod
+    )
+
+    override = os.getenv("WATCHDOG_CHECK_SEC")
+    if override is not None:
+        return _coerce_int(override, fallback)
+
+    return fallback
+
+
 def get_watchdog_stall_sec(default: Optional[int] = None) -> int:
     """
     Returns the watchdog stall threshold.

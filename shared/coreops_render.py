@@ -22,6 +22,7 @@ def build_health_embed(
     latency_s: float|None,
     last_event_age: float,
     keepalive_sec: int,
+    watchdog_check_sec: int,
     stall_after_sec: int,
     disconnect_grace_sec: int,
 ) -> discord.Embed:
@@ -33,6 +34,7 @@ def build_health_embed(
     e.add_field(name="latency", value=("—" if latency_s is None else f"{latency_s*1000:.0f} ms"), inline=True)
     e.add_field(name="last event", value=f"{int(last_event_age)} s", inline=True)
     e.add_field(name="keepalive", value=f"{keepalive_sec}s", inline=True)
+    e.add_field(name="watchdog", value=f"{watchdog_check_sec}s", inline=True)
 
     e.add_field(name="stall after", value=f"{stall_after_sec}s", inline=True)
     e.add_field(name="disconnect grace", value=f"{disconnect_grace_sec}s", inline=True)
@@ -50,7 +52,13 @@ def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str
     e.add_field(name="config", value=f"{src} ({status})", inline=True)
     # Show a few safe vars for sanity (no secrets)
     safe = []
-    for k in ("COMMAND_PREFIX", "KEEPALIVE_INTERVAL_SEC", "WATCHDOG_STALL_SEC", "WATCHDOG_DISCONNECT_GRACE_SEC"):
+    for k in (
+        "COMMAND_PREFIX",
+        "KEEPALIVE_INTERVAL_SEC",
+        "WATCHDOG_CHECK_SEC",
+        "WATCHDOG_STALL_SEC",
+        "WATCHDOG_DISCONNECT_GRACE_SEC",
+    ):
         v = os.getenv(k)
         if v:
             safe.append(f"{k}={v}")

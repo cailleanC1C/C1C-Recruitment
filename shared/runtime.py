@@ -20,6 +20,7 @@ from shared.config import (
     get_env_name,
     get_bot_name,
     get_keepalive_interval_sec,
+    get_watchdog_check_sec,
     get_watchdog_stall_sec,
     get_watchdog_disconnect_grace_sec,
     get_log_channel_id,
@@ -167,6 +168,7 @@ class Runtime:
     async def _health_payload(self) -> tuple[dict, bool]:
         stall = get_watchdog_stall_sec()
         keepalive = get_keepalive_interval_sec()
+        watchdog_check = get_watchdog_check_sec()
         snapshot = hb.snapshot()
         age = snapshot.last_event_age
         healthy = age <= stall
@@ -178,6 +180,7 @@ class Runtime:
             "age_seconds": round(age, 3),
             "stall_after_sec": stall,
             "keepalive_sec": keepalive,
+            "watchdog_check_sec": watchdog_check,
             "connected": snapshot.connected,
             "disconnect_age": (
                 None if snapshot.disconnect_age is None else round(snapshot.disconnect_age, 3)
@@ -232,7 +235,7 @@ class Runtime:
         disconnect_grace: Optional[int] = None,
         delay_sec: float = 0.0,
     ) -> tuple[bool, int, int, int]:
-        check = check_sec or get_keepalive_interval_sec()
+        check = check_sec or get_watchdog_check_sec()
         stall = stall_sec or get_watchdog_stall_sec()
         disconnect = disconnect_grace or get_watchdog_disconnect_grace_sec(stall)
 

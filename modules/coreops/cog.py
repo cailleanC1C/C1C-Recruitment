@@ -7,7 +7,8 @@ from discord.ext import commands
 
 from config.runtime import (
     get_env_name, get_bot_name, get_command_prefix,
-    get_keepalive_interval_sec, get_watchdog_stall_sec, get_watchdog_disconnect_grace_sec,
+    get_keepalive_interval_sec, get_watchdog_check_sec,
+    get_watchdog_stall_sec, get_watchdog_disconnect_grace_sec,
 )
 from shared import socket_heartbeat as hb
 from shared.coreops_render import (
@@ -62,6 +63,7 @@ class CoreOps(commands.Cog):
         latency = _latency_sec(self.bot)
         last_age = await hb.age_seconds()
         keepalive = get_keepalive_interval_sec()
+        watchdog_check = get_watchdog_check_sec()
         stall = get_watchdog_stall_sec()
         dgrace = get_watchdog_disconnect_grace_sec(stall)
 
@@ -73,6 +75,7 @@ class CoreOps(commands.Cog):
             latency_s=latency,
             last_event_age=last_age,
             keepalive_sec=keepalive,
+            watchdog_check_sec=watchdog_check,
             stall_after_sec=stall,
             disconnect_grace_sec=dgrace,
         )
