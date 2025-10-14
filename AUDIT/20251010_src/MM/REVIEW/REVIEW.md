@@ -81,3 +81,15 @@
 ## Notes
 - See `REVIEW/FINDINGS.md` for a numbered index and `REVIEW/TODOS.md` for follow-up tasks.
 - Architecture, threats, and test guidance are documented in the accompanying artifacts.
+
+### Phase 2 outcomes
+- Single process loads recruitment and onboarding modules.
+- Env centralization with allow-list enforcement.
+- Shared runtime stack in `shared/runtime.py`.
+- Documentation updated for env keys and Sheet Config tabs.
+
+### Deferred to Phase 3
+- Sheets access layer (`shared.sheets.core`, `sheets.recruitment`, `sheets.onboarding`) with async + cache.
+
+### Deferred to Phase 3b
+- Expanded shared ops commands, including `!env` with safe redaction and ID resolution.

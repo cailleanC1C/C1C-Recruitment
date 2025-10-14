@@ -35,3 +35,16 @@
 - Both bots expose identical health JSON payloads (`ok`, `connected`, `uptime`, `last_event_age_s`, `latency_s`) with `/healthz` returning 206 when zombie heuristics trigger; `/`/`/ready` honor `STRICT_PROBE` for shallow vs deep checks.【F:AUDIT/20251010_src/MM/bot_clanmatch_prefix.py†L2303-L2335】【F:AUDIT/20251010_src/MM/bot_clanmatch_prefix.py†L2473-L2495】【F:AUDIT/20251010_src/WC/bot_welcomecrew.py†L1473-L1538】
 - Matchmaker adds `!mmhealth` (text ping) plus `!ping` reactions, while WelcomeCrew mirrors `!ping` and offers `!health`; neither restricts HTTP health endpoints beyond network ACLs.【F:AUDIT/20251010_src/MM/bot_clanmatch_prefix.py†L1799-L1808】【F:AUDIT/20251010_src/MM/bot_clanmatch_prefix.py†L2054-L2082】【F:AUDIT/20251010_src/WC/bot_welcomecrew.py†L1098-L1252】
 - Gateway activity timestamps are maintained via identical socket listeners; starvation of `_mark_event` will push both health endpoints into 206/503 responses simultaneously, underscoring the need for coordinated monitoring after merge.【F:AUDIT/20251010_src/MM/bot_clanmatch_prefix.py†L2162-L2189】【F:AUDIT/20251010_src/WC/bot_welcomecrew.py†L1398-L1430】
+
+## Harmonization decisions (locked)
+- Single bot with capability-based modules.
+- Only Sheet IDs in env. Tab names come from each Sheet's **Config** tab.
+- Shared core ops only (`!help !ping !health !reload`); module duplicates retired.
+- `!welcome-*` staff-gated.
+- Logs → `#bot-production` via `LOG_CHANNEL_ID`.
+- Role gates use plural `*_ROLE_IDS` (comma-sep). Singular keys removed post-merge.
+- Watchdog keys: use `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC` (drop max variant).
+
+## Backlog
+- Phase 3: async cached Sheets layer; wire recruitment and onboarding.
+- Phase 3b: `!env` command with redaction and ID name resolution.
