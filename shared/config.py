@@ -62,6 +62,12 @@ _INT_RE = re.compile(r"\d+")
 
 _CONFIG: Dict[str, object] = {}
 
+_SECRET_KEYS = {
+    "DISCORD_TOKEN",
+    "GSPREAD_CREDENTIALS",
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
+}
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -479,12 +485,16 @@ def redact_ids(values: Iterable[int]) -> str:
 
 
 def redact_value(key: str, value: object) -> str:
-    key = key.upper()
-    if key in {"DISCORD_TOKEN", "TOKEN"}:
-        return redact_token(str(value) if value is not None else "")
-    if key in {"GOOGLE_SERVICE_ACCOUNT_JSON", "GSPREAD_CREDENTIALS"}:
-        return _SECRET_VALUE if value else _MISSING_VALUE
-    if key in {
+    key_upper = str(key).upper()
+
+    if key_upper in _SECRET_KEYS or "TOKEN" in key_upper or "CREDENTIAL" in key_upper or key_upper.endswith("_SECRET"):
+        if value in (None, "", [], (), {}):
+            return _MISSING_VALUE
+        text = str(value)
+        tail = text[-4:] if len(text) >= 4 else text
+        return f"••••{tail}"
+
+    if key_upper in {
         "ADMIN_IDS",
         "ADMIN_ROLE_IDS",
         "STAFF_ROLE_IDS",
@@ -497,6 +507,8 @@ def redact_value(key: str, value: object) -> str:
         except TypeError:
             iterable = []
         return redact_ids(int(v) for v in iterable if isinstance(v, int))
+
     if value in (None, "", [], (), {}):
         return _MISSING_VALUE
+
     return str(value)
