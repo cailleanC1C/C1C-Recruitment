@@ -110,6 +110,40 @@ def _parse_schedule(raw: str | None, default: Sequence[str]) -> list[str]:
     return [str(item).strip() for item in default if str(item).strip()]
 
 
+def _int_env(
+    key: str,
+    default: int,
+    *,
+    min_value: int | None = None,
+    max_value: int | None = None,
+) -> int:
+    """Parse an optional integer environment variable defensively."""
+
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+
+    text = str(raw).strip()
+    if not text:
+        return default
+
+    try:
+        value = int(text)
+    except Exception:  # pragma: no cover - defensive logging path
+        logging.warning("config: %s='%s' invalid; using default %s", key, text, default)
+        return default
+
+    if min_value is not None and value < min_value:
+        logging.warning("config: %s=%s < min %s; clamping", key, value, min_value)
+        value = min_value
+
+    if max_value is not None and value > max_value:
+        logging.warning("config: %s=%s > max %s; clamping", key, value, max_value)
+        value = max_value
+
+    return value
+
+
 def _log_snapshot(snapshot: Dict[str, object]) -> None:
     redacted = {key: redact_value(key, value) for key, value in snapshot.items()}
     log.info("config loaded", extra={"config": redacted})
@@ -153,12 +187,12 @@ def _load_config() -> Dict[str, object]:
         "ENABLE_PROMO_WATCHER": _env_bool("ENABLE_PROMO_WATCHER", True),
         "ENABLE_NOTIFY_FALLBACK": _env_bool("ENABLE_NOTIFY_FALLBACK", True),
         "STRICT_PROBE": _env_bool("STRICT_PROBE", False),
-        "SEARCH_RESULTS_SOFT_CAP": int(os.getenv("SEARCH_RESULTS_SOFT_CAP", "25") or 25),
+        "SEARCH_RESULTS_SOFT_CAP": _int_env("SEARCH_RESULTS_SOFT_CAP", 25, min_value=1),
         "WATCHDOG_CHECK_SEC": keepalive,
         "WATCHDOG_STALL_SEC": stall,
         "WATCHDOG_DISCONNECT_GRACE_SEC": grace,
-        "CLAN_TAGS_CACHE_TTL_SEC": int(os.getenv("CLAN_TAGS_CACHE_TTL_SEC", "3600") or 3600),
-        "CLEANUP_AGE_HOURS": int(os.getenv("CLEANUP_AGE_HOURS", "72") or 72),
+        "CLAN_TAGS_CACHE_TTL_SEC": _int_env("CLAN_TAGS_CACHE_TTL_SEC", 3600, min_value=60),
+        "CLEANUP_AGE_HOURS": _int_env("CLEANUP_AGE_HOURS", 72, min_value=1),
         "PANEL_THREAD_MODE": (os.getenv("PANEL_THREAD_MODE") or "same").strip().lower() or "same",
         "PANEL_FIXED_THREAD_ID": _first_int(os.getenv("PANEL_FIXED_THREAD_ID")),
         "BOT_VERSION": os.getenv("BOT_VERSION", "dev"),
