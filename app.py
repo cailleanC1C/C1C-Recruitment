@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Optional
 
 import discord
+from discord.abc import Messageable
 from discord.ext import commands
 
 from config.runtime import (
@@ -18,10 +20,12 @@ from config.runtime import (
     get_watchdog_disconnect_grace_sec,
     get_keepalive_interval_sec,
     get_command_prefix,
+    get_log_channel_id,
+    get_refresh_times,
+    get_timezone,
 )
+from shared import runtime as runtime_srv
 from shared import socket_heartbeat as hb
-from shared import health as health_srv
-from shared import watchdog
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
     get_admin_role_id,
@@ -34,6 +38,14 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("c1c.app")
+
+LOG_CHANNEL_ID = get_log_channel_id()
+REFRESH_TIMES = get_refresh_times()
+REFRESH_TZ = get_timezone()
+
+_watchdog_task: asyncio.Task | None = None
+_schedule_task: asyncio.Task | None = None
+_web_site: object | None = None
 
 # ---- Discord client ---------------------------------------------------------
 
@@ -60,12 +72,35 @@ bot = commands.Bot(
 # Disable discord.py's default help so our CoreOps help can register
 bot.remove_command("help")
 
-# ---- Watchdog -----------------------------------------------
-_watchdog_started = False  # guard to start once
+
+async def _send_runtime_notice(message: str) -> None:
+    if not LOG_CHANNEL_ID:
+        return
+
+    message_target: Messageable | None
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    message_target = channel if isinstance(channel, Messageable) else None
+    if message_target is None:
+        try:
+            fetched = await bot.fetch_channel(LOG_CHANNEL_ID)
+        except Exception as exc:
+            log.warning("Failed to fetch log channel %s: %s", LOG_CHANNEL_ID, exc)
+            return
+        if not isinstance(fetched, Messageable):
+            log.warning("Log channel %s is not messageable (type=%s)", LOG_CHANNEL_ID, type(fetched))
+            return
+        message_target = fetched
+
+    try:
+        await message_target.send(message)
+    except Exception as exc:
+        log.warning("Failed to send runtime notice: %s", exc)
+
+# ---- Watchdog & Scheduler ----------------------------------------------------
 
 @bot.event
 async def on_ready():
-    global _watchdog_started
+    global _watchdog_task, _schedule_task
     hb.note_ready()  # mark as fresh as soon as we're ready
     log.info(f"Bot ready as {bot.user} | env={get_env_name()} | prefix={BOT_PREFIX}")
     log.info(
@@ -75,29 +110,41 @@ async def on_ready():
     )
     bot._c1c_started_mono = _STARTED_MONO  # expose uptime for CoreOps
 
-    if not _watchdog_started:
+    if _watchdog_task is None or _watchdog_task.done():
         stall = get_watchdog_stall_sec()
         keepalive = get_keepalive_interval_sec()
         disconnect_grace = get_watchdog_disconnect_grace_sec(stall)
-        # small grace so the gateway settles before we start enforcing staleness
-        await asyncio.sleep(5)
-        asyncio.create_task(
-            watchdog.run(
-                hb.age_seconds,
-                stall_after_sec=stall,
-                check_every=keepalive,
-                state_probe=hb.snapshot,
-                disconnect_grace_sec=disconnect_grace,
-                latency_probe=lambda: getattr(bot, "latency", None),
-            )
+        _watchdog_task = runtime_srv.watchdog(
+            heartbeat_probe=hb.age_seconds,
+            check_sec=keepalive,
+            stall_sec=stall,
+            disconnect_grace=disconnect_grace,
+            state_probe=hb.snapshot,
+            latency_probe=lambda: latency_seconds(bot),
+            start_delay=5,
+            notify=_send_runtime_notice if LOG_CHANNEL_ID else None,
+            label="Watchdog",
         )
-        _watchdog_started = True
         log.info(
-            "Watchdog started (stall_after=%ss, interval=%ss, disconnect_grace=%ss)",
+            "Watchdog armed (stall_after=%ss, interval=%ss, disconnect_grace=%ss)",
             stall,
             keepalive,
             disconnect_grace,
         )
+
+    if _schedule_task is None or _schedule_task.done():
+        try:
+            _schedule_task = runtime_srv.schedule_at_times(
+                times_csv=REFRESH_TIMES,
+                timezone_name=REFRESH_TZ,
+                callback=_scheduled_refresh_placeholder,
+                notify=_send_runtime_notice if LOG_CHANNEL_ID else None,
+                label="Daily refresh",
+            )
+        except Exception as exc:
+            log.error("Failed to arm scheduler: %s", exc)
+            if LOG_CHANNEL_ID:
+                await _send_runtime_notice(f"❌ Daily refresh disabled: {exc}")
 
 # Touch heartbeat on a few high-volume signals.
 @bot.event
@@ -169,8 +216,6 @@ async def ping(ctx):
         pass
 
 # ---- CoreOps shims (Phase 1) -----------------------------------------------
-import time
-from typing import Optional
 
 BOT_VERSION = os.getenv("BOT_VERSION", "dev")
 _STARTED_MONO = time.monotonic()
@@ -188,21 +233,24 @@ def latency_seconds(bot) -> Optional[float]:
 CONFIG_META = {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
 CFG = {}
 
-# ---- Health server bootstrap -------------------------------------------------
-async def boot_health_server():
-    site = await health_srv.start_server(
+# ---- Runtime placeholders ----------------------------------------------------
+
+async def _scheduled_refresh_placeholder() -> None:
+    log.debug("[schedule] Daily refresh placeholder (no-op)")
+
+# ---- Main entry --------------------------------------------------------------
+async def main():
+    global _web_site
+    _web_site = await runtime_srv.start_webserver(
         heartbeat_probe=hb.age_seconds,
         bot_name=get_bot_name(),
         env_name=get_env_name(),
         port=get_port(),
         stale_after_sec=get_watchdog_stall_sec(),
+        state_probe=hb.snapshot,
+        latency_probe=lambda: latency_seconds(bot),
+        uptime_probe=uptime_seconds,
     )
-    return site
-
-# ---- Main entry --------------------------------------------------------------
-async def main():
-    # Start health server immediately so Render checks pass
-    await boot_health_server()
 
     token = os.environ.get("DISCORD_TOKEN")
     if not token:

@@ -113,3 +113,21 @@ def get_watchdog_disconnect_grace_sec(default: Optional[int] = None) -> int:
 
 def get_command_prefix(default: str = "rec") -> str:
     return os.getenv("COMMAND_PREFIX", default)
+
+
+def get_log_channel_id(default: int = 0) -> int:
+    """Discord channel/thread ID for runtime confirmations and alerts."""
+
+    return _coerce_int(os.getenv("LOG_CHANNEL_ID"), default)
+
+
+def get_refresh_times(default: str = "02:00,10:00,18:00") -> str:
+    """CSV of local times (HH:MM) when scheduled refreshes should run."""
+
+    return os.getenv("REFRESH_TIMES", default)
+
+
+def get_timezone(default: str = "UTC") -> str:
+    """IANA timezone name for scheduled refresh calculations."""
+
+    return os.getenv("TIMEZONE", default)
