@@ -162,3 +162,15 @@ _None beyond the above high-priority issues were found within the review scope._
 ## Additional Notes
 - Keep the existing scheduled refresh loop; it benefits from the non-blocking loader and now short-circuits when tags are fresh.
 - Consider re-enabling Reminder’s structured logging once the carve-out progresses; audit trails ease live triage.
+
+### Phase 2 outcomes
+- Single process loads recruitment and onboarding modules.
+- Env centralization with allow-list enforcement.
+- Shared runtime stack in `shared/runtime.py`.
+- Documentation updated for env keys and Sheet Config tabs.
+
+### Deferred to Phase 3
+- Sheets access layer (`shared.sheets.core`, `sheets.recruitment`, `sheets.onboarding`) with async + cache.
+
+### Deferred to Phase 3b
+- Expanded shared ops commands, including `!env` with safe redaction and ID resolution.
