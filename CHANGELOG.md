@@ -5,7 +5,7 @@
 ### Added
 - CoreOps cog with commands: ping, help, health, env, digest.
 - Help embed with footer: "Bot v{BOT_VERSION} • CoreOps v1.0.0 • <Vienna or UTC time>".
-- Role-based RBAC: ADMIN_ROLE_ID (single), STAFF_ROLE_IDS (list). No user-ID gating.
+- Role-based RBAC: ADMIN_ROLE_IDS (list), STAFF_ROLE_IDS (list). No user-ID gating.
 - Admin "bang" shortcuts: !health, !env, !digest, !help (Admin role only).
 - Prefix handling: supports !rec, !rec␣, rec, rec␣ and @mention.
 - Watchdog mirrored from legacy: keepalive cadence, stall, disconnect grace; connection-aware.

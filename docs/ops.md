@@ -3,7 +3,8 @@
 ## Environment configuration
 Set these variables in Render:
 
-- `ADMIN_ROLE_ID` — Single numeric Discord role ID with admin access.
+- `ADMIN_ROLE_IDS` — Comma or space separated Discord role IDs with admin access
+  (single or multiple IDs supported).
 - `BOT_NAME` — Name of the Bot for later cross-bot shared modules
 - `BOT_VERSION` — Version string included in the help footer.
 - `COMMAND_PREFIX` — Version string included in the help footer.

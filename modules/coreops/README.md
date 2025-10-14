@@ -22,7 +22,8 @@ shortcut. Examples:
 - `!rec ping` — Responds immediately so you can confirm reachability.
 
 ## Role-based access control
-- **Admin** access is granted by the single Discord role ID in `ADMIN_ROLE_ID`.
+- **Admin** access is granted by the Discord role IDs in `ADMIN_ROLE_IDS`
+  (single or multiple IDs supported).
 - **Staff** access is granted by the comma or space separated role IDs in
   `STAFF_ROLE_IDS`.
 - The build does not use individual user IDs for gating.
@@ -52,6 +53,6 @@ Use this checklist if CoreOps feels unresponsive:
    bot mention).
 2. Verify the Admin or Staff role IDs are present on the member in Discord.
 3. Ensure the bot has the Members intent enabled so role data is delivered.
-4. Check that required environment variables (`ADMIN_ROLE_ID`, `STAFF_ROLE_IDS`,
+4. Check that required environment variables (`ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
    watchdog intervals) are set in the deployment environment.
 5. Review logs for watchdog notices about stalls or reconnect attempts.

@@ -24,7 +24,7 @@ from shared import health as health_srv
 from shared import watchdog
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
-    get_admin_role_id,
+    get_admin_role_ids,
     get_staff_role_ids,
     is_admin_member,
 )
@@ -69,8 +69,8 @@ async def on_ready():
     hb.note_ready()  # mark as fresh as soon as we're ready
     log.info(f"Bot ready as {bot.user} | env={get_env_name()} | prefix={BOT_PREFIX}")
     log.info(
-        "CoreOps RBAC: admin_role_id=%s staff_role_ids=%s",
-        get_admin_role_id(),
+        "CoreOps RBAC: admin_role_ids=%s staff_role_ids=%s",
+        sorted(get_admin_role_ids()),
         sorted(get_staff_role_ids()),
     )
     bot._c1c_started_mono = _STARTED_MONO  # expose uptime for CoreOps

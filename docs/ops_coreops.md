@@ -4,7 +4,7 @@ CoreOps gives staff and admins a quick view into the bot's health without leavin
 Discord channel.
 
 ## Access levels
-- **Admin role (`ADMIN_ROLE_ID`)** — Full access. Can run every CoreOps command and use
+- **Admin roles (`ADMIN_ROLE_IDS`)** — Full access. Can run every CoreOps command and use
   the bang shortcuts.
 - **Staff roles (`STAFF_ROLE_IDS`)** — Access to the standard `!rec` commands only.
 
