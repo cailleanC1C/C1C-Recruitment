@@ -34,3 +34,11 @@
 ### Fixed
 - Command registration conflict with discord.py default help (removed default help).
 - Help footer timezone fallback (Vienna → UTC if tzdata missing).
+
+## 2025-10-14 — Phase 2: Per-Environment Configuration
+- Unified single-bot scaffold with modules imported.
+- Centralized env config with `ENV_NAME` and `GUILD_IDS` allow-list.
+- One runtime: watchdog, scheduler, health server.
+- Logs routed to `LOG_CHANNEL_ID` (#bot-production).
+- Final env names standardized; legacy singular admin key deprecated.
+- Sheet tab names moved out of env into each Sheet's **Config** tab.
