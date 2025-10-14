@@ -1,4 +1,4 @@
-"""Role helpers for CoreOps gating (Phase 1).
+"""Role helpers for CoreOps gating (Phase 2).
 
 These mirror the legacy bots' behavior: staff/admin gating is done via role IDs
 from the environment instead of user IDs. The helpers here intentionally ignore
@@ -37,13 +37,15 @@ def _safe_int(tok: str) -> Optional[int]:
 
 
 @lru_cache(maxsize=1)
-def get_admin_role_id() -> Optional[int]:
-    """Return the single admin role id, or None if unset/invalid."""
-    for tok in _parse_role_tokens(os.getenv("ADMIN_ROLE_ID", "")):
+def get_admin_role_ids() -> Set[int]:
+    """Return the (possibly empty) set of admin role ids."""
+
+    ids: Set[int] = set()
+    for tok in _parse_role_tokens(os.getenv("ADMIN_ROLE_IDS", "")):
         value = _safe_int(tok)
         if value is not None:
-            return value
-    return None
+            ids.add(value)
+    return ids
 
 
 @lru_cache(maxsize=1)
@@ -75,15 +77,15 @@ def is_staff_member(member: discord.abc.User | discord.Member) -> bool:
     member_roles = _member_role_ids(member)
     if not member_roles:
         return False
-    admin_role_id = get_admin_role_id()
-    if admin_role_id is not None and admin_role_id in member_roles:
+    admin_role_ids = get_admin_role_ids()
+    if admin_role_ids.intersection(member_roles):
         return True
     staff_ids = get_staff_role_ids()
     return bool(staff_ids.intersection(member_roles))
 
 
 def is_admin_member(member: discord.abc.User | discord.Member) -> bool:
-    admin_role_id = get_admin_role_id()
-    if admin_role_id is None:
+    admin_role_ids = get_admin_role_ids()
+    if not admin_role_ids:
         return False
-    return admin_role_id in _member_role_ids(member)
+    return bool(admin_role_ids.intersection(_member_role_ids(member)))

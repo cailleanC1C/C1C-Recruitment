@@ -5,7 +5,7 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 
 ## Inputs (Env / Secrets)
 - `DISCORD_TOKEN` (required)
-- `ADMIN_ROLE_ID` (single numeric)
+- `ADMIN_ROLE_IDS` (comma/space numeric)
 - `STAFF_ROLE_IDS` (comma/space numeric)
 - `KEEPALIVE_INTERVAL_SEC` (prod default 360; non-prod 60)
 - `WATCHDOG_STALL_SEC` (defaults to keepalive*3+30 if unset)

@@ -5,7 +5,7 @@ Discord Gateway
   ↳ Event handlers (on_ready, on_message, on_connect, on_disconnect)
       ↳ Socket heartbeat tracker (READY / connect / disconnect timestamps, snapshots)
       ↳ Command layer (discord.py command tree with CoreOps cog)
-          ↳ RBAC helper (parses ADMIN_ROLE_ID and STAFF_ROLE_IDS role memberships)
+          ↳ RBAC helper (parses ADMIN_ROLE_IDS and STAFF_ROLE_IDS role memberships)
 
 Watchdog loop
   ↳ Keepalive cadence probe (keepalive interval, stall detection)
