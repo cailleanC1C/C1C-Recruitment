@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # config/runtime.py
+import logging
 import os
 from typing import Iterable, List, Optional
 
@@ -60,12 +61,12 @@ def get_watchdog_check_sec(
     default_nonprod: int = 60,
 ) -> int:
     """
-    Interval (seconds) between watchdog health checks.
+    Interval (seconds) between watchdog heartbeat checks.
 
-    Defaults:
-        - prod-like envs → 360s (6 min) within the 300–600s window.
-        - dev/test/stage → 60s for quicker feedback.
-    Override via WATCHDOG_CHECK_SEC.
+    Priority order:
+        1. WATCHDOG_CHECK_SEC (primary)
+        2. KEEPALIVE_INTERVAL_SEC (deprecated; emits warning)
+        3. Defaults: prod-like envs → 360s, non-prod envs → 60s
     """
 
     env = get_env_name().lower()
@@ -74,6 +75,20 @@ def get_watchdog_check_sec(
     override = os.getenv("WATCHDOG_CHECK_SEC")
     if override is not None:
         return _coerce_int(override, fallback)
+
+    legacy = os.getenv("KEEPALIVE_INTERVAL_SEC")
+    if legacy is not None:
+        try:
+            legacy_val = int(legacy)
+        except (TypeError, ValueError):
+            pass
+        else:
+            logging.getLogger("c1c.config").warning(
+                "KEEPALIVE_INTERVAL_SEC is deprecated; use WATCHDOG_CHECK_SEC instead. "
+                "Using legacy value %ss.",
+                legacy_val,
+            )
+            return legacy_val
 
     return fallback
 
