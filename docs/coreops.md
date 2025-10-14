@@ -1,17 +1,36 @@
-# Core Ops (Phase 2)
+# CoreOps Surface — Phase 2
 
-## Commands (Phase 2)
-- `!help`, `!ping`, `!health`, `!reload` — shared core.
-- `!welcome`, `!welcome-*` — staff-gated. Present but not wired to Sheets until Phase 3.
-- Watchers present but Sheets wiring lands in Phase 3.
+CoreOps consolidates shared operational commands for the unified bot. All commands are available via `!rec <command>` or bot mention.
 
-## Logging
-All confirmations and error logs → `LOG_CHANNEL_ID` (#bot-production).
+## Commands
 
-## Watchdog
-- `WATCHDOG_CHECK_SEC` — check cadence.
-- `WATCHDOG_STALL_SEC` — restart if no events while connected.
-- `WATCHDOG_DISCONNECT_GRACE_SEC` — restart after prolonged disconnect.
+| Command | Access | Description |
+| --- | --- | --- |
+| `!help` | All allowed guilds | Shows module overview, environment label, and contact footer. |
+| `!ping` | All allowed guilds | Latency + heartbeat check; confirms gateway connectivity. |
+| `!health` | Admin roles | Aggregates watchdog status, last refresh, and Config tab timestamps. |
+| `!reload` | Admin roles | Forces Config tab re-read and sheet cache invalidation. |
 
-## Allow-list
-Bot aborts if active guild not in `GUILD_IDS`.
+> Legacy shortcuts (`!health`/`!env`/`!digest` split across bots) are retired. Phase 3b will revisit additional commands.
+
+## Logging policy
+
+- All command usage, success, and errors are emitted to `LOG_CHANNEL_ID`.
+- Startup warnings include missing config keys, allow-list mismatches, and sheet load errors.
+- Watchdog state transitions (stall, reconnect, grace exhausted) are logged at warning level.
+
+## Watchdog controls
+
+| Key | Default guidance |
+| --- | --- |
+| `WATCHDOG_CHECK_SEC` | 120s in prod, 60s elsewhere. Lower only when debugging stalls. |
+| `WATCHDOG_STALL_SEC` | 240s in prod, 90s elsewhere. Must be > `WATCHDOG_CHECK_SEC`. |
+| `WATCHDOG_DISCONNECT_GRACE_SEC` | 180s in prod, 60s elsewhere. Extends before gateway reconnect. |
+
+Adjust values per environment with caution; aggressive settings increase false positives.
+
+## Health surface
+
+- HTTP `/ready` returns 200 once the bot has logged in and loaded Config tabs.
+- HTTP `/healthz` returns 200 when the watchdog is healthy; 503 after consecutive stalls.
+- `!health` command mirrors the same readiness info for Discord operators.
