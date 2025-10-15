@@ -359,37 +359,7 @@ class Runtime:
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
 
-        # --- CoreOps: Refresh commands (shared across bots) -------------------
-        # Registers:
-        #   !refresh all           (admin)
-        #   !rec refresh all       (admin alias)
-        #   !rec refresh clansinfo (staff/admin, 60m guard)
-        try:
-            from shared import coreops_refresh
-
-            await coreops_refresh.setup(self.bot)
-            log.info(
-                "coreops refresh commands loaded",
-                extra={
-                    "commands": [
-                        "!refresh all",
-                        "!rec refresh all",
-                        "!rec refresh clansinfo",
-                    ]
-                },
-            )
-            try:
-                from shared.coreops_rbac import admin_roles_configured  # type: ignore
-
-                if callable(admin_roles_configured) and not admin_roles_configured():  # type: ignore
-                    await self.send_log_message(
-                        "[coreops] warning: admin refresh commands disabled — ADMIN_ROLE_IDS not configured"
-                    )
-            except Exception:
-                # Probe unavailable or errored; ignore to avoid noisy boot logs
-                pass
-        except Exception:
-            log.exception("failed to load coreops refresh commands")
+        # (Refresh commands now live directly in the CoreOps cog.)
 
     async def start(self, token: str) -> None:
         await self.start_webserver()

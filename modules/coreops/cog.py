@@ -14,6 +14,7 @@ from shared.coreops_render import (
     build_digest_line, build_health_embed, build_env_embed,
 )
 from shared.coreops_rbac import is_staff_member
+from shared.coreops_cog import CoreOpsCog as SharedCoreOpsCog
 from shared.help import build_help_embed
 
 
@@ -48,8 +49,9 @@ def _config_meta_from_app() -> dict:
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
 
 
-class CoreOps(commands.Cog):
+class CoreOps(SharedCoreOpsCog):
     def __init__(self, bot: commands.Bot):
+        super().__init__(bot)
         self.bot = bot
 
     @commands.command(name="health")
