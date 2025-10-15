@@ -11,7 +11,7 @@ from sheets.recruitment import get_cached_welcome_templates
 
 
 def staff_only() -> commands.check:
-    """Allow staff/admin via CoreOps roles. Also allow Discord 'Administrator' permission as fallback (useful on fresh/dev guilds)."""
+    """Allow staff/admin via CoreOps roles with Discord Administrator fallback."""
 
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
