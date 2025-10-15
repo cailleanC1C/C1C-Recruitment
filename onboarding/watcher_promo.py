@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import logging
 from typing import Any, Optional
@@ -70,18 +71,37 @@ def _announce(bot: commands.Bot, message: str) -> None:
 
 
 class _ThreadClosureWatcher(commands.Cog):
-    tab_name: str
     log_prefix: str
 
-    def __init__(self, bot: commands.Bot, *, sheet_id: str, channel_id: int) -> None:
+    def __init__(self, bot: commands.Bot, *, channel_id: int) -> None:
         self.bot = bot
-        self.sheet_id = sheet_id
         self.channel_id = channel_id
+        self._sheet_tab: tuple[str, str] | None = None
         self._worksheet: Optional[Any] = None
 
+    def _resolve_sheet_tab(self) -> tuple[str, str]:
+        raise NotImplementedError
+
+    async def _ensure_sheet_tab(self) -> tuple[str, str] | None:
+        if self._sheet_tab is None:
+            try:
+                self._sheet_tab = self._resolve_sheet_tab()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                await _send_runtime(
+                    f"[{self.log_prefix}] degraded: cannot resolve tab (will retry on next event): {exc}"
+                )
+                return None
+        return self._sheet_tab
+
     async def _worksheet_handle(self):
+        sheet_tab = await self._ensure_sheet_tab()
+        if sheet_tab is None:
+            return None
+        sheet_id, tab_name = sheet_tab
         if self._worksheet is None:
-            self._worksheet = await aget_worksheet(self.sheet_id, self.tab_name)
+            self._worksheet = await aget_worksheet(sheet_id, tab_name)
         return self._worksheet
 
     @commands.Cog.listener()
@@ -98,6 +118,8 @@ class _ThreadClosureWatcher(commands.Cog):
         row = [timestamp, str(thread.id), thread.name or "", owner_name]
         try:
             worksheet = await self._worksheet_handle()
+            if worksheet is None:
+                return
             await acall_with_backoff(
                 worksheet.append_row,
                 row,
@@ -106,6 +128,8 @@ class _ThreadClosureWatcher(commands.Cog):
             await _send_runtime(
                 f"[{self.log_prefix}] thread={thread.id} name={thread.name!r} owner={owner_name}"
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             log.exception(
                 "%s watcher failed to log closure", self.log_prefix, extra={"thread_id": thread.id}
@@ -117,8 +141,10 @@ class _ThreadClosureWatcher(commands.Cog):
 
 
 class PromoWatcher(_ThreadClosureWatcher):
-    tab_name = "PromoTickets"
     log_prefix = "promo_watcher"
+
+    def _resolve_sheet_tab(self) -> tuple[str, str]:
+        return _resolve_onboarding_and_promo_tab()
 
 
 async def setup(bot: commands.Bot) -> None:
@@ -134,16 +160,8 @@ async def setup(bot: commands.Bot) -> None:
         _announce(bot, "⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
         return
 
-    try:
-        sheet_id, tab_name = _resolve_onboarding_and_promo_tab()
-    except Exception as exc:
-        _announce(bot, f"⚠️ Promo watcher disabled: {exc}.")
-        return
-
-    watcher = PromoWatcher(bot, sheet_id=sheet_id, channel_id=channel_id)
-    watcher.tab_name = tab_name
-    await bot.add_cog(watcher)
+    await bot.add_cog(PromoWatcher(bot, channel_id=channel_id))
     log.info(
         "promo watcher enabled",
-        extra={"channel_id": channel_id, "tab": tab_name},
+        extra={"channel_id": channel_id},
     )
