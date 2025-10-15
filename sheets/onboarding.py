@@ -98,6 +98,12 @@ def _promo_tab() -> str:
     )
 
 
+def _resolve_onboarding_and_welcome_tab() -> tuple[str, str]:
+    """Return the onboarding sheet ID and configured welcome tab name."""
+
+    return _sheet_id(), _welcome_tab()
+
+
 def _clanlist_tab() -> str:
     return _config_lookup("clanlist_tab", "ClanList") or "ClanList"
 

@@ -12,11 +12,11 @@ from discord.ext import commands
 from shared import runtime as rt
 from shared.config import (
     get_enable_welcome_watcher,
-    get_onboarding_sheet_id,
     get_welcome_channel_id,
     get_welcome_enabled,
 )
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
+from sheets.onboarding import _resolve_onboarding_and_welcome_tab
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.onboarding.welcome_watcher")
@@ -73,10 +73,19 @@ class _ThreadClosureWatcher(commands.Cog):
     tab_name: str
     log_prefix: str
 
-    def __init__(self, bot: commands.Bot, *, sheet_id: str, channel_id: int) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        *,
+        sheet_id: str,
+        channel_id: int,
+        tab_name: str | None = None,
+    ) -> None:
         self.bot = bot
         self.sheet_id = sheet_id
         self.channel_id = channel_id
+        if tab_name:
+            self.tab_name = tab_name
         self._worksheet: Optional[Any] = None
 
     async def _worksheet_handle(self):
@@ -129,9 +138,10 @@ async def setup(bot: commands.Bot) -> None:
         _announce(bot, "📴 Welcome watcher disabled via config toggle.")
         return
 
-    sheet_id = get_onboarding_sheet_id().strip()
-    if not sheet_id:
-        _announce(bot, "⚠️ Welcome watcher disabled: ONBOARDING_SHEET_ID missing.")
+    try:
+        sheet_id, tab_name = _resolve_onboarding_and_welcome_tab()
+    except RuntimeError as exc:
+        _announce(bot, f"⚠️ Welcome watcher disabled: {exc}")
         return
 
     channel_id = get_welcome_channel_id()
@@ -139,8 +149,15 @@ async def setup(bot: commands.Bot) -> None:
         _announce(bot, "⚠️ Welcome watcher disabled: WELCOME_CHANNEL_ID missing.")
         return
 
-    await bot.add_cog(WelcomeWatcher(bot, sheet_id=sheet_id, channel_id=channel_id))
+    await bot.add_cog(
+        WelcomeWatcher(
+            bot,
+            sheet_id=sheet_id,
+            channel_id=channel_id,
+            tab_name=tab_name,
+        )
+    )
     log.info(
         "welcome watcher enabled",
-        extra={"channel_id": channel_id, "tab": WelcomeWatcher.tab_name},
+        extra={"channel_id": channel_id, "tab": tab_name},
     )
