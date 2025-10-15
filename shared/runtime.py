@@ -368,11 +368,18 @@ class Runtime:
             from shared import coreops_refresh
 
             await coreops_refresh.setup(self.bot)
-            await self.send_log_message(
-                "[coreops] refresh commands loaded: !refresh all, !rec refresh all, !rec refresh clansinfo"
+            log.info(
+                "coreops refresh commands loaded",
+                extra={
+                    "commands": [
+                        "!refresh all",
+                        "!rec refresh all",
+                        "!rec refresh clansinfo",
+                    ]
+                },
             )
-        except Exception as exc:  # pragma: no cover - best-effort boot logging
-            await self.send_log_message(f"[coreops] failed to load refresh commands: {exc}")
+        except Exception:
+            log.exception("failed to load coreops refresh commands")
 
     async def start(self, token: str) -> None:
         await self.start_webserver()
