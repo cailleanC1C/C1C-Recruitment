@@ -353,21 +353,18 @@ class Runtime:
         from ops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
-        await recruitment_search.setup(self.bot)
-        await recruitment_welcome.setup(self.bot)
-        await onboarding_welcome.setup(self.bot)
-        await onboarding_promo.setup(self.bot)
-        await ops_cog.setup(self.bot)
 
-        # --- CoreOps: Refresh commands (shared across bots) -------------------
-        # Registers:
-        #   !refresh all           (admin)
-        #   !rec refresh all       (admin alias)
-        #   !rec refresh clansinfo (staff/admin, 60m guard)
+        # --- CoreOps: Refresh commands (load EARLY so failures are visible) ---
         try:
             from shared import coreops_refresh
 
             await coreops_refresh.setup(self.bot)
+            try:
+                await self.send_log_message(
+                    "[coreops] refresh commands loaded: !refresh all, !rec refresh all, !rec refresh clansinfo, !refresh ping"
+                )
+            except Exception:
+                pass
             log.info(
                 "coreops refresh commands loaded",
                 extra={
@@ -375,6 +372,7 @@ class Runtime:
                         "!refresh all",
                         "!rec refresh all",
                         "!rec refresh clansinfo",
+                        "!refresh ping",
                     ]
                 },
             )
@@ -388,8 +386,18 @@ class Runtime:
             except Exception:
                 # Probe unavailable or errored; ignore to avoid noisy boot logs
                 pass
-        except Exception:
+        except Exception as exc:
+            try:
+                await self.send_log_message(f"[coreops] FAILED to load refresh commands: {exc}")
+            except Exception:
+                pass
             log.exception("failed to load coreops refresh commands")
+
+        await recruitment_search.setup(self.bot)
+        await recruitment_welcome.setup(self.bot)
+        await onboarding_welcome.setup(self.bot)
+        await onboarding_promo.setup(self.bot)
+        await ops_cog.setup(self.bot)
 
     async def start(self, token: str) -> None:
         await self.start_webserver()

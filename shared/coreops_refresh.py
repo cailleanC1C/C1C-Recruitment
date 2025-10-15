@@ -132,6 +132,12 @@ class CoreOpsRefresh(commands.Cog):
             asyncio.create_task(_CACHE.refresh_now(name, actor=str(ctx.author), trigger="manual"))
         return
 
+    @refresh.command(name="ping")
+    @is_admin()
+    async def refresh_ping(self, ctx: commands.Context):
+        """Sanity check to confirm the refresh cog is loaded."""
+        await ctx.send("✅ CoreOps refresh cog is loaded and listening.")
+
     # Admin alias: !rec refresh all
     @commands.group(name="rec", invoke_without_command=False)
     async def rec(self, ctx: commands.Context):
