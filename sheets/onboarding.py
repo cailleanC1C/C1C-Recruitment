@@ -84,6 +84,48 @@ def _config_lookup(key: str, default: Optional[str] = None) -> Optional[str]:
     return config.get(want, default)
 
 
+def _resolve_onboarding_sheet_id() -> str:
+    """Return the configured onboarding sheet identifier."""
+
+    return _sheet_id()
+
+
+def _read_onboarding_config(sheet_id: Optional[str] = None) -> Dict[str, str]:
+    """Return the onboarding config mapping using upper-case keys.
+
+    ``_load_config`` normalises keys to lower-case for internal use.  Some
+    callers expect the sheet's original upper-case key names, so we build a new
+    dictionary with upper-case keys while reusing the cached configuration
+    values.
+    """
+
+    _ = sheet_id  # preserved for API compatibility with older helpers
+    config = _load_config()
+    return {key.upper(): value for key, value in config.items()}
+
+
+def _resolve_onboarding_and_welcome_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured welcome tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("WELCOME_TICKETS_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing WELCOME_TICKETS_TAB")
+    return sheet_id, str(tab)
+
+
+def _resolve_onboarding_and_promo_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured promo tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("PROMO_TICKETS_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing PROMO_TICKETS_TAB")
+    return sheet_id, str(tab)
+
+
 def _welcome_tab() -> str:
     return (
         _config_lookup("welcome_tickets_tab", "WelcomeTickets")
@@ -98,6 +140,12 @@ def _promo_tab() -> str:
     )
 
 
+def _resolve_onboarding_and_welcome_tab() -> tuple[str, str]:
+    """Return the onboarding sheet ID and configured welcome tab name."""
+
+    return _sheet_id(), _welcome_tab()
+
+
 def _clanlist_tab() -> str:
     return _config_lookup("clanlist_tab", "ClanList") or "ClanList"
 
@@ -110,6 +158,15 @@ def _resolve_onboarding_and_promo_tab() -> tuple[str, str]:
     """Return the onboarding sheet ID and promo tab name."""
 
     return _sheet_id(), _promo_tab()
+def _resolve_onboarding_and_clanlist_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured clan list tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("CLANLIST_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing CLANLIST_TAB")
+    return sheet_id, str(tab)
 
 
 def _column_index(headers: Sequence[str], name: str, default: int = 0) -> int:
