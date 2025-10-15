@@ -1,4 +1,4 @@
-name: Auto-label & milestone PRs
+name: 97-auto-label & milestone PRs
 
 on:
   pull_request:
