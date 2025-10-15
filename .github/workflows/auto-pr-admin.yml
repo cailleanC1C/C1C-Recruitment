@@ -98,16 +98,16 @@ jobs:
             }
 
             // ---- Ensure milestone exists -------------------------------------
-            const getOrCreateMilestone = async (title) => {
+            const getOrCreateMilestone = async (msTitle) => {
               // Try open first, then all
               let ms = await github.paginate(github.rest.issues.listMilestones, { owner, repo, state: "open", per_page: 100 });
-              let found = ms.find(m => m.title === title);
+              let found = ms.find(m => m.title === msTitle);
               if (!found) {
                 ms = await github.paginate(github.rest.issues.listMilestones, { owner, repo, state: "all", per_page: 100 });
-                found = ms.find(m => m.title === title);
+                found = ms.find(m => m.title === msTitle);
               }
               if (found) return found;
-              const { data } = await github.rest.issues.createMilestone({ owner, repo, title });
+              const { data } = await github.rest.issues.createMilestone({ owner, repo, title: msTitle });
               return data;
             };
 
