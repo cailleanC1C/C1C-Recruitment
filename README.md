@@ -24,7 +24,8 @@ _Mentions stay outside embeds; embeds carry the visuals._
 
 ## Phase status
 **Phase 2 complete** — Per-environment configuration and unified runtime/log routing.  
-Async Sheets layer → **Phase 3**. CoreOps expansion → **Phase 3b**.
+**Phase 3** → Async Sheets layer
+**Phase 3b** → CoreOps expansion
 
 ## How it works (short)
 Recruiters shortlist clans via panels. When a decision is made, `!welcome` renders the template from the **WelcomeTemplates** tab and posts to the clan’s channel.
