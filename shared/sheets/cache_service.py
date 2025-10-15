@@ -137,3 +137,8 @@ class CacheService:
             pass
 
 cache = CacheService()
+
+
+def capabilities() -> Dict[str, Dict[str, Any]]:
+    """Expose cache capabilities for convenience imports."""
+    return cache.capabilities()

@@ -44,7 +44,7 @@ async def _refresh_bucket(ctx: commands.Context, bucket: str, actor: str, trigge
         await ctx.send(f"🔄 `{bucket}` is already refreshing (started {age}s ago).")
         return
     await ctx.send(f"⏳ Refreshing `{bucket}` cache (background)...")
-    asyncio.create_task(_CACHE._refresh(bucket, trigger=trigger, actor=actor))
+    asyncio.create_task(_CACHE.refresh_now(bucket, trigger=trigger, actor=actor))
 
 
 def _fmt_age(b) -> str:
@@ -71,32 +71,46 @@ class CoreOpsRefresh(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.group(name="refresh", invoke_without_command=True)
+    # Admin: !refresh all
+    @commands.group(name="refresh", invoke_without_command=False)
+    @is_admin()
+    async def refresh(self, ctx: commands.Context):
+        """Admin group. Usage: !refresh all"""
+        pass
+
+    @refresh.command(name="all")
     @is_admin()
     async def refresh_all(self, ctx: commands.Context):
         """Admin: Refresh all registered Sheets caches immediately."""
-        buckets = list(_CACHE._buckets.keys())
+        caps = cache_service.capabilities()
+        buckets = list(caps.keys())
         if not buckets:
             await ctx.send("⚠️ No cache buckets registered.")
             return
         await ctx.send(f"🧹 Refreshing: {', '.join(buckets)} (background).")
         for name in buckets:
-            asyncio.create_task(_CACHE._refresh(name, trigger="manual", actor=str(ctx.author)))
+            asyncio.create_task(_CACHE.refresh_now(name, actor=str(ctx.author), trigger="manual"))
         return
 
-    @refresh_all.command(name="all")
-    @is_admin()
-    async def refresh_all_alias(self, ctx: commands.Context):
-        """Alias for !refresh all (admin only)."""
-        await self.refresh_all(ctx)
+    # Admin alias: !rec refresh all
+    @commands.group(name="rec", invoke_without_command=False)
+    async def rec(self, ctx: commands.Context):
+        """Recruitment namespace."""
+        pass
 
-    @commands.command(name="rec_refresh_all")
+    @rec.group(name="refresh", invoke_without_command=False)
+    async def rec_refresh(self, ctx: commands.Context):
+        """Recruitment refresh group."""
+        pass
+
+    @rec_refresh.command(name="all")
     @is_admin()
     async def rec_refresh_all(self, ctx: commands.Context):
-        """Admin: !rec refresh all alias"""
+        """Alias: !rec refresh all (admin)"""
         await self.refresh_all(ctx)
 
-    @commands.command(name="rec_refresh_clansinfo")
+    # Staff: !rec refresh clansinfo  (60m guard)
+    @rec_refresh.command(name="clansinfo")
     @is_staff()
     async def rec_refresh_clansinfo(self, ctx: commands.Context):
         """Staff: refresh bot_info cache if older than 60 minutes."""
