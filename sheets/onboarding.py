@@ -7,6 +7,8 @@ import time
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from shared.sheets import core
+from shared.sheets.async_core import afetch_values
+from shared.sheets.cache_service import cache
 
 _CACHE_TTL = int(os.getenv("SHEETS_CACHE_TTL_SEC", "900"))
 _CONFIG_TTL = int(os.getenv("SHEETS_CONFIG_CACHE_TTL_SEC", str(_CACHE_TTL)))
@@ -287,3 +289,24 @@ def load_clan_tags(force: bool = False) -> List[str]:
     _CLAN_TAGS = tags
     _CLAN_TAG_TS = now
     return tags
+
+
+# -----------------------------
+# Phase 3 cache registrations
+# -----------------------------
+_TTL_CLAN_TAGS_SEC = 7 * 24 * 60 * 60
+
+
+async def _load_clan_tags_async() -> List[str]:
+    values = await afetch_values(_sheet_id(), _clanlist_tab())
+    tags: List[str] = []
+    for row in values[1:]:
+        if not row:
+            continue
+        tag = (row[0] if len(row) > 0 else "").strip().upper()
+        if tag:
+            tags.append(tag)
+    return tags
+
+
+cache.register("clan_tags", _TTL_CLAN_TAGS_SEC, _load_clan_tags_async)

@@ -7,6 +7,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 from shared.sheets import core
+from shared.sheets.async_core import afetch_records, afetch_values
+from shared.sheets.cache_service import cache
 
 _CACHE_TTL = int(os.getenv("SHEETS_CACHE_TTL_SEC", "900"))
 _CONFIG_TTL = int(os.getenv("SHEETS_CONFIG_CACHE_TTL_SEC", str(_CACHE_TTL)))
@@ -132,3 +134,22 @@ def fetch_welcome_templates(tab: str | None = None) -> List[Dict[str, Any]]:
     if tab:
         return core.fetch_records(_sheet_id(), tab)
     return fetch_templates()
+
+
+# -----------------------------
+# Phase 3 cache registrations
+# -----------------------------
+_TTL_CLANS_SEC = 3 * 60 * 60
+_TTL_TEMPLATES_SEC = 7 * 24 * 60 * 60
+
+
+async def _load_clans_async() -> List[List[str]]:
+    return await afetch_values(_sheet_id(), _clans_tab())
+
+
+async def _load_templates_async() -> List[Dict[str, Any]]:
+    return await afetch_records(_sheet_id(), _templates_tab())
+
+
+cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
+cache.register("templates", _TTL_TEMPLATES_SEC, _load_templates_async)
