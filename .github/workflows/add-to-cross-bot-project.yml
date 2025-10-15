@@ -1,4 +1,4 @@
-name: Add issues to Cross-Bot Hotlist
+name: 11-auto-Add issues to Cross-Bot Hotlist
 on:
   issues:
     types: [opened, reopened, labeled, edited, transferred]
