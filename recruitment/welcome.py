@@ -1,49 +1,43 @@
 from __future__ import annotations
-
 from typing import Any, Dict, Optional
-
 from discord.ext import commands
 
 from shared import runtime as rt
-from shared.config import LOG_CHANNEL_ID
-from shared.coreops_rbac import is_admin_member, is_staff_member
+# NOTE: Do not import role ID constants from shared.config; not exported here.
+from shared.coreops_rbac import is_staff_member, is_admin_member
 from sheets.recruitment import get_cached_welcome_templates
 
-
-def staff_only() -> commands.check:
+# --- RBAC decorator (staff with fallback) -------------------------------------
+def staff_only():
     """
     Allow staff/admin via CoreOps roles. Also allow Discord 'Administrator'
-    permission as fallback (useful on fresh/dev guilds).
+    permission as fallback (useful on fresh/dev guilds without CoreOps roles).
     """
-
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
+        # CoreOps roles OR server Administrator (fallback)
         if is_staff_member(author) or is_admin_member(author):
             return True
-
         perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
         return bool(perms)
-
     return commands.check(predicate)
 
-
 class WelcomeBridge(commands.Cog):
-    """Recruitment welcome command backed by cached Sheets templates."""
+    """
+    Recruitment welcome command using cached templates.
+    Behavior matches legacy: it renders a template row and posts to the target channel.
+    """
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command(name="welcome")
     @staff_only()
-    async def welcome(
-        self,
-        ctx: commands.Context,
-        clan: Optional[str] = None,
-        *,
-        note: Optional[str] = None,
-    ) -> None:
-        """Render and post a templated welcome message."""
-
+    async def welcome(self, ctx: commands.Context, clan: Optional[str] = None, *, note: Optional[str] = None):
+        """
+        Post a templated welcome. Template rows are read from the cached 'templates' bucket.
+        Usage: !welcome <CLAN_TAG> [note...]
+        """
         templates = get_cached_welcome_templates()
         if not templates:
             await ctx.send("⚠️ No welcome templates found. Try again after the next refresh.")
@@ -51,10 +45,10 @@ class WelcomeBridge(commands.Cog):
 
         tag = (clan or "").strip().upper()
         row: Optional[Dict[str, Any]] = None
-        for candidate in templates:
-            candidate_tag = str(candidate.get("ClanTag", "")).strip().upper()
-            if candidate_tag == tag:
-                row = candidate
+        for r in templates:
+            rtag = str(r.get("ClanTag", "")).strip().upper()
+            if rtag == tag:
+                row = r
                 break
 
         if not row:
@@ -65,21 +59,16 @@ class WelcomeBridge(commands.Cog):
         if not text:
             await ctx.send(f"⚠️ Template for `{tag}` is missing a 'Message' field.")
             return
-
         if note:
             text = f"{text}\n\n{note}"
 
         await ctx.send(text)
 
-        if LOG_CHANNEL_ID:
-            try:
-                channel_name = getattr(ctx.channel, "name", "?")
-                await rt.send_log_message(
-                    f"[welcome] actor={ctx.author} clan={tag or '—'} channel=#{channel_name}"
-                )
-            except Exception:
-                pass
-
+        # Unified log line
+        try:
+            await rt.send_log_message(f"[welcome] actor={ctx.author} clan={tag} channel=#{getattr(ctx.channel, 'name', '?')}")
+        except Exception:
+            pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(WelcomeBridge(bot))
