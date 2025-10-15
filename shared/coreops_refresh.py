@@ -35,15 +35,31 @@ def _admin_roles_configured() -> bool:
 
 # --- RBAC decorator wrappers (use coreops_rbac helpers) ----------------------
 
+# If admin roles aren't configured, allow passthrough so the command body can
+# show a clear "disabled" message (instead of Discord swallowing the check).
 def is_admin():
-    return commands.check(lambda ctx: is_admin_member(getattr(ctx, "author", None)))
+    async def predicate(ctx: commands.Context) -> bool:
+        try:
+            from .coreops_rbac import admin_roles_configured  # type: ignore
+            configured = bool(admin_roles_configured())  # type: ignore
+        except Exception:
+            configured = True
+        if not configured:
+            return True
+        return is_admin_member(getattr(ctx, "author", None))
+
+    return commands.check(predicate)
+
 
 def is_staff():
     # Staff includes admins
-    return commands.check(
-        lambda ctx: is_staff_member(getattr(ctx, "author", None))
-        or is_admin_member(getattr(ctx, "author", None))
-    )
+    async def predicate(ctx: commands.Context) -> bool:
+        author = getattr(ctx, "author", None)
+        return is_staff_member(author) or is_admin_member(author) or bool(
+            getattr(getattr(author, "guild_permissions", None), "administrator", False)
+        )
+
+    return commands.check(predicate)
 
 # --- helpers ---------------------------------------------------------
 
@@ -84,6 +100,7 @@ async def _too_soon(ctx: commands.Context, b, next_time: Optional[dt.datetime]) 
 class CoreOpsRefresh(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._prefix = "!"
 
     # Admin: !refresh all
     @commands.group(name="refresh", invoke_without_command=False)
@@ -136,6 +153,23 @@ class CoreOpsRefresh(commands.Cog):
             )
             return
         await self.refresh_all(ctx)
+
+    # --- Cog-level error handler to avoid silent denials ---------------------
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx: commands.Context, error: Exception):
+        # Only handle errors from this cog's commands
+        if not getattr(ctx, "command", None) or ctx.command.cog is not self:
+            return
+        from discord.ext import commands as dcmd
+
+        if isinstance(error, dcmd.CheckFailure):
+            # Tailored message by subcommand
+            qn = ctx.command.qualified_name or ""
+            if qn.startswith("refresh") or qn.startswith("rec refresh all"):
+                await ctx.send("⛔ You don't have permission to run admin refresh commands.")
+            elif qn.startswith("rec refresh clansinfo"):
+                await ctx.send("⛔ You need Staff (or Administrator) to run this.")
+            return
 
     # Staff: !rec refresh clansinfo  (60m guard)
     @rec_refresh.command(name="clansinfo")
