@@ -126,5 +126,5 @@ class CoreOpsRefresh(commands.Cog):
 
 # --- setup ------------------------------------------------------------
 
-def setup(bot: commands.Bot):
-    bot.add_cog(CoreOpsRefresh(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(CoreOpsRefresh(bot))
