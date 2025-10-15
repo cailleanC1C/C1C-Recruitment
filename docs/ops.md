@@ -1,4 +1,4 @@
-# Operations
+# Operations (Ops) — Environment & Deployment (v0.9.2)
 
 ## Environment configuration
 Set these variables in Render:
@@ -40,3 +40,7 @@ Set these variables in Render:
 - Confirm incoming member payloads list the expected role IDs before a command executes.
 - If commands silently drop, verify the member still carries an allowed role and that the
   Members intent is delivering updates.
+
+---
+
+_Doc last updated: 2025-10-15 (v0.9.2)_
