@@ -95,13 +95,23 @@ class CacheService:
             # run loader with async backoff (single retry on failure)
             try:
                 new_val = await b.loader()
-            except Exception as e:
+            except asyncio.CancelledError:
+                # Propagate cancellation so shutdown isn't blocked
+                result = "cancelled"
+                err_text = "cancelled"
+                raise
+            except Exception:
                 retries = 1
                 await asyncio.sleep(300)  # 5 minutes
                 new_val = await b.loader()
                 result = "retry_ok"
             b.value = new_val
             b.last_refresh = dt.datetime.now(UTC)
+        except asyncio.CancelledError:
+            # Let the runtime cancel this task; finally will still run
+            result = "cancelled"
+            err_text = "cancelled"
+            raise
         except Exception as e:
             result = "fail"
             err_text = str(e)[:200]
