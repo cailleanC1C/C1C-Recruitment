@@ -13,11 +13,23 @@ from typing import Optional
 import discord
 from discord.ext import commands
 
-from .coreops_rbac import is_admin, is_staff
+from .coreops_rbac import is_admin_member, is_staff_member
 from .sheets import cache_service
 
 UTC = dt.timezone.utc
 _CACHE = cache_service.cache
+
+# --- RBAC decorator wrappers (use coreops_rbac helpers) ----------------------
+
+def is_admin():
+    return commands.check(lambda ctx: is_admin_member(getattr(ctx, "author", None)))
+
+def is_staff():
+    # Staff includes admins
+    return commands.check(
+        lambda ctx: is_staff_member(getattr(ctx, "author", None))
+        or is_admin_member(getattr(ctx, "author", None))
+    )
 
 # --- helpers ---------------------------------------------------------
 
