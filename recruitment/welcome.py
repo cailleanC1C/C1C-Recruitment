@@ -70,5 +70,5 @@ class WelcomeBridge(commands.Cog):
         except Exception:
             pass
 
-def setup(bot: commands.Bot):
-    bot.add_cog(WelcomeBridge(bot))
+async def setup(bot: commands.Bot):
+    await bot.add_cog(WelcomeBridge(bot))
