@@ -1,4 +1,4 @@
-# CoreOps Runbook
+# Ops — CoreOps Runbook (v0.9.2)
 
 CoreOps gives staff and admins a quick view into the bot's health without leaving the
 Discord channel.
@@ -41,3 +41,7 @@ Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases wi
 ## When to escalate
 If CoreOps is offline or watchdog reconnects loop for more than a few minutes, alert the
 platform team. Provide recent `/healthz` responses and any watchdog stall logs.
+
+---
+
+_Doc last updated: 2025-10-15 (v0.9.2)_

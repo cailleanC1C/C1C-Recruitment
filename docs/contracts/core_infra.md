@@ -1,4 +1,4 @@
-# Core Infra Contract (Phase 1)
+# Core Infra Contract — v0.9.2
 
 ## Scope
 Infra must provide reliable runtime, deployment, and observability surfaces while the bot guarantees readiness probes, watchdog exits, and structured logging consistent with Phase 1 behavior.
@@ -61,3 +61,7 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 ## Change Management
 - Backwards-compatible env keys; no behavior changes without CHANGELOG entry.
 - Timezone in help footer: Europe/Vienna with UTC fallback.
+
+---
+
+_Doc last updated: 2025-10-15 (v0.9.2)_

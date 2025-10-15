@@ -1,4 +1,4 @@
-# Development
+# Development — v0.9.2
 
 ## Setup
 - Install Python 3.12.
@@ -36,3 +36,7 @@ Use both styles to confirm parsing:
 ## Linting & formatting
 The project does not enforce a specific linter yet. Follow standard Black/ruff
 conventions if you contribute new Python code.
+
+---
+
+_Doc last updated: 2025-10-15 (v0.9.2)_
