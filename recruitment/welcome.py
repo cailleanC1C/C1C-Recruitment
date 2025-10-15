@@ -5,19 +5,18 @@ from typing import Any, Dict, Optional
 from discord.ext import commands
 
 from shared import runtime as rt
-from shared.config import ADMIN_ROLE_IDS, LOG_CHANNEL_ID, STAFF_ROLE_IDS
+from shared.config import LOG_CHANNEL_ID
 from shared.coreops_rbac import is_admin_member, is_staff_member
 from sheets.recruitment import get_cached_welcome_templates
 
 
 def staff_only() -> commands.check:
-    """Allow staff/admin via shared RBAC; fall back to Discord admin perms."""
+    """Allow staff/admin via CoreOps roles. Also allow Discord 'Administrator' permission as fallback (useful on fresh/dev guilds)."""
 
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
-        roles_configured = bool(ADMIN_ROLE_IDS or STAFF_ROLE_IDS)
-        if roles_configured:
-            return is_staff_member(author) or is_admin_member(author)
+        if is_staff_member(author) or is_admin_member(author):
+            return True
 
         perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
         return bool(perms)
