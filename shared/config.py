@@ -69,6 +69,24 @@ _SECRET_KEYS = {
 }
 
 
+def _redact_value(key: str, value: object) -> str:
+    """Best-effort redaction for import-time logging."""
+
+    key_upper = str(key).upper()
+
+    if key_upper in _SECRET_KEYS or "TOKEN" in key_upper or "CREDENTIAL" in key_upper or key_upper.endswith("_SECRET"):
+        if value in (None, "", [], (), {}):
+            return _MISSING_VALUE
+        text = str(value)
+        tail = text[-4:] if len(text) >= 4 else text
+        return f"••••{tail}"
+
+    if value in (None, "", [], (), {}):
+        return _MISSING_VALUE
+
+    return str(value)
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -151,7 +169,7 @@ def _int_env(
 
 
 def _log_snapshot(snapshot: Dict[str, object]) -> None:
-    redacted = {key: redact_value(key, value) for key, value in snapshot.items()}
+    redacted = {key: _redact_value(key, value) for key, value in snapshot.items()}
     log.info("config loaded", extra={"config": redacted})
 
 
@@ -488,11 +506,7 @@ def redact_value(key: str, value: object) -> str:
     key_upper = str(key).upper()
 
     if key_upper in _SECRET_KEYS or "TOKEN" in key_upper or "CREDENTIAL" in key_upper or key_upper.endswith("_SECRET"):
-        if value in (None, "", [], (), {}):
-            return _MISSING_VALUE
-        text = str(value)
-        tail = text[-4:] if len(text) >= 4 else text
-        return f"••••{tail}"
+        return _redact_value(key, value)
 
     if key_upper in {
         "ADMIN_IDS",
@@ -508,7 +522,4 @@ def redact_value(key: str, value: object) -> str:
             iterable = []
         return redact_ids(int(v) for v in iterable if isinstance(v, int))
 
-    if value in (None, "", [], (), {}):
-        return _MISSING_VALUE
-
-    return str(value)
+    return _redact_value(key, value)
