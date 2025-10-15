@@ -19,6 +19,20 @@ from .sheets import cache_service
 UTC = dt.timezone.utc
 _CACHE = cache_service.cache
 
+# --- configuration probe (non-invasive) --------------------------------------
+
+def _admin_roles_configured() -> bool:
+    """Check whether ADMIN_ROLE_IDS are configured, defaulting to True."""
+
+    try:
+        from .coreops_rbac import admin_roles_configured  # type: ignore
+    except Exception:
+        return True
+    try:
+        return bool(admin_roles_configured())  # type: ignore[func-returns-value]
+    except Exception:
+        return True
+
 # --- RBAC decorator wrappers (use coreops_rbac helpers) ----------------------
 
 def is_admin():
@@ -76,12 +90,21 @@ class CoreOpsRefresh(commands.Cog):
     @is_admin()
     async def refresh(self, ctx: commands.Context):
         """Admin group. Usage: !refresh all"""
-        pass
+        if not _admin_roles_configured():
+            await ctx.send(
+                "⚠️ Admin roles not configured — admin refresh commands are disabled."
+            )
+            return
 
     @refresh.command(name="all")
     @is_admin()
     async def refresh_all(self, ctx: commands.Context):
         """Admin: Refresh all registered Sheets caches immediately."""
+        if not _admin_roles_configured():
+            await ctx.send(
+                "⚠️ Admin roles not configured — admin refresh commands are disabled."
+            )
+            return
         caps = cache_service.capabilities()
         buckets = list(caps.keys())
         if not buckets:
@@ -107,6 +130,11 @@ class CoreOpsRefresh(commands.Cog):
     @is_admin()
     async def rec_refresh_all(self, ctx: commands.Context):
         """Alias: !rec refresh all (admin)"""
+        if not _admin_roles_configured():
+            await ctx.send(
+                "⚠️ Admin roles not configured — admin refresh commands are disabled."
+            )
+            return
         await self.refresh_all(ctx)
 
     # Staff: !rec refresh clansinfo  (60m guard)

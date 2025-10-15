@@ -378,6 +378,16 @@ class Runtime:
                     ]
                 },
             )
+            try:
+                from shared.coreops_rbac import admin_roles_configured  # type: ignore
+
+                if callable(admin_roles_configured) and not admin_roles_configured():  # type: ignore
+                    await self.send_log_message(
+                        "[coreops] warning: admin refresh commands disabled — ADMIN_ROLE_IDS not configured"
+                    )
+            except Exception:
+                # Probe unavailable or errored; ignore to avoid noisy boot logs
+                pass
         except Exception:
             log.exception("failed to load coreops refresh commands")
 
