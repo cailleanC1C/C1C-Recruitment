@@ -37,7 +37,7 @@ INTENTS.message_content = True
 INTENTS.members = True
 
 BOT_PREFIX = get_command_prefix()
-COREOPS_COMMANDS = {"health", "digest", "env", "help", "ping"}
+COREOPS_COMMANDS = {"health", "digest", "env", "help", "ping", "refresh"}
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or(
