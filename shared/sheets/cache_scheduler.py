@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from typing import Awaitable, Callable, List
 
 from .cache_service import cache
 from .. import runtime as rt
@@ -20,25 +21,17 @@ async def _safe_refresh(bucket: str, *, trigger: str) -> None:
         )
 
 
-async def _run_interval(bucket: str, interval_sec: int) -> None:
-    while True:
-        await _safe_refresh(bucket, trigger="schedule")
-        await asyncio.sleep(interval_sec)
+def _every_three_hours_utc() -> List[str]:
+    return [f"{hour:02d}:00" for hour in range(0, 24, 3)]
 
 
-def _seconds_until_weekly(weekday: int, hour: int, minute: int) -> float:
-    now = dt.datetime.now(UTC)
-    target_date = now.date() + dt.timedelta(days=(weekday - now.weekday()) % 7)
-    target = dt.datetime.combine(target_date, dt.time(hour=hour, minute=minute, tzinfo=UTC))
-    if target <= now:
-        target += dt.timedelta(days=7)
-    return max(1.0, (target - now).total_seconds())
+def _if_monday(fn: Callable[[], Awaitable[None]]) -> Callable[[], Awaitable[None]]:
+    async def _wrapped() -> None:
+        now = dt.datetime.now(UTC)
+        if now.weekday() == 0:  # Monday
+            await fn()
 
-
-async def _run_weekly(bucket: str, *, weekday: int, hour: int, minute: int) -> None:
-    while True:
-        await asyncio.sleep(_seconds_until_weekly(weekday, hour, minute))
-        await _safe_refresh(bucket, trigger="schedule")
+    return _wrapped
 
 
 def schedule_default_jobs(runtime: "rt.Runtime") -> None:
@@ -48,12 +41,21 @@ def schedule_default_jobs(runtime: "rt.Runtime") -> None:
     if cache.get_bucket("clan_tags") is None:
         from sheets import onboarding  # noqa: F401  # ensures cache registration
 
-    runtime.scheduler.spawn(_run_interval("clans", 3 * 60 * 60), name="sheets_cache_clans")
-    runtime.scheduler.spawn(
-        _run_weekly("templates", weekday=0, hour=6, minute=0),
+    runtime.schedule_at_times(
+        lambda: _safe_refresh("clans", trigger="schedule"),
+        times=_every_three_hours_utc(),
+        timezone="UTC",
+        name="sheets_cache_clans",
+    )
+    runtime.schedule_at_times(
+        _if_monday(lambda: _safe_refresh("templates", trigger="schedule")),
+        times=["06:00"],
+        timezone="UTC",
         name="sheets_cache_templates",
     )
-    runtime.scheduler.spawn(
-        _run_weekly("clan_tags", weekday=0, hour=6, minute=10),
+    runtime.schedule_at_times(
+        _if_monday(lambda: _safe_refresh("clan_tags", trigger="schedule")),
+        times=["06:10"],
+        timezone="UTC",
         name="sheets_cache_clan_tags",
     )
