@@ -106,6 +106,12 @@ def _worksheet(tab: str):
     return core.get_worksheet(_sheet_id(), tab)
 
 
+def _resolve_onboarding_and_promo_tab() -> tuple[str, str]:
+    """Return the onboarding sheet ID and promo tab name."""
+
+    return _sheet_id(), _promo_tab()
+
+
 def _column_index(headers: Sequence[str], name: str, default: int = 0) -> int:
     target = (name or "").strip().lower()
     for idx, header in enumerate(headers):

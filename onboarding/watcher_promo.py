@@ -12,11 +12,11 @@ from discord.ext import commands
 from shared import runtime as rt
 from shared.config import (
     get_enable_promo_watcher,
-    get_onboarding_sheet_id,
     get_promo_channel_id,
     get_welcome_enabled,
 )
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
+from sheets.onboarding import _resolve_onboarding_and_promo_tab
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.onboarding.promo_watcher")
@@ -129,18 +129,21 @@ async def setup(bot: commands.Bot) -> None:
         _announce(bot, "📴 Promo watcher disabled via config toggle.")
         return
 
-    sheet_id = get_onboarding_sheet_id().strip()
-    if not sheet_id:
-        _announce(bot, "⚠️ Promo watcher disabled: ONBOARDING_SHEET_ID missing.")
-        return
-
     channel_id = get_promo_channel_id()
     if not channel_id:
         _announce(bot, "⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
         return
 
-    await bot.add_cog(PromoWatcher(bot, sheet_id=sheet_id, channel_id=channel_id))
+    try:
+        sheet_id, tab_name = _resolve_onboarding_and_promo_tab()
+    except Exception as exc:
+        _announce(bot, f"⚠️ Promo watcher disabled: {exc}.")
+        return
+
+    watcher = PromoWatcher(bot, sheet_id=sheet_id, channel_id=channel_id)
+    watcher.tab_name = tab_name
+    await bot.add_cog(watcher)
     log.info(
         "promo watcher enabled",
-        extra={"channel_id": channel_id, "tab": PromoWatcher.tab_name},
+        extra={"channel_id": channel_id, "tab": tab_name},
     )
