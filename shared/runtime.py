@@ -359,6 +359,21 @@ class Runtime:
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
 
+        # --- CoreOps: Refresh commands (shared across bots) -------------------
+        # Registers:
+        #   !refresh all           (admin)
+        #   !rec refresh all       (admin alias)
+        #   !rec refresh clansinfo (staff/admin, 60m guard)
+        try:
+            from shared import coreops_refresh
+
+            await coreops_refresh.setup(self.bot)
+            await self.send_log_message(
+                "[coreops] refresh commands loaded: !refresh all, !rec refresh all, !rec refresh clansinfo"
+            )
+        except Exception as exc:  # pragma: no cover - best-effort boot logging
+            await self.send_log_message(f"[coreops] failed to load refresh commands: {exc}")
+
     async def start(self, token: str) -> None:
         await self.start_webserver()
         await self.load_extensions()
