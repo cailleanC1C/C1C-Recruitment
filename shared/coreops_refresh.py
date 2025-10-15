@@ -102,6 +102,29 @@ class CoreOpsRefresh(commands.Cog):
         self.bot = bot
         self._prefix = "!"
 
+    async def cog_command_error(self, ctx: commands.Context, error: Exception):
+        """Reply to RBAC denials and breadcrumb unexpected errors."""
+        from discord.ext import commands as dcmd
+
+        if isinstance(error, dcmd.CheckFailure):
+            qn = (getattr(getattr(ctx, "command", None), "qualified_name", "") or "")
+            if qn.startswith("refresh") or qn.startswith("rec refresh all"):
+                await ctx.send("⛔ You don't have permission to run admin refresh commands.")
+            elif qn.startswith("rec refresh clansinfo"):
+                await ctx.send("⛔ You need Staff (or Administrator) to run this.")
+            return
+
+        # Surface unexpected errors to the shared runtime log, but let global
+        # handlers manage the actual exception (re-raising by returning).
+        try:
+            from . import runtime as rt
+
+            await rt.send_log_message(
+                f"[coreops] error in {getattr(ctx, 'command', None)}: {type(error).__name__}: {error}"
+            )
+        except Exception:
+            pass
+
     # Admin: !refresh all
     @commands.group(name="refresh", invoke_without_command=False)
     @is_admin()
@@ -112,6 +135,13 @@ class CoreOpsRefresh(commands.Cog):
                 "⚠️ Admin roles not configured — admin refresh commands are disabled."
             )
             return
+
+        try:
+            from . import runtime as rt
+
+            await rt.send_log_message(f"[coreops] refresh group invoked by {ctx.author}")
+        except Exception:
+            pass
 
     @refresh.command(name="all")
     @is_admin()
@@ -132,10 +162,10 @@ class CoreOpsRefresh(commands.Cog):
             asyncio.create_task(_CACHE.refresh_now(name, actor=str(ctx.author), trigger="manual"))
         return
 
+    # Temporary sanity subcommand: !refresh ping
     @refresh.command(name="ping")
     @is_admin()
     async def refresh_ping(self, ctx: commands.Context):
-        """Sanity check to confirm the refresh cog is loaded."""
         await ctx.send("✅ CoreOps refresh cog is loaded and listening.")
 
     # Admin alias: !rec refresh all
@@ -159,23 +189,6 @@ class CoreOpsRefresh(commands.Cog):
             )
             return
         await self.refresh_all(ctx)
-
-    # --- Cog-level error handler to avoid silent denials ---------------------
-    @commands.Cog.listener()
-    async def on_command_error(self, ctx: commands.Context, error: Exception):
-        # Only handle errors from this cog's commands
-        if not getattr(ctx, "command", None) or ctx.command.cog is not self:
-            return
-        from discord.ext import commands as dcmd
-
-        if isinstance(error, dcmd.CheckFailure):
-            # Tailored message by subcommand
-            qn = ctx.command.qualified_name or ""
-            if qn.startswith("refresh") or qn.startswith("rec refresh all"):
-                await ctx.send("⛔ You don't have permission to run admin refresh commands.")
-            elif qn.startswith("rec refresh clansinfo"):
-                await ctx.send("⛔ You need Staff (or Administrator) to run this.")
-            return
 
     # Staff: !rec refresh clansinfo  (60m guard)
     @rec_refresh.command(name="clansinfo")
