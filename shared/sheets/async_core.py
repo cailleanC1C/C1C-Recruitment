@@ -70,6 +70,9 @@ async def _retry_with_backoff_async(
             # Execute the sync function in a thread
             return await asyncio.to_thread(func, *args, **kwargs)
         except BaseException as e:  # gspread raises various exceptions
+            # Respect task cancellation — don't swallow CancelledError
+            if isinstance(e, asyncio.CancelledError):
+                raise
             last_exc = e
             if attempt >= max_attempts:
                 break
