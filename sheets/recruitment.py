@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from shared.sheets import core
 from shared.sheets.async_core import afetch_records, afetch_values
@@ -134,6 +134,15 @@ def fetch_welcome_templates(tab: str | None = None) -> List[Dict[str, Any]]:
     if tab:
         return core.fetch_records(_sheet_id(), tab)
     return fetch_templates()
+
+
+def get_cached_welcome_templates() -> List[Dict[str, Any]]:
+    """Return cached WelcomeTemplates rows when available, falling back to a live fetch."""
+
+    bucket = cache.get_bucket("templates")
+    if bucket and bucket.value is not None:
+        return cast(List[Dict[str, Any]], bucket.value)
+    return fetch_welcome_templates()
 
 
 # -----------------------------

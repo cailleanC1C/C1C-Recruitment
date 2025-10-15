@@ -1,34 +1,78 @@
-"""Welcome command integration bridged from the legacy Matchmaker bot."""
-
 from __future__ import annotations
 
-from typing import Dict, Iterable
+from typing import Any, Dict, Optional
 
 from discord.ext import commands
 
-from sheets import recruitment as sheets_recruitment
-from shared.coreops_rbac import get_admin_role_ids, get_staff_role_ids
+from shared import runtime as rt
+from shared.config import LOG_CHANNEL_ID
+from shared.coreops_rbac import is_admin_member, is_staff_member
+from sheets.recruitment import get_cached_welcome_templates
 
-from . import ensure_loaded
+
+def staff_only() -> commands.check:
+    """Restrict command usage to staff or admin members."""
+
+    async def predicate(ctx: commands.Context) -> bool:
+        author = getattr(ctx, "author", None)
+        return is_staff_member(author) or is_admin_member(author)
+
+    return commands.check(predicate)
+
+
+class WelcomeBridge(commands.Cog):
+    """Recruitment welcome command backed by cached Sheets templates."""
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @commands.command(name="welcome")
+    @staff_only()
+    async def welcome(
+        self,
+        ctx: commands.Context,
+        clan: Optional[str] = None,
+        *,
+        note: Optional[str] = None,
+    ) -> None:
+        """Render and post a templated welcome message."""
+
+        templates = get_cached_welcome_templates()
+        if not templates:
+            await ctx.send("⚠️ No welcome templates found. Try again after the next refresh.")
+            return
+
+        tag = (clan or "").strip().upper()
+        row: Optional[Dict[str, Any]] = None
+        for candidate in templates:
+            candidate_tag = str(candidate.get("ClanTag", "")).strip().upper()
+            if candidate_tag == tag:
+                row = candidate
+                break
+
+        if not row:
+            await ctx.send(f"⚠️ No template configured for clan tag `{tag}`.")
+            return
+
+        text = str(row.get("Message", "")).strip()
+        if not text:
+            await ctx.send(f"⚠️ Template for `{tag}` is missing a 'Message' field.")
+            return
+
+        if note:
+            text = f"{text}\n\n{note}"
+
+        await ctx.send(text)
+
+        if LOG_CHANNEL_ID:
+            try:
+                channel_name = getattr(ctx.channel, "name", "?")
+                await rt.send_log_message(
+                    f"[welcome] actor={ctx.author} clan={tag or '—'} channel=#{channel_name}"
+                )
+            except Exception:
+                pass
 
 
 async def setup(bot: commands.Bot) -> None:
-    legacy = await ensure_loaded(bot)
-    welcome_cog = getattr(legacy, "welcome_cog", None)
-    if welcome_cog is None:
-        return
-
-    def _rows() -> Iterable[Dict]:
-        return sheets_recruitment.fetch_welcome_templates()
-
-    welcome_cog.get_rows = _rows  # type: ignore[attr-defined]
-    allowed_roles = set(get_staff_role_ids()) | set(get_admin_role_ids())
-    if allowed_roles:
-        try:
-            welcome_cog.allowed_role_ids = allowed_roles  # type: ignore[attr-defined]
-        except Exception:
-            pass
-    try:
-        welcome_cog.bot = bot  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    await bot.add_cog(WelcomeBridge(bot))
