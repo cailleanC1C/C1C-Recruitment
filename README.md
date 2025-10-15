@@ -16,7 +16,7 @@ Recruiter panels, welcome templates, and ticket watchers share a single config, 
 | --- | --- | --- |
 | `!clanmatch` | Recruiter | Opens recruiter panel with filters and paging. |
 | `!clansearch` | Public | Member-facing panel with the same filters. |
-| `!clan <tag|name>` | Any | Quick clan profile card. |
+| `!clan <clantag>` | Any | Quick clan profile card. |
 | `!welcome` | Staff/Admin | Posts templated welcome for a placement. |
 | `!ping`, `!health`, `!help`, `!digest` | Admin | Liveness, latency, help, daily digest. |
 
