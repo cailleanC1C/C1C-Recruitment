@@ -1,4 +1,4 @@
-name: 10-Deploy to Render (queued, latest-wins)
+name: 10-auto-Deploy to Render (queued, latest-wins)
 
 on:
   push:
