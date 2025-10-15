@@ -12,7 +12,6 @@ New/ported code should import from shared.sheets.async_core.
 """
 
 import asyncio
-import os
 from typing import Any, Callable, TypeVar, ParamSpec
 
 from . import core as _core
@@ -20,27 +19,10 @@ from . import core as _core
 P = ParamSpec("P")
 T = TypeVar("T")
 
-# Defaults mirror shared.sheets.core (env names kept identical for consistency)
+# Defaults mirror shared.sheets.core.
 _DEFAULT_ATTEMPTS = 6
 _DEFAULT_BASE = 0.25  # seconds
-_DEFAULT_FACTOR = 1.8
-
-
-def _retry_params() -> tuple[int, float, float]:
-    """Load retry knobs from env, with sane defaults."""
-    try:
-        attempts = int(os.getenv("GSHEETS_RETRY_ATTEMPTS", str(_DEFAULT_ATTEMPTS)))
-    except Exception:
-        attempts = _DEFAULT_ATTEMPTS
-    try:
-        base = float(os.getenv("GSHEETS_RETRY_BASE", str(_DEFAULT_BASE)))
-    except Exception:
-        base = _DEFAULT_BASE
-    try:
-        factor = float(os.getenv("GSHEETS_RETRY_FACTOR", str(_DEFAULT_FACTOR)))
-    except Exception:
-        factor = _DEFAULT_FACTOR
-    return attempts, base, factor
+_DEFAULT_FACTOR = 1.8  # multiplier
 
 
 async def _retry_with_backoff_async(
@@ -55,7 +37,7 @@ async def _retry_with_backoff_async(
     Async retry wrapper: runs the sync func in a worker thread and backs off with
     await asyncio.sleep(...). Never blocks the event loop.
     """
-    max_attempts, base, mult = _retry_params()
+    max_attempts, base, mult = _DEFAULT_ATTEMPTS, _DEFAULT_BASE, _DEFAULT_FACTOR
     if attempts is not None:
         max_attempts = attempts
     if base_delay is not None:
