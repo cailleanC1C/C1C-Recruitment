@@ -76,6 +76,73 @@ class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    @staticmethod
+    def _child_command_names(group: commands.Command) -> list[str]:
+        if not group or not hasattr(group, "commands"):
+            return []
+
+        seen = set()
+        names = []
+        for sub in group.commands.values():
+            name = getattr(sub, "name", None)
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        return sorted(names)
+
+    def _build_command_tree_lines(self) -> list[str]:
+        top_level = sorted(
+            {
+                getattr(command, "name", "")
+                for command in self.bot.commands
+                if getattr(command, "name", None)
+            }
+        )
+
+        lines = [
+            f"top-level: {', '.join(top_level)}" if top_level else "top-level: (none)"
+        ]
+
+        refresh_map: dict[str, list[str]] = {}
+        for command in self.bot.walk_commands():
+            if getattr(command, "name", None) != "refresh":
+                continue
+            qualified = command.qualified_name or command.name
+            if qualified in refresh_map:
+                continue
+            refresh_map[qualified] = self._child_command_names(command)
+
+        for qualified in sorted(refresh_map):
+            children = refresh_map[qualified]
+            tail = ", ".join(children) if children else "-"
+            lines.append(f"{qualified} -> [{tail}]")
+
+        rec_group = self.bot.get_command("rec")
+        if rec_group:
+            rec_children = self._child_command_names(rec_group)
+            tail = ", ".join(rec_children) if rec_children else "-"
+            lines.append(f"rec -> [{tail}]")
+
+            refresh_child = None
+            if hasattr(rec_group, "commands"):
+                for sub in rec_group.commands.values():
+                    if getattr(sub, "name", None) == "refresh":
+                        refresh_child = sub
+                        break
+
+            if refresh_child:
+                refresh_children = self._child_command_names(refresh_child)
+                tail = ", ".join(refresh_children) if refresh_children else "-"
+                lines.append(f"rec refresh -> [{tail}]")
+
+        return lines
+
+    async def _send_command_tree(self, ctx: commands.Context) -> None:
+        lines = self._build_command_tree_lines()
+        text = "\n".join(lines) if lines else "(no commands)"
+        await ctx.reply(f"```md\n{text}\n```")
+
     @commands.command(name="health")
     @staff_only()
     async def health(self, ctx: commands.Context):
@@ -252,6 +319,22 @@ class CoreOpsCog(commands.Cog):
     @_staff_check()
     async def rec_refresh_alias_clansinfo(self, ctx: commands.Context) -> None:
         await ctx.invoke(self.rec_refresh_clansinfo)
+
+    @rec.command(name="cmds", hidden=True)
+    @_staff_check()
+    async def rec_cmds(self, ctx: commands.Context) -> None:
+        await self._send_command_tree(ctx)
+
+    @rec.group(name="debug", invoke_without_command=True, hidden=True)
+    @_staff_check()
+    async def rec_debug(self, ctx: commands.Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await self._send_command_tree(ctx)
+
+    @rec_debug.command(name="cmds", hidden=True)
+    @_staff_check()
+    async def rec_debug_cmds(self, ctx: commands.Context) -> None:
+        await self._send_command_tree(ctx)
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CheckFailure):
