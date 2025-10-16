@@ -26,6 +26,8 @@ ContextOrMember = Union[commands.Context, Memberish]
 
 _DENIAL_LOG_THROTTLE_SEC = 30.0
 _denial_log_cache: Dict[Tuple[Optional[int], str, Optional[int]], float] = {}
+_ADMIN_FALLBACK_LOG_THROTTLE_SEC = 600.0
+_admin_fallback_log_cache: Dict[Tuple[str, Optional[int]], float] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +205,28 @@ def _log_admin_denial(ctx: commands.Context) -> None:
     )
 
 
+def _log_admin_role_config_missing(ctx: commands.Context) -> None:
+    command = getattr(getattr(ctx, "command", None), "qualified_name", None) or "unknown"
+    guild = getattr(getattr(ctx, "guild", None), "id", None)
+    key = (command, int(guild) if isinstance(guild, int) else None)
+    now = time.monotonic()
+    last = _admin_fallback_log_cache.get(key)
+    if last is not None and now - last < _ADMIN_FALLBACK_LOG_THROTTLE_SEC:
+        return
+    _admin_fallback_log_cache[key] = now
+    if guild is None:
+        logger.warning(
+            "Admin command '%s' allowed via Administrator permission fallback; configure admin roles to enforce RBAC (DM).",
+            command,
+        )
+    else:
+        logger.warning(
+            "Admin command '%s' allowed via Administrator permission fallback; configure admin roles to enforce RBAC for guild %s.",
+            command,
+            guild,
+        )
+
+
 def ops_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
@@ -232,7 +256,10 @@ def admin_only() -> commands.Check[Any]:
                 return True
 
             perms = getattr(member, "guild_permissions", None)
-            if getattr(perms, "administrator", False):
+            has_admin_perm = getattr(perms, "administrator", False)
+            if has_admin_perm:
+                if not admin_roles:
+                    _log_admin_role_config_missing(ctx)
                 return True
 
         await _send_admin_denial(ctx)
