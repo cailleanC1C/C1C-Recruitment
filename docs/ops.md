@@ -1,4 +1,4 @@
-# Operations (Ops) — Environment & Deployment (v0.9.2)
+# Operations (Ops) — Environment & Deployment (v0.9.3)
 
 ## Environment configuration
 Set these variables in Render:
@@ -34,6 +34,10 @@ Set these variables in Render:
   status.
 - Watchdog logs include keepalive intervals, stall detections, reconnect attempts, and
   heartbeat latency snapshots. Monitor for repeated stall warnings or disconnect loops.
+- CoreOps refresh emits `[refresh]` log lines to `LOG_CHANNEL_ID` with bucket, trigger, actor,
+  duration, result, and error fields for both scheduled and manual runs.
+- Cache defaults: `clans` TTL 3 h (auto refresh every 3 h), `templates`/`clan_tags` TTL 7 d
+  (weekly sweep Mondays 06:00 UTC).
 
 ## RBAC troubleshooting
 - Look for log entries showing resolved Admin and Staff role IDs during startup.
@@ -43,4 +47,4 @@ Set these variables in Render:
 
 ---
 
-_Doc last updated: 2025-10-15 (v0.9.2)_
+_Doc last updated: 2025-10-16 (v0.9.3)_
