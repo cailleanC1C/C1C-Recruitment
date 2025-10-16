@@ -19,8 +19,16 @@ Loader = Callable[[], Awaitable[Any]]
 
 class CacheBucket:
     __slots__ = (
-        "name", "ttl_sec", "loader", "value", "last_refresh",
-        "refreshing", "last_latency_ms", "last_result", "last_error",
+        "name",
+        "ttl_sec",
+        "loader",
+        "value",
+        "last_refresh",
+        "refreshing",
+        "last_latency_ms",
+        "last_result",
+        "last_error",
+        "last_retries",
     )
     def __init__(self, name: str, ttl_sec: int, loader: Loader):
         self.name = name
@@ -32,6 +40,7 @@ class CacheBucket:
         self.last_latency_ms: Optional[int] = None
         self.last_result: Optional[str] = None
         self.last_error: Optional[str] = None
+        self.last_retries: int = 0
 
     def age_sec(self) -> Optional[int]:
         if not self.last_refresh:
@@ -146,6 +155,7 @@ class CacheService:
             b.last_latency_ms = rt.monotonic_ms() - t0
             b.last_result = result
             b.last_error = err_text
+            b.last_retries = retries
             await self._log_refresh(b, trigger=trigger, actor=actor, retries=retries)
             # clear marker
             b.refreshing = None
