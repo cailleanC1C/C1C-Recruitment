@@ -64,4 +64,4 @@ platform team. Provide recent `/healthz` responses and any watchdog stall logs.
 
 ---
 
-_Doc last updated: 2025-11-05 (v0.9.3)_
+_Doc last updated: 2025-10-16 (v0.9.3)_
