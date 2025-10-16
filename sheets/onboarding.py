@@ -30,10 +30,18 @@ def _sheet_id() -> str:
     )
     sheet_id = sheet_id.strip()
     if not sheet_id:
-        raise RuntimeError(
-            "ONBOARDING_SHEET_ID/GOOGLE_SHEET_ID/GSHEET_ID not set for onboarding"
-        )
+        raise RuntimeError("ONBOARDING_SHEET_ID not set")
     return sheet_id
+
+
+def _ensure_service_account_credentials() -> None:
+    creds = (
+        os.getenv("GSPREAD_CREDENTIALS")
+        or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        or ""
+    ).strip()
+    if not creds:
+        raise RuntimeError("GSPREAD_CREDENTIALS not set")
 
 
 def _config_tab() -> str:
@@ -361,7 +369,10 @@ _TTL_CLAN_TAGS_SEC = 7 * 24 * 60 * 60
 
 
 async def _load_clan_tags_async() -> List[str]:
-    values = await afetch_values(_sheet_id(), _clanlist_tab())
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _clanlist_tab()
+    values = await afetch_values(sheet_id, tab)
     tags: List[str] = []
     for row in values[1:]:
         if not row:

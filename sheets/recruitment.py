@@ -29,13 +29,20 @@ def _sheet_id() -> str:
         or os.getenv("GOOGLE_SHEET_ID")
         or os.getenv("GSHEET_ID")
         or ""
-    )
-    sheet_id = sheet_id.strip()
+    ).strip()
     if not sheet_id:
-        raise RuntimeError(
-            "RECRUITMENT_SHEET_ID/GOOGLE_SHEET_ID/GSHEET_ID not set for recruitment"
-        )
+        raise RuntimeError("RECRUITMENT_SHEET_ID not set")
     return sheet_id
+
+
+def _ensure_service_account_credentials() -> None:
+    creds = (
+        os.getenv("GSPREAD_CREDENTIALS")
+        or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        or ""
+    ).strip()
+    if not creds:
+        raise RuntimeError("GSPREAD_CREDENTIALS not set")
 
 
 def _config_tab() -> str:
@@ -153,11 +160,17 @@ _TTL_TEMPLATES_SEC = 7 * 24 * 60 * 60
 
 
 async def _load_clans_async() -> List[List[str]]:
-    return await afetch_values(_sheet_id(), _clans_tab())
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _clans_tab()
+    return await afetch_values(sheet_id, tab)
 
 
 async def _load_templates_async() -> List[Dict[str, Any]]:
-    return await afetch_records(_sheet_id(), _templates_tab())
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _templates_tab()
+    return await afetch_records(sheet_id, tab)
 
 
 cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
