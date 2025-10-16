@@ -203,6 +203,16 @@ def _log_admin_denial(ctx: commands.Context) -> None:
     )
 
 
+def _log_admin_role_config_missing(ctx: commands.Context) -> None:
+    command = getattr(getattr(ctx, "command", None), "qualified_name", None) or "unknown"
+    guild = getattr(getattr(ctx, "guild", None), "id", None)
+    logger.error(
+        "No admin roles configured; falling back to Administrator permission for command '%s' in guild %s",
+        command,
+        guild if guild is not None else "DM",
+    )
+
+
 def ops_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
@@ -228,12 +238,14 @@ def admin_only() -> commands.Check[Any]:
         if isinstance(member, discord.Member):
             admin_roles = get_admin_role_ids()
             member_roles = _member_role_ids(member)
-            if admin_roles and admin_roles.intersection(member_roles):
-                return True
-
-            perms = getattr(member, "guild_permissions", None)
-            if getattr(perms, "administrator", False):
-                return True
+            if admin_roles:
+                if admin_roles.intersection(member_roles):
+                    return True
+            else:
+                _log_admin_role_config_missing(ctx)
+                perms = getattr(member, "guild_permissions", None)
+                if getattr(perms, "administrator", False):
+                    return True
 
         await _send_admin_denial(ctx)
         _log_admin_denial(ctx)
