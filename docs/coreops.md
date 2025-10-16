@@ -10,7 +10,7 @@ CoreOps consolidates shared operational commands for the unified bot. All comman
 | `!ping` | All allowed guilds | Latency + heartbeat check; confirms gateway connectivity. |
 | `!health` | Admin roles | Aggregates watchdog status, last refresh, and Config tab timestamps. |
 | `!reload` | Admin roles | Forces Config tab re-read and sheet cache invalidation. |
-| `!env` | Admin roles | prints a human readable list of all set ENV VARs |
+| `!env` | Admin roles | Embed with masked ENV + cached Sheet Config values and ID resolution |
 | `!digest` | Admin roles | short health check. |
 
 > Phase 3b will revisit additional commands.

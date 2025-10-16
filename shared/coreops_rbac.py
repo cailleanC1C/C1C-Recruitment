@@ -153,6 +153,10 @@ async def _send_staff_denial(ctx: commands.Context) -> None:
     await _reply(ctx, "Staff only.")
 
 
+async def _send_admin_denial(ctx: commands.Context) -> None:
+    await _reply(ctx, "Admins only.")
+
+
 def _log_staff_denial(ctx: commands.Context) -> None:
     author = getattr(ctx, "author", None)
     user_id = getattr(author, "id", None)
@@ -176,6 +180,29 @@ def _log_staff_denial(ctx: commands.Context) -> None:
     )
 
 
+def _log_admin_denial(ctx: commands.Context) -> None:
+    author = getattr(ctx, "author", None)
+    user_id = getattr(author, "id", None)
+    command = getattr(getattr(ctx, "command", None), "qualified_name", None) or "unknown"
+    guild = getattr(getattr(ctx, "guild", None), "id", None)
+    key = (
+        int(user_id) if isinstance(user_id, int) else None,
+        command,
+        int(guild) if isinstance(guild, int) else None,
+    )
+    now = time.monotonic()
+    last = _denial_log_cache.get(key)
+    if last is not None and now - last < _DENIAL_LOG_THROTTLE_SEC:
+        return
+    _denial_log_cache[key] = now
+    logger.info(
+        "Denied admin command '%s' for user %s in guild %s",
+        command,
+        user_id if user_id is not None else "unknown",
+        guild if guild is not None else "DM",
+    )
+
+
 def ops_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
@@ -187,6 +214,30 @@ def ops_only() -> commands.Check[Any]:
         await _send_staff_denial(ctx)
         _log_staff_denial(ctx)
         raise commands.CheckFailure("Staff only.")
+
+    return commands.check(predicate)
+
+
+def admin_only() -> commands.Check[Any]:
+    async def predicate(ctx: commands.Context) -> bool:
+        if getattr(ctx, "guild", None) is None:
+            await _send_guild_only_denial(ctx)
+            raise commands.CheckFailure("Guild only.")
+
+        member = getattr(ctx, "author", None)
+        if isinstance(member, discord.Member):
+            admin_roles = get_admin_role_ids()
+            member_roles = _member_role_ids(member)
+            if admin_roles and admin_roles.intersection(member_roles):
+                return True
+
+            perms = getattr(member, "guild_permissions", None)
+            if getattr(perms, "administrator", False):
+                return True
+
+        await _send_admin_denial(ctx)
+        _log_admin_denial(ctx)
+        raise commands.CheckFailure("Admins only.")
 
     return commands.check(predicate)
 

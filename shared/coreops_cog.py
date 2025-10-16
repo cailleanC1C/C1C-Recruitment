@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 import os
+import re
 import sys
 import time
-from typing import Any, Optional
+from importlib import import_module
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+import discord
 from discord.ext import commands
 
 from config.runtime import (
@@ -22,19 +26,21 @@ from config.runtime import (
 from shared import socket_heartbeat as hb
 from shared.config import (
     get_allowed_guild_ids,
+    get_config_snapshot,
     get_onboarding_sheet_id,
     get_recruitment_sheet_id,
     redact_ids,
+    redact_value,
 )
 from shared.coreops_render import (
     build_digest_line,
-    build_env_embed,
     build_health_embed,
 )
 from shared.help import build_help_embed
 from shared.sheets import cache_service
 
 from .coreops_rbac import (
+    admin_only,
     can_manage_guild,
     guild_only_denied_msg,
     is_admin_member,
@@ -43,6 +49,28 @@ from .coreops_rbac import (
 )
 
 UTC = dt.timezone.utc
+
+logger = logging.getLogger(__name__)
+
+_NAME_CACHE_TTL_SEC = 600.0
+_ID_PATTERN = re.compile(r"\d{5,}")
+_ID_KEY_HINTS = ("ID", "ROLE", "CHANNEL", "THREAD", "GUILD")
+_ENV_KEY_HINTS = (
+    "SHEET",
+    "SHEETS",
+    "GSPREAD",
+    "GOOGLE",
+    "SERVICE",
+    "RECRUIT",
+    "ONBOARD",
+    "WELCOME",
+    "PROMO",
+)
+_SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
+    ("Recruitment", "sheets.recruitment"),
+    ("Onboarding", "sheets.onboarding"),
+)
+_sheet_cache_errors_logged: Set[str] = set()
 
 
 def _admin_roles_configured() -> bool:
@@ -111,9 +139,217 @@ def _config_meta_from_app() -> dict:
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
 
 
+def _sheet_cache_snapshot(module_name: str) -> Dict[str, Any]:
+    try:
+        module = import_module(module_name)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        if module_name not in _sheet_cache_errors_logged:
+            _sheet_cache_errors_logged.add(module_name)
+            logger.warning(
+                "failed to import sheet config cache",
+                extra={"module": module_name},
+                exc_info=exc,
+            )
+        return {}
+
+    cache = getattr(module, "_CONFIG_CACHE", None)
+    if isinstance(cache, dict):
+        return dict(cache)
+    return {}
+
+
+def _normalize_snapshot_value(value: object) -> object:
+    if isinstance(value, set):
+        try:
+            return sorted(value)
+        except TypeError:
+            return list(value)
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
+def _clip(text: str, limit: int) -> str:
+    clean = re.sub(r"\s+", " ", str(text)).strip()
+    if not clean:
+        return "—"
+    if len(clean) <= limit:
+        return clean
+    return f"{clean[: limit - 1]}…"
+
+
+def _format_table(entries: Sequence[Tuple[str, str, str]]) -> str:
+    if not entries:
+        return "—"
+
+    header = f"{'KEY':<28} {'VALUE':<32} RESOLVED"
+    lines = [header, "-" * len(header)]
+    for key, value, resolved in entries:
+        key_text = _clip(key, 28).ljust(28)
+        value_text = _clip(value, 32).ljust(32)
+        resolved_text = _clip(resolved, 64)
+        lines.append(f"{key_text} {value_text} {resolved_text}")
+
+    return "```\n" + "\n".join(lines) + "\n```"
+
+
+def _format_resolved(names: Sequence[str]) -> str:
+    if not names:
+        return "—"
+
+    seen: List[str] = []
+    for name in names:
+        label = name or "(not found)"
+        if label not in seen:
+            seen.append(label)
+    return ", ".join(seen) if seen else "—"
+
+
+def _extract_ids(key: str, value: object) -> List[int]:
+    key_upper = str(key).upper()
+    if not any(hint in key_upper for hint in _ID_KEY_HINTS):
+        return []
+
+    result: List[int] = []
+    seen: Set[int] = set()
+
+    def _push(candidate: int) -> None:
+        if candidate not in seen:
+            seen.add(candidate)
+            result.append(candidate)
+
+    def _walk(item: object) -> None:
+        if item is None:
+            return
+        if isinstance(item, bool):
+            return
+        if isinstance(item, int):
+            if item >= 0:
+                _push(int(item))
+            return
+        if isinstance(item, float) and item.is_integer():
+            _push(int(item))
+            return
+        if isinstance(item, str):
+            for match in _ID_PATTERN.findall(item):
+                try:
+                    _push(int(match))
+                except (TypeError, ValueError):
+                    continue
+            return
+        if isinstance(item, dict):
+            for sub in item.values():
+                _walk(sub)
+            return
+        if isinstance(item, (list, tuple, set)):
+            for sub in item:
+                _walk(sub)
+
+    _walk(value)
+    return result
+
+
+def _candidate_env_keys(snapshot: Dict[str, Any]) -> List[str]:
+    keys = {str(k) for k in snapshot.keys()}
+    for key in os.environ.keys():
+        if key in keys:
+            continue
+        if not key.isupper():
+            continue
+        if any(hint in key for hint in _ENV_KEY_HINTS):
+            keys.add(key)
+    return sorted(keys)
+
+
+def _describe_role(role: discord.Role) -> str:
+    name = getattr(role, "name", "role")
+    guild = getattr(role, "guild", None)
+    guild_name = getattr(guild, "name", None)
+    if guild_name:
+        return f"@{name} · {guild_name}"
+    return f"@{name}"
+
+
+def _describe_channel(channel: discord.abc.GuildChannel | discord.Thread) -> str:
+    name = getattr(channel, "name", "channel")
+    if isinstance(channel, (discord.TextChannel, discord.Thread)):
+        base = f"#{name}"
+    elif isinstance(channel, discord.VoiceChannel):
+        base = f"🔊 {name}"
+    elif getattr(discord, "StageChannel", None) and isinstance(channel, discord.StageChannel):  # type: ignore[attr-defined]
+        base = f"🎙️ {name}"
+    elif isinstance(channel, discord.CategoryChannel):
+        base = f"📂 {name}"
+    else:
+        base = str(name)
+    guild = getattr(channel, "guild", None)
+    guild_name = getattr(guild, "name", None)
+    if guild_name:
+        return f"{base} · {guild_name}"
+    return base
+
+
+class _IdResolver:
+    __slots__ = ("_cache", "_failures")
+
+    def __init__(self) -> None:
+        self._cache: Dict[int, Tuple[str, float]] = {}
+        self._failures: Set[int] = set()
+
+    def resolve_many(self, bot: commands.Bot, ids: Iterable[int]) -> List[str]:
+        return [self.resolve(bot, snowflake) for snowflake in ids]
+
+    def resolve(self, bot: commands.Bot, snowflake: int) -> str:
+        now = time.monotonic()
+        cached = self._cache.get(snowflake)
+        if cached and cached[1] > now:
+            return cached[0]
+
+        try:
+            resolved = self._lookup(bot, snowflake)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            if snowflake not in self._failures:
+                self._failures.add(snowflake)
+                logger.warning(
+                    "failed to resolve discord id",
+                    extra={"id": snowflake},
+                    exc_info=exc,
+                )
+            resolved = "(not found)"
+
+        self._cache[snowflake] = (resolved, now + _NAME_CACHE_TTL_SEC)
+        return resolved
+
+    def _lookup(self, bot: commands.Bot, snowflake: int) -> str:
+        guild = bot.get_guild(snowflake)
+        if guild is not None:
+            return f"{guild.name} (guild)"
+
+        channel = bot.get_channel(snowflake)
+        if channel is not None:
+            return _describe_channel(channel)
+
+        for guild in getattr(bot, "guilds", []):
+            role = guild.get_role(snowflake)
+            if role is not None:
+                return _describe_role(role)
+
+            channel = guild.get_channel(snowflake)
+            if channel is not None:
+                return _describe_channel(channel)
+
+            getter = getattr(guild, "get_thread", None)
+            if callable(getter):
+                thread = getter(snowflake)
+                if thread is not None:
+                    return _describe_channel(thread)
+
+        return "(not found)"
+
 class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._id_resolver = _IdResolver()
 
     @commands.command(name="health")
     @staff_only()
@@ -207,14 +443,37 @@ class CoreOpsCog(commands.Cog):
 
     @commands.command(name="env")
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def env(self, ctx: commands.Context) -> None:
-        embed = build_env_embed(
-            bot_name=get_bot_name(),
-            env=get_env_name(),
-            version=os.getenv("BOT_VERSION", "dev"),
-            cfg_meta=_config_meta_from_app(),
+        bot_name = get_bot_name()
+        env = get_env_name()
+        version = os.getenv("BOT_VERSION", "dev")
+
+        embed = discord.Embed(
+            title=f"{bot_name} · {version} · {env}",
+            colour=discord.Colour.dark_teal(),
         )
+
+        sections: List[str] = []
+        env_rows = self._collect_env_rows()
+        sections.append("**Environment**\n" + _format_table(env_rows))
+
+        sheet_sections = self._collect_sheet_sections()
+        if sheet_sections:
+            for label, rows in sheet_sections:
+                sections.append(f"**{label} Config**\n" + _format_table(rows))
+        else:
+            sections.append("**Sheet Config**\n—")
+
+        meta = _config_meta_from_app()
+        source = meta.get("source", "runtime")
+        status = meta.get("status", "ok")
+        sections.append(f"**Config Loader**\n`{source}` · `{status}`")
+
+        embed.description = "\n\n".join(sections)
+        embed.timestamp = dt.datetime.now(UTC)
+        embed.set_footer(text="values from ENV and Sheet Config")
+
         await ctx.reply(embed=embed)
 
     @commands.command(name="help")
@@ -305,6 +564,48 @@ class CoreOpsCog(commands.Cog):
         asyncio.create_task(
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )
+
+    def _collect_env_rows(self) -> List[Tuple[str, str, str]]:
+        snapshot = get_config_snapshot()
+        rows: List[Tuple[str, str, str]] = []
+        for key in _candidate_env_keys(snapshot):
+            raw_value: object
+            if key in os.environ:
+                raw_value = os.environ.get(key)
+            else:
+                raw_value = snapshot.get(key)
+
+            normalized = _normalize_snapshot_value(raw_value)
+            display_value = redact_value(key, normalized)
+            resolved = self._resolve_ids(_extract_ids(key, normalized))
+            rows.append((key, display_value, resolved))
+        return rows
+
+    def _collect_sheet_sections(self) -> List[Tuple[str, List[Tuple[str, str, str]]]]:
+        sections: List[Tuple[str, List[Tuple[str, str, str]]]] = []
+        for label, module_name in _SHEET_CONFIG_SOURCES:
+            snapshot = _sheet_cache_snapshot(module_name)
+            if not snapshot:
+                continue
+
+            rows: List[Tuple[str, str, str]] = []
+            for key in sorted(snapshot.keys()):
+                display_key = str(key).upper()
+                normalized = _normalize_snapshot_value(snapshot[key])
+                display_value = redact_value(display_key, normalized)
+                resolved = self._resolve_ids(_extract_ids(display_key, normalized))
+                rows.append((display_key, display_value, resolved))
+
+            if rows:
+                sections.append((label, rows))
+
+        return sections
+
+    def _resolve_ids(self, ids: Sequence[int]) -> str:
+        if not ids:
+            return "—"
+        names = self._id_resolver.resolve_many(self.bot, ids)
+        return _format_resolved(names)
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CheckFailure):
