@@ -8,6 +8,12 @@ from .. import runtime as rt
 
 UTC = dt.timezone.utc
 
+
+def _errtext(exc: BaseException) -> str:
+    s = str(exc).strip()
+    return s or getattr(exc, "__class__", type(exc)).__name__
+
+
 # Type aliases
 Loader = Callable[[], Awaitable[Any]]
 
@@ -90,23 +96,44 @@ class CacheService:
         t0 = rt.monotonic_ms()
         result = "ok"
         err_text: Optional[str] = None
+        first_err: Optional[str] = None
         retries = 0
+        success = False
+        new_val: Any = None
         try:
             # run loader with async backoff (single retry on failure)
             try:
                 new_val = await b.loader()
+                success = True
             except asyncio.CancelledError:
                 # Propagate cancellation so shutdown isn't blocked
                 result = "cancelled"
                 err_text = "cancelled"
                 raise
-            except Exception:
+            except Exception as exc:
                 retries = 1
+                first_err = _errtext(exc)
+                err_text = first_err
+                b.last_error = first_err
                 await asyncio.sleep(300)  # 5 minutes
-                new_val = await b.loader()
-                result = "retry_ok"
-            b.value = new_val
-            b.last_refresh = dt.datetime.now(UTC)
+                try:
+                    new_val = await b.loader()
+                    success = True
+                    result = "retry_ok"
+                except asyncio.CancelledError:
+                    result = "cancelled"
+                    err_text = "cancelled"
+                    raise
+                except Exception as exc2:
+                    second_err = _errtext(exc2)
+                    if second_err in (None, "", "-"):
+                        err_text = first_err
+                    else:
+                        err_text = f"{first_err} | retry: {second_err}"
+                    result = "fail"
+            if success:
+                b.value = new_val
+                b.last_refresh = dt.datetime.now(UTC)
         except asyncio.CancelledError:
             # Let the runtime cancel this task; finally will still run
             result = "cancelled"
@@ -114,7 +141,7 @@ class CacheService:
             raise
         except Exception as e:
             result = "fail"
-            err_text = str(e)[:200]
+            err_text = _errtext(e)
         finally:
             b.last_latency_ms = rt.monotonic_ms() - t0
             b.last_result = result
