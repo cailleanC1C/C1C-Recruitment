@@ -1,5 +1,5 @@
 <!-- Keep README user-facing -->
-# C1C Unified Recruitment Bot v0.9.2
+# C1C Unified Recruitment Bot v0.9.3
 A Discord bot for the C1C cluster that streamlines **recruiting, welcoming, and onboarding** in one runtime.
 Recruiter panels, welcome templates, and ticket watchers share a single config, scheduler, and watchdog.
 
