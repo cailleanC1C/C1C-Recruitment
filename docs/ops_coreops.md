@@ -1,4 +1,4 @@
-# Ops — CoreOps Runbook (v0.9.2)
+# Ops — CoreOps Runbook (v0.9.3)
 
 CoreOps gives staff and admins a quick view into the bot's health without leaving the
 Discord channel.
@@ -64,4 +64,4 @@ platform team. Provide recent `/healthz` responses and any watchdog stall logs.
 
 ---
 
-_Doc last updated: 2025-10-15 (v0.9.2)_
+_Doc last updated: 2025-11-05 (v0.9.3)_
