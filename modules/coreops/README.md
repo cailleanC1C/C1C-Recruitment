@@ -43,9 +43,10 @@ These shortcuts require the Admin role and map to the same CoreOps command handl
 `!ping` is available because it is included in the default `COREOPS_COMMANDS` list for
 this release.
 
-## Help footer timezone
-The help embed footer displays: `Bot v{BOT_VERSION} • CoreOps v1.0.0 • <time>`. The bot
-uses Europe/Vienna time when tzdata is available and falls back to UTC if it is not.
+## Embed footer
+All CoreOps/admin embeds share the footer `Bot v{BOT_VERSION} · CoreOps v1.0.0` with
+optional notes (for example, ` • source: ENV + Sheet Config`). Discord shows the
+timestamp automatically; no inline datetime is appended to the footer text.
 
 ## Troubleshooting
 Use this checklist if CoreOps feels unresponsive:

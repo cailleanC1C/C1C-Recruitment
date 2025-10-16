@@ -37,7 +37,7 @@ from shared.coreops_render import (
     build_digest_line,
     build_health_embed,
 )
-from shared.help import build_help_embed, build_help_footer
+from shared.help import build_help_embed, build_coreops_footer
 from shared.sheets import cache_service
 
 from .coreops_rbac import (
@@ -176,6 +176,23 @@ def _latency_sec(bot: commands.Bot) -> Optional[float]:
         return float(getattr(bot, "latency", None)) if bot.latency is not None else None
     except Exception:
         return None
+
+
+def _humanize_duration(seconds: Optional[int]) -> str:
+    if seconds is None:
+        return "-"
+    total = max(0, int(seconds))
+    units = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
+    parts = []
+    for suffix, length in units:
+        if total >= length:
+            qty, total = divmod(total, length)
+            parts.append(f"{qty}{suffix}")
+        if len(parts) == 2:
+            break
+    if not parts:
+        parts.append("0s")
+    return "".join(parts)
 
 
 def _config_meta_from_app() -> dict:
@@ -410,22 +427,6 @@ class CoreOpsCog(commands.Cog):
         caps = cache_service.capabilities()
         now = dt.datetime.now(UTC)
 
-        def _humanize(seconds: Optional[int]) -> str:
-            if seconds is None:
-                return "-"
-            total = max(0, int(seconds))
-            units = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
-            parts = []
-            for suffix, length in units:
-                if total >= length:
-                    qty, total = divmod(total, length)
-                    parts.append(f"{qty}{suffix}")
-                if len(parts) == 2:
-                    break
-            if not parts:
-                parts.append("0s")
-            return "".join(parts)
-
         for bucket in ("clans", "templates", "clan_tags"):
             info_raw = caps.get(bucket) or {}
             info = info_raw if isinstance(info_raw, dict) else {}
@@ -447,13 +448,17 @@ class CoreOpsCog(commands.Cog):
             next_text = "-"
             if isinstance(next_refresh, dt.datetime):
                 nr = next_refresh if next_refresh.tzinfo else next_refresh.replace(tzinfo=UTC)
-                next_text = nr.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+                delta = int((nr.astimezone(UTC) - now).total_seconds())
+                if delta >= 0:
+                    next_text = f"in {_humanize_duration(delta)}"
+                else:
+                    next_text = f"{_humanize_duration(abs(delta))} overdue"
 
             embed.add_field(
                 name=bucket,
                 value=(
-                    f"age: {_humanize(age_seconds)}, "
-                    f"TTL: {_humanize(ttl_seconds)}, "
+                    f"age: {_humanize_duration(age_seconds)}, "
+                    f"TTL: {_humanize_duration(ttl_seconds)}, "
                     f"next: {next_text}"
                 ),
                 inline=False,
@@ -482,7 +487,7 @@ class CoreOpsCog(commands.Cog):
         guild_name = getattr(getattr(ctx, "guild", None), "name", "unknown")
 
         embed = discord.Embed(
-            title=f"{bot_name} · v{version} · env: {env} · Guild: {guild_name}",
+            title=f"{bot_name} · env: {env} · Guild: {guild_name}",
             colour=discord.Colour.dark_teal(),
         )
 
@@ -505,8 +510,10 @@ class CoreOpsCog(commands.Cog):
             self._add_embed_group(embed, name, lines)
 
         embed.timestamp = dt.datetime.now(UTC)
-        footer_text = build_help_footer(bot_version=version)
-        embed.set_footer(text=f"{footer_text} • source: ENV + Sheet Config")
+        footer_text = build_coreops_footer(
+            bot_version=version, notes=" • source: ENV + Sheet Config"
+        )
+        embed.set_footer(text=footer_text)
 
         await ctx.reply(embed=embed)
 
@@ -590,7 +597,12 @@ class CoreOpsCog(commands.Cog):
             next_at = clans.get("next_refresh_at")
             nxt = ""
             if isinstance(next_at, dt.datetime):
-                nxt = f" Next auto-refresh: {next_at.astimezone(UTC).strftime('%H:%M UTC')}"
+                nr = next_at if next_at.tzinfo else next_at.replace(tzinfo=UTC)
+                delta = int((nr.astimezone(UTC) - now).total_seconds())
+                if delta >= 0:
+                    nxt = f" Next auto-refresh in {_humanize_duration(delta)}"
+                else:
+                    nxt = f" Next auto-refresh overdue by {_humanize_duration(abs(delta))}"
             await ctx.send(f"✅ Clans cache fresh ({mins}m old).{nxt}")
             return
 
