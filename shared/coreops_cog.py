@@ -174,7 +174,7 @@ class CoreOpsCog(commands.Cog):
             next_text = "-"
             if isinstance(next_refresh, dt.datetime):
                 nr = next_refresh if next_refresh.tzinfo else next_refresh.replace(tzinfo=UTC)
-                next_text = nr.astimezone(UTC).strftime("%H:%M UTC")
+                next_text = nr.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
             embed.add_field(
                 name=bucket,
