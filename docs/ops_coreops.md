@@ -17,11 +17,32 @@ Discord channel.
 | `!rec digest` | ✅ | ✅ |
 | `!rec health` | ✅ | ✅ |
 | `!rec env` | ✅ | ✅ |
+| `!config` | ✅ | ✅ |
 | `!health`, `!env`, `!digest`, `!help`, `!ping` | ❌ | ✅ |
 
 ## Admin bang shortcuts
 Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases without
 `!rec`. The shortcuts call the same handlers, so responses match the prefixed versions.
+
+## Refresh and cache management
+
+CoreOps hosts two command groups for cache control:
+
+- `!refresh` (admin-only):
+  - `!refresh all` — Clear and warm every registered Sheets cache bucket.
+- `!rec refresh` / `!rec_refresh`:
+  - `all` — Admin alias for `!refresh all`.
+  - `clansinfo` — Staff/Admin tool that refreshes the `clans` cache if it is older than 60 minutes; otherwise it reports the next scheduled refresh.
+
+Cache TTL reference:
+
+| Bucket | TTL |
+| --- | --- |
+| `clans` | 15 minutes |
+| `templates` | 15 minutes |
+| `clan_tags` | 60 minutes |
+
+Phase 3b shared Ops work resumes after this fix, once refresh command coverage is stable across environments.
 
 ## Sample outputs
 - **Health** — Embed with gateway latency, heartbeat timestamps (READY/connect/disconnect),

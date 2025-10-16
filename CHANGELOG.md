@@ -5,6 +5,7 @@
 - README is user-facing and versioned to v0.9.2.
 - Stamped v0.9.2 across architecture, development, ops, ops_coreops, contracts.
 - Added footer notes: "Doc last updated: 2025-10-15 (v0.9.2)".
+- CoreOps: fix refresh subcommand registration; replace private cache calls with public API; relocate staff `!config` summary into CoreOps.
 - Sheets access layer migration remains slated for Phase 3; CoreOps expansion for Phase 3b.
 
 ## Phase 2 — 2025-11-05
