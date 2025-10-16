@@ -133,6 +133,58 @@ class CoreOpsCog(commands.Cog):
             stall_after_sec=stall,
             disconnect_grace_sec=dgrace,
         )
+
+        caps = cache_service.capabilities()
+        now = dt.datetime.now(UTC)
+
+        def _humanize(seconds: Optional[int]) -> str:
+            if seconds is None:
+                return "-"
+            total = max(0, int(seconds))
+            units = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
+            parts = []
+            for suffix, length in units:
+                if total >= length:
+                    qty, total = divmod(total, length)
+                    parts.append(f"{qty}{suffix}")
+                if len(parts) == 2:
+                    break
+            if not parts:
+                parts.append("0s")
+            return "".join(parts)
+
+        for bucket in ("clans", "templates", "clan_tags"):
+            info_raw = caps.get(bucket) or {}
+            info = info_raw if isinstance(info_raw, dict) else {}
+            last_refresh = info.get("last_refresh_at")
+            ttl_value = info.get("ttl_sec")
+            next_refresh = info.get("next_refresh_at")
+
+            age_seconds: Optional[int] = None
+            if isinstance(last_refresh, dt.datetime):
+                lr = last_refresh if last_refresh.tzinfo else last_refresh.replace(tzinfo=UTC)
+                age_seconds = int((now - lr.astimezone(UTC)).total_seconds())
+                if age_seconds < 0:
+                    age_seconds = 0
+
+            ttl_seconds: Optional[int] = None
+            if isinstance(ttl_value, (int, float)):
+                ttl_seconds = int(ttl_value)
+
+            next_text = "-"
+            if isinstance(next_refresh, dt.datetime):
+                nr = next_refresh if next_refresh.tzinfo else next_refresh.replace(tzinfo=UTC)
+                next_text = nr.astimezone(UTC).strftime("%H:%M UTC")
+
+            embed.add_field(
+                name=bucket,
+                value=(
+                    f"age: {_humanize(age_seconds)}, "
+                    f"TTL: {_humanize(ttl_seconds)}, "
+                    f"next: {next_text}"
+                ),
+                inline=False,
+            )
         await ctx.reply(embed=embed)
 
     @commands.command(name="digest")
@@ -207,8 +259,11 @@ class CoreOpsCog(commands.Cog):
             await ctx.send("⚠️ No cache buckets registered.")
             return
         await ctx.send(f"🧹 Refreshing: {', '.join(buckets)} (background).")
+        actor = str(ctx.author)
         for name in buckets:
-            asyncio.create_task(cache_service.cache.refresh_now(name))
+            asyncio.create_task(
+                cache_service.cache.refresh_now(name, trigger="manual", actor=actor)
+            )
 
     @refresh.command(name="clansinfo")
     @_staff_check()
@@ -237,7 +292,9 @@ class CoreOpsCog(commands.Cog):
             return
 
         await ctx.send("Refreshing clans (background).")
-        asyncio.create_task(cache_service.cache.refresh_now("clans"))
+        asyncio.create_task(
+            cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
+        )
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CheckFailure):
