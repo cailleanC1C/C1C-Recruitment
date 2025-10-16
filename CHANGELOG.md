@@ -3,6 +3,7 @@
 ## [0.9.3] — Phase 3 rollout (Shared CoreOps refresh)
 
 - CoreOps: unify refresh commands in shared cog; removed duplicate definitions.
+- Runtime: add gspread dependency to enable templates bucket refresh.
 
 ## [0.9.2] — Phase 2 complete (Per-Environment Configuration)
 
