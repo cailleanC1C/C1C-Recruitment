@@ -1,7 +1,12 @@
 # shared/coreops_render.py
 from __future__ import annotations
-import os, platform, time
+import datetime as dt
+import os
+import platform
+import time
 import discord
+
+from shared.help import build_coreops_footer
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))
@@ -38,7 +43,9 @@ def build_health_embed(
     e.add_field(name="disconnect grace", value=f"{disconnect_grace_sec}s", inline=True)
     e.add_field(name="pid", value=str(os.getpid()), inline=True)
 
-    e.set_footer(text=f"{platform.system()} {platform.release()}")
+    footer_notes = f" • {platform.system()} {platform.release()}"
+    e.set_footer(text=build_coreops_footer(bot_version=version, notes=footer_notes))
+    e.timestamp = dt.datetime.now(dt.timezone.utc)
     return e
 
 def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str, object]) -> discord.Embed:
@@ -55,4 +62,6 @@ def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str
         if v:
             safe.append(f"{k}={v}")
     e.add_field(name="settings", value="\n".join(safe) if safe else "—", inline=False)
+    e.set_footer(text=build_coreops_footer(bot_version=version))
+    e.timestamp = dt.datetime.now(dt.timezone.utc)
     return e

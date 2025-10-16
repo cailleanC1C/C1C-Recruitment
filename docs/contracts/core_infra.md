@@ -60,7 +60,8 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 
 ## Change Management
 - Backwards-compatible env keys; no behavior changes without CHANGELOG entry.
-- Timezone in help footer: Europe/Vienna with UTC fallback.
+- Embed footer standardized: `Bot vX.Y.Z · CoreOps vA.B.C` (Discord timestamp replaces
+  inline timezone text).
 
 ---
 

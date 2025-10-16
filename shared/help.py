@@ -1,25 +1,27 @@
 # shared/help.py
 from __future__ import annotations
 import discord
-from datetime import datetime
-from zoneinfo import ZoneInfo
+import datetime as dt
+
+COREOPS_VERSION = "1.0.0"
 
 
-def _vienna_now_str() -> str:
-    """Return 'YYYY-MM-DD HH:MM Europe/Vienna' (fallback to UTC on any issue)."""
-    try:
-        if ZoneInfo is not None:
-            tz = ZoneInfo("Europe/Vienna")
-            return datetime.now(tz).strftime("%Y-%m-%d %H:%M Europe/Vienna")
-    except Exception:
-        pass
-    # Fallback (should rarely happen)
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+def build_coreops_footer(
+    *, bot_version: str, coreops_version: str = COREOPS_VERSION, notes: str | None = None
+) -> str:
+    footer = f"Bot v{bot_version} · CoreOps v{coreops_version}"
+    if notes:
+        trimmed = notes.strip()
+        if trimmed:
+            # Preserve the caller's chosen separator (bullet, middot, etc.).
+            footer = f"{footer}{notes}"
+    return footer
 
 
 def build_help_footer(*, bot_version: str) -> str:
-    footer_time = _vienna_now_str()
-    return f"Bot v{bot_version} • CoreOps v1.0.0 • {footer_time}"
+    """Backward-compatible alias for callers expecting the legacy name."""
+
+    return build_coreops_footer(bot_version=bot_version)
 
 
 def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discord.Embed:
@@ -39,6 +41,7 @@ def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discor
     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
     if is_staff:
         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
-    footer_text = build_help_footer(bot_version=bot_version)
+    footer_text = build_coreops_footer(bot_version=bot_version)
     e.set_footer(text=footer_text)
+    e.timestamp = dt.datetime.now(dt.timezone.utc)
     return e

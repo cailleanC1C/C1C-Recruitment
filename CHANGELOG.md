@@ -25,6 +25,7 @@ Phase 3: Sheets Access Layer + CoreOps Refresh
 – !health embed now displays cache ages, TTLs, and next refresh times (UTC date + time).
 – Refresher telemetry captures retry counts and error text across attempts.
 – Enhanced observability for manual vs scheduled triggers.
+– Embeds standardized: versions moved to footer; inline date/time removed (embed timestamp used).
 
 • Runtime Reliability
 – Gspread dependency added to enable template bucket refresh.

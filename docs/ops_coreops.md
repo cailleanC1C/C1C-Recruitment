@@ -32,8 +32,9 @@ Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases wi
 
 - **Access** — Admin roles take precedence; Administrator permission is a fallback when
   no configured role is present. Direct messages receive a friendly denial.
-- **Embed header** — `Bot Name · Version · ENV_NAME`, with a UTC timestamp footer and
-  `values from ENV and Sheet Config` label.
+- **Embed header** — `Bot Name · env: ENV_NAME · Guild: …`. Versions now live in the
+  shared footer (`Bot vX.Y.Z · CoreOps vA.B.C • source: ENV + Sheet Config`) with the
+  embed timestamp set to the current time.
 - **Environment table** — Reads the cached runtime config keys plus relevant environment
   variables, masking secrets (keeps the last four characters) and resolving guild,
   channel, and role IDs using a 10-minute in-memory cache. Missing lookups render as
@@ -72,12 +73,19 @@ Phase 3b shared Ops work resumes after this fix, once refresh command coverage i
 
   ```
   Cache
-  clans: age 00:47:12 • TTL 03:00:00 • next 2025-10-16 18:00 UTC
-  templates: age 05d 04:00 • TTL 07d 00:00 • next 2025-10-20 06:00 UTC
+  clans: age 47m • TTL 3h • next in 2h
+  templates: age 5d • TTL 7d • next overdue by 6h
   ```
 - **Digest** — One-line summary: bot version, watchdog state, last heartbeat age.
-- **Help footer** — `Bot v{BOT_VERSION} • CoreOps v1.0.0 • 2025-10-14 12:00 Vienna` (falls
-  back to UTC if the Vienna timezone is unavailable).
+- **Help footer** — `Bot v{BOT_VERSION} · CoreOps v1.0.0` (timestamp supplied by the
+  embed).
+
+## Embed footer
+
+All CoreOps/admin embeds share the same footer format: `Bot v{BOT_VERSION} · CoreOps
+v1.0.0` plus optional notes (e.g., ` • source: ENV + Sheet Config`). Absolute timestamps
+are no longer printed inline; rely on the embed timestamp Discord displays beneath the
+message.
 
 ## Common issues
 1. **Prefix mismatch** — Ensure commands start with `!rec`, `rec`, or a bot mention. Admin
