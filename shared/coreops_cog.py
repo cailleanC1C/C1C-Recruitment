@@ -567,12 +567,89 @@ class CoreOpsCog(commands.Cog):
         if not buckets:
             await ctx.send("⚠️ No cache buckets registered.")
             return
-        await ctx.send(f"🧹 Refreshing: {', '.join(buckets)} (background).")
+
+        actor_display = getattr(ctx.author, "display_name", None) or str(ctx.author)
         actor = str(ctx.author)
+        rows: List[dict[str, Any]] = []
+        total_duration = 0
+
         for name in buckets:
-            asyncio.create_task(
-                cache_service.cache.refresh_now(name, trigger="manual", actor=actor)
+            exc_text: Optional[str] = None
+            try:
+                await cache_service.cache.refresh_now(
+                    name, trigger="manual", actor=actor
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.exception("refresh-all bucket failed", extra={"bucket": name})
+                exc_text = str(exc).strip() or exc.__class__.__name__
+
+            bucket = cache_service.cache.get_bucket(name)
+            duration_ms = 0
+            retries = 0
+            outcome = "error"
+            error_text = exc_text or "-"
+
+            if bucket is not None:
+                duration_ms = bucket.last_latency_ms or 0
+                retries = getattr(bucket, "last_retries", 0)
+                raw_result = (bucket.last_result or "").lower()
+                if raw_result in ("ok", "retry_ok"):
+                    outcome = "ok"
+                else:
+                    outcome = "error"
+                bucket_error = (bucket.last_error or "").strip()
+                if bucket_error:
+                    error_text = bucket_error
+            else:
+                error_text = exc_text or "missing bucket"
+
+            total_duration += duration_ms
+
+            cleaned_error = (error_text or "-").strip() or "-"
+            cleaned_error = cleaned_error.replace("\n", " ")
+            if len(cleaned_error) > 60:
+                cleaned_error = f"{cleaned_error[:57]}..."
+
+            rows.append(
+                {
+                    "bucket": name,
+                    "duration_ms": duration_ms,
+                    "result": outcome,
+                    "retries": retries,
+                    "error": cleaned_error,
+                }
             )
+
+        header = "bucket        duration   result   retries   error"
+        separator = "-----------   --------   ------   -------   -----"
+        table_lines = [header, separator]
+        for row in rows:
+            duration = f"{row['duration_ms']}ms"
+            line = (
+                f"{row['bucket']:<11}   "
+                f"{duration:<8}   "
+                f"{row['result']:<6}   "
+                f"{row['retries']:<7}   "
+                f"{row['error']}"
+            )
+            table_lines.append(line.rstrip())
+
+        embed = discord.Embed(
+            title="Refresh · all",
+            description=f"actor: {actor_display} • trigger: manual",
+            colour=discord.Colour.blurple(),
+        )
+        embed.add_field(name="Buckets", value=f"```\n{'\n'.join(table_lines)}\n```", inline=False)
+        embed.timestamp = dt.datetime.now(UTC)
+        footer_text = build_coreops_footer(
+            bot_version=os.getenv("BOT_VERSION", "dev"),
+            notes=f" • total: {total_duration}ms",
+        )
+        embed.set_footer(text=footer_text)
+
+        await ctx.send(embed=embed)
 
     @refresh.command(name="clansinfo")
     @guild_only_denied_msg()

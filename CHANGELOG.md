@@ -20,6 +20,7 @@ Phase 3: Sheets Access Layer + CoreOps Refresh
 – Admin and Staff roles now use !rec refresh all and !rec refresh clansinfo.
 – RBAC guard logic preserved; clear permission errors surfaced.
 – Refresher logs record bucket, trigger, actor, duration, result, error.
+– `!rec refresh all` now posts a single summary embed listing all buckets with duration/result/retries.
 
 • Diagnostics & Health
 – !health embed now displays cache ages, TTLs, and next refresh times (UTC date + time).
