@@ -16,7 +16,7 @@ Discord channel.
 | `!rec ping` | ✅ | ✅ |
 | `!rec digest` | ✅ | ✅ |
 | `!rec health` | ✅ | ✅ |
-| `!rec env` | ✅ | ✅ |
+| `!rec env` | ❌ | ✅ |
 | `!config` | ✅ | ✅ |
 | `!rec refresh clansinfo` | ✅ | ✅ |
 | `!rec refresh all` | ❌ | ✅ |
@@ -25,6 +25,22 @@ Discord channel.
 ## Admin bang shortcuts
 Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases without
 `!rec`. The shortcuts call the same handlers, so responses match the prefixed versions.
+
+## CoreOps Admin Commands
+
+### `!env`
+
+- **Access** — Admin roles take precedence; Administrator permission is a fallback when
+  no configured role is present. Direct messages receive a friendly denial.
+- **Embed header** — `Bot Name · Version · ENV_NAME`, with a UTC timestamp footer and
+  `values from ENV and Sheet Config` label.
+- **Environment table** — Reads the cached runtime config keys plus relevant environment
+  variables, masking secrets (keeps the last four characters) and resolving guild,
+  channel, and role IDs using a 10-minute in-memory cache. Missing lookups render as
+  `(not found)`.
+- **Sheet Config table** — When recruitment/onboarding Config tab caches are warm,
+  their keys and values are added beneath the environment section using the same masking
+  and ID resolution rules.
 
 ## Refresh and cache management
 
@@ -77,4 +93,4 @@ platform team. Provide recent `/healthz` responses and any watchdog stall logs.
 
 ---
 
-_Doc last updated: 2025-10-16 (v0.9.3)_
+_Doc last updated: 2025-10-16 (v0.9.4-phase3b-rc2)_
