@@ -1,21 +1,44 @@
 # modules/coreops/cog.py
 from __future__ import annotations
-import os, sys, time
+
+import asyncio
+import datetime as dt
+import os
+import sys
+import time
 from typing import Optional
 
 from discord.ext import commands
 
 from config.runtime import (
-    get_env_name, get_bot_name, get_command_prefix,
-    get_watchdog_check_sec, get_watchdog_stall_sec, get_watchdog_disconnect_grace_sec,
+    get_env_name,
+    get_bot_name,
+    get_command_prefix,
+    get_watchdog_check_sec,
+    get_watchdog_stall_sec,
+    get_watchdog_disconnect_grace_sec,
 )
 from shared import socket_heartbeat as hb
+from shared.coreops_cog import (
+    UTC,
+    _admin_check,
+    _admin_roles_configured,
+    _staff_check,
+)
 from shared.coreops_render import (
-    build_digest_line, build_health_embed, build_env_embed,
+    build_digest_line,
+    build_env_embed,
+    build_health_embed,
+)
+from shared.config import (
+    get_allowed_guild_ids,
+    get_onboarding_sheet_id,
+    get_recruitment_sheet_id,
+    redact_ids,
 )
 from shared.coreops_rbac import is_staff_member
-from shared.coreops_cog import CoreOpsCog as SharedCoreOpsCog
 from shared.help import build_help_embed
+from shared.sheets import cache_service
 
 
 def staff_only():
@@ -49,9 +72,8 @@ def _config_meta_from_app() -> dict:
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
 
 
-class CoreOps(SharedCoreOpsCog):
+class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        super().__init__(bot)
         self.bot = bot
 
     @commands.command(name="health")
@@ -112,6 +134,136 @@ class CoreOps(SharedCoreOpsCog):
         )
         await ctx.reply(embed=e)
 
+    @commands.command(name="config")
+    @staff_only()
+    async def config_summary(self, ctx: commands.Context) -> None:
+        env = get_env_name()
+        allow = get_allowed_guild_ids()
+        recruitment_sheet = "set" if get_recruitment_sheet_id() else "missing"
+        onboarding_sheet = "set" if get_onboarding_sheet_id() else "missing"
+
+        lines = [
+            f"env: `{env}`",
+            f"allow-list: {len(allow)} ({redact_ids(sorted(allow))})",
+            f"connected guilds: {len(self.bot.guilds)}",
+            f"recruitment sheet: {recruitment_sheet}",
+            f"onboarding sheet: {onboarding_sheet}",
+        ]
+
+        await ctx.reply("\n".join(lines))
+
+    @commands.group(name="refresh", invoke_without_command=True)
+    @commands.guild_only()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    @_admin_check()
+    async def refresh(self, ctx: commands.Context) -> None:
+        """Admin group. Usage: !refresh all"""
+
+        if not _admin_roles_configured():
+            await ctx.send("⚠️ Admin roles not configured — admin refresh commands are disabled.")
+            return
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Try `!refresh all`.")
+
+    @refresh.command(name="all")
+    @_admin_check()
+    async def refresh_all(self, ctx: commands.Context) -> None:
+        """Admin: Clear & warm all registered Sheets caches."""
+
+        if not _admin_roles_configured():
+            await ctx.send("⚠️ Admin roles not configured — admin refresh commands are disabled.")
+            return
+        caps = cache_service.capabilities()
+        buckets = list(caps.keys())
+        if not buckets:
+            await ctx.send("⚠️ No cache buckets registered.")
+            return
+        await ctx.send(f"🧹 Refreshing: {', '.join(buckets)} (background).")
+        for name in buckets:
+            asyncio.create_task(cache_service.refresh_now(name))
+
+    @commands.group(name="rec_refresh", invoke_without_command=True)
+    async def rec_refresh(self, ctx: commands.Context) -> None:
+        """Recruitment refresh commands."""
+
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Try `!rec refresh all` or `!rec refresh clansinfo`.")
+
+    @rec_refresh.command(name="all")
+    @_admin_check()
+    async def rec_refresh_all(self, ctx: commands.Context) -> None:
+        """Alias: !rec refresh all (admin)."""
+
+        await ctx.invoke(self.refresh_all)
+
+    @rec_refresh.command(name="clansinfo")
+    @_staff_check()
+    async def rec_refresh_clansinfo(self, ctx: commands.Context) -> None:
+        """Staff/Admin: refresh 'clans' cache if age >= 60 minutes."""
+
+        caps = cache_service.capabilities()
+        clans = caps.get("clans")
+        if not clans:
+            await ctx.send("⚠️ This bot has no clansinfo cache.")
+            return
+
+        last_refresh = clans.get("last_refresh_at")
+        now = dt.datetime.now(UTC)
+        age_sec = 10 ** 9
+        if isinstance(last_refresh, dt.datetime):
+            try:
+                age_sec = int((now - last_refresh.astimezone(UTC)).total_seconds())
+            except Exception:
+                age_sec = int((now - last_refresh).total_seconds())
+
+        if age_sec < 60 * 60:
+            mins = age_sec // 60
+            next_at = clans.get("next_refresh_at")
+            tail = ""
+            if isinstance(next_at, dt.datetime):
+                try:
+                    tail = f" Next auto-refresh at {next_at.astimezone(UTC).strftime('%H:%M UTC')}"
+                except Exception:
+                    tail = f" Next auto-refresh at {next_at.strftime('%H:%M UTC')}"
+            await ctx.send(f"Clans cache is fresh (age: {mins}m).{tail}")
+            return
+
+        await ctx.send("Refreshing: clans (background).")
+        asyncio.create_task(cache_service.refresh_now("clans"))
+
+    @commands.group(name="rec", invoke_without_command=True)
+    async def rec(self, ctx: commands.Context) -> None:
+        """Recruitment namespace."""
+
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use `!rec help` for commands.")
+
+    @rec.group(name="refresh", invoke_without_command=True)
+    async def rec_refresh_alias(self, ctx: commands.Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Try `!rec refresh all` or `!rec refresh clansinfo`.")
+
+    @rec_refresh_alias.command(name="all")
+    @_admin_check()
+    async def rec_refresh_alias_all(self, ctx: commands.Context) -> None:
+        await ctx.invoke(self.rec_refresh_all)
+
+    @rec_refresh_alias.command(name="clansinfo")
+    @_staff_check()
+    async def rec_refresh_alias_clansinfo(self, ctx: commands.Context) -> None:
+        await ctx.invoke(self.rec_refresh_clansinfo)
+
+    async def cog_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        if isinstance(error, commands.CheckFailure):
+            qn = (ctx.command.qualified_name if getattr(ctx, "command", None) else "") or ""
+            if qn.startswith("refresh") or qn.startswith("rec refresh all") or qn.startswith("rec_refresh all"):
+                await ctx.send("⛔ You don't have permission to run admin refresh commands.")
+                return
+            if qn.startswith("rec refresh clansinfo") or qn.startswith("rec_refresh clansinfo"):
+                await ctx.send("⛔ You need Staff (or Administrator) to run this.")
+                return
+        raise error
+
 
 async def setup(bot):
-    await bot.add_cog(CoreOps(bot))
+    await bot.add_cog(CoreOpsCog(bot))
