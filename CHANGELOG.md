@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.9.3] — Phase 3 rollout (Shared CoreOps refresh)
+
+- CoreOps: unify refresh commands in shared cog; removed duplicate definitions.
+
 ## [0.9.2] — Phase 2 complete (Per-Environment Configuration)
 
 - README is user-facing and versioned to v0.9.2.

@@ -1,4 +1,4 @@
-# Ops — CoreOps Runbook (v0.9.2)
+# Ops — CoreOps Runbook (v0.9.3)
 
 CoreOps gives staff and admins a quick view into the bot's health without leaving the
 Discord channel.
@@ -18,6 +18,8 @@ Discord channel.
 | `!rec health` | ✅ | ✅ |
 | `!rec env` | ✅ | ✅ |
 | `!config` | ✅ | ✅ |
+| `!rec refresh clansinfo` | ✅ | ✅ |
+| `!rec refresh all` | ❌ | ✅ |
 | `!health`, `!env`, `!digest`, `!help`, `!ping` | ❌ | ✅ |
 
 ## Admin bang shortcuts
@@ -26,13 +28,10 @@ Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases wi
 
 ## Refresh and cache management
 
-CoreOps hosts two command groups for cache control:
+Cache refresh commands live directly in the shared CoreOps cog:
 
-- `!refresh` (admin-only):
-  - `!refresh all` — Clear and warm every registered Sheets cache bucket.
-- `!rec refresh` / `!rec_refresh`:
-  - `all` — Admin alias for `!refresh all`.
-  - `clansinfo` — Staff/Admin tool that refreshes the `clans` cache if it is older than 60 minutes; otherwise it reports the next scheduled refresh.
+- `!rec refresh all` — Admin-only. Clears and warms every registered Sheets cache bucket in the background.
+- `!rec refresh clansinfo` — Staff/Admin. Refreshes the `clans` cache when it is at least 60 minutes old; otherwise reports its freshness and next scheduled refresh.
 
 Cache TTL reference:
 
@@ -65,4 +64,4 @@ platform team. Provide recent `/healthz` responses and any watchdog stall logs.
 
 ---
 
-_Doc last updated: 2025-10-15 (v0.9.2)_
+_Doc last updated: 2025-10-16 (v0.9.3)_
