@@ -5,6 +5,7 @@
 - CoreOps: unify refresh commands in shared cog; removed duplicate definitions.
 - Runtime: add gspread dependency to enable templates bucket refresh.
 - Cache: improved refresh failure diagnostics — both first and retry errors are logged.
+- Health: 'next' now shows full UTC date + time (YYYY-MM-DD HH:MM UTC).
 
 ## [0.9.2] — Phase 2 complete (Per-Environment Configuration)
 
