@@ -24,6 +24,7 @@ from shared.coreops_rbac import (
     get_admin_role_ids,
     get_staff_role_ids,
     is_admin_member,
+    ops_gate,
 )
 
 logging.basicConfig(
@@ -177,7 +178,7 @@ async def on_message(message: discord.Message):
     )
 
     cmd_name = detect_admin_bang_command(
-        message, commands=COREOPS_COMMANDS, is_admin=is_admin_member
+        message, commands=COREOPS_COMMANDS, is_admin=ops_gate
     )
     if cmd_name:
         ctx = await bot.get_context(message)
