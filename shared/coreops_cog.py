@@ -34,7 +34,13 @@ from shared.coreops_render import (
 from shared.help import build_help_embed
 from shared.sheets import cache_service
 
-from .coreops_rbac import is_admin_member, is_staff_member
+from .coreops_rbac import (
+    can_manage_guild,
+    guild_only_denied_msg,
+    is_admin_member,
+    is_staff_member,
+    ops_only,
+)
 
 UTC = dt.timezone.utc
 
@@ -78,7 +84,7 @@ def staff_only() -> commands.Check[Any]:
         if is_staff_member(getattr(ctx, "author", None)):
             return True
         try:
-            await ctx.reply("Staff only")
+            await ctx.reply("Staff only.")
         except Exception:
             pass
         return False
@@ -200,7 +206,8 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(line)
 
     @commands.command(name="env")
-    @staff_only()
+    @guild_only_denied_msg()
+    @ops_only()
     async def env(self, ctx: commands.Context) -> None:
         embed = build_env_embed(
             bot_name=get_bot_name(),
@@ -220,7 +227,8 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=embed)
 
     @commands.command(name="config")
-    @staff_only()
+    @guild_only_denied_msg()
+    @ops_only()
     async def config_summary(self, ctx: commands.Context) -> None:
         env = get_env_name()
         allow = get_allowed_guild_ids()
@@ -238,18 +246,19 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply("\n".join(lines))
 
     @commands.group(name="refresh", invoke_without_command=True)
-    @commands.guild_only()
-    @commands.check_any(_admin_check(), _staff_check())
+    @guild_only_denied_msg()
+    @ops_only()
     async def refresh(self, ctx: commands.Context) -> None:
         """Admin/Staff group: manual cache refresh."""
 
-        if not _admin_roles_configured():
+        if not _admin_roles_configured() and not can_manage_guild(getattr(ctx, "author", None)):
             await ctx.send("⚠️ Admin roles not configured — refresh commands disabled.")
             return
         await ctx.send("Available: `!rec refresh all`, `!rec refresh clansinfo`")
 
     @refresh.command(name="all")
-    @_admin_check()
+    @guild_only_denied_msg()
+    @ops_only()
     async def refresh_all(self, ctx: commands.Context) -> None:
         """Admin: clear & warm all registered Sheets caches."""
 
@@ -266,7 +275,8 @@ class CoreOpsCog(commands.Cog):
             )
 
     @refresh.command(name="clansinfo")
-    @_staff_check()
+    @guild_only_denied_msg()
+    @ops_only()
     async def refresh_clansinfo(self, ctx: commands.Context) -> None:
         """Staff/Admin: refresh 'clans' cache if age ≥ 60 min."""
 
@@ -298,13 +308,7 @@ class CoreOpsCog(commands.Cog):
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception) -> None:
         if isinstance(error, commands.CheckFailure):
-            qn = (ctx.command.qualified_name if getattr(ctx, "command", None) else "") or ""
-            if qn.startswith("refresh all"):
-                await ctx.send("⛔ You don't have permission to run admin refresh commands.")
-                return
-            if qn.startswith("refresh clansinfo"):
-                await ctx.send("⛔ You need Staff (or Administrator) to run this.")
-                return
+            return
         raise error
 
 
