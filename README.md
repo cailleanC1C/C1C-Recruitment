@@ -1,39 +1,41 @@
-# C1C Unified Recruitment Bot
-Single Discord bot with modular capabilities:
-- recruitment.search (panels, filters, embeds)
-- recruitment.welcome (templated welcome posting)
-- onboarding.watcher_welcome (welcome thread close logging)
-- onboarding.watcher_promo (promo close logging)
+<!-- Keep README user-facing -->
+# C1C Recruitment Bot v0.9.3
+A Discord bot for the C1C cluster that streamlines **recruiting, welcoming and onboarding** in one runtime.
+Recruiter panels, welcome templates and ticket watchers share a single config, scheduler and watchdog.
 
-## Phase 2 status
-✔ Centralized env config
-✔ Guild allow-list by environment
-✔ Single runtime (watchdog, scheduler, health server)
-✔ Logs routed to #bot-production
-✖ Sheets wiring moves to Phase 3
-✖ Shared ops commands expansion moves to Phase 3b
+## Highlights
+- 🧭 **Recruitment panels** — `!clanmatch`, `!clansearch`, `!clan` for filtering and placement.
+- 💌 **Welcome system** — templated welcomes loaded from Google Sheets.
+- 🧾 **Onboarding watchers** — log welcome & promo thread closures; prompt for missing data.
+- ⚙️ **Unified runtime** — single watchdog, scheduler, and health layer (Phase 2 & 3 runtime verified).
+- 🔄 **Sheets & CoreOps refresh** — async cache layer with retries, scheduled + manual refresh, and structured logging.
+- 🔐 **Per-environment configuration** — strict `GUILD_IDS` allow-list per env.
+- 🪶 **Zero-code maintenance** — update Google Sheets tabs; bot picks it up on refresh.
 
-## Environment setup
-Create `.env.dev`, `.env.test`, `.env.prod` with identical key names and `ENV_NAME=dev|test|prod`.
+## Commands (at a glance)
+| Command | Scope | Purpose |
+| --- | --- | --- |
+| `!clanmatch` | Recruiter | Opens recruiter panel with filters and paging. |
+| `!clansearch` | Public | Member-facing panel with the same filters. |
+| `!clan <clantag>` | Any | Quick clan profile card. |
+| `!welcome` | Staff/Admin | Posts templated welcome for a placement. |
+| `!ping`, `!health`, `!help`, `!digest` | Admin | Liveness, latency, help, daily digest. |
 
-### Required ENV keys
-- Core: `DISCORD_TOKEN`, `ENV_NAME`, `GUILD_IDS`, `TIMEZONE`, `REFRESH_TIMES`
-- Sheets: `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`, `ONBOARDING_SHEET_ID`
-- Roles: `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`, `RECRUITER_ROLE_IDS`, `LEAD_ROLE_IDS`
-- Channels: `RECRUITERS_THREAD_ID`, `WELCOME_GENERAL_CHANNEL_ID`, `WELCOME_CHANNEL_ID`, `PROMO_CHANNEL_ID`, `LOG_CHANNEL_ID`, `NOTIFY_CHANNEL_ID`, `NOTIFY_PING_ROLE_ID`
-- Toggles: `WELCOME_ENABLED`, `ENABLE_WELCOME_WATCHER`, `ENABLE_PROMO_WATCHER`, `ENABLE_NOTIFY_FALLBACK`, `STRICT_PROBE`, `SEARCH_RESULTS_SOFT_CAP`
-- Watchdog: `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
-- Cache/Cleanup: `CLAN_TAGS_CACHE_TTL_SEC`, `CLEANUP_AGE_HOURS`
+## How it works 
+Recruiters shortlist clans via panels. When a decision is made, `!welcome` renders the template from the **WelcomeTemplates** tab and posts to the clan’s channel.
+Watchers detect thread closures and upsert rows into **WelcomeTickets** / **PromoTickets**, keeping records tidy.
 
-> Note: Legacy singular keys like `ADMIN_ROLE_ID` are deprecated and removed post-Phase 2.
+## Troubleshooting
+- Command not working? -> ping @administrator
+- Panel not popping? -> run !ping to see if bot is up.
 
-## Sheet Config tabs (required)
-Each Google Sheet must have a tab named **Config** with two columns `Key | Value`.
-- Recruitment sheet: `CLANS_TAB`, `WELCOME_TEMPLATES_TAB`
-- Onboarding sheet: `WELCOME_TICKETS_TAB`, `PROMO_TICKETS_TAB`, `CLANLIST_TAB`
+## Documentation
+- 📐 [architecture.md](docs/architecture.md) — High-level layout & watchdog flow  
+- 🧑‍💻 [development.md](docs/development.md) — Local setup, prefixes, structure  
+- ⚙️ [ops.md](docs/ops.md) — Environment configuration & deployment workflow  
+- 🛡️ [ops_coreops.md](docs/ops_coreops.md) — CoreOps runbook for admins/staff  
+- 📜 [contracts/core_infra.md](docs/contracts/core_infra.md) — API & health contract
 
-## Logging
-All confirmations and errors route to `LOG_CHANNEL_ID` (= #bot-production).
+---
 
-## Run
-Deploy with the desired `.env.*`. The bot enforces `GUILD_IDS` allow-list on startup.
+_Doc last updated: 2025-10-16 (v0.9.3)_

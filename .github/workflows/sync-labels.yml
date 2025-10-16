@@ -1,4 +1,4 @@
-name: Sync Labels
+name: 98-Sync Labels
 on:
   workflow_dispatch: {}
   push:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, time as dt_time, timedelta
 from typing import Awaitable, Callable, Iterable, Optional, Sequence
 
@@ -28,6 +29,36 @@ from shared.config import (
 )
 
 log = logging.getLogger("c1c.runtime")
+
+_ACTIVE_RUNTIME: "Runtime | None" = None
+
+
+def set_active_runtime(runtime: "Runtime | None") -> None:
+    """Set the active runtime used by module-level helpers."""
+
+    global _ACTIVE_RUNTIME
+    _ACTIVE_RUNTIME = runtime
+
+
+def get_active_runtime() -> "Runtime | None":
+    """Return the active runtime instance if one has been registered."""
+
+    return _ACTIVE_RUNTIME
+
+
+async def send_log_message(message: str) -> None:
+    """Proxy to the active runtime's log channel helper, if available."""
+
+    runtime = get_active_runtime()
+    if runtime is None:
+        return
+    await runtime.send_log_message(message)
+
+
+def monotonic_ms() -> int:
+    """Return a monotonic millisecond timestamp for lightweight timing."""
+
+    return int(time.monotonic() * 1000)
 
 
 def _parse_times(parts: Iterable[str]) -> list[dt_time]:
@@ -127,6 +158,7 @@ class Runtime:
         self._web_site: Optional[web.TCPSite] = None
         self._watchdog_task: Optional[asyncio.Task] = None
         self._watchdog_params: Optional[tuple[int, int, int]] = None
+        set_active_runtime(self)
 
     async def start_webserver(self, *, port: Optional[int] = None) -> None:
         if self._web_site is not None:
@@ -327,11 +359,17 @@ class Runtime:
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
 
+        # (Refresh commands now live directly in the CoreOps cog.)
+
     async def start(self, token: str) -> None:
         await self.start_webserver()
         await self.load_extensions()
+        from shared.sheets.cache_scheduler import schedule_default_jobs
+
+        schedule_default_jobs(self)
         await self.bot.start(token)
 
     async def close(self) -> None:
         await self.shutdown_webserver()
         await self.scheduler.shutdown()
+        set_active_runtime(None)

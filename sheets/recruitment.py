@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from shared.sheets import core
+from shared.sheets.async_core import afetch_records, afetch_values
+from shared.sheets.cache_service import cache
 
 _CACHE_TTL = int(os.getenv("SHEETS_CACHE_TTL_SEC", "900"))
 _CONFIG_TTL = int(os.getenv("SHEETS_CONFIG_CACHE_TTL_SEC", str(_CACHE_TTL)))
@@ -27,13 +29,20 @@ def _sheet_id() -> str:
         or os.getenv("GOOGLE_SHEET_ID")
         or os.getenv("GSHEET_ID")
         or ""
-    )
-    sheet_id = sheet_id.strip()
+    ).strip()
     if not sheet_id:
-        raise RuntimeError(
-            "RECRUITMENT_SHEET_ID/GOOGLE_SHEET_ID/GSHEET_ID not set for recruitment"
-        )
+        raise RuntimeError("RECRUITMENT_SHEET_ID not set")
     return sheet_id
+
+
+def _ensure_service_account_credentials() -> None:
+    creds = (
+        os.getenv("GSPREAD_CREDENTIALS")
+        or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        or ""
+    ).strip()
+    if not creds:
+        raise RuntimeError("GSPREAD_CREDENTIALS not set")
 
 
 def _config_tab() -> str:
@@ -132,3 +141,37 @@ def fetch_welcome_templates(tab: str | None = None) -> List[Dict[str, Any]]:
     if tab:
         return core.fetch_records(_sheet_id(), tab)
     return fetch_templates()
+
+
+def get_cached_welcome_templates() -> List[Dict[str, Any]]:
+    """Return cached WelcomeTemplates rows when available, falling back to a live fetch."""
+
+    bucket = cache.get_bucket("templates")
+    if bucket and bucket.value is not None:
+        return cast(List[Dict[str, Any]], bucket.value)
+    return fetch_welcome_templates()
+
+
+# -----------------------------
+# Phase 3 cache registrations
+# -----------------------------
+_TTL_CLANS_SEC = 3 * 60 * 60
+_TTL_TEMPLATES_SEC = 7 * 24 * 60 * 60
+
+
+async def _load_clans_async() -> List[List[str]]:
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _clans_tab()
+    return await afetch_values(sheet_id, tab)
+
+
+async def _load_templates_async() -> List[Dict[str, Any]]:
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _templates_tab()
+    return await afetch_records(sheet_id, tab)
+
+
+cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
+cache.register("templates", _TTL_TEMPLATES_SEC, _load_templates_async)

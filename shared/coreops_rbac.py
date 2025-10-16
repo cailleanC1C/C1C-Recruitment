@@ -7,7 +7,9 @@ crashes if a value is malformed.
 """
 from __future__ import annotations
 
-from typing import Set, Union
+import logging
+import time
+from typing import Any, Dict, Optional, Set, Tuple, Union
 
 import discord
 from discord.ext import commands
@@ -21,6 +23,11 @@ from shared.config import (
 
 Memberish = Union[discord.abc.User, discord.Member]
 ContextOrMember = Union[commands.Context, Memberish]
+
+_DENIAL_LOG_THROTTLE_SEC = 30.0
+_denial_log_cache: Dict[Tuple[Optional[int], str, Optional[int]], float] = {}
+
+logger = logging.getLogger(__name__)
 
 
 def _member_role_ids(member: Memberish | None) -> Set[int]:
@@ -110,3 +117,85 @@ def is_lead(target: ContextOrMember | None) -> bool:
         return True
     lead_roles = get_lead_role_ids()
     return bool(lead_roles.intersection(roles))
+
+
+def can_manage_guild(member: discord.Member | None) -> bool:
+    if not isinstance(member, discord.Member):
+        return False
+    perms = getattr(member, "guild_permissions", None)
+    if perms is None:
+        return False
+    if getattr(perms, "administrator", False):
+        return True
+    return bool(getattr(perms, "manage_guild", False))
+
+
+def ops_gate(member: discord.Member | None) -> bool:
+    if member is None:
+        return False
+    if is_admin_member(member) or is_staff_member(member):
+        return True
+    return can_manage_guild(member)
+
+
+async def _reply(ctx: commands.Context, message: str) -> None:
+    try:
+        await ctx.reply(message, mention_author=False)
+    except Exception:
+        pass
+
+
+async def _send_guild_only_denial(ctx: commands.Context) -> None:
+    await _reply(ctx, "This command can only be used in servers.")
+
+
+async def _send_staff_denial(ctx: commands.Context) -> None:
+    await _reply(ctx, "Staff only.")
+
+
+def _log_staff_denial(ctx: commands.Context) -> None:
+    author = getattr(ctx, "author", None)
+    user_id = getattr(author, "id", None)
+    command = getattr(getattr(ctx, "command", None), "qualified_name", None) or "unknown"
+    guild = getattr(getattr(ctx, "guild", None), "id", None)
+    key = (
+        int(user_id) if isinstance(user_id, int) else None,
+        command,
+        int(guild) if isinstance(guild, int) else None,
+    )
+    now = time.monotonic()
+    last = _denial_log_cache.get(key)
+    if last is not None and now - last < _DENIAL_LOG_THROTTLE_SEC:
+        return
+    _denial_log_cache[key] = now
+    logger.info(
+        "Denied ops command '%s' for user %s in guild %s",
+        command,
+        user_id if user_id is not None else "unknown",
+        guild if guild is not None else "DM",
+    )
+
+
+def ops_only() -> commands.Check[Any]:
+    async def predicate(ctx: commands.Context) -> bool:
+        if getattr(ctx, "guild", None) is None:
+            await _send_guild_only_denial(ctx)
+            raise commands.CheckFailure("Guild only.")
+        member = getattr(ctx, "author", None)
+        if isinstance(member, discord.Member) and ops_gate(member):
+            return True
+        await _send_staff_denial(ctx)
+        _log_staff_denial(ctx)
+        raise commands.CheckFailure("Staff only.")
+
+    return commands.check(predicate)
+
+
+def guild_only_denied_msg() -> commands.Check[Any]:
+    async def predicate(ctx: commands.Context) -> bool:
+        if getattr(ctx, "guild", None) is None:
+            await _send_guild_only_denial(ctx)
+            raise commands.CheckFailure("Guild only.")
+        return True
+
+    return commands.check(predicate)

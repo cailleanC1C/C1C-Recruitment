@@ -7,6 +7,8 @@ import time
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from shared.sheets import core
+from shared.sheets.async_core import afetch_values
+from shared.sheets.cache_service import cache
 
 _CACHE_TTL = int(os.getenv("SHEETS_CACHE_TTL_SEC", "900"))
 _CONFIG_TTL = int(os.getenv("SHEETS_CONFIG_CACHE_TTL_SEC", str(_CACHE_TTL)))
@@ -28,10 +30,18 @@ def _sheet_id() -> str:
     )
     sheet_id = sheet_id.strip()
     if not sheet_id:
-        raise RuntimeError(
-            "ONBOARDING_SHEET_ID/GOOGLE_SHEET_ID/GSHEET_ID not set for onboarding"
-        )
+        raise RuntimeError("ONBOARDING_SHEET_ID not set")
     return sheet_id
+
+
+def _ensure_service_account_credentials() -> None:
+    creds = (
+        os.getenv("GSPREAD_CREDENTIALS")
+        or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        or ""
+    ).strip()
+    if not creds:
+        raise RuntimeError("GSPREAD_CREDENTIALS not set")
 
 
 def _config_tab() -> str:
@@ -82,6 +92,48 @@ def _config_lookup(key: str, default: Optional[str] = None) -> Optional[str]:
     return config.get(want, default)
 
 
+def _resolve_onboarding_sheet_id() -> str:
+    """Return the configured onboarding sheet identifier."""
+
+    return _sheet_id()
+
+
+def _read_onboarding_config(sheet_id: Optional[str] = None) -> Dict[str, str]:
+    """Return the onboarding config mapping using upper-case keys.
+
+    ``_load_config`` normalises keys to lower-case for internal use.  Some
+    callers expect the sheet's original upper-case key names, so we build a new
+    dictionary with upper-case keys while reusing the cached configuration
+    values.
+    """
+
+    _ = sheet_id  # preserved for API compatibility with older helpers
+    config = _load_config()
+    return {key.upper(): value for key, value in config.items()}
+
+
+def _resolve_onboarding_and_welcome_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured welcome tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("WELCOME_TICKETS_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing WELCOME_TICKETS_TAB")
+    return sheet_id, str(tab)
+
+
+def _resolve_onboarding_and_promo_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured promo tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("PROMO_TICKETS_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing PROMO_TICKETS_TAB")
+    return sheet_id, str(tab)
+
+
 def _welcome_tab() -> str:
     return (
         _config_lookup("welcome_tickets_tab", "WelcomeTickets")
@@ -96,12 +148,33 @@ def _promo_tab() -> str:
     )
 
 
+def _resolve_onboarding_and_welcome_tab() -> tuple[str, str]:
+    """Return the onboarding sheet ID and configured welcome tab name."""
+
+    return _sheet_id(), _welcome_tab()
+
+
 def _clanlist_tab() -> str:
     return _config_lookup("clanlist_tab", "ClanList") or "ClanList"
 
 
 def _worksheet(tab: str):
     return core.get_worksheet(_sheet_id(), tab)
+
+
+def _resolve_onboarding_and_promo_tab() -> tuple[str, str]:
+    """Return the onboarding sheet ID and promo tab name."""
+
+    return _sheet_id(), _promo_tab()
+def _resolve_onboarding_and_clanlist_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured clan list tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("CLANLIST_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing CLANLIST_TAB")
+    return sheet_id, str(tab)
 
 
 def _column_index(headers: Sequence[str], name: str, default: int = 0) -> int:
@@ -287,3 +360,27 @@ def load_clan_tags(force: bool = False) -> List[str]:
     _CLAN_TAGS = tags
     _CLAN_TAG_TS = now
     return tags
+
+
+# -----------------------------
+# Phase 3 cache registrations
+# -----------------------------
+_TTL_CLAN_TAGS_SEC = 7 * 24 * 60 * 60
+
+
+async def _load_clan_tags_async() -> List[str]:
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = _clanlist_tab()
+    values = await afetch_values(sheet_id, tab)
+    tags: List[str] = []
+    for row in values[1:]:
+        if not row:
+            continue
+        tag = (row[0] if len(row) > 0 else "").strip().upper()
+        if tag:
+            tags.append(tag)
+    return tags
+
+
+cache.register("clan_tags", _TTL_CLAN_TAGS_SEC, _load_clan_tags_async)

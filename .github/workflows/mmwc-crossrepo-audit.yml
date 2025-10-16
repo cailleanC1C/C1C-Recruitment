@@ -1,4 +1,4 @@
-name: Cross-repo Audit — Matchmaker + WelcomeCrew
+name: 99-Cross-repo Audit — Matchmaker + WelcomeCrew
 
 on:
   workflow_dispatch:

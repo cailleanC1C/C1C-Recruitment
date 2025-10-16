@@ -1,4 +1,5 @@
-# Architecture
+<!-- Header/version stamp -->
+# Architecture — v0.9.2
 
 ```
 Discord Gateway
@@ -23,3 +24,7 @@ Health server (aiohttp)
 - The watchdog mirrors the legacy system: it schedules keepalive messages, measures
   stalls, and forces reconnects when the disconnect grace expires.
 - Render restarts the container automatically whenever the bot exits.
+
+---
+
+_Doc last updated: 2025-10-15 (v0.9.2)_
