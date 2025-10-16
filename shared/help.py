@@ -17,6 +17,11 @@ def _vienna_now_str() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
 
+def build_help_footer(*, bot_version: str) -> str:
+    footer_time = _vienna_now_str()
+    return f"Bot v{bot_version} • CoreOps v1.0.0 • {footer_time}"
+
+
 def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discord.Embed:
     e = discord.Embed(title="🌿C1C Recruitment Helper · help", colour=discord.Color.blurple())
     user_cmds = [
@@ -34,6 +39,6 @@ def build_help_embed(*, prefix: str, is_staff: bool, bot_version: str) -> discor
     e.add_field(name="Everyone", value=fmt(user_cmds) or "—", inline=False)
     if is_staff:
         e.add_field(name="Staff", value=fmt(staff_cmds) or "—", inline=False)
-    footer_time = _vienna_now_str()
-    e.set_footer(text=f"Bot v{bot_version} • CoreOps v1.0.0 • {footer_time}")
+    footer_text = build_help_footer(bot_version=bot_version)
+    e.set_footer(text=footer_text)
     return e

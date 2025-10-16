@@ -10,6 +10,7 @@ import re
 import sys
 import time
 from importlib import import_module
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import discord
@@ -36,7 +37,7 @@ from shared.coreops_render import (
     build_digest_line,
     build_health_embed,
 )
-from shared.help import build_help_embed
+from shared.help import build_help_embed, build_help_footer
 from shared.sheets import cache_service
 
 from .coreops_rbac import (
@@ -71,6 +72,51 @@ _SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
     ("Onboarding", "sheets.onboarding"),
 )
 _sheet_cache_errors_logged: Set[str] = set()
+_FIELD_CHAR_LIMIT = 900
+
+
+@dataclass(frozen=True)
+class _EnvEntry:
+    key: str
+    normalized: object
+    display: str
+
+
+def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
+    chunks: List[str] = []
+    current: List[str] = []
+    current_len = 0
+    for line in lines:
+        text = line.rstrip()
+        additional = len(text) + (1 if current else 0)
+        if current and current_len + additional > limit:
+            chunks.append("\n".join(current))
+            current = [text]
+            current_len = len(text)
+        else:
+            current.append(text)
+            current_len += additional
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or ["—"]
+
+
+def _is_secret_key(key: str) -> bool:
+    upper = key.upper()
+    return (
+        "TOKEN" in upper
+        or "SECRET" in upper
+        or "CREDENTIAL" in upper
+        or "SERVICE_ACCOUNT" in upper
+    )
+
+
+def _trim_resolved_label(label: str) -> str:
+    if label.endswith(" (guild)"):
+        label = label[:-8]
+    if " · " in label:
+        label = label.split(" · ", 1)[0]
+    return label
 
 
 def _admin_roles_configured() -> bool:
@@ -176,21 +222,6 @@ def _clip(text: str, limit: int) -> str:
     if len(clean) <= limit:
         return clean
     return f"{clean[: limit - 1]}…"
-
-
-def _format_table(entries: Sequence[Tuple[str, str, str]]) -> str:
-    if not entries:
-        return "—"
-
-    header = f"{'KEY':<28} {'VALUE':<32} RESOLVED"
-    lines = [header, "-" * len(header)]
-    for key, value, resolved in entries:
-        key_text = _clip(key, 28).ljust(28)
-        value_text = _clip(value, 32).ljust(32)
-        resolved_text = _clip(resolved, 64)
-        lines.append(f"{key_text} {value_text} {resolved_text}")
-
-    return "```\n" + "\n".join(lines) + "\n```"
 
 
 def _format_resolved(names: Sequence[str]) -> str:
@@ -448,31 +479,34 @@ class CoreOpsCog(commands.Cog):
         bot_name = get_bot_name()
         env = get_env_name()
         version = os.getenv("BOT_VERSION", "dev")
+        guild_name = getattr(getattr(ctx, "guild", None), "name", "unknown")
 
         embed = discord.Embed(
-            title=f"{bot_name} · {version} · {env}",
+            title=f"{bot_name} · v{version} · env: {env} · Guild: {guild_name}",
             colour=discord.Colour.dark_teal(),
         )
 
-        sections: List[str] = []
-        env_rows = self._collect_env_rows()
-        sections.append("**Environment**\n" + _format_table(env_rows))
-
+        entries = self._collect_env_entries()
         sheet_sections = self._collect_sheet_sections()
-        if sheet_sections:
-            for label, rows in sheet_sections:
-                sections.append(f"**{label} Config**\n" + _format_table(rows))
-        else:
-            sections.append("**Sheet Config**\n—")
 
-        meta = _config_meta_from_app()
-        source = meta.get("source", "runtime")
-        status = meta.get("status", "ok")
-        sections.append(f"**Config Loader**\n`{source}` · `{status}`")
+        groups = [
+            ("Core Identity", self._format_core_identity(entries)),
+            ("Guild / Channels", self._format_guild_channels(entries)),
+            ("Roles", self._format_roles(entries)),
+            ("Sheets / Config Keys", self._format_sheet_keys(entries, sheet_sections)),
+            ("Features / Flags", self._format_features(entries)),
+            ("Cache / Refresh", self._format_cache_refresh(entries)),
+            ("Watchdog / Runtime", self._format_watchdog(entries)),
+            ("Render / Infra", self._format_render(entries)),
+            ("Secrets (masked)", self._format_secrets(entries)),
+        ]
 
-        embed.description = "\n\n".join(sections)
+        for name, lines in groups:
+            self._add_embed_group(embed, name, lines)
+
         embed.timestamp = dt.datetime.now(UTC)
-        embed.set_footer(text="values from ENV and Sheet Config")
+        footer_text = build_help_footer(bot_version=version)
+        embed.set_footer(text=f"{footer_text} • source: ENV + Sheet Config")
 
         await ctx.reply(embed=embed)
 
@@ -565,10 +599,26 @@ class CoreOpsCog(commands.Cog):
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )
 
-    def _collect_env_rows(self) -> List[Tuple[str, str, str]]:
+    def _add_embed_group(
+        self, embed: discord.Embed, name: str, lines: Sequence[str]
+    ) -> None:
+        text_lines = list(lines)
+        if not text_lines:
+            text_lines = ["—"]
+        elif all(line == "" for line in text_lines):
+            text_lines = ["—"]
+
+        chunks = _chunk_lines(text_lines, _FIELD_CHAR_LIMIT)
+        for index, chunk in enumerate(chunks):
+            label = name if index == 0 else f"{name} (cont.)"
+            embed.add_field(name=label, value=f"```{chunk}```", inline=False)
+
+    def _collect_env_entries(self) -> Dict[str, _EnvEntry]:
         snapshot = get_config_snapshot()
-        rows: List[Tuple[str, str, str]] = []
+        entries: Dict[str, _EnvEntry] = {}
         for key in _candidate_env_keys(snapshot):
+            if key in entries:
+                continue
             raw_value: object
             if key in os.environ:
                 raw_value = os.environ.get(key)
@@ -576,10 +626,258 @@ class CoreOpsCog(commands.Cog):
                 raw_value = snapshot.get(key)
 
             normalized = _normalize_snapshot_value(raw_value)
-            display_value = redact_value(key, normalized)
-            resolved = self._resolve_ids(_extract_ids(key, normalized))
-            rows.append((key, display_value, resolved))
-        return rows
+            display_value = str(redact_value(key, normalized))
+            entries[key] = _EnvEntry(key=key, normalized=normalized, display=display_value)
+        return entries
+
+    def _format_simple_line(self, key: str, entry: Optional[_EnvEntry]) -> str:
+        value = entry.display if entry else "—"
+        return f"{key} = {value}"
+
+    def _format_core_identity(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        keys = ("BOT_NAME", "BOT_VERSION", "COMMAND_PREFIX", "ENV_NAME")
+        return [self._format_simple_line(key, entries.get(key)) for key in keys]
+
+    def _format_guild_channels(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        ordered = [
+            "GUILD_IDS",
+            "LOG_CHANNEL_ID",
+            "WELCOME_CHANNEL_ID",
+            "WELCOME_GENERAL_CHANNEL_ID",
+            "NOTIFY_CHANNEL_ID",
+            "PROMO_CHANNEL_ID",
+            "RECRUITERS_THREAD_ID",
+            "PANEL_FIXED_THREAD_ID",
+            "PANEL_THREAD_MODE",
+        ]
+        lines: List[str] = []
+        seen: Set[str] = set()
+        for key in ordered:
+            seen.add(key)
+            lines.extend(self._format_channel_entry(key, entries.get(key)))
+
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen
+            and not _is_secret_key(key)
+            and any(token in key for token in ("CHANNEL", "THREAD", "GUILD"))
+        ]
+        for key in sorted(dynamic):
+            seen.add(key)
+            lines.extend(self._format_channel_entry(key, entries.get(key)))
+
+        return lines or ["—"]
+
+    def _format_channel_entry(self, key: str, entry: Optional[_EnvEntry]) -> List[str]:
+        if key == "PANEL_THREAD_MODE":
+            return [self._format_simple_line(key, entry)]
+        if entry is None:
+            return [f"{key} = —"]
+        ids = self._extract_visible_ids(key, entry.normalized)
+        if not ids:
+            return [self._format_simple_line(key, entry)]
+        return self._format_id_lines(key, ids)
+
+    def _format_roles(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        ordered = [
+            "ADMIN_ROLE_IDS",
+            "STAFF_ROLE_IDS",
+            "LEAD_ROLE_IDS",
+            "RECRUITER_ROLE_IDS",
+            "NOTIFY_PING_ROLE_ID",
+        ]
+        lines: List[str] = []
+        seen: Set[str] = set()
+        for key in ordered:
+            seen.add(key)
+            lines.extend(self._format_role_entry(key, entries.get(key)))
+
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen and not _is_secret_key(key) and "ROLE" in key
+        ]
+        for key in sorted(dynamic):
+            lines.extend(self._format_role_entry(key, entries.get(key)))
+
+        return lines or ["—"]
+
+    def _format_role_entry(self, key: str, entry: Optional[_EnvEntry]) -> List[str]:
+        if entry is None:
+            return [f"{key} = —"]
+        ids = self._extract_visible_ids(key, entry.normalized)
+        if not ids:
+            return [self._format_simple_line(key, entry)]
+        return self._format_id_lines(key, ids)
+
+    def _format_sheet_keys(
+        self,
+        entries: Dict[str, _EnvEntry],
+        sheet_sections: List[Tuple[str, List[Tuple[str, str, str]]]],
+    ) -> List[str]:
+        ordered = ["RECRUITMENT_SHEET_ID", "ONBOARDING_SHEET_ID"]
+        lines: List[str] = []
+        seen: Set[str] = set()
+        for key in ordered:
+            seen.add(key)
+            lines.append(self._format_simple_line(key, entries.get(key)))
+
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen
+            and not _is_secret_key(key)
+            and ("SHEET" in key or "TAB" in key)
+        ]
+        for key in sorted(dynamic):
+            lines.append(self._format_simple_line(key, entries.get(key)))
+
+        if sheet_sections:
+            if lines:
+                lines.append("")
+            for label, rows in sheet_sections:
+                lines.append(f"{label} overrides:")
+                for row_key, value, resolved in rows:
+                    text = f"  {row_key} = {value}"
+                    if resolved and resolved != "—":
+                        text += f" ({resolved})"
+                    lines.append(text)
+                if rows:
+                    lines.append("")
+            while lines and not lines[-1].strip():
+                lines.pop()
+
+        meta = _config_meta_from_app()
+        source = str(meta.get("source", "runtime"))
+        status = str(meta.get("status", "ok"))
+        if lines:
+            lines.append("")
+        lines.append(f"Loader: {source} · {status}")
+        loaded_at = meta.get("loaded_at")
+        if loaded_at:
+            lines.append(f"  loaded_at: {loaded_at}")
+        last_error = meta.get("last_error")
+        if last_error:
+            lines.append(f"  last_error: {last_error}")
+
+        return lines or ["—"]
+
+    def _format_features(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        ordered = [
+            "WELCOME_ENABLED",
+            "ENABLE_WELCOME_WATCHER",
+            "ENABLE_PROMO_WATCHER",
+            "ENABLE_NOTIFY_FALLBACK",
+            "STRICT_PROBE",
+            "PANEL_THREAD_MODE",
+            "SEARCH_RESULTS_SOFT_CAP",
+        ]
+        lines = [self._format_simple_line(key, entries.get(key)) for key in ordered]
+        seen = set(ordered)
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen
+            and not _is_secret_key(key)
+            and (
+                key.startswith("ENABLE_")
+                or key.endswith("_ENABLED")
+                or key in {"STRICT_PROBE", "PANEL_THREAD_MODE"}
+            )
+        ]
+        for key in sorted(dynamic):
+            lines.append(self._format_simple_line(key, entries.get(key)))
+        return lines or ["—"]
+
+    def _format_cache_refresh(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        ordered = ["CLAN_TAGS_CACHE_TTL_SEC", "REFRESH_TIMES", "CLEANUP_AGE_HOURS"]
+        lines = [self._format_simple_line(key, entries.get(key)) for key in ordered]
+        seen = set(ordered)
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen
+            and not _is_secret_key(key)
+            and ("TTL" in key or "REFRESH" in key)
+        ]
+        for key in sorted(dynamic):
+            lines.append(self._format_simple_line(key, entries.get(key)))
+        return lines or ["—"]
+
+    def _format_watchdog(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        ordered = [
+            "WATCHDOG_CHECK_SEC",
+            "WATCHDOG_STALL_SEC",
+            "WATCHDOG_DISCONNECT_GRACE_SEC",
+            "TIMEZONE",
+            "PORT",
+            "LOG_LEVEL",
+        ]
+        lines = [self._format_simple_line(key, entries.get(key)) for key in ordered]
+        seen = set(ordered)
+        dynamic = [
+            key
+            for key in entries.keys()
+            if key not in seen
+            and not _is_secret_key(key)
+            and (key.startswith("WATCHDOG_") or key in {"TIMEZONE", "PORT", "LOG_LEVEL"})
+        ]
+        for key in sorted(dynamic):
+            lines.append(self._format_simple_line(key, entries.get(key)))
+        return lines or ["—"]
+
+    def _format_render(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        keys = [key for key in entries.keys() if key.startswith("RENDER_")]
+        if not keys:
+            return ["—"]
+        return [self._format_simple_line(key, entries.get(key)) for key in sorted(keys)]
+
+    def _format_secrets(self, entries: Dict[str, _EnvEntry]) -> List[str]:
+        secrets = [key for key in entries.keys() if _is_secret_key(key)]
+        if not secrets:
+            return ["—"]
+        lines: List[str] = []
+        for key in sorted(secrets):
+            entry = entries.get(key)
+            if entry is None:
+                lines.append(f"{key} = —")
+                continue
+            value = entry.display
+            if value == "—":
+                lines.append(f"{key} = —")
+            else:
+                lines.append(f"{key} = {value} (masked)")
+        return lines
+
+    def _format_id_lines(self, key: str, ids: Sequence[int]) -> List[str]:
+        cleaned: List[int] = []
+        seen: Set[int] = set()
+        for value in ids:
+            try:
+                snowflake = int(value)
+            except (TypeError, ValueError):
+                continue
+            if snowflake < 0 or snowflake in seen:
+                continue
+            seen.add(snowflake)
+            cleaned.append(snowflake)
+
+        if not cleaned:
+            return [f"{key} = —"]
+
+        label = f"{key}:"
+        indent = " " * len(label)
+        lines: List[str] = []
+        for index, snowflake in enumerate(cleaned):
+            resolved = _trim_resolved_label(self._id_resolver.resolve(self.bot, snowflake))
+            prefix = label if index == 0 else indent
+            lines.append(f"{prefix} {snowflake} → {resolved}")
+        return lines
+
+    def _extract_visible_ids(self, key: str, value: object) -> List[int]:
+        ids = _extract_ids(key, value)
+        return list(ids)
 
     def _collect_sheet_sections(self) -> List[Tuple[str, List[Tuple[str, str, str]]]]:
         sections: List[Tuple[str, List[Tuple[str, str, str]]]] = []
