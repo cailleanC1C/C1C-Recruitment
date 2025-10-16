@@ -125,10 +125,12 @@ class CacheService:
 
     async def _log_refresh(self, b: CacheBucket, *, trigger: str, actor: Optional[str], retries: int) -> None:
         # Format: [refresh] bucket=clans trigger=schedule actor=@user duration=842ms result=ok hits=?,misses=?,retries=1
+        error_text = b.last_error or "-"
         msg = (
             f"[refresh] bucket={b.name} trigger={trigger} "
-            f"actor={actor or '—'} duration={b.last_latency_ms or 0}ms "
-            f"result={b.last_result or 'unknown'} retries={retries}"
+            f"actor={actor or '-'} duration={b.last_latency_ms or 0}ms "
+            f"result={b.last_result or 'unknown'} retries={retries} "
+            f"error={error_text}"
         )
         try:
             await rt.send_log_message(msg)
