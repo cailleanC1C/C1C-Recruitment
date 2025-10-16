@@ -180,7 +180,7 @@ class CoreOpsCog(commands.Cog):
             return
         await ctx.send(f"🧹 Refreshing: {', '.join(buckets)} (background).")
         for name in buckets:
-            asyncio.create_task(cache_service.refresh_now(name))
+            asyncio.create_task(cache_service.cache.refresh_now(name))
 
     @commands.group(name="rec_refresh", invoke_without_command=True)
     async def rec_refresh(self, ctx: commands.Context) -> None:
@@ -229,7 +229,7 @@ class CoreOpsCog(commands.Cog):
             return
 
         await ctx.send("Refreshing: clans (background).")
-        asyncio.create_task(cache_service.refresh_now("clans"))
+        asyncio.create_task(cache_service.cache.refresh_now("clans"))
 
     @commands.group(name="rec", invoke_without_command=True)
     async def rec(self, ctx: commands.Context) -> None:
