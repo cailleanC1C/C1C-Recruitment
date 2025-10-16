@@ -74,7 +74,13 @@ def _redact_value(key: str, value: object) -> str:
 
     key_upper = str(key).upper()
 
-    if key_upper in _SECRET_KEYS or "TOKEN" in key_upper or "CREDENTIAL" in key_upper or key_upper.endswith("_SECRET"):
+    if (
+        key_upper in _SECRET_KEYS
+        or "TOKEN" in key_upper
+        or "CREDENTIAL" in key_upper
+        or "SERVICE_ACCOUNT" in key_upper
+        or key_upper.endswith("_SECRET")
+    ):
         if value in (None, "", [], (), {}):
             return _MISSING_VALUE
         text = str(value)
@@ -505,7 +511,13 @@ def redact_ids(values: Iterable[int]) -> str:
 def redact_value(key: str, value: object) -> str:
     key_upper = str(key).upper()
 
-    if key_upper in _SECRET_KEYS or "TOKEN" in key_upper or "CREDENTIAL" in key_upper or key_upper.endswith("_SECRET"):
+    if (
+        key_upper in _SECRET_KEYS
+        or "TOKEN" in key_upper
+        or "CREDENTIAL" in key_upper
+        or "SERVICE_ACCOUNT" in key_upper
+        or key_upper.endswith("_SECRET")
+    ):
         return _redact_value(key, value)
 
     if key_upper in {
