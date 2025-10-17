@@ -2,8 +2,7 @@
 
 ## v0.9.3-phase3b-rc3 — Phase 3b Docs Alignment (2025-10-16)
 
-• CoreOps & Admin Ops
-
+**• CoreOps & Admin Ops**
 - Admin-only gating standardized across ops commands.
 - New `!env` command: grouped, masked output with ID → name resolution.
 - Embeds unified: versions in footer, no inline datetime (use message timestamp).
