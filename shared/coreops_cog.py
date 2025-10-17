@@ -438,11 +438,17 @@ class CoreOpsCog(commands.Cog):
     @commands.group(name="rec", invoke_without_command=True)
     @guild_only_denied_msg()
     async def rec(self, ctx: commands.Context) -> None:
-        """Entry point for grouped CoreOps commands."""
+        """Grouped CoreOps commands."""
 
         if ctx.invoked_subcommand is not None:
             return
-        await ctx.send(str(sanitize_text("Use !rec help")))
+        await ctx.send(
+            str(
+                sanitize_text(
+                    "Use !rec help, !rec help <command>, or !rec help <command> <subcommand>."
+                )
+            )
+        )
 
     async def _health_impl(self, ctx: commands.Context) -> None:
         env = get_env_name()
@@ -508,7 +514,7 @@ class CoreOpsCog(commands.Cog):
                 )
         await ctx.reply(embed=sanitize_embed(embed))
 
-    @tier("staff")
+    @tier("admin")
     @rec.command(name="health")
     @staff_only()
     async def rec_health(self, ctx: commands.Context) -> None:
@@ -714,7 +720,7 @@ class CoreOpsCog(commands.Cog):
 
         await self._refresh_root(ctx)
 
-    @tier("staff")
+    @tier("admin")
     @rec.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
@@ -824,7 +830,7 @@ class CoreOpsCog(commands.Cog):
 
         await self._refresh_all_impl(ctx)
 
-    @tier("staff")
+    @tier("admin")
     @rec_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
@@ -917,15 +923,16 @@ class CoreOpsCog(commands.Cog):
         allowed = {"user"} | ({"staff"} if is_staff else set()) | ({"admin"} if is_admin else set())
 
         tier_order: list[tuple[str, str, str]] = [
-            ("user", "User", "Player-facing commands for everyday recruitment checks."),
+            ("admin", "Admin", "Operational controls reserved for administrators."),
             (
                 "staff",
                 "Recruiter/Staff",
                 "Tools for recruiters and staff managing applicant workflows.",
             ),
-            ("admin", "Admin", "Operational controls reserved for administrators."),
+            ("user", "User", "Player-facing commands for everyday recruitment checks."),
         ]
 
+        seen: set[str] = set()
         sections: list[HelpOverviewSection] = []
         for key, label, blurb in tier_order:
             if key not in allowed:
@@ -933,10 +940,18 @@ class CoreOpsCog(commands.Cog):
             commands_for_tier = grouped.get(key, [])
             if not commands_for_tier:
                 continue
-            sorted_commands = sorted(
+            filtered_commands: list[commands.Command[Any, Any, Any]] = []
+            for command in sorted(
                 commands_for_tier, key=lambda command: command.qualified_name
-            )
-            infos = [self._build_help_info(command) for command in sorted_commands]
+            ):
+                base_name = command.qualified_name
+                if base_name in seen:
+                    continue
+                seen.add(base_name)
+                filtered_commands.append(command)
+            if not filtered_commands:
+                continue
+            infos = [self._build_help_info(command) for command in filtered_commands]
             sections.append(
                 HelpOverviewSection(
                     label=label,
