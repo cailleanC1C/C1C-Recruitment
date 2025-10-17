@@ -50,6 +50,8 @@ from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
 from .coreops_rbac import (
     admin_only,
+    can_view_admin,
+    can_view_staff,
     guild_only_denied_msg,
     is_admin_member,
     is_staff_member,
@@ -193,6 +195,8 @@ def staff_only() -> commands.Check[Any]:
         author = getattr(ctx, "author", None)
         if is_staff_member(author) or is_admin_member(author):
             return True
+        if getattr(ctx, "_coreops_suppress_denials", False):
+            raise commands.CheckFailure("Staff only.")
         try:
             await ctx.reply("Staff only.")
         except Exception:
@@ -918,9 +922,11 @@ class CoreOpsCog(commands.Cog):
             grouped[level].append(command)
 
         author = getattr(ctx, "author", None)
-        is_admin = is_admin_member(author)
-        is_staff = is_staff_member(author) or is_admin
-        allowed = {"user"} | ({"staff"} if is_staff else set()) | ({"admin"} if is_admin else set())
+        allowed: set[str] = {"user"}
+        if can_view_staff(author):
+            allowed.add("staff")
+        if can_view_admin(author):
+            allowed.add("admin")
 
         tier_order: list[tuple[str, str, str]] = [
             ("admin", "Admin", "Operational controls reserved for administrators."),
@@ -997,6 +1003,12 @@ class CoreOpsCog(commands.Cog):
         self, command: commands.Command[Any, Any, Any], ctx: commands.Context
     ) -> bool:
         if not command.enabled:
+            return False
+        author = getattr(ctx, "author", None)
+        tier = _get_tier(command)
+        if tier == "admin" and not can_view_admin(author):
+            return False
+        if tier == "staff" and not can_view_staff(author):
             return False
         sentinel = object()
         previous = getattr(ctx, "_coreops_suppress_denials", sentinel)

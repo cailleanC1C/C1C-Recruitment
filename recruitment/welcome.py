@@ -19,6 +19,8 @@ def staff_only():
         # CoreOps roles OR server Administrator (fallback)
         if is_staff_member(author) or is_admin_member(author):
             return True
+        if getattr(ctx, "_coreops_suppress_denials", False):
+            raise commands.CheckFailure("Staff only.")
         try:
             await ctx.reply("Staff only.")
         except Exception:
