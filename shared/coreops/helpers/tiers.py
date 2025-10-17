@@ -65,3 +65,20 @@ def rehydrate_tiers(bot) -> None:
 
         if level:
             _set_tier(cmd, level)
+
+
+def audit_tiers(bot, logger=None) -> None:
+    missing: list[str] = []
+    for cmd in bot.walk_commands():
+        tier = None
+        try:
+            extras = getattr(cmd, "extras", None)
+            if isinstance(extras, dict):
+                tier = extras.get("tier")
+        except Exception:
+            pass
+        tier = tier or getattr(cmd, "_tier", None)
+        if not tier and cmd.qualified_name not in ("rec",):
+            missing.append(cmd.qualified_name)
+    if missing and logger is not None:
+        logger.warning("Help tiers missing for: %s", ", ".join(sorted(missing)))

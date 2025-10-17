@@ -139,17 +139,21 @@ def _admin_roles_configured() -> bool:
         return True
 
 
-def _get_cmd_tier(cmd: commands.Command[Any, Any, Any]) -> str:
-    level: Optional[str] = None
-    try:
-        extras = getattr(cmd, "extras", None)
-        if isinstance(extras, dict):
-            level = extras.get("tier")
-    except Exception:
-        level = None
-    if not level:
-        level = getattr(cmd, "_tier", None)
-    return level or "user"
+def _get_tier(cmd: commands.Command[Any, Any, Any]) -> str:
+    extras = getattr(cmd, "extras", None)
+    level = extras.get("tier") if isinstance(extras, dict) else None
+    return level or getattr(cmd, "_tier", "user")
+
+
+def _should_show(cmd: commands.Command[Any, Any, Any]) -> bool:
+    qualified = getattr(cmd, "qualified_name", "") or ""
+    name = getattr(cmd, "name", "") or ""
+    if qualified == "rec" or name.startswith("_"):
+        return False
+    extras = getattr(cmd, "extras", None)
+    if isinstance(extras, dict) and extras.get("hide_in_help"):
+        return False
+    return True
 
 
 def _admin_check() -> commands.Check[Any]:
@@ -872,10 +876,7 @@ class CoreOpsCog(commands.Cog):
 
         commands_iter: list[commands.Command[Any, Any, Any]] = []
         for command in self.bot.walk_commands():
-            if command.hidden:
-                continue
-            name = (getattr(command, "name", "") or "").strip()
-            if name.startswith("_"):
+            if not _should_show(command):
                 continue
             if not self._include_in_overview(command):
                 continue
@@ -891,7 +892,7 @@ class CoreOpsCog(commands.Cog):
             seen.add(base_name)
             if not await self._can_display_command(command, ctx):
                 continue
-            level = _get_cmd_tier(command)
+            level = _get_tier(command)
             if level not in grouped:
                 level = "user"
             grouped[level].append(command)
@@ -899,12 +900,7 @@ class CoreOpsCog(commands.Cog):
         author = getattr(ctx, "author", None)
         is_admin = is_admin_member(author)
         is_staff = is_staff_member(author) or is_admin
-
-        allowed_tiers: set[str] = {"user"}
-        if is_staff:
-            allowed_tiers.add("staff")
-        if is_admin:
-            allowed_tiers.add("admin")
+        allowed = {"user"} | ({"staff"} if is_staff else set()) | ({"admin"} if is_admin else set())
 
         tier_order: list[tuple[str, str, str]] = [
             ("user", "User", "Player-facing commands for everyday recruitment checks."),
@@ -918,7 +914,7 @@ class CoreOpsCog(commands.Cog):
 
         sections: list[HelpOverviewSection] = []
         for key, label, blurb in tier_order:
-            if key not in allowed_tiers:
+            if key not in allowed:
                 continue
             commands_for_tier = grouped.get(key, [])
             if not commands_for_tier:
@@ -954,7 +950,7 @@ class CoreOpsCog(commands.Cog):
         infos: list[HelpCommandInfo] = []
         seen: set[str] = set()
         for subcommand in command.commands:
-            if subcommand.hidden:
+            if not _should_show(subcommand):
                 continue
             # Guard against duplicate references when aliases are registered.
             base_name = subcommand.qualified_name
