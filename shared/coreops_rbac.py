@@ -73,9 +73,24 @@ def get_lead_role_ids() -> Set[int]:
     return set(_config_lead_roles())
 
 
+def _member_has_admin_role(member: discord.Member) -> bool:
+    admin_roles = get_admin_role_ids()
+    if not admin_roles:
+        return False
+    member_roles = _member_role_ids(member)
+    return bool(admin_roles.intersection(member_roles))
+
+
+def _has_administrator_permission(member: discord.Member) -> bool:
+    perms = getattr(member, "guild_permissions", None)
+    if perms is None:
+        return False
+    return bool(getattr(perms, "administrator", False))
+
+
 def is_staff_member(target: ContextOrMember | None) -> bool:
     member = _resolve_member(target)
-    if member is None:
+    if not isinstance(member, discord.Member):
         return False
     member_roles = _member_role_ids(member)
     if not member_roles:
@@ -89,12 +104,11 @@ def is_staff_member(target: ContextOrMember | None) -> bool:
 
 def is_admin_member(target: ContextOrMember | None) -> bool:
     member = _resolve_member(target)
-    if member is None:
+    if not isinstance(member, discord.Member):
         return False
-    admin_roles = get_admin_role_ids()
-    if not admin_roles:
-        return False
-    return bool(admin_roles.intersection(_member_role_ids(member)))
+    if _member_has_admin_role(member):
+        return True
+    return _has_administrator_permission(member)
 
 
 def is_recruiter(target: ContextOrMember | None) -> bool:
@@ -125,23 +139,10 @@ def is_lead(target: ContextOrMember | None) -> bool:
     return bool(lead_roles.intersection(roles))
 
 
-def can_manage_guild(member: discord.Member | None) -> bool:
-    if not isinstance(member, discord.Member):
-        return False
-    perms = getattr(member, "guild_permissions", None)
-    if perms is None:
-        return False
-    if getattr(perms, "administrator", False):
-        return True
-    return bool(getattr(perms, "manage_guild", False))
-
-
 def ops_gate(member: discord.Member | None) -> bool:
     if member is None:
         return False
-    if is_admin_member(member) or is_staff_member(member):
-        return True
-    return can_manage_guild(member)
+    return is_admin_member(member) or is_staff_member(member)
 
 
 async def _reply(ctx: commands.Context, message: str) -> None:
@@ -257,15 +258,11 @@ def admin_only() -> commands.Check[Any]:
 
         member = getattr(ctx, "author", None)
         if isinstance(member, discord.Member):
-            admin_roles = get_admin_role_ids()
-            member_roles = _member_role_ids(member)
-            if admin_roles and admin_roles.intersection(member_roles):
+            if _member_has_admin_role(member):
                 return True
 
-            perms = getattr(member, "guild_permissions", None)
-            has_admin_perm = getattr(perms, "administrator", False)
-            if has_admin_perm:
-                if not admin_roles:
+            if _has_administrator_permission(member):
+                if not get_admin_role_ids():
                     _log_admin_role_config_missing(ctx)
                 return True
 

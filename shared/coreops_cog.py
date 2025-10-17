@@ -152,23 +152,21 @@ def _admin_check() -> commands.Check[Any]:
 def _staff_check() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
-        if is_staff_member(author) or is_admin_member(author):
-            return True
-        perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
-        return bool(perms)
+        return bool(is_staff_member(author) or is_admin_member(author))
 
     return commands.check(predicate)
 
 
 def staff_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
-        if is_staff_member(getattr(ctx, "author", None)):
+        author = getattr(ctx, "author", None)
+        if is_staff_member(author) or is_admin_member(author):
             return True
         try:
             await ctx.reply("Staff only.")
         except Exception:
             pass
-        return False
+        raise commands.CheckFailure("Staff only.")
 
     return commands.check(predicate)
 

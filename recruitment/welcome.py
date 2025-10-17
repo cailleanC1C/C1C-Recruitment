@@ -19,8 +19,11 @@ def staff_only():
         # CoreOps roles OR server Administrator (fallback)
         if is_staff_member(author) or is_admin_member(author):
             return True
-        perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
-        return bool(perms)
+        try:
+            await ctx.reply("Staff only.")
+        except Exception:
+            pass
+        raise commands.CheckFailure("Staff only.")
     return commands.check(predicate)
 
 class WelcomeBridge(commands.Cog):
