@@ -13,33 +13,33 @@
 ### Sheets Access Layer + CoreOps Refresh
 
 ### Docs & versioning
-– All runtime and docs bumped to v0.9.3.
-– Unified runtime confirmed stable across env groups.
+- All runtime and docs bumped to v0.9.3.
+- Unified runtime confirmed stable across env groups.
 
 ### Cache & Async Layer
-– Async back-off and retry helpers implemented.
-– Safe cancel propagation and non-blocking refresh confirmed.
-– TTL defaults: clans 3 h, templates 7 d, clan_tags 7 d.
-– Scheduled refresh cadence: 3 h / weekly (Mon 06:00 UTC).
-– Background logging to LOG_CHANNEL_ID with actor + trigger tags.
+- Async back-off and retry helpers implemented.
+- Safe cancel propagation and non-blocking refresh confirmed.
+- TTL defaults: clans 3 h, templates 7 d, clan_tags 7 d.
+- Scheduled refresh cadence: 3 h / weekly (Mon 06:00 UTC).
+- Background logging to LOG_CHANNEL_ID with actor + trigger tags.
 
 ### CoreOps Groundwork
-– Refresh commands consolidated into shared CoreOps.
-– Admin and Staff roles now use !rec refresh all and !rec refresh clansinfo.
-– RBAC guard logic preserved; clear permission errors surfaced.
-– Refresher logs record bucket, trigger, actor, duration, result, error.
-– `!rec refresh all` now posts a single summary embed listing all buckets with duration/result/retries.
+- Refresh commands consolidated into shared CoreOps.
+- Admin and Staff roles now use !rec refresh all and !rec refresh clansinfo.
+- RBAC guard logic preserved; clear permission errors surfaced.
+- Refresher logs record bucket, trigger, actor, duration, result, error.
+- `!rec refresh all` now posts a single summary embed listing all buckets with duration/result/retries.
 
 ### Diagnostics & Health
-– !health embed now displays cache ages, TTLs, and next refresh times (UTC date + time).
-– Refresher telemetry captures retry counts and error text across attempts.
-– Enhanced observability for manual vs scheduled triggers.
-– Embeds standardized: versions moved to footer; inline date/time removed (embed timestamp used).
+- !health embed now displays cache ages, TTLs, and next refresh times (UTC date + time).
+- Refresher telemetry captures retry counts and error text across attempts.
+- Enhanced observability for manual vs scheduled triggers.
+- Embeds standardized: versions moved to footer; inline date/time removed (embed timestamp used).
 
 ### Runtime Reliability
-– Gspread dependency added to enable template bucket refresh.
-– Ops cog removed (merged into CoreOps for clarity).
-– Workflow auto-label and milestone fix verified.
+- Gspread dependency added to enable template bucket refresh.
+- Ops cog removed (merged into CoreOps for clarity).
+- Workflow auto-label and milestone fix verified.
 
 ## [0.9.3-rc] — Phase 3 rollout (Shared CoreOps refresh)
 
