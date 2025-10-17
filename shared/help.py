@@ -60,14 +60,11 @@ def build_help_overview_embed(
     )
 
     description_lines = [bot_description.strip()]
-    usage_all = _format_usage(prefix, "help", None)
-    usage_command = _format_usage(prefix, "help", "<command>")
-    usage_subcommand = _format_usage(prefix, "help", "<command> <subcommand>")
-    description_lines.append(
-        "Usage: "
-        f"`{usage_all}` • `{usage_command}` • `{usage_subcommand}`"
+    usage_block = (
+        "To learn what a command does, type it like this:\n"
+        "!rec help rec ping → shows info for !rec ping"
     )
-    description_lines.append("Tip: Use the forms above for an extended description.")
+    description_lines.append(usage_block)
     embed.description = "\n\n".join(line for line in description_lines if line)
 
     for section in sections:

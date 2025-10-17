@@ -442,7 +442,7 @@ class CoreOpsCog(commands.Cog):
     @commands.group(name="rec", invoke_without_command=True)
     @guild_only_denied_msg()
     async def rec(self, ctx: commands.Context) -> None:
-        """Grouped CoreOps commands."""
+        """Recruitment toolkit commands for the C1C cluster."""
 
         if ctx.invoked_subcommand is not None:
             return
@@ -606,7 +606,7 @@ class CoreOpsCog(commands.Cog):
         await self._env_impl(ctx)
 
     @tier("user")
-    @rec.command(name="help")
+    @rec.command(name="help", usage="[command]")
     async def rec_help(
         self, ctx: commands.Context, *, query: str | None = None
     ) -> None:
@@ -1044,8 +1044,11 @@ class CoreOpsCog(commands.Cog):
 
     def _help_bot_description(self, *, bot_name: str) -> str:
         return (
-            f"{bot_name} streamlines C1C recruitment with quick status checks,"
-            " roster insights, and operational safeguards."
+            "C1C-Recruitment keeps the doors open and the hearths warm.\n"
+            "It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.\n"
+            "Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.\n"
+            "Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.\n"
+            "All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care."
         )
 
     def _add_embed_group(
