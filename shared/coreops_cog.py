@@ -140,16 +140,38 @@ def _admin_roles_configured() -> bool:
 
 
 def _get_cmd_tier(cmd: commands.Command[Any, Any, Any]) -> str:
-    level: Optional[str] = None
     try:
         extras = getattr(cmd, "extras", None)
         if isinstance(extras, dict):
             level = extras.get("tier")
+            if isinstance(level, str) and level:
+                return level
     except Exception:
-        level = None
-    if not level:
-        level = getattr(cmd, "_tier", None)
-    return level or "user"
+        pass
+
+    try:
+        level_attr = getattr(cmd, "_tier", None)
+    except Exception:
+        level_attr = None
+    if isinstance(level_attr, str) and level_attr:
+        return level_attr
+
+    return "user"
+
+
+def _should_show(cmd: commands.Command[Any, Any, Any]) -> bool:
+    if getattr(cmd, "qualified_name", None) == "rec":
+        return False
+
+    name = (getattr(cmd, "name", "") or "").strip()
+    if name.startswith("_"):
+        return False
+
+    extras = getattr(cmd, "extras", None)
+    if isinstance(extras, dict) and extras.get("hide_in_help"):
+        return False
+
+    return True
 
 
 def _admin_check() -> commands.Check[Any]:
@@ -870,12 +892,16 @@ class CoreOpsCog(commands.Cog):
             "admin": [],
         }
 
+        author = getattr(ctx, "author", None)
+        is_admin = is_admin_member(author)
+        is_staff = is_staff_member(author) or is_admin
+        allowed: set[str] = {"user"} | ({"staff"} if is_staff else set()) | (
+            {"admin"} if is_admin else set()
+        )
+
         commands_iter: list[commands.Command[Any, Any, Any]] = []
         for command in self.bot.walk_commands():
-            if command.hidden:
-                continue
-            name = (getattr(command, "name", "") or "").strip()
-            if name.startswith("_"):
+            if not _should_show(command):
                 continue
             if not self._include_in_overview(command):
                 continue
@@ -894,17 +920,9 @@ class CoreOpsCog(commands.Cog):
             level = _get_cmd_tier(command)
             if level not in grouped:
                 level = "user"
+            if level not in allowed:
+                continue
             grouped[level].append(command)
-
-        author = getattr(ctx, "author", None)
-        is_admin = is_admin_member(author)
-        is_staff = is_staff_member(author) or is_admin
-
-        allowed_tiers: set[str] = {"user"}
-        if is_staff:
-            allowed_tiers.add("staff")
-        if is_admin:
-            allowed_tiers.add("admin")
 
         tier_order: list[tuple[str, str, str]] = [
             ("user", "User", "Player-facing commands for everyday recruitment checks."),
@@ -918,7 +936,7 @@ class CoreOpsCog(commands.Cog):
 
         sections: list[HelpOverviewSection] = []
         for key, label, blurb in tier_order:
-            if key not in allowed_tiers:
+            if key not in allowed:
                 continue
             commands_for_tier = grouped.get(key, [])
             if not commands_for_tier:
@@ -953,8 +971,16 @@ class CoreOpsCog(commands.Cog):
 
         infos: list[HelpCommandInfo] = []
         seen: set[str] = set()
+
+        author = getattr(ctx, "author", None)
+        is_admin = is_admin_member(author)
+        is_staff = is_staff_member(author) or is_admin
+        allowed: set[str] = {"user"} | ({"staff"} if is_staff else set()) | (
+            {"admin"} if is_admin else set()
+        )
+
         for subcommand in command.commands:
-            if subcommand.hidden:
+            if not _should_show(subcommand):
                 continue
             # Guard against duplicate references when aliases are registered.
             base_name = subcommand.qualified_name
@@ -962,6 +988,9 @@ class CoreOpsCog(commands.Cog):
                 continue
             seen.add(base_name)
             if not await self._can_display_command(subcommand, ctx):
+                continue
+            level = _get_cmd_tier(subcommand)
+            if level not in allowed:
                 continue
             infos.append(self._build_help_info(subcommand))
 
