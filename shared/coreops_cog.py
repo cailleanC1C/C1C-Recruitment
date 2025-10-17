@@ -39,6 +39,7 @@ from shared.coreops_render import (
 )
 from shared.help import build_help_embed, build_coreops_footer
 from shared.sheets import cache_service
+from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
 from .coreops_rbac import (
     admin_only,
@@ -208,11 +209,11 @@ def _sheet_cache_snapshot(module_name: str) -> Dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive logging
         if module_name not in _sheet_cache_errors_logged:
             _sheet_cache_errors_logged.add(module_name)
-            logger.warning(
+            msg, extra = sanitize_log(
                 "failed to import sheet config cache",
                 extra={"module": module_name},
-                exc_info=exc,
             )
+            logger.warning(msg, extra=extra, exc_info=exc)
         return {}
 
     cache = getattr(module, "_CONFIG_CACHE", None)
@@ -358,11 +359,11 @@ class _IdResolver:
         except Exception as exc:  # pragma: no cover - defensive logging
             if snowflake not in self._failures:
                 self._failures.add(snowflake)
-                logger.warning(
+                msg, extra = sanitize_log(
                     "failed to resolve discord id",
                     extra={"id": snowflake},
-                    exc_info=exc,
                 )
+                logger.warning(msg, extra=extra, exc_info=exc)
             resolved = "(not found)"
 
         self._cache[snowflake] = (resolved, now + _NAME_CACHE_TTL_SEC)
@@ -463,7 +464,7 @@ class CoreOpsCog(commands.Cog):
                 ),
                 inline=False,
             )
-        await ctx.reply(embed=embed)
+        await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="digest")
     @staff_only()
@@ -475,7 +476,7 @@ class CoreOpsCog(commands.Cog):
             latency_s=_latency_sec(self.bot),
             last_event_age=await hb.age_seconds(),
         )
-        await ctx.reply(line)
+        await ctx.reply(str(sanitize_text(line)))
 
     @commands.command(name="env")
     @guild_only_denied_msg()
@@ -515,7 +516,7 @@ class CoreOpsCog(commands.Cog):
         )
         embed.set_footer(text=footer_text)
 
-        await ctx.reply(embed=embed)
+        await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="help")
     async def help_(self, ctx: commands.Context) -> None:
@@ -524,7 +525,7 @@ class CoreOpsCog(commands.Cog):
             is_staff=is_staff_member(ctx.author),
             bot_version=os.getenv("BOT_VERSION", "dev"),
         )
-        await ctx.reply(embed=embed)
+        await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="config")
     @guild_only_denied_msg()
@@ -543,7 +544,7 @@ class CoreOpsCog(commands.Cog):
             f"onboarding sheet: {onboarding_sheet}",
         ]
 
-        await ctx.reply("\n".join(lines))
+        await ctx.reply(str(sanitize_text("\n".join(lines))))
 
     @commands.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
@@ -552,9 +553,13 @@ class CoreOpsCog(commands.Cog):
         """Admin/Staff group: manual cache refresh."""
 
         if not _admin_roles_configured() and not can_manage_guild(getattr(ctx, "author", None)):
-            await ctx.send("⚠️ Admin roles not configured — refresh commands disabled.")
+            await ctx.send(
+                str(sanitize_text("⚠️ Admin roles not configured — refresh commands disabled."))
+            )
             return
-        await ctx.send("Available: `!rec refresh all`, `!rec refresh clansinfo`")
+        await ctx.send(
+            str(sanitize_text("Available: `!rec refresh all`, `!rec refresh clansinfo`"))
+        )
 
     @refresh.command(name="all")
     @guild_only_denied_msg()
@@ -565,7 +570,7 @@ class CoreOpsCog(commands.Cog):
         caps = cache_service.capabilities()
         buckets = list(caps.keys())
         if not buckets:
-            await ctx.send("⚠️ No cache buckets registered.")
+            await ctx.send(str(sanitize_text("⚠️ No cache buckets registered.")))
             return
 
         actor_display = getattr(ctx.author, "display_name", None) or str(ctx.author)
@@ -582,7 +587,10 @@ class CoreOpsCog(commands.Cog):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.exception("refresh-all bucket failed", extra={"bucket": name})
+                msg, extra = sanitize_log(
+                    "refresh-all bucket failed", extra={"bucket": name}
+                )
+                logger.exception(msg, extra=extra)
                 exc_text = str(exc).strip() or exc.__class__.__name__
 
             bucket = cache_service.cache.get_bucket(name)
@@ -649,7 +657,7 @@ class CoreOpsCog(commands.Cog):
         )
         embed.set_footer(text=footer_text)
 
-        await ctx.send(embed=embed)
+        await ctx.send(embed=sanitize_embed(embed))
 
     @refresh.command(name="clansinfo")
     @guild_only_denied_msg()
@@ -660,7 +668,7 @@ class CoreOpsCog(commands.Cog):
         caps = cache_service.capabilities()
         clans = caps.get("clans")
         if not clans:
-            await ctx.send("⚠️ No clansinfo cache registered.")
+            await ctx.send(str(sanitize_text("⚠️ No clansinfo cache registered.")))
             return
 
         last_refresh = clans.get("last_refresh_at")
@@ -680,10 +688,10 @@ class CoreOpsCog(commands.Cog):
                     nxt = f" Next auto-refresh in {_humanize_duration(delta)}"
                 else:
                     nxt = f" Next auto-refresh overdue by {_humanize_duration(abs(delta))}"
-            await ctx.send(f"✅ Clans cache fresh ({mins}m old).{nxt}")
+            await ctx.send(str(sanitize_text(f"✅ Clans cache fresh ({mins}m old).{nxt}")))
             return
 
-        await ctx.send("Refreshing clans (background).")
+        await ctx.send(str(sanitize_text("Refreshing clans (background).")))
         asyncio.create_task(
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )

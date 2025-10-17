@@ -8,6 +8,7 @@ import re
 from typing import Dict, Iterable, Optional, Sequence, Set
 
 from config import runtime as _runtime
+from shared.redaction import mask_secret, mask_service_account, sanitize_text
 
 __all__ = [
     "reload_config",
@@ -84,13 +85,21 @@ def _redact_value(key: str, value: object) -> str:
         if value in (None, "", [], (), {}):
             return _MISSING_VALUE
         text = str(value)
-        tail = text[-4:] if len(text) >= 4 else text
-        return f"••••{tail}"
+        stripped = text.strip()
+        if not stripped:
+            return _MISSING_VALUE
+        masked = sanitize_text(text)
+        if isinstance(masked, str) and masked != text:
+            return masked
+        if "service_account" in stripped and "private_key" in stripped:
+            return mask_service_account(stripped)
+        return mask_secret(stripped)
 
     if value in (None, "", [], (), {}):
         return _MISSING_VALUE
 
-    return str(value)
+    redacted = sanitize_text(value)
+    return str(redacted)
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -494,9 +503,10 @@ def redact_token(token: Optional[str]) -> str:
     token = (token or "").strip()
     if not token:
         return _MISSING_VALUE
-    if len(token) <= 8:
-        return "••••"
-    return f"{token[:4]}…{token[-4:]}"
+    masked = sanitize_text(token)
+    if isinstance(masked, str) and masked != token:
+        return masked
+    return mask_secret(token)
 
 
 def redact_ids(values: Iterable[int]) -> str:
