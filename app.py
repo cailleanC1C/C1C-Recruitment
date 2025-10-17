@@ -24,7 +24,6 @@ from shared.coreops_rbac import (
     is_admin_member,
     ops_gate,
 )
-from shared.redaction import sanitize_text
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -171,12 +170,6 @@ async def on_message(message: discord.Message):
     )
 
     content = (message.content or "").strip()
-    if content.lower() == "!help" and not ops_gate(message.author):
-        try:
-            await message.channel.send(str(sanitize_text("Use !rec help")))
-        except Exception:
-            pass
-        return
 
     cmd_name = detect_admin_bang_command(
         message, commands=COREOPS_COMMANDS, is_admin=ops_gate
