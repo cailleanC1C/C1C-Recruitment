@@ -406,6 +406,37 @@ class CoreOpsCog(commands.Cog):
         self.bot = bot
         self._id_resolver = _IdResolver()
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """Provide a hint for legacy ``!help`` invocations when bang isn't a prefix."""
+
+        if not isinstance(message, discord.Message):
+            return
+        if getattr(message.author, "bot", False):
+            return
+
+        configured_prefix = get_command_prefix().strip()
+        if configured_prefix.startswith("!"):
+            return
+
+        raw = (message.content or "").lstrip()
+        if not raw:
+            return
+
+        lowered = raw.lower()
+        if not lowered.startswith("!help"):
+            return
+
+        if len(raw) > 5 and not raw[5].isspace():
+            return
+
+        try:
+            await message.channel.send(
+                str(sanitize_text("Unknown command !help. Try rec help."))
+            )
+        except Exception:
+            logger.exception("failed responding to legacy !help invocation", exc_info=True)
+
     @commands.command(name="health")
     @staff_only()
     async def health(self, ctx: commands.Context) -> None:
