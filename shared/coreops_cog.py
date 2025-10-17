@@ -49,7 +49,6 @@ from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
 from .coreops_rbac import (
     admin_only,
-    can_manage_guild,
     guild_only_denied_msg,
     is_admin_member,
     is_staff_member,
@@ -510,12 +509,14 @@ class CoreOpsCog(commands.Cog):
         await self._help_impl(ctx)
 
     @commands.command(name="health", hidden=True)
-    @staff_only()
+    @guild_only_denied_msg()
+    @admin_only()
     async def health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
     @commands.command(name="help", hidden=True)
-    @staff_only()
+    @guild_only_denied_msg()
+    @admin_only()
     async def help(self, ctx: commands.Context) -> None:
         await self._help_impl(ctx)
 
@@ -535,7 +536,8 @@ class CoreOpsCog(commands.Cog):
         await self._digest_impl(ctx)
 
     @commands.command(name="digest", hidden=True)
-    @staff_only()
+    @guild_only_denied_msg()
+    @admin_only()
     async def digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
@@ -590,7 +592,7 @@ class CoreOpsCog(commands.Cog):
 
     @commands.command(name="help")
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def help_(
         self, ctx: commands.Context, *, query: str | None = None
     ) -> None:
@@ -680,12 +682,15 @@ class CoreOpsCog(commands.Cog):
 
     @commands.command(name="config", hidden=True)
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def config_summary(self, ctx: commands.Context) -> None:
         await self._config_impl(ctx)
 
     async def _refresh_root(self, ctx: commands.Context) -> None:
-        if not _admin_roles_configured() and not can_manage_guild(getattr(ctx, "author", None)):
+        author = getattr(ctx, "author", None)
+        if not _admin_roles_configured() and not (
+            is_admin_member(author) or is_staff_member(author)
+        ):
             await ctx.send(
                 str(sanitize_text("⚠️ Admin roles not configured — refresh commands disabled."))
             )
@@ -696,9 +701,9 @@ class CoreOpsCog(commands.Cog):
 
     @commands.group(name="refresh", invoke_without_command=True, hidden=True)
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def refresh(self, ctx: commands.Context) -> None:
-        """Admin/Staff group: manual cache refresh."""
+        """Admin group: manual cache refresh."""
 
         await self._refresh_root(ctx)
 
@@ -804,7 +809,7 @@ class CoreOpsCog(commands.Cog):
 
     @refresh.command(name="all")
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def refresh_all(self, ctx: commands.Context) -> None:
         """Admin: clear & warm all registered Sheets caches."""
 
@@ -850,7 +855,7 @@ class CoreOpsCog(commands.Cog):
 
     @refresh.command(name="clansinfo")
     @guild_only_denied_msg()
-    @ops_only()
+    @admin_only()
     async def refresh_clansinfo(self, ctx: commands.Context) -> None:
         """Staff/Admin: refresh 'clans' cache if age ≥ 60 min."""
 
@@ -945,6 +950,9 @@ class CoreOpsCog(commands.Cog):
     ) -> bool:
         if not command.enabled:
             return False
+        sentinel = object()
+        previous = getattr(ctx, "_coreops_suppress_denials", sentinel)
+        setattr(ctx, "_coreops_suppress_denials", True)
         try:
             return await command.can_run(ctx)
         except commands.CheckFailure:
@@ -954,6 +962,14 @@ class CoreOpsCog(commands.Cog):
         except Exception:  # pragma: no cover - defensive guard
             logger.exception("failed help gate for command", exc_info=True)
             return False
+        finally:
+            if previous is sentinel:
+                try:
+                    delattr(ctx, "_coreops_suppress_denials")
+                except AttributeError:
+                    pass
+            else:
+                setattr(ctx, "_coreops_suppress_denials", previous)
 
     def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
         signature = command.signature or ""

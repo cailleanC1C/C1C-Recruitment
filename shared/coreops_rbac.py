@@ -29,6 +29,10 @@ _denial_log_cache: Dict[Tuple[Optional[int], str, Optional[int]], float] = {}
 _ADMIN_FALLBACK_LOG_THROTTLE_SEC = 600.0
 _admin_fallback_log_cache: Dict[Tuple[str, Optional[int]], float] = {}
 
+
+def _suppress_denial(ctx: commands.Context) -> bool:
+    return bool(getattr(ctx, "_coreops_suppress_denials", False))
+
 logger = logging.getLogger(__name__)
 
 
@@ -230,13 +234,15 @@ def _log_admin_role_config_missing(ctx: commands.Context) -> None:
 def ops_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
-            await _send_guild_only_denial(ctx)
+            if not _suppress_denial(ctx):
+                await _send_guild_only_denial(ctx)
             raise commands.CheckFailure("Guild only.")
         member = getattr(ctx, "author", None)
         if isinstance(member, discord.Member) and ops_gate(member):
             return True
-        await _send_staff_denial(ctx)
-        _log_staff_denial(ctx)
+        if not _suppress_denial(ctx):
+            await _send_staff_denial(ctx)
+            _log_staff_denial(ctx)
         raise commands.CheckFailure("Staff only.")
 
     return commands.check(predicate)
@@ -245,7 +251,8 @@ def ops_only() -> commands.Check[Any]:
 def admin_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
-            await _send_guild_only_denial(ctx)
+            if not _suppress_denial(ctx):
+                await _send_guild_only_denial(ctx)
             raise commands.CheckFailure("Guild only.")
 
         member = getattr(ctx, "author", None)
@@ -262,8 +269,9 @@ def admin_only() -> commands.Check[Any]:
                     _log_admin_role_config_missing(ctx)
                 return True
 
-        await _send_admin_denial(ctx)
-        _log_admin_denial(ctx)
+        if not _suppress_denial(ctx):
+            await _send_admin_denial(ctx)
+            _log_admin_denial(ctx)
         raise commands.CheckFailure("Admins only.")
 
     return commands.check(predicate)
@@ -272,7 +280,8 @@ def admin_only() -> commands.Check[Any]:
 def guild_only_denied_msg() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if getattr(ctx, "guild", None) is None:
-            await _send_guild_only_denial(ctx)
+            if not _suppress_denial(ctx):
+                await _send_guild_only_denial(ctx)
             raise commands.CheckFailure("Guild only.")
         return True
 
