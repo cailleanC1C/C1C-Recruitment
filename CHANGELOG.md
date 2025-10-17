@@ -2,7 +2,7 @@
 
 ## v0.9.3-phase3b-rc3 — Phase 3b Docs Alignment (2025-10-16)
 
-**• CoreOps & Admin Ops**
+### CoreOps & Admin Ops
 - Admin-only gating standardized across ops commands.
 - New `!env` command: grouped, masked output with ID → name resolution.
 - Embeds unified: versions in footer, no inline datetime (use message timestamp).
@@ -10,33 +10,33 @@
 
 ## v0.9.3 — Phase 3 Completion (2025-10-16)
 
-Phase 3: Sheets Access Layer + CoreOps Refresh
+### Sheets Access Layer + CoreOps Refresh
 
-• Docs & versioning
+### Docs & versioning
 – All runtime and docs bumped to v0.9.3.
 – Unified runtime confirmed stable across env groups.
 
-• Cache & Async Layer
+### Cache & Async Layer
 – Async back-off and retry helpers implemented.
 – Safe cancel propagation and non-blocking refresh confirmed.
 – TTL defaults: clans 3 h, templates 7 d, clan_tags 7 d.
 – Scheduled refresh cadence: 3 h / weekly (Mon 06:00 UTC).
 – Background logging to LOG_CHANNEL_ID with actor + trigger tags.
 
-• CoreOps Groundwork
+### CoreOps Groundwork
 – Refresh commands consolidated into shared CoreOps.
 – Admin and Staff roles now use !rec refresh all and !rec refresh clansinfo.
 – RBAC guard logic preserved; clear permission errors surfaced.
 – Refresher logs record bucket, trigger, actor, duration, result, error.
 – `!rec refresh all` now posts a single summary embed listing all buckets with duration/result/retries.
 
-• Diagnostics & Health
+### Diagnostics & Health
 – !health embed now displays cache ages, TTLs, and next refresh times (UTC date + time).
 – Refresher telemetry captures retry counts and error text across attempts.
 – Enhanced observability for manual vs scheduled triggers.
 – Embeds standardized: versions moved to footer; inline date/time removed (embed timestamp used).
 
-• Runtime Reliability
+### Runtime Reliability
 – Gspread dependency added to enable template bucket refresh.
 – Ops cog removed (merged into CoreOps for clarity).
 – Workflow auto-label and milestone fix verified.
