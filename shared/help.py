@@ -6,7 +6,7 @@ from typing import Iterable, Sequence
 
 import discord
 
-COREOPS_VERSION = "1.0.0"
+COREOPS_VERSION = "1.5.0"
 
 
 @dataclass(frozen=True)
