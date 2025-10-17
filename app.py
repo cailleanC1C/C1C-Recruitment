@@ -211,6 +211,7 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 
 @bot.command(name="ping")
 async def ping(ctx: commands.Context):
+    """Basic reachability check."""
     try:
         await ctx.message.add_reaction("🏓")
     except Exception:

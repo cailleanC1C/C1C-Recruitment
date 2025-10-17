@@ -37,7 +37,12 @@ from shared.coreops_render import (
     build_digest_line,
     build_health_embed,
 )
-from shared.help import build_help_embed, build_coreops_footer
+from shared.help import (
+    build_help_embed,
+    build_coreops_footer,
+    HelpLookupError,
+    HelpPermissionError,
+)
 from shared.sheets import cache_service
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
@@ -519,12 +524,34 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="help")
-    async def help_(self, ctx: commands.Context) -> None:
-        embed = build_help_embed(
-            prefix=get_command_prefix(),
-            is_staff=is_staff_member(ctx.author),
-            bot_version=os.getenv("BOT_VERSION", "dev"),
-        )
+    @guild_only_denied_msg()
+    async def help_(self, ctx: commands.Context, *, query: str | None = None) -> None:
+        """Display dynamic help for CoreOps commands."""
+
+        command_path = query.split() if query else None
+        try:
+            embed = await build_help_embed(
+                bot=self.bot,
+                ctx=ctx,
+                bot_name=get_bot_name(),
+                prefix=get_command_prefix(),
+                bot_version=os.getenv("BOT_VERSION", "dev"),
+                command_path=command_path,
+            )
+        except HelpPermissionError:
+            await ctx.reply(str(sanitize_text("You do not have access to that command.")))
+            return
+        except HelpLookupError:
+            target = query.strip() if query else ""
+            await ctx.reply(
+                str(
+                    sanitize_text(
+                        f"Unknown command{f' `{target}`' if target else ''}."
+                    )
+                )
+            )
+            return
+
         await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="config")
