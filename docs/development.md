@@ -1,42 +1,38 @@
-# Development — v0.9.2
+# Development — v0.9.3-phase3b-rc4
 
-## Setup
-- Install Python 3.12.
-- Create a Discord application and bot token with the required intents.
-- Export the following environment variable before running locally:
+This document covers how Caillean and Codex iterate on the recruitment runtime using the
+web-based deployment flow. Local execution is not supported in Phase 3b.
 
-```text
-DISCORD_TOKEN=<bot token>
-```
+## Phase 3b workflow
+- Ship changes through the shared Render pipelines exposed in the admin portal.
+- Use the deployment queue controls to pause/resume production refreshes when rolling out
+  CoreOps updates.
+- Update PR descriptions with the required metadata block (see
+  [Command System Guide](commands.md#adding-new-commands-internal-guide)).
 
-- Enable the **Message Content Intent** so the bot can read command prefixes.
-- Enable the **Server Members Intent** so RBAC checks receive member roles.
+## Environment configuration checks
+- Version config lives in the Sheets **Config** tab and propagates automatically during
+  refresh.
+- Verify guild role IDs before deployment; `is_admin_member()` and `is_staff_member()` rely
+  on those mappings.
+- Refresh caches post-deploy with `!rec refresh clansinfo` (staff) or `!rec refresh all`
+  (admin) as needed.
 
-## Run locally
-Install dependencies and start the bot:
+## Command system verification
+- `!rec help` shows user and staff tiers depending on the caller. Expect no denial copy
+  during help rendering.
+- `!help` is admin-only and lists every command grouped by tier.
+- Use `rehydrate_tiers()` followed by `audit_tiers()` inside the Render console when
+  validating tier coverage.
+- See [Command System Guide](commands.md) and the
+  [CoreOps contract](coreops_contract.md) for details on RBAC helpers and escalation.
 
-```bash
-pip install -r requirements.txt
-python app.py
-```
-
-## Try the prefixes
-Use both styles to confirm parsing:
-
-```text
-!rec ping
-@C1C Recruitment help
-```
-
-## Project layout
-- Core cogs live in `modules/`. CoreOps is loaded via `modules.coreops`.
-- Shared helpers sit under `shared/` and are imported by the bot on startup.
+## Project layout quick reference
+- Core cogs live in `modules/`; CoreOps loads from `modules.coreops`.
+- Tier metadata is declared in `shared/coreops/helpers/tiers.py`.
+- RBAC helpers reside in `shared/coreops_rbac.py` and gate privileged commands.
 - The command tree is configured in `app.py` when the bot boots.
-
-## Linting & formatting
-The project does not enforce a specific linter yet. Follow standard Black/ruff
-conventions if you contribute new Python code.
 
 ---
 
-_Doc last updated: 2025-10-15 (v0.9.2)_
+_Doc last updated: 2025-10-17 (v0.9.3-phase3b-rc4)_
