@@ -11,8 +11,6 @@ from discord.ext import commands
 
 from shared.config import (
     get_env_name,
-    get_bot_name,
-    get_command_prefix,
     get_allowed_guild_ids,
     is_guild_allowed,
     get_config_snapshot,
@@ -26,6 +24,7 @@ from shared.coreops_rbac import (
     is_admin_member,
     ops_gate,
 )
+from shared.redaction import sanitize_text
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -37,16 +36,11 @@ INTENTS = discord.Intents.default()
 INTENTS.message_content = True
 INTENTS.members = True
 
-BOT_PREFIX = get_command_prefix()
-COREOPS_COMMANDS = {"health", "digest", "env", "help", "ping", "refresh"}
+COMMAND_PREFIX = "!"
+COREOPS_COMMANDS = {"digest", "env", "health", "help", "ping", "refresh"}
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(
-        f"!{BOT_PREFIX} ",
-        f"!{BOT_PREFIX}",
-        BOT_PREFIX,
-        f"{BOT_PREFIX} ",
-    ),
+    command_prefix=commands.when_mentioned_or(COMMAND_PREFIX),
     intents=INTENTS,
 )
 bot.remove_command("help")
@@ -103,10 +97,9 @@ async def _enforce_guild_allow_list(
 async def on_ready():
     hb.note_ready()
     log.info(
-        "Bot ready as %s | env=%s | prefix=%s",
+        'Bot ready as %s | env=%s | prefixes=["!", "@mention"]',
         bot.user,
         get_env_name(),
-        BOT_PREFIX,
     )
     log.info(
         "CoreOps RBAC: admin_role_ids=%s staff_role_ids=%s",
@@ -177,6 +170,14 @@ async def on_message(message: discord.Message):
         message.content,
     )
 
+    content = (message.content or "").strip()
+    if content.lower() == "!help" and not ops_gate(message.author):
+        try:
+            await message.channel.send(str(sanitize_text("Use !rec help")))
+        except Exception:
+            pass
+        return
+
     cmd_name = detect_admin_bang_command(
         message, commands=COREOPS_COMMANDS, is_admin=ops_gate
     )
@@ -209,7 +210,7 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         log.exception("failed to send command error to log channel")
 
 
-@bot.command(name="ping")
+@bot.command(name="ping", hidden=True)
 async def ping(ctx: commands.Context):
     try:
         await ctx.message.add_reaction("🏓")

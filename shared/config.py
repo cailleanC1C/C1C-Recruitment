@@ -303,9 +303,8 @@ def get_watchdog_disconnect_grace_sec(default: Optional[int] = None) -> int:
     return _runtime.get_watchdog_disconnect_grace_sec(default)
 
 
-def get_command_prefix(default: str = "rec") -> str:
-    value = _CONFIG.get("COMMAND_PREFIX")
-    return str(value) if isinstance(value, str) and value else default
+def get_command_prefix(default: str = "!") -> str:
+    return "!"
 
 
 def get_discord_token() -> str:

@@ -61,7 +61,7 @@ def build_help_overview_embed(
 
     description_lines = [bot_description.strip()]
     tip_usage = _format_usage(prefix, "help", "<command>")
-    description_lines.append(f"Tip: Use `{tip_usage}` for an extended description.")
+    description_lines.append(f"Tip: Use {tip_usage} for an extended description.")
     embed.description = "\n\n".join(line for line in description_lines if line)
 
     for section in sections:
@@ -117,11 +117,16 @@ def _normalize_prefix(prefix: str) -> str:
 
 
 def _format_usage(prefix: str, qualified_name: str, signature: str | None) -> str:
-    parts = [_normalize_prefix(prefix)]
+    normalized_prefix = _normalize_prefix(prefix)
     name = (qualified_name or "").strip()
-    if name:
-        parts.append(name)
     sig = (signature or "").strip()
+
+    if name:
+        base = f"{normalized_prefix}{name}"
+    else:
+        base = normalized_prefix
+
+    parts = [base]
     if sig:
         parts.append(sig)
     return " ".join(part for part in parts if part)

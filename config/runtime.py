@@ -125,5 +125,7 @@ def get_watchdog_disconnect_grace_sec(default: Optional[int] = None) -> int:
     return get_watchdog_stall_sec()
 
 
-def get_command_prefix(default: str = "rec") -> str:
-    return os.getenv("COMMAND_PREFIX", default)
+def get_command_prefix(default: str = "!") -> str:
+    """Return the fixed bang prefix for command routing."""
+
+    return "!"

@@ -406,9 +406,16 @@ class CoreOpsCog(commands.Cog):
         self.bot = bot
         self._id_resolver = _IdResolver()
 
-    @commands.command(name="health")
-    @staff_only()
-    async def health(self, ctx: commands.Context) -> None:
+    @commands.group(name="rec", invoke_without_command=True)
+    @guild_only_denied_msg()
+    async def rec(self, ctx: commands.Context) -> None:
+        """Entry point for grouped CoreOps commands."""
+
+        if ctx.invoked_subcommand is not None:
+            return
+        await ctx.send(str(sanitize_text("Use !rec help")))
+
+    async def _health_impl(self, ctx: commands.Context) -> None:
         env = get_env_name()
         bot_name = get_bot_name()
         version = os.getenv("BOT_VERSION", "dev")
@@ -469,12 +476,20 @@ class CoreOpsCog(commands.Cog):
                     f"next: {next_text}"
                 ),
                 inline=False,
-            )
+                )
         await ctx.reply(embed=sanitize_embed(embed))
 
-    @commands.command(name="digest")
+    @rec.command(name="health")
     @staff_only()
-    async def digest(self, ctx: commands.Context) -> None:
+    async def rec_health(self, ctx: commands.Context) -> None:
+        await self._health_impl(ctx)
+
+    @commands.command(name="health", hidden=True)
+    @staff_only()
+    async def health(self, ctx: commands.Context) -> None:
+        await self._health_impl(ctx)
+
+    async def _digest_impl(self, ctx: commands.Context) -> None:
         line = build_digest_line(
             bot_name=get_bot_name(),
             env=get_env_name(),
@@ -484,10 +499,17 @@ class CoreOpsCog(commands.Cog):
         )
         await ctx.reply(str(sanitize_text(line)))
 
-    @commands.command(name="env")
-    @guild_only_denied_msg()
-    @admin_only()
-    async def env(self, ctx: commands.Context) -> None:
+    @rec.command(name="digest")
+    @staff_only()
+    async def rec_digest(self, ctx: commands.Context) -> None:
+        await self._digest_impl(ctx)
+
+    @commands.command(name="digest", hidden=True)
+    @staff_only()
+    async def digest(self, ctx: commands.Context) -> None:
+        await self._digest_impl(ctx)
+
+    async def _env_impl(self, ctx: commands.Context) -> None:
         bot_name = get_bot_name()
         env = get_env_name()
         version = os.getenv("BOT_VERSION", "dev")
@@ -524,9 +546,43 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(embed=sanitize_embed(embed))
 
+    @rec.command(name="env")
+    @guild_only_denied_msg()
+    @admin_only()
+    async def rec_env(self, ctx: commands.Context) -> None:
+        await self._env_impl(ctx)
+
+    @commands.command(name="env", hidden=True)
+    @guild_only_denied_msg()
+    @admin_only()
+    async def env(self, ctx: commands.Context) -> None:
+        await self._env_impl(ctx)
+
     @commands.command(name="help")
     @guild_only_denied_msg()
-    async def help_(self, ctx: commands.Context, *, query: str | None = None) -> None:
+    @ops_only()
+    async def help_(
+        self, ctx: commands.Context, *, query: str | None = None
+    ) -> None:
+        await self._render_help(ctx, query=query)
+
+    @rec.command(name="help")
+    async def rec_help(
+        self, ctx: commands.Context, *, query: str | None = None
+    ) -> None:
+        await self._render_help(ctx, query=query)
+
+    @rec.command(name="ping")
+    async def rec_ping(self, ctx: commands.Context) -> None:
+        command = self.bot.get_command("ping")
+        if command is None:
+            await ctx.send(str(sanitize_text("Ping command unavailable.")))
+            return
+        await ctx.invoke(command)
+
+    async def _render_help(
+        self, ctx: commands.Context, *, query: str | None
+    ) -> None:
         prefix = get_command_prefix()
         bot_version = os.getenv("BOT_VERSION", "dev")
         bot_name = get_bot_name()
@@ -549,6 +605,8 @@ class CoreOpsCog(commands.Cog):
 
         normalized_lookup = " ".join(lookup.lower().split())
         command = self.bot.get_command(normalized_lookup)
+        if command is None and not normalized_lookup.startswith("rec "):
+            command = self.bot.get_command(f"rec {normalized_lookup}")
         if command is None:
             await ctx.reply(str(sanitize_text(f"Unknown command `{lookup}`.")))
             return
@@ -568,10 +626,7 @@ class CoreOpsCog(commands.Cog):
         )
         await ctx.reply(embed=sanitize_embed(embed))
 
-    @commands.command(name="config")
-    @guild_only_denied_msg()
-    @ops_only()
-    async def config_summary(self, ctx: commands.Context) -> None:
+    async def _config_impl(self, ctx: commands.Context) -> None:
         env = get_env_name()
         allow = get_allowed_guild_ids()
         recruitment_sheet = "set" if get_recruitment_sheet_id() else "missing"
@@ -587,27 +642,43 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(str(sanitize_text("\n".join(lines))))
 
-    @commands.group(name="refresh", invoke_without_command=True)
+    @rec.command(name="config")
     @guild_only_denied_msg()
     @ops_only()
-    async def refresh(self, ctx: commands.Context) -> None:
-        """Admin/Staff group: manual cache refresh."""
+    async def rec_config(self, ctx: commands.Context) -> None:
+        await self._config_impl(ctx)
 
+    @commands.command(name="config", hidden=True)
+    @guild_only_denied_msg()
+    @ops_only()
+    async def config_summary(self, ctx: commands.Context) -> None:
+        await self._config_impl(ctx)
+
+    async def _refresh_root(self, ctx: commands.Context) -> None:
         if not _admin_roles_configured() and not can_manage_guild(getattr(ctx, "author", None)):
             await ctx.send(
                 str(sanitize_text("⚠️ Admin roles not configured — refresh commands disabled."))
             )
             return
         await ctx.send(
-            str(sanitize_text("Available: `!rec refresh all`, `!rec refresh clansinfo`"))
+            str(sanitize_text("Available: `!refresh all`, `!refresh clansinfo`"))
         )
 
-    @refresh.command(name="all")
+    @commands.group(name="refresh", invoke_without_command=True, hidden=True)
     @guild_only_denied_msg()
     @ops_only()
-    async def refresh_all(self, ctx: commands.Context) -> None:
-        """Admin: clear & warm all registered Sheets caches."""
+    async def refresh(self, ctx: commands.Context) -> None:
+        """Admin/Staff group: manual cache refresh."""
 
+        await self._refresh_root(ctx)
+
+    @rec.group(name="refresh", invoke_without_command=True)
+    @guild_only_denied_msg()
+    @ops_only()
+    async def rec_refresh(self, ctx: commands.Context) -> None:
+        await self._refresh_root(ctx)
+
+    async def _refresh_all_impl(self, ctx: commands.Context) -> None:
         caps = cache_service.capabilities()
         buckets = list(caps.keys())
         if not buckets:
@@ -701,12 +772,21 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.send(embed=sanitize_embed(embed))
 
-    @refresh.command(name="clansinfo")
+    @refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
-    async def refresh_clansinfo(self, ctx: commands.Context) -> None:
-        """Staff/Admin: refresh 'clans' cache if age ≥ 60 min."""
+    async def refresh_all(self, ctx: commands.Context) -> None:
+        """Admin: clear & warm all registered Sheets caches."""
 
+        await self._refresh_all_impl(ctx)
+
+    @rec_refresh.command(name="all")
+    @guild_only_denied_msg()
+    @ops_only()
+    async def rec_refresh_all(self, ctx: commands.Context) -> None:
+        await self._refresh_all_impl(ctx)
+
+    async def _refresh_clansinfo_impl(self, ctx: commands.Context) -> None:
         caps = cache_service.capabilities()
         clans = caps.get("clans")
         if not clans:
@@ -738,6 +818,20 @@ class CoreOpsCog(commands.Cog):
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )
 
+    @refresh.command(name="clansinfo")
+    @guild_only_denied_msg()
+    @ops_only()
+    async def refresh_clansinfo(self, ctx: commands.Context) -> None:
+        """Staff/Admin: refresh 'clans' cache if age ≥ 60 min."""
+
+        await self._refresh_clansinfo_impl(ctx)
+
+    @rec_refresh.command(name="clansinfo")
+    @guild_only_denied_msg()
+    @ops_only()
+    async def rec_refresh_clansinfo(self, ctx: commands.Context) -> None:
+        await self._refresh_clansinfo_impl(ctx)
+
     async def _gather_overview_sections(
         self, ctx: commands.Context
     ) -> list[HelpOverviewSection]:
@@ -748,13 +842,15 @@ class CoreOpsCog(commands.Cog):
         }
 
         commands_iter = sorted(
-            (cmd for cmd in self.bot.commands if not cmd.hidden),
+            (
+                cmd
+                for cmd in self.bot.walk_commands()
+                if not cmd.hidden and self._include_in_overview(cmd)
+            ),
             key=lambda cmd: cmd.qualified_name,
         )
 
         for command in commands_iter:
-            if command.parent is not None:
-                continue
             if not await self._can_display_command(command, ctx):
                 continue
             info = self._build_help_info(command)
@@ -781,6 +877,15 @@ class CoreOpsCog(commands.Cog):
                 )
             )
         return sections
+
+    def _include_in_overview(self, command: commands.Command[Any, Any, Any]) -> bool:
+        if command.parent is None:
+            return True
+
+        top = command
+        while top.parent is not None:
+            top = top.parent
+        return top.qualified_name == "rec"
 
     async def _gather_subcommand_infos(
         self, command: commands.Command[Any, Any, Any], ctx: commands.Context
