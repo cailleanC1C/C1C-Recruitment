@@ -37,7 +37,12 @@ from shared.coreops_render import (
     build_digest_line,
     build_health_embed,
 )
-from shared.help import build_help_embed, build_coreops_footer
+from shared.help import (
+    HelpCommandInfo,
+    build_coreops_footer,
+    build_help_detail_embed,
+    build_help_overview_embed,
+)
 from shared.sheets import cache_service
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
@@ -519,11 +524,42 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     @commands.command(name="help")
-    async def help_(self, ctx: commands.Context) -> None:
-        embed = build_help_embed(
-            prefix=get_command_prefix(),
-            is_staff=is_staff_member(ctx.author),
-            bot_version=os.getenv("BOT_VERSION", "dev"),
+    @guild_only_denied_msg()
+    async def help_(self, ctx: commands.Context, *, query: str | None = None) -> None:
+        prefix = get_command_prefix()
+        bot_version = os.getenv("BOT_VERSION", "dev")
+        lookup = query.strip() if isinstance(query, str) else ""
+
+        if not lookup:
+            sections = await self._gather_overview_sections(ctx)
+            if not sections:
+                await ctx.reply(str(sanitize_text("No commands available.")))
+                return
+            embed = build_help_overview_embed(
+                prefix=prefix,
+                sections=sections,
+                bot_version=bot_version,
+            )
+            await ctx.reply(embed=sanitize_embed(embed))
+            return
+
+        normalized_lookup = " ".join(lookup.lower().split())
+        command = self.bot.get_command(normalized_lookup)
+        if command is None:
+            await ctx.reply(str(sanitize_text(f"Unknown command `{lookup}`.")))
+            return
+
+        if not await self._can_display_command(command, ctx):
+            await ctx.reply(str(sanitize_text("You do not have access to that command.")))
+            return
+
+        command_info = self._build_help_info(command)
+        subcommands = await self._gather_subcommand_infos(command, ctx)
+        embed = build_help_detail_embed(
+            prefix=prefix,
+            command=command_info,
+            subcommands=subcommands,
+            bot_version=bot_version,
         )
         await ctx.reply(embed=sanitize_embed(embed))
 
@@ -649,7 +685,8 @@ class CoreOpsCog(commands.Cog):
             description=f"actor: {actor_display} • trigger: manual",
             colour=discord.Colour.blurple(),
         )
-        embed.add_field(name="Buckets", value=f"```\n{'\n'.join(table_lines)}\n```", inline=False)
+        bucket_block = "\n".join(table_lines)
+        embed.add_field(name="Buckets", value=f"```\n{bucket_block}\n```", inline=False)
         embed.timestamp = dt.datetime.now(UTC)
         footer_text = build_coreops_footer(
             bot_version=os.getenv("BOT_VERSION", "dev"),
@@ -695,6 +732,105 @@ class CoreOpsCog(commands.Cog):
         asyncio.create_task(
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )
+
+    async def _gather_overview_sections(
+        self, ctx: commands.Context
+    ) -> list[tuple[str, list[HelpCommandInfo]]]:
+        buckets: dict[str, list[HelpCommandInfo]] = {
+            "Admin": [],
+            "Staff": [],
+            "General": [],
+        }
+
+        commands_iter = sorted(
+            (cmd for cmd in self.bot.commands if not cmd.hidden),
+            key=lambda cmd: cmd.qualified_name,
+        )
+
+        for command in commands_iter:
+            if command.parent is not None:
+                continue
+            if not await self._can_display_command(command, ctx):
+                continue
+            info = self._build_help_info(command)
+            category = self._categorize_command(command)
+            buckets[category].append(info)
+
+        sections: list[tuple[str, list[HelpCommandInfo]]] = []
+        for label in ("Admin", "Staff", "General"):
+            entries = buckets[label]
+            if not entries:
+                continue
+            entries.sort(key=lambda item: item.qualified_name)
+            sections.append((label, entries))
+        return sections
+
+    async def _gather_subcommand_infos(
+        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+    ) -> list[HelpCommandInfo]:
+        if not isinstance(command, commands.Group):
+            return []
+
+        infos: list[HelpCommandInfo] = []
+        seen: set[str] = set()
+        for subcommand in command.commands:
+            if subcommand.hidden:
+                continue
+            # Guard against duplicate references when aliases are registered.
+            base_name = subcommand.qualified_name
+            if base_name in seen:
+                continue
+            seen.add(base_name)
+            if not await self._can_display_command(subcommand, ctx):
+                continue
+            infos.append(self._build_help_info(subcommand))
+
+        infos.sort(key=lambda item: item.qualified_name)
+        return infos
+
+    async def _can_display_command(
+        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+    ) -> bool:
+        if not command.enabled:
+            return False
+        try:
+            return await command.can_run(ctx)
+        except commands.CheckFailure:
+            return False
+        except commands.CommandError:
+            return False
+        except Exception:  # pragma: no cover - defensive guard
+            logger.exception("failed help gate for command", exc_info=True)
+            return False
+
+    def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
+        signature = command.signature or ""
+        summary = command.short_doc or command.help or command.brief or ""
+        aliases = tuple(sorted(alias.strip() for alias in command.aliases if alias.strip()))
+        return HelpCommandInfo(
+            qualified_name=command.qualified_name,
+            signature=signature,
+            summary=summary.strip(),
+            aliases=aliases,
+        )
+
+    def _categorize_command(self, command: commands.Command[Any, Any, Any]) -> str:
+        if self._has_check(command, "admin_only"):
+            return "Admin"
+        if self._has_check(command, "ops_only") or self._has_check(command, "staff_only"):
+            return "Staff"
+        return "General"
+
+    def _has_check(self, command: commands.Command[Any, Any, Any], needle: str) -> bool:
+        for check in getattr(command, "checks", []):
+            for attr in (
+                getattr(check, "__qualname__", ""),
+                getattr(check, "__name__", ""),
+                getattr(check, "__module__", ""),
+            ):
+                if needle in attr:
+                    return True
+        return False
 
     def _add_embed_group(
         self, embed: discord.Embed, name: str, lines: Sequence[str]
