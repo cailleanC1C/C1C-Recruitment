@@ -39,6 +39,7 @@ from shared.coreops_render import (
 )
 from shared.help import (
     HelpCommandInfo,
+    HelpOverviewSection,
     build_coreops_footer,
     build_help_detail_embed,
     build_help_overview_embed,
@@ -528,6 +529,7 @@ class CoreOpsCog(commands.Cog):
     async def help_(self, ctx: commands.Context, *, query: str | None = None) -> None:
         prefix = get_command_prefix()
         bot_version = os.getenv("BOT_VERSION", "dev")
+        bot_name = get_bot_name()
         lookup = query.strip() if isinstance(query, str) else ""
 
         if not lookup:
@@ -539,6 +541,8 @@ class CoreOpsCog(commands.Cog):
                 prefix=prefix,
                 sections=sections,
                 bot_version=bot_version,
+                bot_name=bot_name,
+                bot_description=self._help_bot_description(bot_name=bot_name),
             )
             await ctx.reply(embed=sanitize_embed(embed))
             return
@@ -560,6 +564,7 @@ class CoreOpsCog(commands.Cog):
             command=command_info,
             subcommands=subcommands,
             bot_version=bot_version,
+            bot_name=bot_name,
         )
         await ctx.reply(embed=sanitize_embed(embed))
 
@@ -735,11 +740,11 @@ class CoreOpsCog(commands.Cog):
 
     async def _gather_overview_sections(
         self, ctx: commands.Context
-    ) -> list[tuple[str, list[HelpCommandInfo]]]:
+    ) -> list[HelpOverviewSection]:
         buckets: dict[str, list[HelpCommandInfo]] = {
             "Admin": [],
-            "Staff": [],
-            "General": [],
+            "Recruiter/Staff": [],
+            "User": [],
         }
 
         commands_iter = sorted(
@@ -756,13 +761,25 @@ class CoreOpsCog(commands.Cog):
             category = self._categorize_command(command)
             buckets[category].append(info)
 
-        sections: list[tuple[str, list[HelpCommandInfo]]] = []
-        for label in ("Admin", "Staff", "General"):
+        blurbs = {
+            "User": "Player-facing commands for everyday recruitment checks.",
+            "Recruiter/Staff": "Tools for recruiters and staff managing applicant workflows.",
+            "Admin": "Operational controls reserved for administrators.",
+        }
+
+        sections: list[HelpOverviewSection] = []
+        for label in ("User", "Recruiter/Staff", "Admin"):
             entries = buckets[label]
             if not entries:
                 continue
             entries.sort(key=lambda item: item.qualified_name)
-            sections.append((label, entries))
+            sections.append(
+                HelpOverviewSection(
+                    label=label,
+                    blurb=blurbs[label],
+                    commands=tuple(entries),
+                )
+            )
         return sections
 
     async def _gather_subcommand_infos(
@@ -818,8 +835,14 @@ class CoreOpsCog(commands.Cog):
         if self._has_check(command, "admin_only"):
             return "Admin"
         if self._has_check(command, "ops_only") or self._has_check(command, "staff_only"):
-            return "Staff"
-        return "General"
+            return "Recruiter/Staff"
+        return "User"
+
+    def _help_bot_description(self, *, bot_name: str) -> str:
+        return (
+            f"{bot_name} streamlines C1C recruitment with quick status checks,"
+            " roster insights, and operational safeguards."
+        )
 
     def _has_check(self, command: commands.Command[Any, Any, Any], needle: str) -> bool:
         for check in getattr(command, "checks", []):

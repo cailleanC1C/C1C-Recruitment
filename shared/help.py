@@ -19,6 +19,15 @@ class HelpCommandInfo:
     aliases: Sequence[str]
 
 
+@dataclass(frozen=True)
+class HelpOverviewSection:
+    """Collection of commands rendered together in the overview help embed."""
+
+    label: str
+    blurb: str
+    commands: Sequence[HelpCommandInfo]
+
+
 def build_coreops_footer(
     *, bot_version: str, coreops_version: str = COREOPS_VERSION, notes: str | None = None
 ) -> str:
@@ -40,19 +49,28 @@ def build_help_footer(*, bot_version: str) -> str:
 def build_help_overview_embed(
     *,
     prefix: str,
-    sections: Sequence[tuple[str, Sequence[HelpCommandInfo]]],
+    sections: Sequence[HelpOverviewSection],
     bot_version: str,
+    bot_name: str,
+    bot_description: str,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title="🌿C1C Recruitment Helper · help",
+        title=f"{bot_name} · help",
         colour=discord.Color.blurple(),
     )
 
-    for label, commands in sections:
+    description_lines = [bot_description.strip()]
+    tip_usage = _format_usage(prefix, "help", "<command>")
+    description_lines.append(f"Tip: Use `{tip_usage}` for an extended description.")
+    embed.description = "\n\n".join(line for line in description_lines if line)
+
+    for section in sections:
+        commands = [command for command in section.commands if command]
         if not commands:
             continue
         lines = [_format_summary_line(prefix, command) for command in commands]
-        embed.add_field(name=label, value=_join_and_truncate(lines), inline=False)
+        value = _format_section_value(section.blurb, lines)
+        embed.add_field(name=section.label, value=value, inline=False)
 
     footer_text = build_coreops_footer(bot_version=bot_version)
     embed.set_footer(text=footer_text)
@@ -65,9 +83,10 @@ def build_help_detail_embed(
     command: HelpCommandInfo,
     subcommands: Sequence[HelpCommandInfo],
     bot_version: str,
+    bot_name: str,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title="🌿C1C Recruitment Helper · help",
+        title=f"{bot_name} · help",
         colour=discord.Color.blurple(),
     )
 
@@ -83,11 +102,7 @@ def build_help_detail_embed(
 
     if subcommands:
         lines = [_format_summary_line(prefix, subcommand) for subcommand in subcommands]
-        embed.add_field(
-            name="Subcommands",
-            value=_join_and_truncate(lines),
-            inline=False,
-        )
+        embed.add_field(name="Subcommands", value=_join_and_truncate(lines), inline=False)
 
     footer_text = build_coreops_footer(bot_version=bot_version)
     embed.set_footer(text=footer_text)
@@ -135,6 +150,17 @@ def _format_summary_line(prefix: str, command: HelpCommandInfo) -> str:
     return f"• {' '.join(parts)}"
 
 
+def _format_section_value(blurb: str, lines: Sequence[str], *, limit: int = 900) -> str:
+    cleaned_blurb = blurb.strip()
+    if not lines:
+        return cleaned_blurb or "—"
+
+    block = _join_and_truncate(lines, limit=limit)
+    if cleaned_blurb:
+        return f"{cleaned_blurb}\n{block}" if block else cleaned_blurb
+    return block
+
+
 def _join_and_truncate(lines: Sequence[str], limit: int = 900) -> str:
     if not lines:
         return "—"
@@ -147,7 +173,7 @@ def _join_and_truncate(lines: Sequence[str], limit: int = 900) -> str:
         if collected and total + addition > limit:
             remaining = len(lines) - len(collected)
             if remaining > 0:
-                collected.append(f"… +{remaining} more")
+                collected.append(f"+{remaining} more…")
             break
         collected.append(text)
         total += addition
