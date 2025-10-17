@@ -61,6 +61,20 @@ def _can_dispatch_bare_coreops(member: discord.abc.User | discord.Member | None)
     return is_admin_member(member)
 
 
+def _extract_bang_query(content: str) -> str | None:
+    raw = (content or "").strip()
+    if not raw.startswith("!"):
+        return None
+    trimmed = raw[1:].lstrip()
+    if not trimmed:
+        return None
+    parts = trimmed.split(None, 1)
+    if len(parts) < 2:
+        return None
+    remainder = parts[1].strip()
+    return remainder if remainder else None
+
+
 async def _enforce_guild_allow_list(
     *, log_when_empty: bool = False, log_success: bool = True
 ) -> bool:
@@ -190,6 +204,16 @@ async def on_message(message: discord.Message):
     )
     if cmd_name:
         ctx = await bot.get_context(message)
+        if cmd_name == "help":
+            cog = bot.get_cog("CoreOpsCog")
+            if cog is not None and hasattr(cog, "render_help"):
+                rec_help_command = bot.get_command("rec help")
+                if rec_help_command is not None:
+                    ctx.command = rec_help_command
+                    ctx.invoked_with = "help"
+                query = _extract_bang_query(message.content or "")
+                await cog.render_help(ctx, query=query)
+            return
         cmd = bot.get_command(cmd_name)
         if cmd is not None:
             ctx.command = cmd
