@@ -44,6 +44,7 @@ from shared.help import (
     build_help_detail_embed,
     build_help_overview_embed,
 )
+from shared.coreops.helpers.tiers import tier
 from shared.sheets import cache_service
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 
@@ -151,23 +152,21 @@ def _admin_check() -> commands.Check[Any]:
 def _staff_check() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
-        if is_staff_member(author) or is_admin_member(author):
-            return True
-        perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
-        return bool(perms)
+        return bool(is_staff_member(author) or is_admin_member(author))
 
     return commands.check(predicate)
 
 
 def staff_only() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
-        if is_staff_member(getattr(ctx, "author", None)):
+        author = getattr(ctx, "author", None)
+        if is_staff_member(author) or is_admin_member(author):
             return True
         try:
             await ctx.reply("Staff only.")
         except Exception:
             pass
-        return False
+        raise commands.CheckFailure("Staff only.")
 
     return commands.check(predicate)
 
@@ -478,11 +477,13 @@ class CoreOpsCog(commands.Cog):
                 )
         await ctx.reply(embed=sanitize_embed(embed))
 
+    @tier("staff")
     @rec.command(name="health")
     @staff_only()
     async def rec_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
+    @tier("admin")
     @commands.command(name="health", hidden=True)
     @guild_only_denied_msg()
     @admin_only()
@@ -499,11 +500,13 @@ class CoreOpsCog(commands.Cog):
         )
         await ctx.reply(str(sanitize_text(line)))
 
+    @tier("staff")
     @rec.command(name="digest")
     @staff_only()
     async def rec_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
+    @tier("admin")
     @commands.command(name="digest", hidden=True)
     @guild_only_denied_msg()
     @admin_only()
@@ -547,18 +550,21 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(embed=sanitize_embed(embed))
 
+    @tier("admin")
     @rec.command(name="env")
     @guild_only_denied_msg()
     @admin_only()
     async def rec_env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
+    @tier("admin")
     @commands.command(name="env", hidden=True)
     @guild_only_denied_msg()
     @admin_only()
     async def env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
+    @tier("user")
     @rec.command(name="help")
     async def rec_help(
         self, ctx: commands.Context, *, query: str | None = None
@@ -570,6 +576,7 @@ class CoreOpsCog(commands.Cog):
     ) -> None:
         await self._render_help(ctx, query=query)
 
+    @tier("user")
     @rec.command(name="ping")
     async def rec_ping(self, ctx: commands.Context) -> None:
         command = self.bot.get_command("ping")
@@ -640,12 +647,14 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(str(sanitize_text("\n".join(lines))))
 
+    @tier("staff")
     @rec.command(name="config")
     @guild_only_denied_msg()
     @ops_only()
     async def rec_config(self, ctx: commands.Context) -> None:
         await self._config_impl(ctx)
 
+    @tier("admin")
     @commands.command(name="config", hidden=True)
     @guild_only_denied_msg()
     @admin_only()
@@ -665,6 +674,7 @@ class CoreOpsCog(commands.Cog):
             str(sanitize_text("Available: `!refresh all`, `!refresh clansinfo`"))
         )
 
+    @tier("admin")
     @commands.group(name="refresh", invoke_without_command=True, hidden=True)
     @guild_only_denied_msg()
     @admin_only()
@@ -673,6 +683,7 @@ class CoreOpsCog(commands.Cog):
 
         await self._refresh_root(ctx)
 
+    @tier("staff")
     @rec.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
@@ -773,6 +784,7 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.send(embed=sanitize_embed(embed))
 
+    @tier("admin")
     @refresh.command(name="all")
     @guild_only_denied_msg()
     @admin_only()
@@ -781,6 +793,7 @@ class CoreOpsCog(commands.Cog):
 
         await self._refresh_all_impl(ctx)
 
+    @tier("staff")
     @rec_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
@@ -819,6 +832,7 @@ class CoreOpsCog(commands.Cog):
             cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
         )
 
+    @tier("admin")
     @refresh.command(name="clansinfo")
     @guild_only_denied_msg()
     @admin_only()
@@ -827,6 +841,7 @@ class CoreOpsCog(commands.Cog):
 
         await self._refresh_clansinfo_impl(ctx)
 
+    @tier("staff")
     @rec_refresh.command(name="clansinfo")
     @guild_only_denied_msg()
     @ops_only()
@@ -836,45 +851,74 @@ class CoreOpsCog(commands.Cog):
     async def _gather_overview_sections(
         self, ctx: commands.Context
     ) -> list[HelpOverviewSection]:
-        buckets: dict[str, list[HelpCommandInfo]] = {
-            "Admin": [],
-            "Recruiter/Staff": [],
-            "User": [],
+        grouped: dict[str, list[commands.Command[Any, Any, Any]]] = {
+            "user": [],
+            "staff": [],
+            "admin": [],
         }
 
-        commands_iter = sorted(
-            (
-                cmd
-                for cmd in self.bot.walk_commands()
-                if not cmd.hidden and self._include_in_overview(cmd)
-            ),
-            key=lambda cmd: cmd.qualified_name,
-        )
+        commands_iter: list[commands.Command[Any, Any, Any]] = []
+        for command in self.bot.walk_commands():
+            if command.hidden:
+                continue
+            name = (getattr(command, "name", "") or "").strip()
+            if name.startswith("_"):
+                continue
+            if not self._include_in_overview(command):
+                continue
+            commands_iter.append(command)
 
+        commands_iter.sort(key=lambda cmd: cmd.qualified_name)
+
+        seen: set[str] = set()
         for command in commands_iter:
+            base_name = command.qualified_name
+            if base_name in seen:
+                continue
+            seen.add(base_name)
             if not await self._can_display_command(command, ctx):
                 continue
-            info = self._build_help_info(command)
-            category = self._categorize_command(command)
-            buckets[category].append(info)
+            level = getattr(command, "_tier", "user")
+            if level not in grouped:
+                level = "user"
+            grouped[level].append(command)
 
-        blurbs = {
-            "User": "Player-facing commands for everyday recruitment checks.",
-            "Recruiter/Staff": "Tools for recruiters and staff managing applicant workflows.",
-            "Admin": "Operational controls reserved for administrators.",
-        }
+        author = getattr(ctx, "author", None)
+        is_admin = is_admin_member(author)
+        is_staff = is_staff_member(author) or is_admin
+
+        allowed_tiers: set[str] = {"user"}
+        if is_staff:
+            allowed_tiers.add("staff")
+        if is_admin:
+            allowed_tiers.add("admin")
+
+        tier_order: list[tuple[str, str, str]] = [
+            ("user", "User", "Player-facing commands for everyday recruitment checks."),
+            (
+                "staff",
+                "Recruiter/Staff",
+                "Tools for recruiters and staff managing applicant workflows.",
+            ),
+            ("admin", "Admin", "Operational controls reserved for administrators."),
+        ]
 
         sections: list[HelpOverviewSection] = []
-        for label in ("User", "Recruiter/Staff", "Admin"):
-            entries = buckets[label]
-            if not entries:
+        for key, label, blurb in tier_order:
+            if key not in allowed_tiers:
                 continue
-            entries.sort(key=lambda item: item.qualified_name)
+            commands_for_tier = grouped.get(key, [])
+            if not commands_for_tier:
+                continue
+            sorted_commands = sorted(
+                commands_for_tier, key=lambda command: command.qualified_name
+            )
+            infos = [self._build_help_info(command) for command in sorted_commands]
             sections.append(
                 HelpOverviewSection(
                     label=label,
-                    blurb=blurbs[label],
-                    commands=tuple(entries),
+                    blurb=blurb,
+                    commands=tuple(infos),
                 )
             )
         return sections
@@ -948,29 +992,11 @@ class CoreOpsCog(commands.Cog):
             aliases=aliases,
         )
 
-    def _categorize_command(self, command: commands.Command[Any, Any, Any]) -> str:
-        if self._has_check(command, "admin_only"):
-            return "Admin"
-        if self._has_check(command, "ops_only") or self._has_check(command, "staff_only"):
-            return "Recruiter/Staff"
-        return "User"
-
     def _help_bot_description(self, *, bot_name: str) -> str:
         return (
             f"{bot_name} streamlines C1C recruitment with quick status checks,"
             " roster insights, and operational safeguards."
         )
-
-    def _has_check(self, command: commands.Command[Any, Any, Any], needle: str) -> bool:
-        for check in getattr(command, "checks", []):
-            for attr in (
-                getattr(check, "__qualname__", ""),
-                getattr(check, "__name__", ""),
-                getattr(check, "__module__", ""),
-            ):
-                if needle in attr:
-                    return True
-        return False
 
     def _add_embed_group(
         self, embed: discord.Embed, name: str, lines: Sequence[str]

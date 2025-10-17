@@ -4,6 +4,7 @@ from discord.ext import commands
 
 from shared import runtime as rt
 # NOTE: Do not import role ID constants from shared.config; not exported here.
+from shared.coreops.helpers.tiers import tier
 from shared.coreops_rbac import is_staff_member, is_admin_member
 from sheets.recruitment import get_cached_welcome_templates
 
@@ -18,8 +19,11 @@ def staff_only():
         # CoreOps roles OR server Administrator (fallback)
         if is_staff_member(author) or is_admin_member(author):
             return True
-        perms = getattr(getattr(author, "guild_permissions", None), "administrator", False)
-        return bool(perms)
+        try:
+            await ctx.reply("Staff only.")
+        except Exception:
+            pass
+        raise commands.CheckFailure("Staff only.")
     return commands.check(predicate)
 
 class WelcomeBridge(commands.Cog):
@@ -31,6 +35,7 @@ class WelcomeBridge(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    @tier("staff")
     @commands.command(name="welcome")
     @staff_only()
     async def welcome(self, ctx: commands.Context, clan: Optional[str] = None, *, note: Optional[str] = None):
