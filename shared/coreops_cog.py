@@ -139,6 +139,19 @@ def _admin_roles_configured() -> bool:
         return True
 
 
+def _get_cmd_tier(cmd: commands.Command[Any, Any, Any]) -> str:
+    level: Optional[str] = None
+    try:
+        extras = getattr(cmd, "extras", None)
+        if isinstance(extras, dict):
+            level = extras.get("tier")
+    except Exception:
+        level = None
+    if not level:
+        level = getattr(cmd, "_tier", None)
+    return level or "user"
+
+
 def _admin_check() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         if not _admin_roles_configured():
@@ -878,7 +891,7 @@ class CoreOpsCog(commands.Cog):
             seen.add(base_name)
             if not await self._can_display_command(command, ctx):
                 continue
-            level = getattr(command, "_tier", "user")
+            level = _get_cmd_tier(command)
             if level not in grouped:
                 level = "user"
             grouped[level].append(command)

@@ -27,6 +27,7 @@ from shared.config import (
     get_refresh_times,
     get_refresh_timezone,
 )
+from shared.coreops.helpers.tiers import rehydrate_tiers
 
 log = logging.getLogger("c1c.runtime")
 
@@ -364,6 +365,7 @@ class Runtime:
     async def start(self, token: str) -> None:
         await self.start_webserver()
         await self.load_extensions()
+        rehydrate_tiers(self.bot)
         from shared.sheets.cache_scheduler import schedule_default_jobs
 
         schedule_default_jobs(self)
