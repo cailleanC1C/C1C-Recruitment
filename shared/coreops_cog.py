@@ -415,6 +415,26 @@ class CoreOpsCog(commands.Cog):
             return
         await ctx.send(str(sanitize_text("Use !rec help")))
 
+    async def _help_impl(self, ctx: commands.Context) -> None:
+        bot_name = get_bot_name()
+        env = get_env_name()
+        version = os.getenv("BOT_VERSION", "dev")
+
+        description = (
+            "CoreOps provides staff-only operational insights and controls for our "
+            f"{env} deployment. Use `!rec <command>` to access grouped tools such as "
+            "health, digest, and env."
+        )
+
+        embed = discord.Embed(
+            title=f"{bot_name} · help",
+            colour=discord.Color.blurple(),
+            description=description,
+        )
+        embed.set_footer(text=build_coreops_footer(bot_version=version))
+
+        await ctx.reply(embed=sanitize_embed(embed))
+
     async def _health_impl(self, ctx: commands.Context) -> None:
         env = get_env_name()
         bot_name = get_bot_name()
@@ -484,10 +504,20 @@ class CoreOpsCog(commands.Cog):
     async def rec_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
+    @rec.command(name="help")
+    @staff_only()
+    async def rec_help(self, ctx: commands.Context) -> None:
+        await self._help_impl(ctx)
+
     @commands.command(name="health", hidden=True)
     @staff_only()
     async def health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
+
+    @commands.command(name="help", hidden=True)
+    @staff_only()
+    async def help(self, ctx: commands.Context) -> None:
+        await self._help_impl(ctx)
 
     async def _digest_impl(self, ctx: commands.Context) -> None:
         line = build_digest_line(
