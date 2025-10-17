@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.9.3-phase3b-rc4] — 2025-10-17
+### Changed
+- Unified all command prefixes under `!` and `@mention`.
+- Implemented dynamic help with tier grouping (User / Staff / Admin).
+- Added tier decorators to all commands (`@tier("...")`).
+- Removed legacy `!reboot` (redundant with `!refresh`).
+- Removed `manage_guild` bypass; full RBAC enforcement via helper functions.
+- Updated help text copy (C1C community tone, cleaner usage examples).
+- Gating now silent during help rendering (no "Staff only." spam).
+
+### Fixed
+- Duplicate help entries across tiers.
+- Hidden admin/staff commands now visible only to allowed roles.
+
+### Documentation
+- Added “Adding New Commands” guide.
+- Updated Ops Contract and command overview for Phase 3b.
+
 ## v0.9.3-phase3b-rc3 — Phase 3b Docs Alignment (2025-10-16)
 
 ### CoreOps & Admin Ops
@@ -98,3 +116,7 @@
 - Logs routed to `LOG_CHANNEL_ID` (#bot-production).
 - Final env names standardized; legacy singular admin key deprecated.
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
+
+---
+
+_Doc last updated: 2025-10-17 (v0.9.3-phase3b-rc4)_
