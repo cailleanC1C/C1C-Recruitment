@@ -43,7 +43,7 @@ class WelcomeBridge(commands.Cog):
     async def welcome(self, ctx: commands.Context, clan: Optional[str] = None, *, note: Optional[str] = None):
         """
         Post a templated welcome. Template rows are read from the cached 'templates' bucket.
-        Usage: !welcome [CLAN] @mention
+        Usage: !welcome [clan] @mention
         """
         templates = get_cached_welcome_templates()
         if not templates:
