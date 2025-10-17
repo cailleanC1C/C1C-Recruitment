@@ -4,6 +4,7 @@ from discord.ext import commands
 
 from shared import runtime as rt
 # NOTE: Do not import role ID constants from shared.config; not exported here.
+from shared.coreops.helpers.tiers import tier
 from shared.coreops_rbac import is_staff_member, is_admin_member
 from sheets.recruitment import get_cached_welcome_templates
 
@@ -31,6 +32,7 @@ class WelcomeBridge(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    @tier("staff")
     @commands.command(name="welcome")
     @staff_only()
     async def welcome(self, ctx: commands.Context, clan: Optional[str] = None, *, note: Optional[str] = None):
