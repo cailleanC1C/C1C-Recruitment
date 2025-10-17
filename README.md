@@ -21,7 +21,11 @@ Recruiter panels, welcome templates and ticket watchers share a single config, s
 | `!welcome` | Staff/Admin | Posts templated welcome for a placement. |
 | `!ping`, `!health`, `!help`, `!digest` | Admin | Liveness, latency, help, daily digest. |
 
-## How it works 
+## Admin Ops & Diagnostics
+- 🔐 Core operations commands are guild-only (no DMs) and restricted to configured Admin/Staff roles.
+- 📘 See the [CoreOps runbook](docs/ops_coreops.md) for the full command matrix and examples.
+
+## How it works
 Recruiters shortlist clans via panels. When a decision is made, `!welcome` renders the template from the **WelcomeTemplates** tab and posts to the clan’s channel.
 Watchers detect thread closures and upsert rows into **WelcomeTickets** / **PromoTickets**, keeping records tidy.
 
@@ -38,4 +42,4 @@ Watchers detect thread closures and upsert rows into **WelcomeTickets** / **Prom
 
 ---
 
-_Doc last updated: 2025-10-16 (v0.9.3)_
+_Doc last updated: 2025-10-16 (v0.9.3-phase3b-rc3)_

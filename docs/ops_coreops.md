@@ -1,56 +1,65 @@
-# Ops — CoreOps Runbook (v0.9.3)
+# Ops — CoreOps Runbook (v0.9.3-phase3b-rc3)
 
 CoreOps gives staff and admins a quick view into the bot's health without leaving the
 Discord channel.
 
-## Access levels
-- **Admin roles (`ADMIN_ROLE_IDS`)** — Full access. Can run every CoreOps command and use
-  the bang shortcuts.
-- **Staff roles (`STAFF_ROLE_IDS`)** — Access to the standard `!rec` commands only.
+## Guild-only access
+CoreOps commands only respond in guild text channels. Direct messages receive a friendly
+denial, even for Admins.
 
-## Commands by role
+## Command reference
 
-| Command | Staff | Admin |
-| --- | --- | --- |
-| `!rec help` | ✅ | ✅ |
-| `!rec ping` | ✅ | ✅ |
-| `!rec digest` | ✅ | ✅ |
-| `!rec health` | ✅ | ✅ |
-| `!rec env` | ❌ | ✅ |
-| `!config` | ✅ | ✅ |
-| `!rec refresh clansinfo` | ✅ | ✅ |
-| `!rec refresh all` | ❌ | ✅ |
-| `!health`, `!env`, `!digest`, `!help`, `!ping` | ❌ | ✅ |
+| Command | Access |
+| --- | --- |
+| `!rec config` / `!config` | Admin-only |
+| `!rec reboot` | Admin-only |
+| `!rec reload` | Admin-only |
+| `!rec refresh all` | Admin-only |
+| `!rec health` / `!health` | Admin-only |
+| `!rec checksheet` | Admin-only |
+| `!rec env` / `!env` | Admin-only |
+| `!rec digest` / `!digest` | Staff & Admin |
+| `!rec refresh clansinfo` | Staff & Admin |
+| `!rec ping` / `!ping` | Public |
 
-## Admin bang shortcuts
-Admins can use the `!health`, `!env`, `!digest`, `!help`, and `!ping` aliases without
-`!rec`. The shortcuts call the same handlers, so responses match the prefixed versions.
+Admin bang shortcuts call the same handlers as their `!rec` versions. RBAC checks apply
+before execution.
 
-## CoreOps Admin Commands
+## `!env`
 
-### `!env`
+- **Access** — Admin-only. Administrator permission is a fallback when no configured
+  role is present.
+- **Sections** — Output is grouped (Core Identity, Guild / Channels, Roles, Sheets,
+  Secrets).
+- **Masking** — Secrets show `(masked)` with the last four characters visible.
+- **Lookup** — Guild, channel, and role IDs resolve to names with cached lookups.
 
-- **Access** — Admin roles take precedence; Administrator permission is a fallback when
-  no configured role is present. Direct messages receive a friendly denial.
-- **Embed header** — `Bot Name · env: ENV_NAME · Guild: …`. Versions now live in the
-  shared footer (`Bot vX.Y.Z · CoreOps vA.B.C • source: ENV + Sheet Config`) with the
-  embed timestamp set to the current time.
-- **Environment table** — Reads the cached runtime config keys plus relevant environment
-  variables, masking secrets (keeps the last four characters) and resolving guild,
-  channel, and role IDs using a 10-minute in-memory cache. Missing lookups render as
-  `(not found)`.
-- **Sheet Config table** — When recruitment/onboarding Config tab caches are warm,
-  their keys and values are added beneath the environment section using the same masking
-  and ID resolution rules.
+Sample excerpt:
+
+```
+Core Identity
+ENV_NAME: production
+BOT_VERSION: v0.9.3-phase3b-rc3
+
+Secrets
+SERVICE_ACCOUNT_KEY: ****9f2c (masked)
+WEBHOOK_TOKEN: ****71ab (masked)
+```
 
 ## Refresh and cache management
 
 Cache refresh commands live directly in the shared CoreOps cog:
 
-- `!rec refresh all` — Admin-only. Clears and warms every registered Sheets cache bucket in the background. Emits a `[refresh]` log to `LOG_CHANNEL_ID` with the trigger (`manual` or `schedule`) and actor.
-- `!rec refresh clansinfo` — Staff/Admin. Refreshes the `clans` cache when it is at least 60 minutes old; otherwise reports its freshness and the next scheduled refresh window. The same `[refresh]` log is emitted when the guard passes.
+- `!rec refresh all` — Admin-only. Clears and warms every registered Sheets cache bucket
+  in the background. Emits a `[refresh]` log to `LOG_CHANNEL_ID` with the trigger
+  (`manual` or `schedule`) and actor.
+- `!rec refresh clansinfo` — Staff/Admin. Refreshes the `clans` cache when it is at least
+  60 minutes old; otherwise reports its freshness and the next scheduled refresh window.
+  The same `[refresh]` log is emitted when the guard passes.
 
-All manual refreshes respect the 60 minute guard to avoid spamming Sheets. Results (success, retry, cancel, failure) surface in Discord and the log stream. Log lines follow `[refresh] bucket=<name> trigger=<manual|schedule> actor=<@user> duration=<ms> result=<state> error=<text>`.
+All manual refreshes respect the 60 minute guard to avoid spamming Sheets. Results
+(success, retry, cancel, failure) surface in Discord and the log stream. Log lines follow
+`[refresh] bucket=<name> trigger=<manual|schedule> actor=<@user> duration=<ms> result=<state> error=<text>`.
 
 Cache TTL reference:
 
@@ -65,7 +74,28 @@ Scheduled refresh cadence:
 - `clans` — every 3 hours.
 - `templates` & `clan_tags` — weekly, Mondays at 06:00 UTC.
 
-Phase 3b shared Ops work resumes after this fix, once refresh command coverage is stable across environments.
+Phase 3b shared Ops work resumes after this fix, once refresh command coverage is stable
+across environments.
+
+### `refresh all` summary embed
+
+Manual runs now emit a single summary embed covering every cache bucket. Example layout:
+
+```
+Refresh Summary — manual by @AdminUser
+
+Buckets
+| Bucket | Result | Retries | Duration |
+| --- | --- | --- | --- |
+| clans | success | 0 | 842 ms |
+| templates | retry (success) | 1 | 1935 ms |
+| clan_tags | cancelled | 0 | 0 ms |
+
+Total duration: 2,777 ms
+```
+
+The embed footer follows the shared footer builder and uses the message timestamp for
+context.
 
 ## Sample outputs
 - **Health** — Embed with gateway latency, cache metrics, heartbeat timestamps (READY/connect/disconnect),
@@ -77,15 +107,14 @@ Phase 3b shared Ops work resumes after this fix, once refresh command coverage i
   templates: age 5d • TTL 7d • next overdue by 6h
   ```
 - **Digest** — One-line summary: bot version, watchdog state, last heartbeat age.
-- **Help footer** — `Bot v{BOT_VERSION} · CoreOps v1.0.0` (timestamp supplied by the
+- **Help footer** — `Bot v{BOT_VERSION} · CoreOps v{COREOPS_VERSION}` (timestamp supplied by the
   embed).
 
 ## Embed footer
 
-All CoreOps/admin embeds share the same footer format: `Bot v{BOT_VERSION} · CoreOps
-v1.0.0` plus optional notes (e.g., ` • source: ENV + Sheet Config`). Absolute timestamps
-are no longer printed inline; rely on the embed timestamp Discord displays beneath the
-message.
+All CoreOps/admin embeds use the unified footer builder: `Bot v{BOT_VERSION} · CoreOps
+vA.B.C` with optional notes appended using ` • `. Inline datetimes are removed—rely on
+the embed timestamp Discord displays beneath the message.
 
 ## Common issues
 1. **Prefix mismatch** — Ensure commands start with `!rec`, `rec`, or a bot mention. Admin
@@ -101,4 +130,4 @@ platform team. Provide recent `/healthz` responses and any watchdog stall logs.
 
 ---
 
-_Doc last updated: 2025-10-16 (v0.9.4-phase3b-rc2)_
+_Doc last updated: 2025-10-16 (v0.9.3-phase3b-rc3)_
