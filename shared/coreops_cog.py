@@ -146,13 +146,27 @@ def _get_tier(cmd: commands.Command[Any, Any, Any]) -> str:
 
 
 def _should_show(cmd: commands.Command[Any, Any, Any]) -> bool:
-    qualified = getattr(cmd, "qualified_name", "") or ""
-    name = getattr(cmd, "name", "") or ""
-    if qualified == "rec" or name.startswith("_"):
+    # never show internals or the group container
+    if cmd.qualified_name == "rec" or cmd.name.startswith("_"):
         return False
-    extras = getattr(cmd, "extras", None)
-    if isinstance(extras, dict) and extras.get("hide_in_help"):
+
+    # respect explicit opt-out flag in extras
+    ex = getattr(cmd, "extras", None)
+    if isinstance(ex, dict) and ex.get("hide_in_help"):
         return False
+
+    # respect command.hidden only if command lacks a CoreOps/admin tier
+    if getattr(cmd, "hidden", False):
+        # find its tier (preserved via extras/_tier)
+        tier = None
+        ex = getattr(cmd, "extras", None)
+        if isinstance(ex, dict):
+            tier = ex.get("tier")
+        tier = tier or getattr(cmd, "_tier", None)
+        # hidden admin/staff commands stay visible to admins
+        if tier not in {"admin", "staff"}:
+            return False
+
     return True
 
 
