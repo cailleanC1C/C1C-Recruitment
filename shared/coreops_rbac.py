@@ -111,6 +111,18 @@ def is_admin_member(target: ContextOrMember | None) -> bool:
     return _has_administrator_permission(member)
 
 
+def can_view_admin(target: ContextOrMember | None) -> bool:
+    """Return True if the target should see admin-tier commands."""
+
+    return is_admin_member(target)
+
+
+def can_view_staff(target: ContextOrMember | None) -> bool:
+    """Return True if the target should see staff-tier commands."""
+
+    return bool(is_staff_member(target) or is_admin_member(target))
+
+
 def is_recruiter(target: ContextOrMember | None) -> bool:
     member = _resolve_member(target)
     if member is None:
