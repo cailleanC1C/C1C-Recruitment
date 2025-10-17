@@ -19,10 +19,10 @@ from shared import socket_heartbeat as hb
 from shared.runtime import Runtime
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
+    admin_only,
     get_admin_role_ids,
     get_staff_role_ids,
     is_admin_member,
-    ops_gate,
 )
 
 logging.basicConfig(
@@ -36,7 +36,15 @@ INTENTS.message_content = True
 INTENTS.members = True
 
 COMMAND_PREFIX = "!"
-COREOPS_COMMANDS = {"digest", "env", "health", "help", "ping", "refresh"}
+COREOPS_COMMANDS = {
+    "config",
+    "digest",
+    "env",
+    "health",
+    "help",
+    "ping",
+    "refresh",
+}
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or(COMMAND_PREFIX),
@@ -45,6 +53,12 @@ bot = commands.Bot(
 bot.remove_command("help")
 
 runtime = Runtime(bot)
+
+
+def _can_dispatch_bare_coreops(member: discord.abc.User | discord.Member | None) -> bool:
+    if not isinstance(member, discord.Member):
+        return False
+    return is_admin_member(member)
 
 
 async def _enforce_guild_allow_list(
@@ -172,7 +186,7 @@ async def on_message(message: discord.Message):
     content = (message.content or "").strip()
 
     cmd_name = detect_admin_bang_command(
-        message, commands=COREOPS_COMMANDS, is_admin=ops_gate
+        message, commands=COREOPS_COMMANDS, is_admin=_can_dispatch_bare_coreops
     )
     if cmd_name:
         ctx = await bot.get_context(message)
@@ -204,6 +218,7 @@ async def on_command_error(ctx: commands.Context, error: Exception):
 
 
 @bot.command(name="ping", hidden=True)
+@admin_only()
 async def ping(ctx: commands.Context):
     try:
         await ctx.message.add_reaction("🏓")
