@@ -38,6 +38,7 @@ from shared.coreops_render import (
     DigestCacheError,
     DigestCacheSummary,
     DigestEmbedData,
+    DigestSheetsSummary,
     RefreshEmbedRow,
     build_digest_embed,
     build_digest_line,
@@ -862,17 +863,36 @@ class CoreOpsCog(commands.Cog):
 
         next_delta, next_at = self._select_next_refresh_candidate(next_candidates, now)
 
-        summary_result = failure_result or latest_result
         summary_error = failure_error or (self._trim_error_text(latest_error) if latest_error else None)
+        if summary_error is None and failure_result:
+            summary_error = self._trim_error_text(failure_result)
+        if summary_error is None and latest_result:
+            summary_error = self._trim_error_text(latest_result)
+
+        last_success_text: Optional[str]
+        if latest_success_age is None:
+            last_success_text = None
+        else:
+            last_success_text = f"{humanize_duration(latest_success_age)} ago"
+
+        next_refresh_text: Optional[str]
+        if next_delta is not None:
+            direction = "ago" if next_delta < 0 else "in"
+            next_refresh_text = f"{direction} {humanize_duration(abs(next_delta))}" if next_delta != 0 else "now"
+        elif next_at is not None:
+            try:
+                next_refresh_text = next_at.astimezone(UTC).strftime("%H:%M UTC")
+            except Exception:
+                next_refresh_text = next_at.isoformat()
+        else:
+            next_refresh_text = None
 
         return DigestSheetsSummary(
-            last_success_age=latest_success_age,
+            last_success=last_success_text,
+            last_error=summary_error,
             latency_ms=latest_latency,
             retries=latest_retries,
-            next_refresh_at=next_at,
-            next_refresh_delta=next_delta,
-            last_error=summary_error,
-            last_result=summary_result,
+            next_refresh=next_refresh_text,
         )
 
     async def _digest_impl(self, ctx: commands.Context) -> None:

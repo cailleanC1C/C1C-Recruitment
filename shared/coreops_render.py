@@ -65,13 +65,12 @@ class DigestCacheSummary:
 
 @dataclass(frozen=True)
 class DigestSheetsSummary:
-    last_success_age: int | None
-    latency_ms: int | None
-    retries: int | None
-    next_refresh_at: dt.datetime | None
-    next_refresh_delta: int | None
-    last_error: str | None
-    last_result: str | None
+    # Keep fields optional so we can fail-soft if any signal isn't available
+    last_success: str | None = None
+    last_error: str | None = None
+    latency_ms: int | None = None
+    retries: int | None = None
+    next_refresh: str | None = None
 
 
 @dataclass(frozen=True)
