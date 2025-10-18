@@ -35,16 +35,14 @@ from shared.config import (
     redact_value,
 )
 from shared.coreops_render import (
-    DigestCacheError,
-    DigestCacheSummary,
-    DigestEmbedData,
-    DigestSheetsSummary,
-    build_digest_embed,
+    RefreshEmbedRow,
     build_digest_line,
     build_health_embed,
+    build_refresh_embed,
 )
 from shared.cache import telemetry as cache_telemetry
 from shared.help import (
+    COREOPS_VERSION,
     HelpCommandInfo,
     HelpOverviewSection,
     build_coreops_footer,
@@ -596,12 +594,74 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(log_msg, extra=extra)
 
-        if reboot:
-            async def _shutdown() -> None:
-                await asyncio.sleep(1)
-                await self.bot.close()
+        async def _shutdown() -> None:
+            await self.bot.close()
 
-            asyncio.create_task(_shutdown())
+        if reboot:
+            await _shutdown()
+            await asyncio.sleep(1)
+
+    async def _refresh_single_impl(
+        self, ctx: commands.Context, bucket: str
+    ) -> None:
+        candidate = bucket.strip()
+        if not candidate:
+            await self._refresh_root(ctx)
+            return
+
+        buckets = cache_telemetry.list_buckets()
+        if not buckets:
+            await ctx.send(str(sanitize_text("⚠️ No cache buckets registered.")))
+            return
+
+        lookup = {name.lower(): name for name in buckets}
+        target = lookup.get(candidate.lower())
+        if target is None:
+            available = ", ".join(buckets)
+            await ctx.send(
+                str(
+                    sanitize_text(
+                        f"⚠️ Unknown bucket `{candidate}`. Available: {available}"
+                    )
+                )
+            )
+            return
+
+        actor_display = getattr(ctx.author, "display_name", None) or str(ctx.author)
+        actor = str(ctx.author)
+        actor_id = getattr(ctx.author, "id", None)
+
+        try:
+            result = await cache_telemetry.refresh_now(target, actor=actor)
+        except asyncio.CancelledError:
+            raise
+
+        summary, ok = self._format_refresh_summary(result)
+        prefix = "•" if ok else "⚠"
+        duration_ms = result.duration_ms if result.duration_ms is not None else 0
+        header = f"cache refresh · {target} · {duration_ms} ms · by {actor_display}"
+        message = "\n".join([header, f"{prefix} {summary}"])
+
+        await self._send_refresh_response(
+            ctx,
+            scope=target,
+            actor_display=actor_display,
+            rows=[self._build_refresh_row(result)],
+            total_duration=duration_ms,
+            fallback_message=message,
+        )
+
+        log_msg, extra = sanitize_log(
+            "cache refresh completed",
+            extra={
+                "actor": actor,
+                "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
+                "buckets": [target],
+                "duration_ms": duration_ms,
+                "failures": [] if ok else [target],
+            },
+        )
+        logger.info(log_msg, extra=extra)
 
     @tier("admin")
     @rec.command(name="health")
@@ -1067,16 +1127,26 @@ class CoreOpsCog(commands.Cog):
     @commands.group(name="refresh", invoke_without_command=True, hidden=True)
     @guild_only_denied_msg()
     @admin_only()
-    async def refresh(self, ctx: commands.Context) -> None:
+    async def refresh(
+        self, ctx: commands.Context, *, bucket: Optional[str] = None
+    ) -> None:
         """Admin group: manual cache refresh."""
 
+        if bucket and bucket.strip():
+            await self._refresh_single_impl(ctx, bucket)
+            return
         await self._refresh_root(ctx)
 
     @tier("admin")
     @rec.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_refresh(self, ctx: commands.Context) -> None:
+    async def rec_refresh(
+        self, ctx: commands.Context, *, bucket: Optional[str] = None
+    ) -> None:
+        if bucket and bucket.strip():
+            await self._refresh_single_impl(ctx, bucket)
+            return
         await self._refresh_root(ctx)
 
     async def _refresh_all_impl(self, ctx: commands.Context) -> None:
@@ -1092,6 +1162,7 @@ class CoreOpsCog(commands.Cog):
         overall_start = time.monotonic()
         summaries: list[str] = []
         failures: list[str] = []
+        embed_rows: list[RefreshEmbedRow] = []
 
         for name in buckets:
             try:
@@ -1104,6 +1175,7 @@ class CoreOpsCog(commands.Cog):
             summaries.append(f"{prefix} {summary}")
             if not ok:
                 failures.append(name)
+            embed_rows.append(self._build_refresh_row(result))
 
         total_duration = int((time.monotonic() - overall_start) * 1000)
         header = (
@@ -1111,7 +1183,14 @@ class CoreOpsCog(commands.Cog):
         )
 
         message = "\n".join([header, *summaries])
-        await ctx.send(str(sanitize_text(message)))
+        await self._send_refresh_response(
+            ctx,
+            scope="all",
+            actor_display=actor_display,
+            rows=embed_rows,
+            total_duration=total_duration,
+            fallback_message=message,
+        )
 
         log_msg, extra = sanitize_log(
             "cache refresh completed",
@@ -1142,6 +1221,73 @@ class CoreOpsCog(commands.Cog):
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
     async def rec_refresh_all(self, ctx: commands.Context) -> None:
         await self._refresh_all_impl(ctx)
+
+    def _build_refresh_row(
+        self, result: cache_telemetry.RefreshResult
+    ) -> RefreshEmbedRow:
+        snapshot = result.snapshot
+        label = _format_bucket_label(result.name) or result.name or "-"
+        duration_ms = result.duration_ms if result.duration_ms is not None else 0
+        duration_text = f"{duration_ms} ms"
+
+        raw_result = (snapshot.last_result or ("ok" if result.ok else "fail")).strip()
+        display_result = raw_result.replace("_", " ") if raw_result else "-"
+
+        normalized = raw_result.lower()
+        retries = "1" if normalized in {"retry_ok", "fail"} else "0"
+
+        error_text = result.error or snapshot.last_error or "-"
+        cleaned_error = " ".join(str(error_text).split()) if error_text else "-"
+        if len(cleaned_error) > 70:
+            cleaned_error = f"{cleaned_error[:67]}…"
+
+        return RefreshEmbedRow(
+            bucket=label,
+            duration=duration_text,
+            result=display_result or "-",
+            retries=retries,
+            error=cleaned_error or "-",
+        )
+
+    async def _send_refresh_response(
+        self,
+        ctx: commands.Context,
+        *,
+        scope: str,
+        actor_display: str,
+        rows: Sequence[RefreshEmbedRow],
+        total_duration: int,
+        fallback_message: str,
+    ) -> None:
+        bot_version = os.getenv("BOT_VERSION", "dev")
+        now_utc = dt.datetime.now(UTC)
+
+        embed = None
+        try:
+            embed = build_refresh_embed(
+                scope=scope,
+                actor_display=actor_display,
+                trigger="manual",
+                rows=rows,
+                total_ms=total_duration,
+                bot_version=bot_version,
+                coreops_version=COREOPS_VERSION,
+                now_utc=now_utc,
+            )
+        except Exception:
+            embed = None
+
+        sent = False
+        if embed is not None:
+            try:
+                await ctx.send(embed=sanitize_embed(embed))
+            except Exception:
+                sent = False
+            else:
+                sent = True
+
+        if not sent:
+            await ctx.send(str(sanitize_text(fallback_message)))
 
     async def _refresh_clansinfo_impl(self, ctx: commands.Context) -> None:
         snapshot = cache_telemetry.get_snapshot("clans")

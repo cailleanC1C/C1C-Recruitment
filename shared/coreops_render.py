@@ -5,13 +5,12 @@ import datetime as dt
 import os
 import platform
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Sequence
 
 import discord
 
-from shared.help import build_coreops_footer, COREOPS_VERSION
-from shared.utils import humanize_duration
+from shared.help import COREOPS_VERSION, build_coreops_footer
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))
@@ -113,105 +112,73 @@ def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str
     return e
 
 
-def _achievements_colour() -> discord.Colour:
-    return discord.Colour.from_rgb(246, 181, 56)
+@dataclass(frozen=True)
+class RefreshEmbedRow:
+    bucket: str
+    duration: str
+    result: str
+    retries: str
+    error: str
 
 
-def _format_duration(value: int | None) -> str:
-    if value is None:
-        return "n/a"
-    text = humanize_duration(value)
-    return "n/a" if text == "-" else text
-
-
-def _format_latency_seconds(value: float | None) -> str:
-    if value is None:
-        return "n/a"
-    try:
-        return f"{int(max(0.0, value) * 1000):d}ms"
-    except Exception:
-        return "n/a"
-
-
-def _format_latency_ms(value: int | None) -> str:
-    if value is None:
-        return "n/a"
-    return f"{max(0, int(value))}ms"
-
-
-def _format_count(value: int | None) -> str:
-    return "n/a" if value is None else str(max(0, value))
-
-
-def _format_next_refresh(at: dt.datetime | None, delta: int | None) -> str:
-    if at is not None:
-        try:
-            timestamp = at.astimezone(dt.timezone.utc)
-        except Exception:
-            timestamp = None
-        else:
-            return timestamp.strftime("%Y-%m-%d %H:%M UTC")
-    if delta is None:
-        return "n/a"
-    label = humanize_duration(abs(delta))
-    if label == "-":
-        label = "0s"
-    if delta >= 0:
-        return f"in {label}"
-    return f"{label} ago"
-
-
-def build_digest_embed(*, data: DigestEmbedData) -> discord.Embed:
-    embed = discord.Embed(colour=_achievements_colour())
-    embed.description = f"bot: {data.bot_name} • env: {data.env}"
-
-    uptime_text = _format_duration(data.uptime_seconds)
-    latency_text = _format_latency_seconds(data.latency_seconds)
-    gateway_age = _format_duration(data.gateway_age_seconds)
-    gateway_text = f"gateway: last {gateway_age}" if gateway_age != "n/a" else "gateway: n/a"
-    metrics_line = f"uptime: {uptime_text} • latency: {latency_text} • {gateway_text}"
-    embed.add_field(name="status", value=metrics_line, inline=False)
-
-    if data.cache is None:
-        cache_value = "n/a"
-    else:
-        cache_lines = [
-            (
-                "buckets: "
-                f"{_format_count(data.cache.total)} total • "
-                f"stale: {_format_count(data.cache.stale)} • "
-                f"errors: {_format_count(data.cache.recent_errors)} in last 1h"
-            ),
-            f"next refresh: {_format_next_refresh(data.cache.next_refresh_at, data.cache.next_refresh_delta)}",
-        ]
-        for error in data.cache.errors:
-            cache_lines.append(f"• {error.bucket}: {error.message}")
-        cache_value = "\n".join(cache_lines)
-    embed.add_field(name="Caches", value=cache_value, inline=False)
-
-    if data.sheets is None:
-        sheets_value = "n/a"
-    else:
-        sheets_lines = [
-            (
-                "last success: "
-                f"{_format_duration(data.sheets.last_success_age)} • "
-                f"latency: {_format_latency_ms(data.sheets.latency_ms)} • "
-                f"retries: {_format_count(data.sheets.retries)}"
-            ),
-            f"next refresh: {_format_next_refresh(data.sheets.next_refresh_at, data.sheets.next_refresh_delta)}",
-        ]
-        status = (data.sheets.last_result or "").lower()
-        if status.startswith("fail") or (data.sheets.last_error and status not in {"ok", "retry_ok"}):
-            sheets_lines.append(f"last error: {data.sheets.last_error or data.sheets.last_result or 'n/a'}")
-        sheets_value = "\n".join(sheets_lines)
-    embed.add_field(name="Sheets", value=sheets_value, inline=False)
-
-    footer_time = data.timestamp.astimezone(dt.timezone.utc)
-    footer_text = (
-        f"Bot v{data.bot_version} · CoreOps v{data.coreops_version} · "
-        f"{footer_time.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+def build_refresh_embed(
+    *,
+    scope: str,
+    actor_display: str,
+    trigger: str,
+    rows: Sequence[RefreshEmbedRow],
+    total_ms: int,
+    bot_version: str,
+    coreops_version: str = COREOPS_VERSION,
+    now_utc: dt.datetime | None = None,
+) -> discord.Embed:
+    timestamp = now_utc or dt.datetime.now(dt.timezone.utc)
+    embed = discord.Embed(
+        title=f"Refresh • {scope}",
+        colour=getattr(discord.Colour, "dark_theme", discord.Colour.dark_teal)(),
     )
-    embed.set_footer(text=footer_text)
-    embed.timestamp = footer_time
+
+    actor_line = f"actor: {actor_display.strip() or actor_display} • trigger: {trigger}"
+    embed.description = actor_line
+
+    headers = ["bucket", "duration", "result", "retries", "error"]
+    data = [
+        [
+            row.bucket,
+            row.duration,
+            row.result,
+            row.retries,
+            row.error,
+        ]
+        for row in rows
+    ]
+
+    if data:
+        widths = [len(header) for header in headers]
+        for row in data:
+            for idx, cell in enumerate(row):
+                widths[idx] = max(widths[idx], len(cell))
+
+        header_line = " | ".join(
+            header.ljust(widths[idx]) for idx, header in enumerate(headers)
+        )
+        separator_line = "-+-".join("-" * width for width in widths)
+        body_lines = [
+            " | ".join(cell.ljust(widths[idx]) for idx, cell in enumerate(row))
+            for row in data
+        ]
+        table = "\n".join([header_line, separator_line, *body_lines])
+    else:
+        table = "no buckets"
+
+    embed.add_field(name="Buckets", value=f"```{table}```", inline=False)
+    footer_notes = f" · total: {total_ms}ms · {timestamp:%Y-%m-%d %H:%M:%S} UTC"
+    embed.timestamp = timestamp
+    embed.set_footer(
+        text=build_coreops_footer(
+            bot_version=bot_version,
+            coreops_version=coreops_version,
+            notes=footer_notes,
+        )
+    )
     return embed
