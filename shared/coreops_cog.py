@@ -25,15 +25,7 @@ from config.runtime import (
     get_watchdog_stall_sec,
 )
 from shared import socket_heartbeat as hb
-from shared.config import (
-    get_allowed_guild_ids,
-    get_config_snapshot,
-    reload_config,
-    get_onboarding_sheet_id,
-    get_recruitment_sheet_id,
-    redact_ids,
-    redact_value,
-)
+from shared.config import get_allowed_guild_ids, get_config_snapshot, reload_config, redact_value
 from shared.coreops_render import (
     ChecksheetEmbedData,
     ChecksheetSheetEntry,
@@ -42,6 +34,7 @@ from shared.coreops_render import (
     DigestSheetEntry,
     DigestSheetsClientSummary,
     RefreshEmbedRow,
+    build_config_embed,
     build_checksheet_tabs_embed,
     build_digest_embed,
     build_digest_line,
@@ -170,6 +163,88 @@ def _trim_resolved_label(label: str) -> str:
     if " · " in label:
         label = label.split(" · ", 1)[0]
     return label
+
+
+def _short_identifier(value: object) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if len(text) <= 6:
+        return text
+    return f"…{text[-4:]}"
+
+
+def _extract_override_keys(meta: Mapping[str, Any]) -> List[str]:
+    overrides = meta.get("overrides")
+    result: List[str] = []
+
+    def _coerce_sequence(values: Iterable[object]) -> None:
+        for item in values:
+            text = str(item or "").strip()
+            if text:
+                result.append(text)
+
+    if isinstance(overrides, Mapping):
+        keys = overrides.get("keys")
+        if isinstance(keys, Iterable) and not isinstance(keys, (str, bytes)):
+            _coerce_sequence(keys)
+        else:
+            _coerce_sequence(overrides.keys())
+    elif isinstance(overrides, (set, tuple, list)):
+        _coerce_sequence(overrides)
+    elif isinstance(overrides, str):
+        text = overrides.strip()
+        if text:
+            result.append(text)
+
+    if not result:
+        extra_keys = meta.get("override_keys")
+        if isinstance(extra_keys, (set, tuple, list)):
+            _coerce_sequence(extra_keys)
+
+    seen: Set[str] = set()
+    unique: List[str] = []
+    for item in result:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return unique
+
+
+def _lookup_sheet_hint(meta: Mapping[str, Any] | None, slug: str) -> str | None:
+    if not isinstance(meta, Mapping):
+        return None
+
+    keys = [slug, slug.lower(), slug.upper(), slug.capitalize()]
+
+    def _extract(section: Mapping[str, Any]) -> str | None:
+        for key in keys:
+            if key not in section:
+                continue
+            value = section[key]
+            if isinstance(value, Mapping):
+                for candidate in ("title", "name", "label", "display"):
+                    inner = value.get(candidate)
+                    if isinstance(inner, str) and inner.strip():
+                        return inner.strip()
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    for candidate_key in (
+        "sheets",
+        "sheet_titles",
+        "sheet_labels",
+        "sheet_names",
+        "sheet_meta",
+    ):
+        section = meta.get(candidate_key)
+        if isinstance(section, Mapping):
+            found = _extract(section)
+            if found:
+                return found
+
+    return _extract(meta)
 
 
 def _admin_roles_configured() -> bool:
@@ -1418,20 +1493,126 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     async def _config_impl(self, ctx: commands.Context) -> None:
-        env = get_env_name()
-        allow = get_allowed_guild_ids()
-        recruitment_sheet = "set" if get_recruitment_sheet_id() else "missing"
-        onboarding_sheet = "set" if get_onboarding_sheet_id() else "missing"
+        snapshot = get_config_snapshot()
+        meta_raw = _config_meta_from_app()
 
-        lines = [
-            f"env: `{env}`",
-            f"allow-list: {len(allow)} ({redact_ids(sorted(allow))})",
-            f"connected guilds: {len(self.bot.guilds)}",
-            f"recruitment sheet: {recruitment_sheet}",
-            f"onboarding sheet: {onboarding_sheet}",
+        env = get_env_name()
+        bot_version = str(snapshot.get("BOT_VERSION") or os.getenv("BOT_VERSION", "dev"))
+
+        connected_items: List[str] = []
+        for guild in getattr(self.bot, "guilds", []):
+            name = getattr(guild, "name", None) or f"Guild {getattr(guild, 'id', 'n/a')}"
+            if env:
+                connected_items.append(f"{name} [{env}]")
+            else:
+                connected_items.append(name)
+
+        allow_ids = sorted(get_allowed_guild_ids())
+        allow_entries: List[Dict[str, object]] = []
+        for snowflake in allow_ids:
+            resolved = _trim_resolved_label(self._id_resolver.resolve(self.bot, snowflake))
+            if resolved and resolved != "(not found)":
+                display = resolved
+                resolved_name: Optional[str] = resolved
+            else:
+                display = f"Guild {snowflake} (unresolved)"
+                resolved_name = None
+            allow_entries.append({
+                "id": snowflake,
+                "display": display,
+                "resolved": resolved_name,
+            })
+
+        allow_summary = next(
+            (str(entry["resolved"]) for entry in allow_entries if entry.get("resolved")),
+            None,
+        )
+        if not allow_summary and allow_entries:
+            allow_summary = str(allow_entries[0]["display"])
+
+        meta: Dict[str, Any]
+        if isinstance(meta_raw, dict):
+            meta = dict(meta_raw)
+        else:
+            meta = {}
+
+        def _sheet_entry(slug: str, *, key: str, label: str, fallback_index: int) -> Dict[str, object]:
+            raw_value = snapshot.get(key)
+            if isinstance(raw_value, str):
+                sheet_id = raw_value.strip()
+            elif raw_value is None:
+                sheet_id = ""
+            else:
+                sheet_id = str(raw_value).strip()
+
+            ok = bool(sheet_id)
+            entry: Dict[str, object] = {
+                "label": label,
+                "ok": ok,
+            }
+            if ok:
+                hint = _lookup_sheet_hint(meta_raw if isinstance(meta_raw, Mapping) else None, slug)
+                if hint:
+                    entry["hint"] = hint
+                else:
+                    entry["hint"] = f"Sheet #{fallback_index}"
+                    short_id = _short_identifier(sheet_id)
+                    if short_id:
+                        entry["short_id"] = short_id
+            else:
+                entry["status"] = "Missing"
+            return entry
+
+        sheet_entries = [
+            _sheet_entry("recruitment", key="RECRUITMENT_SHEET_ID", label="Recruitment Sheet", fallback_index=1),
+            _sheet_entry("onboarding", key="ONBOARDING_SHEET_ID", label="Onboarding Sheet", fallback_index=2),
         ]
 
-        await ctx.reply(str(sanitize_text("\n".join(lines))))
+        log_channel_id = get_log_channel_id()
+        ops_detail: Optional[str] = None
+        if log_channel_id:
+            channel = self.bot.get_channel(log_channel_id)
+            if channel is not None:
+                ops_detail = _describe_channel(channel)
+            else:
+                short = _short_identifier(log_channel_id)
+                if short:
+                    ops_detail = f"Channel ({short})"
+
+        override_keys = _extract_override_keys(meta) if meta else []
+
+        overview = {
+            "env": env,
+            "connected": {
+                "count": len(connected_items),
+                "items": connected_items,
+            },
+            "allow": {
+                "count": len(allow_entries),
+                "items": [entry["display"] for entry in allow_entries],
+                "summary": allow_summary,
+            },
+            "sheets": sheet_entries,
+            "ops": {
+                "configured": bool(log_channel_id),
+                "detail": ops_detail,
+            },
+            "source": {
+                "loaded_from": meta.get("source", "Environment variables"),
+                "overrides": override_keys,
+            },
+        }
+
+        meta["overview"] = overview
+
+        embed = build_config_embed(
+            snapshot,
+            meta,
+            bot_version=bot_version,
+            coreops_version=COREOPS_VERSION,
+        )
+
+        await ctx.reply(embed=sanitize_embed(embed))
 
     @tier("staff")
     @rec.command(name="config")

@@ -152,6 +152,195 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
     return embed
 
 
+def _format_config_sheets(entries: Sequence[dict[str, object]]) -> str:
+    if not entries:
+        return "n/a"
+
+    lines: list[str] = []
+    for entry in entries:
+        label = _sanitize_inline(entry.get("label", "Sheet"))
+        ok = bool(entry.get("ok"))
+        status = entry.get("status")
+        status_text = _sanitize_inline(status or ("Connected" if ok else "Missing"))
+        if ok:
+            note_parts: list[str] = []
+            for key in ("hint", "detail"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    note_parts.append(_sanitize_inline(value))
+            short_id = entry.get("short_id")
+            if isinstance(short_id, str) and short_id.strip():
+                short_clean = _sanitize_inline(short_id)
+                if short_clean not in note_parts:
+                    note_parts.append(short_clean)
+            hint_text = f" *({' — '.join(note_parts)})*" if note_parts else ""
+            lines.append(f"{label} → ✅ {status_text}{hint_text}")
+        else:
+            reason = entry.get("reason")
+            reason_text = (
+                f" — {_sanitize_inline(reason)}"
+                if isinstance(reason, str) and reason.strip()
+                else ""
+            )
+            lines.append(f"{label} → ⚠️ {status_text}{reason_text}")
+    return "\n".join(lines)
+
+
+def _format_config_guilds(connected: dict[str, object], allow: dict[str, object]) -> str:
+    connected_items = connected.get("items")
+    if isinstance(connected_items, Sequence) and not isinstance(connected_items, (str, bytes)):
+        connected_lines = ", ".join(_sanitize_inline(item) for item in connected_items if item)
+    else:
+        connected_lines = ""
+    if not connected_lines:
+        connected_lines = "n/a"
+
+    allow_total = allow.get("count")
+    if not isinstance(allow_total, int):
+        allow_items = allow.get("items")
+        if isinstance(allow_items, Sequence) and not isinstance(allow_items, (str, bytes)):
+            allow_total = len([item for item in allow_items if item])
+        else:
+            allow_total = 0
+    summary = allow.get("summary")
+    summary_text = (
+        f" ({_sanitize_inline(summary)})"
+        if isinstance(summary, str) and summary.strip()
+        else ""
+    )
+
+    lines = [f"Connected guilds: {connected_lines}", f"Allow-listed: {allow_total} total{summary_text}"]
+    return "\n".join(lines)
+
+
+def _format_config_source(
+    source_info: dict[str, object],
+    default_source: str | None,
+) -> str:
+    loaded_from = source_info.get("loaded_from")
+    if not isinstance(loaded_from, str) or not loaded_from.strip():
+        loaded_from = default_source or "n/a"
+    loaded_line = f"Loaded from: {_sanitize_inline(loaded_from)}"
+
+    override_items = source_info.get("overrides")
+    overrides: list[str] = []
+    if isinstance(override_items, dict):
+        overrides = [str(key) for key in override_items.keys()]
+    elif isinstance(override_items, (set, tuple, list)):
+        overrides = [str(item) for item in override_items]
+    elif isinstance(override_items, str) and override_items.strip():
+        overrides = [override_items.strip()]
+
+    overrides = [item for item in overrides if item.strip()]
+    if not overrides:
+        override_line = "Overrides: none"
+    else:
+        overrides_sorted = sorted(overrides)
+        overrides_text = ", ".join(_sanitize_inline(item) for item in overrides_sorted)
+        override_line = f"Overrides: {len(overrides_sorted)} keys — {overrides_text}"
+
+    return "\n".join([loaded_line, override_line])
+
+
+def _format_ops_channel(ops_info: dict[str, object]) -> str:
+    configured = bool(ops_info.get("ok") or ops_info.get("configured"))
+    detail = ops_info.get("detail")
+    detail_text = (
+        f" *({_sanitize_inline(detail)})*"
+        if isinstance(detail, str) and detail.strip()
+        else ""
+    )
+    if configured:
+        return f"Logs → ✅ Configured{detail_text}"
+
+    missing_hint = ops_info.get("missing_hint")
+    if not isinstance(missing_hint, str) or not missing_hint.strip():
+        missing_hint = detail if isinstance(detail, str) else ""
+    hint_text = (
+        f" *({_sanitize_inline(missing_hint)})*"
+        if missing_hint and missing_hint.strip()
+        else ""
+    )
+    return f"Logs → ⚠️ Missing{hint_text}"
+
+
+def build_config_embed(
+    snapshot: dict[str, object],
+    meta: dict[str, object] | None,
+    *,
+    bot_version: str,
+    coreops_version: str = COREOPS_VERSION,
+) -> discord.Embed:
+    meta = meta or {}
+    overview = meta.get("overview") if isinstance(meta, dict) else None
+    if not isinstance(overview, dict):
+        overview = {}
+
+    env_value = overview.get("env") or snapshot.get("ENV_NAME") or meta.get("env")
+    env_text = _sanitize_inline(env_value or "n/a")
+
+    connected_info = overview.get("connected")
+    if not isinstance(connected_info, dict):
+        connected_info = {}
+
+    allow_info = overview.get("allow")
+    if not isinstance(allow_info, dict):
+        allow_info = {}
+
+    connected_count = connected_info.get("count")
+    if not isinstance(connected_count, int):
+        connected_items = connected_info.get("items")
+        if isinstance(connected_items, Sequence) and not isinstance(connected_items, (str, bytes)):
+            connected_count = len([item for item in connected_items if item])
+        else:
+            connected_count = 0
+
+    allow_count = allow_info.get("count")
+    if not isinstance(allow_count, int):
+        allow_items = allow_info.get("items")
+        if isinstance(allow_items, Sequence) and not isinstance(allow_items, (str, bytes)):
+            allow_count = len([item for item in allow_items if item])
+        else:
+            allow_count = 0
+
+    description = (
+        f"Environment: {env_text}{_EM_DOT}"
+        f"Connected guilds: {connected_count}{_EM_DOT}"
+        f"Allow-list: {allow_count}"
+    )
+
+    colour_factory = getattr(discord.Colour, "blurple", None)
+    colour = colour_factory() if callable(colour_factory) else discord.Colour.blue()
+    embed = discord.Embed(title="Config Overview", description=description, colour=colour)
+
+    sheets_entries = overview.get("sheets")
+    if isinstance(sheets_entries, Sequence) and not isinstance(sheets_entries, (str, bytes)):
+        sheets_value = _format_config_sheets(sheets_entries)
+    else:
+        sheets_value = "n/a"
+    embed.add_field(name="Sheets", value=sheets_value, inline=False)
+
+    guilds_value = _format_config_guilds(connected_info, allow_info)
+    embed.add_field(name="Guild Access", value=guilds_value, inline=False)
+
+    source_info = overview.get("source")
+    if not isinstance(source_info, dict):
+        source_info = {}
+    default_source = meta.get("source") if isinstance(meta, dict) else None
+    source_value = _format_config_source(source_info, default_source if isinstance(default_source, str) else None)
+    embed.add_field(name="Source", value=source_value, inline=False)
+
+    ops_info = overview.get("ops")
+    if not isinstance(ops_info, dict):
+        ops_info = {}
+    ops_value = _format_ops_channel(ops_info)
+    embed.add_field(name="Ops Channel", value=ops_value, inline=False)
+
+    footer_text = f"Bot v{_sanitize_inline(bot_version)} · CoreOps v{_sanitize_inline(coreops_version)}"
+    embed.set_footer(text=footer_text)
+    return embed
+
+
 def _maybe_build_tip(entries: Sequence[DigestSheetEntry]) -> str | None:
     if entries:
         return 'Need latest openings? run "!rec refresh clansinfo" and retry.'
