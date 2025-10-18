@@ -66,7 +66,6 @@ from .coreops_rbac import (
     is_admin_member,
     is_staff_member,
     ops_only,
-    staff_only,
 )
 
 UTC = dt.timezone.utc
@@ -958,7 +957,7 @@ class CoreOpsCog(commands.Cog):
     @tier("staff")
     @rec.command(name="checksheet")
     @guild_only_denied_msg()
-    @staff_only()
+    @ops_only()
     async def rec_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx)
 
