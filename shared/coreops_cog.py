@@ -35,6 +35,11 @@ from shared.config import (
     redact_value,
 )
 from shared.coreops_render import (
+    DigestCacheError,
+    DigestCacheSummary,
+    DigestEmbedData,
+    DigestSheetsSummary,
+    build_digest_embed,
     build_digest_line,
     build_health_embed,
 )
@@ -49,6 +54,7 @@ from shared.help import (
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.utils import humanize_duration
+from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
     admin_only,
@@ -223,6 +229,16 @@ def _uptime_sec(bot: commands.Bot) -> float:
 def _latency_sec(bot: commands.Bot) -> Optional[float]:
     try:
         return float(getattr(bot, "latency", None)) if bot.latency is not None else None
+    except Exception:
+        return None
+
+
+def _delta_seconds(now: dt.datetime, value: dt.datetime | None) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        delta = value - now
+        return int(delta.total_seconds())
     except Exception:
         return None
 def _config_meta_from_app() -> dict:
@@ -600,15 +616,250 @@ class CoreOpsCog(commands.Cog):
     async def health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
-    async def _digest_impl(self, ctx: commands.Context) -> None:
-        line = build_digest_line(
-            bot_name=get_bot_name(),
-            env=get_env_name(),
-            uptime_sec=_uptime_sec(self.bot),
-            latency_s=_latency_sec(self.bot),
-            last_event_age=await hb.age_seconds(),
+    def _trim_error_text(self, text: str, *, limit: int = 120) -> str:
+        cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not cleaned:
+            return "n/a"
+        if len(cleaned) > limit:
+            return f"{cleaned[: limit - 1].rstrip()}…"
+        return cleaned
+
+    def _select_next_refresh_candidate(
+        self, candidates: Sequence[Tuple[Optional[int], Optional[dt.datetime]]], now: dt.datetime
+    ) -> Tuple[Optional[int], Optional[dt.datetime]]:
+        future = [item for item in candidates if item[0] is not None and item[0] >= 0]
+        if future:
+            return min(future, key=lambda item: item[0] or 0)
+        known = [item for item in candidates if item[0] is not None]
+        if known:
+            return min(known, key=lambda item: abs(item[0] or 0))
+        for delta, at in candidates:
+            if at is None:
+                continue
+            computed = _delta_seconds(now, at)
+            return computed, at
+        return None, None
+
+    def _collect_cache_digest_summary(self, now: dt.datetime) -> Optional[DigestCacheSummary]:
+        try:
+            snapshots = cache_telemetry.get_all_snapshots()
+        except Exception:
+            return None
+
+        if not isinstance(snapshots, dict) or not snapshots:
+            return DigestCacheSummary(
+                total=0,
+                stale=0,
+                recent_errors=0,
+                next_refresh_at=None,
+                next_refresh_delta=None,
+                errors=(),
+            )
+
+        total = len(snapshots)
+        stale = 0
+        recent_errors = 0
+        error_items: List[DigestCacheError] = []
+        next_candidates: List[Tuple[Optional[int], Optional[dt.datetime]]] = []
+        error_window = 3600
+
+        for snapshot in snapshots.values():
+            ttl = snapshot.ttl_seconds
+            age = snapshot.age_seconds
+            if not snapshot.available or ttl is None:
+                stale += 1
+            elif age is None or age > ttl:
+                stale += 1
+
+            delta = snapshot.next_refresh_delta_seconds
+            at = snapshot.next_refresh_at
+            if at is not None or delta is not None:
+                if delta is None:
+                    delta = _delta_seconds(now, at)
+                next_candidates.append((delta, at))
+
+            last_error = snapshot.last_error or ""
+            last_result = (snapshot.last_result or "").strip()
+            has_error = bool(last_error) or last_result.lower().startswith("fail")
+            if not has_error:
+                continue
+
+            is_recent = False
+            if snapshot.age_seconds is not None:
+                is_recent = snapshot.age_seconds <= error_window
+            elif snapshot.last_refresh_at is not None:
+                try:
+                    delta_seconds = abs(int((now - snapshot.last_refresh_at).total_seconds()))
+                except Exception:
+                    delta_seconds = None
+                if delta_seconds is not None:
+                    is_recent = delta_seconds <= error_window
+            else:
+                is_recent = True
+
+            if not is_recent:
+                continue
+
+            recent_errors += 1
+            if len(error_items) >= 3:
+                continue
+            message_source = snapshot.last_error or snapshot.last_result or "fail"
+            error_items.append(DigestCacheError(snapshot.name, self._trim_error_text(message_source)))
+
+        next_delta, next_at = self._select_next_refresh_candidate(next_candidates, now)
+
+        return DigestCacheSummary(
+            total=total,
+            stale=stale,
+            recent_errors=recent_errors,
+            next_refresh_at=next_at,
+            next_refresh_delta=next_delta,
+            errors=tuple(error_items),
         )
-        await ctx.reply(str(sanitize_text(line)))
+
+    def _collect_sheets_digest_summary(self, now: dt.datetime) -> Optional[DigestSheetsSummary]:
+        try:
+            capabilities = sheets_cache.capabilities()
+        except Exception:
+            return None
+
+        if not isinstance(capabilities, dict):
+            return None
+
+        buckets: List[Tuple[str, object]] = []
+        for key in capabilities.keys():
+            if not isinstance(key, str):
+                continue
+            try:
+                bucket = sheets_cache.get_bucket(key)
+            except Exception:
+                bucket = None
+            if bucket is None:
+                continue
+            buckets.append((key, bucket))
+
+        if not buckets:
+            return None
+
+        latest_success_age: Optional[int] = None
+        latest_latency: Optional[int] = None
+        latest_retries: Optional[int] = None
+        latest_result: Optional[str] = None
+        latest_error: Optional[str] = None
+        failure_result: Optional[str] = None
+        failure_error: Optional[str] = None
+        next_candidates: List[Tuple[Optional[int], Optional[dt.datetime]]] = []
+
+        for name, bucket in buckets:
+            last_refresh = getattr(bucket, "last_refresh", None)
+            if isinstance(last_refresh, dt.datetime):
+                try:
+                    age_seconds = max(0, int((now - last_refresh).total_seconds()))
+                except Exception:
+                    age_seconds = None
+            else:
+                age_seconds = None
+
+            if age_seconds is not None and (
+                latest_success_age is None or age_seconds < latest_success_age
+            ):
+                latest_success_age = age_seconds
+                latency_ms = getattr(bucket, "last_latency_ms", None)
+                latest_latency = (
+                    int(latency_ms)
+                    if isinstance(latency_ms, (int, float))
+                    else None
+                )
+                retries_val = getattr(bucket, "last_retries", None)
+                latest_retries = (
+                    int(retries_val)
+                    if isinstance(retries_val, (int, float))
+                    else None
+                )
+                latest_result = getattr(bucket, "last_result", None)
+                latest_error = getattr(bucket, "last_error", None)
+
+            try:
+                next_at = bucket.next_refresh_at()
+            except Exception:
+                next_at = None
+            delta = _delta_seconds(now, next_at)
+            if next_at is not None or delta is not None:
+                next_candidates.append((delta, next_at))
+
+            result_text = getattr(bucket, "last_result", None)
+            result_norm = (result_text or "").strip().lower()
+            if result_norm and result_norm not in {"ok", "retry_ok"} and failure_result is None:
+                failure_result = result_text
+                err = getattr(bucket, "last_error", None)
+                failure_error = self._trim_error_text(err) if err else None
+                if failure_error is None and result_text:
+                    failure_error = self._trim_error_text(result_text)
+
+        next_delta, next_at = self._select_next_refresh_candidate(next_candidates, now)
+
+        summary_result = failure_result or latest_result
+        summary_error = failure_error or (self._trim_error_text(latest_error) if latest_error else None)
+
+        return DigestSheetsSummary(
+            last_success_age=latest_success_age,
+            latency_ms=latest_latency,
+            retries=latest_retries,
+            next_refresh_at=next_at,
+            next_refresh_delta=next_delta,
+            last_error=summary_error,
+            last_result=summary_result,
+        )
+
+    async def _digest_impl(self, ctx: commands.Context) -> None:
+        bot_name = get_bot_name()
+        env = get_env_name()
+        uptime = _uptime_sec(self.bot)
+        latency = _latency_sec(self.bot)
+        try:
+            gateway_age = await hb.age_seconds()
+        except Exception:
+            gateway_age = None
+
+        now = dt.datetime.now(UTC)
+        cache_summary = self._collect_cache_digest_summary(now)
+        sheets_summary = self._collect_sheets_digest_summary(now)
+        bot_version = os.getenv("BOT_VERSION", "dev")
+
+        embed_data = DigestEmbedData(
+            bot_name=bot_name,
+            env=env,
+            uptime_seconds=int(uptime) if uptime is not None else None,
+            latency_seconds=latency,
+            gateway_age_seconds=int(gateway_age) if gateway_age is not None else None,
+            cache=cache_summary,
+            sheets=sheets_summary,
+            bot_version=bot_version,
+            timestamp=now,
+        )
+
+        fallback_line = build_digest_line(
+            bot_name=bot_name,
+            env=env,
+            uptime_sec=uptime,
+            latency_s=latency,
+            last_event_age=gateway_age if isinstance(gateway_age, (int, float)) else 0.0,
+        )
+
+        try:
+            embed = build_digest_embed(data=embed_data)
+        except Exception:
+            msg, extra = sanitize_log("failed to build digest embed", extra={"command": "digest"})
+            logger.exception(msg, extra=extra)
+            await ctx.reply(str(sanitize_text(fallback_line)))
+            return
+
+        try:
+            await ctx.reply(embed=sanitize_embed(embed))
+        except Exception:
+            msg, extra = sanitize_log("failed to send digest embed", extra={"command": "digest"})
+            logger.exception(msg, extra=extra)
+            await ctx.reply(str(sanitize_text(fallback_line)))
 
     @tier("staff")
     @rec.command(name="digest")
