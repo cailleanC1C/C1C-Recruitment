@@ -1,5 +1,6 @@
 # shared/coreops_render.py
 from __future__ import annotations
+
 import datetime as dt
 import os
 import platform
@@ -17,9 +18,50 @@ def _hms(seconds: float) -> str:
     m, s = divmod(s, 60)
     return f"{h:d}h {m:02d}m {s:02d}s"
 
-def build_digest_line(*, bot_name: str, env: str, uptime_sec: float, latency_s: float|None, last_event_age: float) -> str:
+def build_digest_line(*, bot_name: str, env: str, uptime_sec: float, latency_s: float | None, last_event_age: float) -> str:
     lat = "—" if latency_s is None else f"{latency_s*1000:.0f}ms"
     return f"{bot_name} [{env}] · up {_hms(uptime_sec)} · rt {lat} · last {int(last_event_age)}s"
+
+
+@dataclass(frozen=True)
+class DigestCacheError:
+    bucket: str
+    message: str
+
+
+@dataclass(frozen=True)
+class DigestCacheSummary:
+    total: int | None
+    stale: int | None
+    recent_errors: int | None
+    next_refresh_at: dt.datetime | None
+    next_refresh_delta: int | None
+    errors: Sequence[DigestCacheError]
+
+
+@dataclass(frozen=True)
+class DigestSheetsSummary:
+    last_success_age: int | None
+    latency_ms: int | None
+    retries: int | None
+    next_refresh_at: dt.datetime | None
+    next_refresh_delta: int | None
+    last_error: str | None
+    last_result: str | None
+
+
+@dataclass(frozen=True)
+class DigestEmbedData:
+    bot_name: str
+    env: str
+    uptime_seconds: int | None
+    latency_seconds: float | None
+    gateway_age_seconds: int | None
+    cache: DigestCacheSummary | None
+    sheets: DigestSheetsSummary | None
+    bot_version: str
+    coreops_version: str = COREOPS_VERSION
+    timestamp: dt.datetime = field(default_factory=lambda: dt.datetime.now(dt.timezone.utc))
 
 def build_health_embed(
     *,
