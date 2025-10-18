@@ -1,7 +1,12 @@
-# Architecture Decision Records
+# Architectural Decision Records
 
-The ADR directory tracks notable engineering decisions along with their current status.
+This directory contains the architectural decision records (ADRs) that document significant design and operational choices.
 
-| ID | Title | Status | Summary |
-| --- | --- | --- | --- |
-| [ADR-0006](ADR-0006-cache-telemetry-and-coreops-reload.md) | Public cache telemetry wrapper + CoreOps reload consolidation | Accepted — 2025-10-18 | Establishes a shared cache telemetry API and consolidates CoreOps refresh/reload behavior. |
+## Index
+
+- [ADR-0000 — Architectural Decision Record Template](ADR-0000-template.md)
+- [ADR-0001 — Sheets Access Layer (Async + Cached)](ADR-0001-sheets-access-layer.md)
+- [ADR-0002 — Per-Environment Configuration](ADR-0002-per-environment-configuration.md)
+- [ADR-0003 — CoreOps Contract (Command Surface and Guardrails)](ADR-0003-coreops-contract.md)
+- [ADR-0004 — Ops Command RBAC and Cooldowns](ADR-0004-ops-command-rbac.md)
+- [ADR-0005 — Docs and PR Metadata Workflow](ADR-0005-docs-and-pr-metadata-workflow.md)
