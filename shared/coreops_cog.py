@@ -52,7 +52,12 @@ from shared.help import (
 )
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
-from shared.sheets.async_core import aget_worksheet, aopen_by_key, acall_with_backoff
+from shared.sheets.async_core import (
+    aget_worksheet,
+    aopen_by_key,
+    acall_with_backoff,
+    afetch_records,
+)
 from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
@@ -111,7 +116,98 @@ _CHECKSHEET_SHEET_CONFIGS: Tuple[Tuple[str, str, str], ...] = (
     ("Onboarding", "ONBOARDING_SHEET_ID", "ONBOARDING_CONFIG_TAB"),
 )
 
-_CHECKSHEET_ROW_LIMIT = 5000
+
+def _column_label(index: int) -> str:
+    if index <= 0:
+        return ""
+    label = ""
+    value = index
+    while value > 0:
+        value, rem = divmod(value - 1, 26)
+        label = chr(65 + rem) + label
+    return label
+
+
+
+class _SheetsDiscoveryClient:
+    async def get_worksheet(self, *, sheet_id: str, tab: str):
+        return await aget_worksheet(sheet_id, tab)
+
+    async def get_values(self, worksheet, *, max_rows: int, max_cols: int):
+        end_col = _column_label(max_cols)
+        if not end_col:
+            end_col = "A"
+        rng = f"A1:{end_col}{max_rows}"
+        params = {"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"}
+        values = await acall_with_backoff(worksheet.get, rng, params=params)
+        return values or []
+
+
+_DISCOVERY_SHEETS_CLIENT = _SheetsDiscoveryClient()
+
+
+async def _discover_tabs_from_config(sheets_client, sheet_id: str, config_tab_name: str | None) -> list[str]:
+    """Return ordered unique tab names discovered from a sheet's Config tab."""
+    try:
+        worksheet = await sheets_client.get_worksheet(
+            sheet_id=sheet_id,
+            tab=config_tab_name or "Config",
+        )
+        rows = await sheets_client.get_values(
+            worksheet,
+            max_rows=200,
+            max_cols=2,
+        )
+        if not rows or not isinstance(rows, Sequence):
+            return []
+
+        rows_seq = list(rows)
+        key_idx: int | None = None
+        val_idx: int | None = None
+        header_row_index: int | None = None
+        for r_i in range(min(3, len(rows_seq))):
+            raw_row = rows_seq[r_i]
+            if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
+                cells: list[str] = []
+            else:
+                cells = [str(cell or "").strip() for cell in raw_row]
+            lowered = [cell.lower() for cell in cells]
+            if "key" in lowered and "value" in lowered:
+                key_idx = lowered.index("key")
+                val_idx = lowered.index("value")
+                header_row_index = r_i
+                break
+
+        if key_idx is None or val_idx is None:
+            key_idx, val_idx = 0, 1
+            header_row_index = -1
+
+        discovered: list[str] = []
+        seen: set[str] = set()
+        max_index = max(key_idx, val_idx)
+        for r_i, raw_row in enumerate(rows_seq):
+            if r_i <= header_row_index:
+                continue
+            if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
+                cells = []
+            else:
+                cells = list(raw_row)
+            if len(cells) <= max_index:
+                cells.extend([""] * (max_index + 1 - len(cells)))
+            key = str(cells[key_idx] or "").strip()
+            val = str(cells[val_idx] or "").strip()
+            if not key or not val:
+                continue
+            if key.upper().endswith("_TAB"):
+                dedupe = val.lower()
+                if dedupe in seen:
+                    continue
+                seen.add(dedupe)
+                discovered.append(val)
+
+        return discovered
+    except Exception:
+        return []
 
 
 @dataclass(frozen=True)
@@ -172,6 +268,21 @@ def _short_identifier(value: object) -> str | None:
     if len(text) <= 6:
         return text
     return f"…{text[-4:]}"
+
+
+def _mask_sheet_id(sheet_id: str) -> str:
+    text = str(sheet_id or "").strip()
+    if not text:
+        return "—"
+    return f"***{text[-4:]}"
+
+
+def _format_sheet_log_label(sheet_title: str, sheet_id: str) -> str:
+    title = (sheet_title or "Sheet").strip() or "Sheet"
+    title = title.replace("\n", " ")
+    trimmed_id = (sheet_id or "").strip()
+    suffix = f"…{trimmed_id[-4:]}" if trimmed_id else "…----"
+    return f"{title}({suffix})"
 
 
 def _extract_override_keys(meta: Mapping[str, Any]) -> List[str]:
@@ -904,40 +1015,6 @@ class CoreOpsCog(commands.Cog):
         )
         logger.log(level, msg, extra=extra)
 
-    def _normalize_tab_header(self, header: str) -> str:
-        cleaned = re.sub(r"[^a-z0-9]+", "", str(header or "").lower())
-        return cleaned
-
-    def _parse_config_tab_names(self, records: Sequence[Mapping[str, Any]]) -> list[str]:
-        candidates = {
-            "tab",
-            "worksheet",
-            "worksheettab",
-            "worksheetname",
-            "sheet",
-            "sheetname",
-            "tabname",
-            "worksheettabname",
-        }
-        names: list[str] = []
-        seen: Set[str] = set()
-        for row in records:
-            if not isinstance(row, Mapping):
-                continue
-            for key, value in row.items():
-                normalized = self._normalize_tab_header(key)
-                if normalized not in candidates:
-                    continue
-                candidate = str(value or "").strip()
-                if not candidate:
-                    continue
-                dedupe_key = candidate.lower()
-                if dedupe_key in seen:
-                    continue
-                seen.add(dedupe_key)
-                names.append(candidate)
-        return names
-
     def _format_headers_preview(self, header_row: Sequence[object]) -> str:
         preview: list[str] = []
         for raw in list(header_row)[:12]:
@@ -947,29 +1024,46 @@ class CoreOpsCog(commands.Cog):
             preview.append(text.replace("\n", " "))
         return ", ".join(preview) if preview else "—"
 
-    async def _determine_row_text(self, worksheet) -> tuple[str, Optional[str]]:
+    async def _determine_row_text(
+        self,
+        *,
+        sheet_id: str,
+        tab_name: str,
+        worksheet,
+    ) -> tuple[str, Optional[str]]:
         try:
-            params = {"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"}
-            values = await acall_with_backoff(
-                worksheet.get,
-                f"A2:ZZZ{_CHECKSHEET_ROW_LIMIT + 1}",
-                params=params,
-            )
+            records = await afetch_records(sheet_id, tab_name)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            return "n/a", self._trim_error_text(exc)
+            error_text = self._trim_error_text(exc)
+            count = await self._fallback_row_count(worksheet)
+            if count is not None:
+                return str(count), error_text
+            return "n/a", error_text
 
-        count = 0
-        for row in values or []:
-            if any(str(cell or "").strip() for cell in row):
-                count += 1
+        if not isinstance(records, Sequence):
+            return "0", None
 
-        if count >= _CHECKSHEET_ROW_LIMIT and values:
-            last = values[-1]
-            if any(str(cell or "").strip() for cell in last):
-                return ">5k", None
-        return str(count), None
+        return str(len(records)), None
+
+    async def _fallback_row_count(self, worksheet) -> Optional[int]:
+        getter = getattr(worksheet, "get_row_count", None)
+        if callable(getter):
+            try:
+                value = await acall_with_backoff(getter)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                value = None
+            else:
+                if isinstance(value, int):
+                    return value
+
+        count_attr = getattr(worksheet, "row_count", None)
+        if isinstance(count_attr, int):
+            return count_attr
+        return None
 
     async def _inspect_tab(
         self,
@@ -1011,7 +1105,11 @@ class CoreOpsCog(commands.Cog):
             return ChecksheetTabEntry(name=tab_name, ok=False, rows="n/a", headers="—", error=error)
 
         headers_preview = self._format_headers_preview(header_row)
-        rows_text, row_error = await self._determine_row_text(worksheet)
+        rows_text, row_error = await self._determine_row_text(
+            sheet_id=sheet_id,
+            tab_name=tab_name,
+            worksheet=worksheet,
+        )
         if row_error:
             self._log_checksheet_issue(
                 level=logging.INFO,
@@ -1035,6 +1133,8 @@ class CoreOpsCog(commands.Cog):
         sheet_title = target.label
         warnings: list[str] = []
         tabs: list[ChecksheetTabEntry] = []
+
+        display_sheet_id = _mask_sheet_id(sheet_id)
 
         if not sheet_id:
             warning = "missing sheet id"
@@ -1074,75 +1174,38 @@ class CoreOpsCog(commands.Cog):
             warnings.append(f"Failed to open sheet: {error}")
             return ChecksheetSheetEntry(
                 title=sheet_title,
-                sheet_id=sheet_id,
+                sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
             )
 
-        try:
-            config_ws = await aget_worksheet(sheet_id, config_tab)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            error = self._trim_error_text(exc)
-            warning = f"Config tab '{config_tab}' unavailable: {error}"
-            self._log_checksheet_issue(
-                level=logging.WARNING,
-                sheet_id=sheet_id,
-                sheet_title=sheet_title,
-                tab_name=config_tab,
-                detail=error,
-                context="config_tab",
-            )
-            warnings.append(warning)
-            return ChecksheetSheetEntry(
-                title=sheet_title,
-                sheet_id=sheet_id,
-                tabs=tuple(tabs),
-                warnings=tuple(warnings),
-            )
+        tab_names = await _discover_tabs_from_config(
+            _DISCOVERY_SHEETS_CLIENT,
+            sheet_id=sheet_id,
+            config_tab_name=config_tab,
+        )
 
-        try:
-            records = await acall_with_backoff(config_ws.get_all_records)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            error = self._trim_error_text(exc)
-            warning = f"Failed to read Config tab: {error}"
-            self._log_checksheet_issue(
-                level=logging.WARNING,
-                sheet_id=sheet_id,
-                sheet_title=sheet_title,
-                tab_name=config_tab,
-                detail=error,
-                context="config_read",
-            )
-            warnings.append(warning)
-            return ChecksheetSheetEntry(
-                title=sheet_title,
-                sheet_id=sheet_id,
-                tabs=tuple(tabs),
-                warnings=tuple(warnings),
-            )
-
-        tab_names = self._parse_config_tab_names(records)
         if not tab_names:
-            warning = f"No tabs listed in '{config_tab}'"
-            self._log_checksheet_issue(
-                level=logging.INFO,
-                sheet_id=sheet_id,
-                sheet_title=sheet_title,
-                tab_name=config_tab,
-                detail=warning,
-                context="config_tabs",
+            sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
+            logger.info(
+                "[checksheet] no *_TAB entries in Config for sheet %s",
+                sheet_label,
             )
+            warning = f"⚠️ No tabs listed in '{config_tab}'"
             warnings.append(warning)
             return ChecksheetSheetEntry(
                 title=sheet_title,
-                sheet_id=sheet_id,
+                sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
             )
+
+        sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
+        logger.info(
+            "[checksheet] discovered %d tabs from Config for sheet %s",
+            len(tab_names),
+            sheet_label,
+        )
 
         for tab_name in tab_names:
             tab_entry = await self._inspect_tab(
@@ -1154,7 +1217,7 @@ class CoreOpsCog(commands.Cog):
 
         return ChecksheetSheetEntry(
             title=sheet_title,
-            sheet_id=sheet_id,
+            sheet_id=display_sheet_id,
             tabs=tuple(tabs),
             warnings=tuple(warnings),
         )
