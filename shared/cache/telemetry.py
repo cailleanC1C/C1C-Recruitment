@@ -27,6 +27,8 @@ class CacheSnapshot:
     next_refresh_at: Optional[dt.datetime]
     next_refresh_delta_seconds: Optional[int]
     next_refresh_human: Optional[str]
+    last_result: Optional[str]
+    last_error: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -61,11 +63,20 @@ def _to_int(value: object) -> Optional[int]:
     return None
 
 
+def _clean_text(value: object) -> Optional[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    return None
+
+
 def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapshot:
     available = isinstance(raw, dict)
     ttl_seconds = _to_int(raw.get("ttl_sec")) if available else None
     last_refresh_at = _normalize_datetime(raw.get("last_refresh_at")) if available else None
     next_refresh_at = _normalize_datetime(raw.get("next_refresh_at")) if available else None
+    last_result = _clean_text(raw.get("last_result")) if available else None
+    last_error = _clean_text(raw.get("last_error")) if available else None
 
     now = _now_utc()
     age_seconds: Optional[int] = None
@@ -101,6 +112,8 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
         next_refresh_at=next_refresh_at,
         next_refresh_delta_seconds=next_delta,
         next_refresh_human=next_human,
+        last_result=last_result,
+        last_error=last_error,
     )
 
 
@@ -149,7 +162,13 @@ def get_all_snapshots() -> Dict[str, CacheSnapshot]:
 
 
 async def refresh_now(name: str, actor: Optional[str] = None) -> RefreshResult:
-    """Trigger an immediate refresh and return result metadata."""
+    """Trigger an immediate refresh and return result metadata.
+
+    Notes:
+        Some cache loaders record failures in the bucket snapshot (last_result/last_error)
+        without raising. We therefore inspect the snapshot after the call and flip `ok`
+        accordingly to avoid reporting a false success.
+    """
 
     start = time.monotonic()
     error_text: Optional[str] = None
@@ -163,6 +182,13 @@ async def refresh_now(name: str, actor: Optional[str] = None) -> RefreshResult:
         error_text = (str(exc).strip()) or exc.__class__.__name__
     duration_ms = int((time.monotonic() - start) * 1000)
     snapshot = get_snapshot(name)
+    if ok:
+        last_error = snapshot.last_error or ""
+        last_result = snapshot.last_result or ""
+        last_result_norm = last_result.lower()
+        if last_error or last_result_norm.startswith("fail"):
+            ok = False
+            error_text = last_error or last_result or "fail"
     return RefreshResult(
         name=name,
         ok=ok,
