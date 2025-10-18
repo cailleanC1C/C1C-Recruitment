@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
 import os
 import time
@@ -24,6 +25,8 @@ from shared.coreops_rbac import (
     get_staff_role_ids,
     is_admin_member,
 )
+from modules.coreops.cron_summary import emit_daily_summary
+from shared.sheets.cache_scheduler import CRON_JOB_NAMES
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -148,6 +151,25 @@ async def on_ready():
             )
 
         runtime.scheduler.spawn(announce(), name="watchdog_announce")
+
+    if not hasattr(bot, "_cron_summary_task"):
+        async def _daily_summary_loop() -> None:
+            while True:
+                now = dt.datetime.now(dt.timezone.utc)
+                target = now.replace(hour=0, minute=5, second=0, microsecond=0)
+                if now >= target:
+                    target = target + dt.timedelta(days=1)
+                await asyncio.sleep((target - now).total_seconds())
+                try:
+                    await emit_daily_summary(CRON_JOB_NAMES)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.warning("[cron] summary_failed", exc_info=True)
+
+        runtime.scheduler.spawn(_daily_summary_loop(), name="cron_daily_summary")
+        bot._cron_summary_task = True
+        log.info("[cron] summary scheduler started (00:05Z)")
 
 
 @bot.event
