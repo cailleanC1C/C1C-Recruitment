@@ -3,10 +3,10 @@
 ## Runtime map
 ```
 Discord Gateway
-  ↳ Event handlers (commands, watchers, lifecycle)
+  ↳ Event handlers (commands, listeners, lifecycle)
       ↳ CoreOps cog & command matrix (tier gated)
-      ↳ Watchers (welcome, promo, daily digest)
-          ↳ Runtime scheduler (refresh windows, retries)
+      ↳ Watcher listeners (welcome, promo) [watcher]
+          ↳ Runtime scheduler (refresh windows, retries) [cron]
           ↳ Sheets adapters (recruitment, onboarding)
               ↳ shared.sheets.core (Google API client, cache)
                   ↳ Google Sheets
@@ -19,6 +19,8 @@ off in production until the panels ship._
 ### Legend
 - Solid nodes = active in production.
 - Dashed nodes = integrated but disabled in production (feature-flagged).
+- `[watcher]` marks event-driven listeners tied to Discord webhooks.
+- `[cron]` marks scheduled jobs emitted by the runtime scheduler.
 - Grey callouts describe shared helpers used by multiple features.
 
 ## Phase 3 dependency highlights
@@ -26,26 +28,26 @@ off in production until the panels ship._
   features → Discord extensions. Abort boot if config or sheets layers fail.
 - Watchdog owns keepalive cadences, stall detection, reconnect timers, and feeds its
   metrics into the health server output.
-- Runtime scheduler handles cache refreshes, recruiter digest delivery, and any hygiene
-  jobs registered by features.
+- Runtime scheduler handles cron refreshes, recruiter digest delivery, and any hygiene
+  jobs registered by feature modules.
 
 ## Data paths
-- Reads: commands and watchers use `sheets.recruitment` / `sheets.onboarding`, which
-  delegate to `shared.sheets.core` before hitting Google Sheets caches.
-- Writes: onboarding watchers call `sheets.onboarding` helpers with bounded retries and
+- Reads: commands and watcher listeners use `sheets.recruitment` / `sheets.onboarding`,
+  which delegate to `shared.sheets.core` before hitting Google Sheets caches.
+- Writes: onboarding listeners call `sheets.onboarding` helpers with bounded retries and
   per-tab cache invalidation.
 
 ## Feature toggles & gating
-- `WELCOME_ENABLED` controls the welcome command plus both onboarding watchers.
-- `ENABLE_WELCOME_WATCHER` and `ENABLE_PROMO_WATCHER` register their event hooks only when
-  true.
+- `WELCOME_ENABLED` controls the welcome command plus both onboarding listeners.
+- `ENABLE_WELCOME_LISTENERS` and `ENABLE_PROMO_LISTENERS` register their event hooks only
+  when true (aliases ending in `_WATCHER` remain for backward compatibility).
 - RBAC derives from `shared.coreops_rbac`, mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 
 ## Health & observability
 - `/healthz` aggregates watchdog state, last refresh timestamps, and cache health.
-- Structured logs emit `[refresh]`, `[watcher]`, and `[command]` tags with context for
-  quick filtering in Discord.
+- Structured logs emit `[ops]`, `[cron]`, `[watcher]`, `[refresh]`, and `[command]` tags
+  with context for quick filtering in Discord.
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 

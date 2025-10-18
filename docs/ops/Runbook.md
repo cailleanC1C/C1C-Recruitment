@@ -2,8 +2,16 @@
 
 ## Daily expectations
 - Confirm the bot is online and responding to `!ping` in production.
-- Review scheduled refresh logs (`[refresh]`) for duration anomalies.
+- Review scheduled refresh logs via `[cron]` entries for duration anomalies.
 - Check the welcome and promo ticket channels for stuck threads or duplicate posts.
+
+### Logs to check
+1. `[ops]` — service lifecycle messages (boot, shutdown, deploy tags).
+2. `[watcher]` — event listeners (toggles, hook errors, ticket IDs).
+3. `[cron]` — scheduled jobs (start/result/retry/summary for refresh cycles).
+
+_If `[cron]` lines stop appearing for longer than the configured cadence, assume the
+scheduler is stalled and inspect `/healthz` before triggering manual refresh commands._
 
 ## Deployment checklist
 1. Ship through the Render pipeline (GitHub Actions handles image builds).
@@ -21,7 +29,8 @@
 | Cache stale | Run `!rec refresh all`, confirm `[refresh]` completion | Monitor next scheduled refresh |
 
 ## Logging quick reference
-- `[refresh]` — cache warmers (bucket, actor, duration, result).
+- `[ops]` — deployment lifecycle, watchdog notices, and manual overrides.
+- `[cron]` — cron job lifecycle (start/result/retry/summary, duration, target cache).
 - `[watcher]` — watcher lifecycle messages (toggles, errors, thread IDs).
 - `[command]` — execution context for CoreOps commands (caller, guild, result).
 
