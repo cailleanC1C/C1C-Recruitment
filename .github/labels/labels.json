@@ -220,6 +220,11 @@
     "description": "Mirrors P2"
   },
   {
+    "name": "telemetry",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "tests",
     "color": "a2eeef",
     "description": "Unit/integration/e2e tests"
