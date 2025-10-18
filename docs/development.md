@@ -1,38 +1,57 @@
-# Development — v0.9.3-phase3b-rc4
+# Development — Phase 3b
 
-This document covers how Caillean and Codex iterate on the recruitment runtime using the
-web-based deployment flow. Local execution is not supported in Phase 3b.
+## Workflow snapshot
+- Deploy via the shared Render pipelines; local execution is unsupported this phase.
+- Use PR descriptions with the required metadata block (see template below).
+- Pause the deployment queue before force-pushing or re-running builds.
 
-## Phase 3b workflow
-- Ship changes through the shared Render pipelines exposed in the admin portal.
-- Use the deployment queue controls to pause/resume production refreshes when rolling out
-  CoreOps updates.
-- Update PR descriptions with the required metadata block (see
-  [Command System Guide](commands.md#adding-new-commands-internal-guide)).
+### Required PR metadata
+```
+[meta]
+labels: docs, comp:ops-contract, P2
+milestone: Harmonize v1.0
+[/meta]
+```
 
-## Environment configuration checks
-- Version config lives in the Sheets **Config** tab and propagates automatically during
-  refresh.
-- Verify guild role IDs before deployment; `is_admin_member()` and `is_staff_member()` rely
-  on those mappings.
-- Refresh caches post-deploy with `!rec refresh clansinfo` (staff) or `!rec refresh all`
-  (admin) as needed.
+## Contribution checklist
+1. Branch from `main` and follow commit conventions.
+2. Update documentation alongside code changes.
+3. Run smoke checks or targeted tests where applicable.
+4. Include rollout notes for staff when features need coordination.
+5. Confirm help tiers using `rehydrate_tiers()` + `audit_tiers()` in a staging session.
 
-## Command system verification
-- `!rec help` shows user and staff tiers depending on the caller. Expect no denial copy
-  during help rendering.
-- `!help` is admin-only and lists every command grouped by tier.
-- Use `rehydrate_tiers()` followed by `audit_tiers()` inside the Render console when
-  validating tier coverage.
-- See [Command System Guide](commands.md) and the
-  [CoreOps contract](coreops_contract.md) for details on RBAC helpers and escalation.
+## Command & embed style
+- Declare tiers with `@tier("user"|"staff"|"admin")`; gate execution via
+  `shared.coreops_rbac` helpers (`is_admin_member`, `is_staff_member`).
+- Approved help description (keep formatting):
+  ```
+  C1C-Recruitment keeps the doors open and the hearths warm.
+  It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.
+  Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.
+  Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.
+  All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care.
+  ```
+- Embed titles: sentence case (`Feature · Context`).
+- Footers: `Bot vX.Y.Z · CoreOps vA.B.C`, optional extras appended with ` • `.
+- Always set the embed timestamp instead of hard-coding dates in fields.
 
-## Project layout quick reference
-- Core cogs live in `modules/`; CoreOps loads from `modules.coreops`.
-- Tier metadata is declared in `shared/coreops/helpers/tiers.py`.
-- RBAC helpers reside in `shared/coreops_rbac.py` and gate privileged commands.
-- The command tree is configured in `app.py` when the bot boots.
+## Doc map
+| Audience | Where to start |
+| --- | --- |
+| Members | [`README.md`](../README.md) |
+| Operators | [`docs/ops/Runbook.md`](ops/Runbook.md) |
+| Config owners | [`docs/ops/Config.md`](ops/Config.md) |
+| Developers | [`docs/development.md`](development.md) + [`docs/Architecture.md`](Architecture.md) |
+| Watcher maintainers | [`docs/ops/Watchers.md`](ops/Watchers.md) |
+| Incident responders | [`docs/ops/Troubleshooting.md`](ops/Troubleshooting.md) |
+
+## Lessons learned (see `AUDIT/`)
+- Keep refresh durations under 60 seconds; longer runs risk Render restarts (Audit 2025-09-12).
+- Escalate Sheets outages immediately; prior incidents show data divergence within 15
+  minutes when watchers continue writing (Audit 2025-08-04).
+- Document toggle changes in PRs; missing notes slowed response during the Phase 3 rollout
+  (Audit 2025-07-22).
 
 ---
 
-_Doc last updated: 2025-10-17 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
