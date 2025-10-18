@@ -249,22 +249,6 @@ def _staff_check() -> commands.Check[Any]:
     return commands.check(predicate)
 
 
-def staff_only() -> commands.Check[Any]:
-    async def predicate(ctx: commands.Context) -> bool:
-        author = getattr(ctx, "author", None)
-        if is_staff_member(author) or is_admin_member(author):
-            return True
-        if getattr(ctx, "_coreops_suppress_denials", False):
-            raise commands.CheckFailure("Staff only.")
-        try:
-            await ctx.reply("Staff only.")
-        except Exception:
-            pass
-        raise commands.CheckFailure("Staff only.")
-
-    return commands.check(predicate)
-
-
 def _uptime_sec(bot: commands.Bot) -> float:
     started = getattr(bot, "_c1c_started_mono", None)
     return max(0.0, time.monotonic() - started) if started else 0.0
@@ -711,7 +695,7 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @rec.command(name="health")
-    @staff_only()
+    @ops_only()
     async def rec_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
@@ -1113,7 +1097,7 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @rec.command(name="digest")
-    @staff_only()
+    @ops_only()
     async def rec_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
