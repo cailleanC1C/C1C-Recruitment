@@ -717,7 +717,9 @@ class CoreOpsCog(commands.Cog):
         msg, extra = sanitize_log("failed to collect digest section", extra={"section": section})
         logger.warning(msg, extra=extra, exc_info=exc)
 
-    def _collect_sheet_bucket_entries(self) -> Sequence[DigestSheetEntry]:
+    def _collect_sheet_bucket_entries(
+        self, *, uptime_seconds: Optional[int]
+    ) -> Sequence[DigestSheetEntry]:
         entries: List[DigestSheetEntry] = []
         for bucket_key, display_name in _DIGEST_SHEET_BUCKETS:
             try:
@@ -736,16 +738,57 @@ class CoreOpsCog(commands.Cog):
                         next_refresh_at=None,
                         retries=None,
                         error=None,
+                        age_estimated=False,
+                        next_refresh_estimated=False,
                     )
                 )
                 continue
 
             available = getattr(snapshot, "available", False)
             age_seconds = getattr(snapshot, "age_seconds", None) if available else None
-            next_delta = getattr(snapshot, "next_refresh_delta_seconds", None) if available else None
+            next_delta = (
+                getattr(snapshot, "next_refresh_delta_seconds", None) if available else None
+            )
             next_at = getattr(snapshot, "next_refresh_at", None) if available else None
             last_error = getattr(snapshot, "last_error", None) if available else None
             last_result = getattr(snapshot, "last_result", None) if available else None
+            last_refresh_at = (
+                getattr(snapshot, "last_refresh_at", None) if available else None
+            )
+            ttl_raw = None
+            if available:
+                ttl_raw = getattr(snapshot, "ttl_sec", None)
+                if ttl_raw is None:
+                    ttl_raw = getattr(snapshot, "ttl_seconds", None)
+
+            ttl_seconds = None
+            if isinstance(ttl_raw, (int, float)):
+                try:
+                    ttl_seconds = int(ttl_raw)
+                except Exception:
+                    ttl_seconds = None
+
+            age_estimated = False
+            if available and age_seconds is None and uptime_seconds is not None:
+                candidate = uptime_seconds
+                if ttl_seconds is not None:
+                    candidate = min(uptime_seconds, ttl_seconds)
+                age_seconds = max(0, int(candidate))
+                age_estimated = True
+
+            next_estimated = False
+            if (
+                available
+                and next_at is None
+                and ttl_seconds is not None
+                and isinstance(last_refresh_at, dt.datetime)
+            ):
+                try:
+                    next_at = last_refresh_at + dt.timedelta(seconds=ttl_seconds)
+                    next_estimated = True
+                except Exception:
+                    next_at = None
+                    next_estimated = False
 
             status = "n/a"
             error_text: Optional[str] = None
@@ -766,6 +809,8 @@ class CoreOpsCog(commands.Cog):
                     next_refresh_at=next_at,
                     retries=None,
                     error=error_text,
+                    age_estimated=age_estimated,
+                    next_refresh_estimated=next_estimated,
                 )
             )
 
@@ -860,13 +905,14 @@ class CoreOpsCog(commands.Cog):
             gateway_age = None
 
         now = dt.datetime.now(UTC)
-        sheet_entries = self._collect_sheet_bucket_entries()
+        uptime_seconds = int(uptime) if uptime is not None else None
+        sheet_entries = self._collect_sheet_bucket_entries(uptime_seconds=uptime_seconds)
         sheets_summary = self._collect_sheets_client_summary(now)
         bot_version = os.getenv("BOT_VERSION", "dev")
 
         embed_data = DigestEmbedData(
             env=env,
-            uptime_seconds=int(uptime) if uptime is not None else None,
+            uptime_seconds=uptime_seconds,
             latency_seconds=latency,
             gateway_age_seconds=int(gateway_age) if gateway_age is not None else None,
             sheets=tuple(sheet_entries),

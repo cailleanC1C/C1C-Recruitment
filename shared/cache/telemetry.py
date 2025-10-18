@@ -21,14 +21,17 @@ class CacheSnapshot:
     available: bool
     ttl_seconds: Optional[int]
     ttl_human: Optional[str]
+    ttl_sec: Optional[int]
     last_refresh_at: Optional[dt.datetime]
     age_seconds: Optional[int]
     age_human: Optional[str]
+    age_sec: Optional[int]
     next_refresh_at: Optional[dt.datetime]
     next_refresh_delta_seconds: Optional[int]
     next_refresh_human: Optional[str]
     last_result: Optional[str]
     last_error: Optional[str]
+    retries: Optional[int]
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,7 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
     next_refresh_at = _normalize_datetime(raw.get("next_refresh_at")) if available else None
     last_result = _clean_text(raw.get("last_result")) if available else None
     last_error = _clean_text(raw.get("last_error")) if available else None
+    retries = _to_int(raw.get("retries")) if available else None
 
     now = _now_utc()
     age_seconds: Optional[int] = None
@@ -106,14 +110,17 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
         available=available,
         ttl_seconds=ttl_seconds,
         ttl_human=ttl_human,
+        ttl_sec=ttl_seconds,
         last_refresh_at=last_refresh_at,
         age_seconds=age_seconds,
         age_human=age_human,
+        age_sec=age_seconds,
         next_refresh_at=next_refresh_at,
         next_refresh_delta_seconds=next_delta,
         next_refresh_human=next_human,
         last_result=last_result,
         last_error=last_error,
+        retries=retries,
     )
 
 
@@ -147,16 +154,16 @@ def get_snapshot(name: str) -> CacheSnapshot:
 def get_all_snapshots() -> Dict[str, CacheSnapshot]:
     """Return telemetry snapshots for all known buckets."""
 
-    try:
-        caps = cache_service.capabilities()
-    except Exception:
-        caps = {}
-
     snapshots: Dict[str, CacheSnapshot] = {}
-    for key in caps.keys():
-        if not isinstance(key, str):
-            continue
-        snapshots[key] = get_snapshot(key)
+    for name in list_buckets():
+        raw: Optional[Dict[str, object]] = None
+        try:
+            candidate = cache_service.get_bucket_snapshot(name)
+        except Exception:
+            candidate = None
+        if isinstance(candidate, dict):
+            raw = candidate
+        snapshots[name] = _build_snapshot(name, raw)
     return snapshots
 
 
