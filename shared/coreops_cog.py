@@ -583,12 +583,12 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(log_msg, extra=extra)
 
-        if reboot:
-            async def _shutdown() -> None:
-                await asyncio.sleep(1)
-                await self.bot.close()
+        async def _shutdown() -> None:
+            await self.bot.close()
 
-            asyncio.create_task(_shutdown())
+        if reboot:
+            await _shutdown()
+            await asyncio.sleep(1)
 
     async def _refresh_single_impl(
         self, ctx: commands.Context, bucket: str
