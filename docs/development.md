@@ -3,9 +3,8 @@
 ## Workflow snapshot
 - Deploy via the shared Render pipelines; local execution is unsupported this phase.
 - Use PR descriptions with the required metadata block (see template below).
-- Pause the deployment queue before force-pushing or re-running builds.
 
-### Required PR metadata
+### Required PR metadata - Must be part of the PR message body 
 ```
 [meta]
 labels: docs, comp:ops-contract, P2
@@ -23,14 +22,6 @@ milestone: Harmonize v1.0
 ## Command & embed style
 - Declare tiers with `@tier("user"|"staff"|"admin")`; gate execution via
   `shared.coreops_rbac` helpers (`is_admin_member`, `is_staff_member`).
-- Approved help description (keep formatting):
-  ```
-  C1C-Recruitment keeps the doors open and the hearths warm.
-  It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.
-  Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.
-  Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.
-  All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care.
-  ```
 - Embed titles: sentence case (`Feature · Context`).
 - Footers: `Bot vX.Y.Z · CoreOps vA.B.C`, optional extras appended with ` • `.
 - Always set the embed timestamp instead of hard-coding dates in fields.
