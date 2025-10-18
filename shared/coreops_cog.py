@@ -583,6 +583,13 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(log_msg, extra=extra)
 
+        if reboot:
+            async def _shutdown() -> None:
+                await asyncio.sleep(1)
+                await self.bot.close()
+
+            asyncio.create_task(_shutdown())
+
     async def _refresh_single_impl(
         self, ctx: commands.Context, bucket: str
     ) -> None:
@@ -644,13 +651,6 @@ class CoreOpsCog(commands.Cog):
             },
         )
         logger.info(log_msg, extra=extra)
-
-        if reboot:
-            async def _shutdown() -> None:
-                await asyncio.sleep(1)
-                await self.bot.close()
-
-            asyncio.create_task(_shutdown())
 
     @tier("admin")
     @rec.command(name="health")
