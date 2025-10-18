@@ -31,12 +31,16 @@ class DigestCacheError:
 
 @dataclass(frozen=True)
 class DigestCacheSummary:
-    total: int | None
-    stale: int | None
-    recent_errors: int | None
-    next_refresh_at: dt.datetime | None
-    next_refresh_delta: int | None
-    errors: Sequence[DigestCacheError]
+    bucket: str = ""
+    ttl: str = ""
+    retries: int = 0
+    last_result: str = ""
+    total: int | None = None
+    stale: int | None = None
+    recent_errors: int | None = None
+    next_refresh_at: dt.datetime | None = None
+    next_refresh_delta: int | None = None
+    errors: Sequence[DigestCacheError] = ()
 
 
 @dataclass(frozen=True)
