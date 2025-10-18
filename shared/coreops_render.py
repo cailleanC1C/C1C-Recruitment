@@ -5,7 +5,7 @@ import datetime as dt
 import os
 import platform
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 import discord
