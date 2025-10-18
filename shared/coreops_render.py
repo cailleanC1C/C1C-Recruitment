@@ -137,7 +137,6 @@ def build_refresh_embed(
     coreops_version: str = COREOPS_VERSION,
     now_utc: dt.datetime | None = None,
 ) -> discord.Embed:
-    timestamp = now_utc or dt.datetime.now(dt.timezone.utc)
     embed = discord.Embed(
         title=f"Refresh • {scope}",
         colour=getattr(discord.Colour, "dark_theme", discord.Colour.dark_teal)(),
@@ -177,13 +176,10 @@ def build_refresh_embed(
         table = "no buckets"
 
     embed.add_field(name="Buckets", value=f"```{table}```", inline=False)
-    footer_notes = f" · total: {total_ms}ms · {timestamp:%Y-%m-%d %H:%M:%S} UTC"
-    embed.timestamp = timestamp
-    embed.set_footer(
-        text=build_coreops_footer(
-            bot_version=bot_version,
-            coreops_version=coreops_version,
-            notes=footer_notes,
-        )
+    footer_text = (
+        f"Bot v{bot_version} · CoreOps v{coreops_version} · total: {total_ms} ms"
+        if bot_version and coreops_version
+        else f"total: {total_ms} ms"
     )
+    embed.set_footer(text=footer_text)
     return embed
