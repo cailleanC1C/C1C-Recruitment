@@ -74,6 +74,12 @@ def _format_next_eta(delta: int | None, at: dt.datetime | None) -> str:
     return f"in {human}" if delta > 0 else f"{human} ago"
 
 
+def _prefix_estimated(text: str, estimated: bool) -> str:
+    if estimated and text not in {"n/a", "-"}:
+        return f"~{text}"
+    return text
+
+
 def _build_sheets_field(entries: Sequence[DigestSheetEntry]) -> str:
     if not entries:
         return "n/a"
@@ -81,8 +87,13 @@ def _build_sheets_field(entries: Sequence[DigestSheetEntry]) -> str:
     lines = []
     for entry in entries:
         status = entry.status or "n/a"
-        age_text = _format_humanized(entry.age_seconds)
-        next_text = _format_next_eta(entry.next_refresh_delta_seconds, entry.next_refresh_at)
+        age_text = _prefix_estimated(
+            _format_humanized(entry.age_seconds), entry.age_estimated
+        )
+        next_text = _prefix_estimated(
+            _format_next_eta(entry.next_refresh_delta_seconds, entry.next_refresh_at),
+            entry.next_refresh_estimated,
+        )
         retries_text = "n/a" if entry.retries is None else str(entry.retries)
         error_raw = _sanitize_inline(entry.error, allow_empty=True)
         error_text = error_raw if error_raw else "-"
@@ -129,12 +140,29 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
     embed.add_field(name="Sheets", value=_build_sheets_field(data.sheets), inline=False)
     embed.add_field(name="Sheets client", value=_build_sheets_client_field(data.sheets_client), inline=False)
 
+    tip_text = _maybe_build_tip(data.sheets)
+    if tip_text:
+        embed.add_field(name="Tip", value=tip_text, inline=False)
+
     footer_text = (
         f"Bot v{_sanitize_inline(data.bot_version)} · "
         f"CoreOps v{_sanitize_inline(data.coreops_version)}"
     )
     embed.set_footer(text=footer_text)
     return embed
+
+
+def _maybe_build_tip(entries: Sequence[DigestSheetEntry]) -> str | None:
+    for entry in entries:
+        if entry.display_name.lower() != "claninfo":
+            continue
+        status = (entry.status or "").strip().lower()
+        status_ok = status in {"ok", "n/a", ""}
+        age_unknown = entry.age_seconds is None or entry.age_estimated
+        if status_ok and age_unknown:
+            return 'Tip: need latest openings? run "!rec refresh clans" and retry.'
+        break
+    return None
 
 
 @dataclass(frozen=True)
@@ -158,6 +186,8 @@ class DigestSheetEntry:
     next_refresh_at: dt.datetime | None
     retries: int | None
     error: str | None
+    age_estimated: bool = False
+    next_refresh_estimated: bool = False
 
 
 @dataclass(frozen=True)
