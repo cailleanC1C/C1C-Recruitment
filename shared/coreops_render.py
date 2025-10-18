@@ -23,6 +23,25 @@ def build_digest_line(*, bot_name: str, env: str, uptime_sec: float, latency_s: 
     return f"{bot_name} [{env}] · up {_hms(uptime_sec)} · rt {lat} · last {int(last_event_age)}s"
 
 
+def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
+    """
+    Back-compat wrapper: build a simple embed using the existing digest line.
+    This restores imports for CoreOpsCog without changing digest semantics.
+    """
+    colour_factory = getattr(discord.Colour, "blurple", None)
+    color = colour_factory() if callable(colour_factory) else discord.Colour.blue()
+    desc = build_digest_line(
+        bot_name=data.bot_name,
+        env=data.env,
+        uptime_sec=float(data.uptime_seconds or 0),
+        latency_s=data.latency_seconds,
+        last_event_age=float(data.gateway_age_seconds or 0),
+    )
+    embed = discord.Embed(title="Digest", description=desc, colour=color)
+    # Intentionally do not set a timestamp to match existing digest behavior.
+    return embed
+
+
 @dataclass(frozen=True)
 class DigestCacheError:
     bucket: str
