@@ -5,7 +5,7 @@ import datetime as dt
 import os
 import platform
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 import discord
 
@@ -38,6 +38,250 @@ def _sanitize_inline(text: object, *, allow_empty: bool = False) -> str:
     if not cleaned and not allow_empty:
         return "n/a"
     return cleaned.replace("`", "ʼ")
+
+
+def _config_meta_extras(meta: object) -> Mapping[str, Any]:
+    if isinstance(meta, Mapping):
+        extras = meta.get("_extras")
+        if isinstance(extras, Mapping):
+            return extras
+    return {}
+
+
+def _format_short_id(value: object) -> str | None:
+    if value is None:
+        return None
+    digits = "".join(ch for ch in str(value).strip() if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) <= 4:
+        return digits
+    return f"(…{digits[-4:]})"
+
+
+def _format_sheet_entries(entries: Sequence[Mapping[str, Any]]) -> str:
+    if not entries:
+        return "n/a"
+
+    lines: list[str] = []
+    for index, entry in enumerate(entries, start=1):
+        label = _sanitize_inline(entry.get("label") or f"Sheet #{index}")
+        connected_flag = entry.get("connected")
+        if connected_flag is None:
+            sheet_id = entry.get("id")
+            connected = bool(sheet_id)
+        else:
+            connected = bool(connected_flag)
+        emoji = "✅" if connected else "⚠️"
+        status_text = "Connected" if connected else "Missing"
+
+        friendly = entry.get("friendly_name")
+        fallback = entry.get("fallback_name")
+        short_id = _format_short_id(entry.get("id"))
+
+        detail_parts: list[str] = []
+        if isinstance(friendly, str) and friendly.strip():
+            detail_parts.append(_sanitize_inline(friendly))
+        elif isinstance(fallback, str) and fallback.strip():
+            detail_parts.append(_sanitize_inline(fallback))
+
+        if not detail_parts and short_id:
+            detail_parts.append(short_id)
+        elif detail_parts and not isinstance(friendly, str) and short_id:
+            detail_parts.append(short_id)
+
+        detail_text = ""
+        if detail_parts:
+            detail_text = f" *({' · '.join(detail_parts)})*"
+
+        lines.append(f"- {label} → {emoji} {status_text}{detail_text}")
+
+    return "\n".join(lines)
+
+
+def _format_guild_access(entries: Sequence[Mapping[str, Any]], allowlist: Sequence[Mapping[str, Any]]) -> str:
+    lines: list[str] = []
+
+    connected_names = [
+        _sanitize_inline(item.get("display") or item.get("name"))
+        for item in entries
+        if isinstance(item, Mapping)
+    ]
+    connected_names = [name for name in connected_names if name and name != "n/a"]
+    connected_text = ", ".join(connected_names) if connected_names else "n/a"
+    lines.append(f"- Connected guilds: {connected_text}")
+
+    allow_count = len(allowlist)
+    preview_text: str | None = None
+    if allowlist:
+        first = allowlist[0]
+        if isinstance(first, Mapping):
+            label = first.get("label")
+            if isinstance(label, str) and label.strip():
+                preview_text = _sanitize_inline(label)
+            else:
+                short_id = _format_short_id(first.get("id"))
+                if short_id:
+                    preview_text = f"Guild {short_id} (unresolved)"
+
+    allow_line = f"- Allow-listed: {allow_count} total"
+    if preview_text:
+        allow_line += f" — {preview_text}"
+    lines.append(allow_line)
+
+    return "\n".join(lines)
+
+
+def _map_source_label(source: str) -> str:
+    cleaned = source.strip()
+    if not cleaned:
+        return "Unknown"
+
+    lowered = cleaned.lower()
+    if "shared.config" in lowered or "env" in lowered:
+        return "Environment variables"
+    if "sheet" in lowered:
+        return "Google Sheets"
+    if "runtime" in lowered:
+        return "Runtime defaults"
+    if "config" in lowered and "http" not in lowered:
+        return cleaned.replace("_", " ").title()
+    return cleaned
+
+
+def _format_overrides(meta: Mapping[str, Any]) -> str:
+    keys: list[str] = []
+    overrides = meta.get("overrides")
+    if isinstance(overrides, Mapping):
+        keys = [str(k).strip() for k in overrides.keys() if str(k).strip()]
+    elif isinstance(overrides, (list, tuple, set)):
+        keys = [str(k).strip() for k in overrides if str(k).strip()]
+
+    if not keys:
+        override_keys = meta.get("override_keys")
+        if isinstance(override_keys, (list, tuple, set)):
+            keys = [str(k).strip() for k in override_keys if str(k).strip()]
+
+    count_hint = meta.get("overrides_count")
+    count = None
+    if isinstance(count_hint, int) and count_hint >= 0:
+        count = count_hint
+
+    filtered_keys = [k for k in keys if k]
+    sorted_keys = sorted(filtered_keys, key=lambda value: value.lower())
+
+    if count is None:
+        count = len(sorted_keys)
+
+    if count == 0:
+        return "Overrides: none"
+
+    display_keys = sorted_keys[:5]
+    preview = ", ".join(_sanitize_inline(k) for k in display_keys)
+    if len(sorted_keys) > len(display_keys) or (count and count > len(display_keys)):
+        preview = f"{preview}, …" if preview else "…"
+
+    plural = "key" if count == 1 else "keys"
+    if preview:
+        return f"Overrides: {count} {plural} — {preview}"
+    return f"Overrides: {count} {plural}"
+
+
+def _format_source(meta: Mapping[str, Any]) -> str:
+    source_raw = str(meta.get("source") or "")
+    source_text = _map_source_label(source_raw)
+    loaded_line = f"Loaded from: {_sanitize_inline(source_text)}"
+    overrides_line = _format_overrides(meta)
+    if overrides_line:
+        return "\n".join([loaded_line, overrides_line])
+    return loaded_line
+
+
+def _format_ops_channel(info: Mapping[str, Any]) -> str:
+    configured = bool(info.get("id"))
+    if not configured:
+        return "Logs → ⚠️ Missing"
+
+    label = info.get("label")
+    short_id = _format_short_id(info.get("id"))
+    detail = None
+    if isinstance(label, str) and label.strip():
+        detail = _sanitize_inline(label)
+    elif short_id:
+        detail = short_id
+
+    suffix = f" *({detail})*" if detail else ""
+    return f"Logs → ✅ Configured{suffix}"
+
+
+def build_config_embed(
+    snapshot: Mapping[str, Any],
+    meta: Mapping[str, Any] | object,
+    *,
+    bot_version: str,
+    coreops_version: str = COREOPS_VERSION,
+) -> discord.Embed:
+    extras = _config_meta_extras(meta)
+    env = extras.get("environment") or snapshot.get("ENV_NAME") or "n/a"
+    env_text = _sanitize_inline(env)
+
+    connected_entries = []
+    allow_entries = []
+    sheet_entries = []
+    ops_info: Mapping[str, Any] = {}
+
+    raw_connected = extras.get("connected_guilds")
+    if isinstance(raw_connected, Sequence) and not isinstance(raw_connected, (str, bytes)):
+        connected_entries = [item for item in raw_connected if isinstance(item, Mapping)]
+
+    raw_allow = extras.get("allowlist")
+    if isinstance(raw_allow, Sequence) and not isinstance(raw_allow, (str, bytes)):
+        allow_entries = [item for item in raw_allow if isinstance(item, Mapping)]
+
+    raw_sheets = extras.get("sheets")
+    if isinstance(raw_sheets, Sequence) and not isinstance(raw_sheets, (str, bytes)):
+        sheet_entries = [item for item in raw_sheets if isinstance(item, Mapping)]
+
+    raw_ops_info = extras.get("ops_channel")
+    if isinstance(raw_ops_info, Mapping):
+        ops_info = raw_ops_info
+
+    colour_factory = getattr(discord.Colour, "blurple", None)
+    colour = colour_factory() if callable(colour_factory) else discord.Colour.blue()
+
+    connected_count = len(connected_entries)
+    allow_count = len(allow_entries)
+    description = (
+        f"Environment: {env_text}"
+        f" • Connected guilds: {connected_count}"
+        f" • Allow-list: {allow_count}"
+    )
+
+    embed = discord.Embed(title="Config Overview", description=description, colour=colour)
+
+    sheets_value = _format_sheet_entries(sheet_entries)
+    embed.add_field(name="Sheets", value=sheets_value or "n/a", inline=False)
+
+    guild_value = _format_guild_access(connected_entries, allow_entries)
+    embed.add_field(name="Guild Access", value=guild_value or "n/a", inline=False)
+
+    meta_mapping: Mapping[str, Any]
+    if isinstance(meta, Mapping):
+        meta_mapping = meta
+    else:
+        meta_mapping = {}
+    source_value = _format_source(meta_mapping)
+    embed.add_field(name="Source", value=source_value or "n/a", inline=False)
+
+    ops_value = _format_ops_channel(ops_info)
+    embed.add_field(name="Ops Channel", value=ops_value or "n/a", inline=False)
+
+    footer_text = (
+        f"Bot v{_sanitize_inline(bot_version)}"
+        f" · CoreOps v{_sanitize_inline(coreops_version)}"
+    )
+    embed.set_footer(text=footer_text)
+    return embed
 
 
 def _format_humanized(seconds: int | None) -> str:

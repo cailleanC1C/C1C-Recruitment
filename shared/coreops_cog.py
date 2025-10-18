@@ -31,7 +31,6 @@ from shared.config import (
     reload_config,
     get_onboarding_sheet_id,
     get_recruitment_sheet_id,
-    redact_ids,
     redact_value,
 )
 from shared.coreops_render import (
@@ -39,6 +38,7 @@ from shared.coreops_render import (
     DigestSheetEntry,
     DigestSheetsClientSummary,
     RefreshEmbedRow,
+    build_config_embed,
     build_digest_embed,
     build_digest_line,
     build_health_embed,
@@ -1226,20 +1226,88 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     async def _config_impl(self, ctx: commands.Context) -> None:
+        snapshot = get_config_snapshot()
         env = get_env_name()
-        allow = get_allowed_guild_ids()
-        recruitment_sheet = "set" if get_recruitment_sheet_id() else "missing"
-        onboarding_sheet = "set" if get_onboarding_sheet_id() else "missing"
+        bot_version = str(snapshot.get("BOT_VERSION") or os.getenv("BOT_VERSION", "dev"))
 
-        lines = [
-            f"env: `{env}`",
-            f"allow-list: {len(allow)} ({redact_ids(sorted(allow))})",
-            f"connected guilds: {len(self.bot.guilds)}",
-            f"recruitment sheet: {recruitment_sheet}",
-            f"onboarding sheet: {onboarding_sheet}",
+        allow_ids = sorted(get_allowed_guild_ids())
+        connected_guilds = []
+        for guild in sorted(getattr(self.bot, "guilds", []), key=lambda g: (getattr(g, "name", "") or "").lower()):
+            name = getattr(guild, "name", None) or "Guild"
+            label = f"{name} [{env}]" if env else name
+            connected_guilds.append(
+                {
+                    "id": getattr(guild, "id", None),
+                    "display": label,
+                }
+            )
+
+        allow_entries = []
+        for guild_id in allow_ids:
+            label: Optional[str] = None
+            if guild_id:
+                resolved = _trim_resolved_label(self._id_resolver.resolve(self.bot, guild_id))
+                if resolved and resolved not in {"(not found)", ""}:
+                    label = resolved
+            allow_entries.append({"id": guild_id, "label": label})
+
+        def _sheet_title_from_meta(meta: object, key: str) -> Optional[str]:
+            if not isinstance(meta, dict):
+                return None
+            sheets_meta = meta.get("sheets")
+            if isinstance(sheets_meta, dict):
+                entry = sheets_meta.get(key)
+                if isinstance(entry, dict):
+                    for candidate in ("title", "name", "label"):
+                        value = entry.get(candidate)
+                        if isinstance(value, str) and value.strip():
+                            return value.strip()
+                elif isinstance(entry, str) and entry.strip():
+                    return entry.strip()
+            return None
+
+        recruitment_sheet_id = get_recruitment_sheet_id()
+        onboarding_sheet_id = get_onboarding_sheet_id()
+        meta_raw = _config_meta_from_app()
+        sheet_entries = [
+            {
+                "label": "Recruitment Sheet",
+                "id": recruitment_sheet_id or None,
+                "friendly_name": _sheet_title_from_meta(meta_raw, "recruitment"),
+                "fallback_name": "Sheet #1",
+            },
+            {
+                "label": "Onboarding Sheet",
+                "id": onboarding_sheet_id or None,
+                "friendly_name": _sheet_title_from_meta(meta_raw, "onboarding"),
+                "fallback_name": "Sheet #2",
+            },
         ]
 
-        await ctx.reply(str(sanitize_text("\n".join(lines))))
+        log_channel_id = snapshot.get("LOG_CHANNEL_ID")
+        log_label: Optional[str] = None
+        if isinstance(log_channel_id, int) and log_channel_id > 0:
+            resolved = _trim_resolved_label(self._id_resolver.resolve(self.bot, log_channel_id))
+            if resolved and resolved not in {"(not found)", ""}:
+                log_label = resolved
+
+        meta_payload = dict(meta_raw) if isinstance(meta_raw, dict) else {}
+        meta_payload["_extras"] = {
+            "environment": env,
+            "connected_guilds": connected_guilds,
+            "allowlist": allow_entries,
+            "sheets": sheet_entries,
+            "ops_channel": {"id": log_channel_id, "label": log_label},
+        }
+
+        embed = build_config_embed(
+            snapshot,
+            meta_payload,
+            bot_version=bot_version,
+            coreops_version=COREOPS_VERSION,
+        )
+
+        await ctx.reply(embed=sanitize_embed(embed))
 
     @tier("staff")
     @rec.command(name="config")
