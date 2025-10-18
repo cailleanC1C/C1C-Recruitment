@@ -66,7 +66,6 @@ from .coreops_rbac import (
     is_admin_member,
     is_staff_member,
     ops_only,
-    staff_only,
 )
 
 UTC = dt.timezone.utc
@@ -245,22 +244,6 @@ def _staff_check() -> commands.Check[Any]:
     async def predicate(ctx: commands.Context) -> bool:
         author = getattr(ctx, "author", None)
         return bool(is_staff_member(author) or is_admin_member(author))
-
-    return commands.check(predicate)
-
-
-def staff_only() -> commands.Check[Any]:
-    async def predicate(ctx: commands.Context) -> bool:
-        author = getattr(ctx, "author", None)
-        if is_staff_member(author) or is_admin_member(author):
-            return True
-        if getattr(ctx, "_coreops_suppress_denials", False):
-            raise commands.CheckFailure("Staff only.")
-        try:
-            await ctx.reply("Staff only.")
-        except Exception:
-            pass
-        raise commands.CheckFailure("Staff only.")
 
     return commands.check(predicate)
 
@@ -711,7 +694,7 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @rec.command(name="health")
-    @staff_only()
+    @ops_only()
     async def rec_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
@@ -974,7 +957,7 @@ class CoreOpsCog(commands.Cog):
     @tier("staff")
     @rec.command(name="checksheet")
     @guild_only_denied_msg()
-    @staff_only()
+    @ops_only()
     async def rec_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx)
 
@@ -1113,7 +1096,7 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @rec.command(name="digest")
-    @staff_only()
+    @ops_only()
     async def rec_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
