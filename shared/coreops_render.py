@@ -4,9 +4,12 @@ import datetime as dt
 import os
 import platform
 import time
+from dataclasses import dataclass
+from typing import Sequence
+
 import discord
 
-from shared.help import build_coreops_footer
+from shared.help import COREOPS_VERSION, build_coreops_footer
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))
@@ -65,3 +68,75 @@ def build_env_embed(*, bot_name: str, env: str, version: str, cfg_meta: dict[str
     e.set_footer(text=build_coreops_footer(bot_version=version))
     e.timestamp = dt.datetime.now(dt.timezone.utc)
     return e
+
+
+@dataclass(frozen=True)
+class RefreshEmbedRow:
+    bucket: str
+    duration: str
+    result: str
+    retries: str
+    error: str
+
+
+def build_refresh_embed(
+    *,
+    scope: str,
+    actor_display: str,
+    trigger: str,
+    rows: Sequence[RefreshEmbedRow],
+    total_ms: int,
+    bot_version: str,
+    coreops_version: str = COREOPS_VERSION,
+    now_utc: dt.datetime | None = None,
+) -> discord.Embed:
+    timestamp = now_utc or dt.datetime.now(dt.timezone.utc)
+    embed = discord.Embed(
+        title=f"Refresh • {scope}",
+        colour=getattr(discord.Colour, "dark_theme", discord.Colour.dark_teal)(),
+    )
+
+    actor_line = f"actor: {actor_display.strip() or actor_display} • trigger: {trigger}"
+    embed.description = actor_line
+
+    headers = ["bucket", "duration", "result", "retries", "error"]
+    data = [
+        [
+            row.bucket,
+            row.duration,
+            row.result,
+            row.retries,
+            row.error,
+        ]
+        for row in rows
+    ]
+
+    if data:
+        widths = [len(header) for header in headers]
+        for row in data:
+            for idx, cell in enumerate(row):
+                widths[idx] = max(widths[idx], len(cell))
+
+        header_line = " | ".join(
+            header.ljust(widths[idx]) for idx, header in enumerate(headers)
+        )
+        separator_line = "-+-".join("-" * width for width in widths)
+        body_lines = [
+            " | ".join(cell.ljust(widths[idx]) for idx, cell in enumerate(row))
+            for row in data
+        ]
+        table = "\n".join([header_line, separator_line, *body_lines])
+    else:
+        table = "no buckets"
+
+    embed.add_field(name="Buckets", value=f"```{table}```", inline=False)
+    footer_notes = f" · total: {total_ms}ms · {timestamp:%Y-%m-%d %H:%M:%S} UTC"
+    embed.timestamp = timestamp
+    embed.set_footer(
+        text=build_coreops_footer(
+            bot_version=bot_version,
+            coreops_version=coreops_version,
+            notes=footer_notes,
+        )
+    )
+    return embed
