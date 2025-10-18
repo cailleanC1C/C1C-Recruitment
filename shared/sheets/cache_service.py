@@ -181,3 +181,37 @@ cache = CacheService()
 def capabilities() -> Dict[str, Dict[str, Any]]:
     """Expose cache capabilities for convenience imports."""
     return cache.capabilities()
+
+
+def get_bucket_snapshot(name: str) -> Dict[str, Any]:
+    """Return a read-only snapshot for ``name`` (fail-soft)."""
+
+    try:
+        bucket = cache.get_bucket(name)
+    except Exception:
+        bucket = None
+
+    if bucket is None:
+        return {
+            "name": name,
+            "ttl_sec": None,
+            "last_refresh_at": None,
+            "next_refresh_at": None,
+            "last_result": None,
+            "last_error": f"unknown bucket: {name}",
+        }
+
+    next_refresh: Optional[dt.datetime]
+    try:
+        next_refresh = bucket.next_refresh_at()
+    except Exception:
+        next_refresh = None
+
+    return {
+        "name": bucket.name,
+        "ttl_sec": getattr(bucket, "ttl_sec", None),
+        "last_refresh_at": getattr(bucket, "last_refresh", None),
+        "next_refresh_at": next_refresh,
+        "last_result": getattr(bucket, "last_result", None),
+        "last_error": getattr(bucket, "last_error", None),
+    }
