@@ -4,13 +4,13 @@ from __future__ import annotations
 import datetime as dt
 import os
 import platform
-import time
 from dataclasses import dataclass, field
 from typing import Sequence
 
 import discord
 
 from shared.help import COREOPS_VERSION, build_coreops_footer
+from shared.utils import humanize_duration
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))
@@ -23,22 +23,118 @@ def build_digest_line(*, bot_name: str, env: str, uptime_sec: float, latency_s: 
     return f"{bot_name} [{env}] · up {_hms(uptime_sec)} · rt {lat} · last {int(last_event_age)}s"
 
 
+_EM_DOT = " • "
+
+
+def _sanitize_inline(text: object, *, allow_empty: bool = False) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned and not allow_empty:
+        return "n/a"
+    return cleaned.replace("`", "ʼ")
+
+
+def _format_humanized(seconds: int | None) -> str:
+    if seconds is None:
+        return "n/a"
+    return humanize_duration(int(max(0, seconds)))
+
+
+def _format_latency_ms(latency_ms: int | None) -> str:
+    if latency_ms is None:
+        return "n/a"
+    return f"{int(latency_ms)}ms"
+
+
+def _format_latency_seconds(latency_s: float | None) -> str:
+    if latency_s is None:
+        return "n/a"
+    return f"{int(max(0, latency_s) * 1000):d}ms"
+
+
+def _format_next_refresh(delta: int | None, at: dt.datetime | None) -> str:
+    if delta is not None:
+        if delta == 0:
+            return "now"
+        direction = "in" if delta > 0 else "ago"
+        return f"{direction} {_format_humanized(abs(delta))}"
+    if at is not None:
+        try:
+            return at.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        except Exception:
+            return at.isoformat()
+    return "n/a"
+
+
+def _build_cache_field(summary: DigestCacheSummary | None) -> str:
+    if summary is None:
+        first_line = "buckets: n/a • stale: n/a • errors: n/a"
+        next_line = "next refresh: n/a"
+        return "\n".join([first_line, next_line])
+
+    total_text = "n/a" if summary.total is None else str(summary.total)
+    stale_text = "n/a" if summary.stale is None else str(summary.stale)
+    error_text = "n/a" if summary.errors_total is None else str(summary.errors_total)
+    lines = [f"buckets: {total_text} • stale: {stale_text} • errors: {error_text}"]
+
+    if summary.errors_total and summary.errors_total > 0:
+        for error in list(summary.errors)[:3]:
+            bucket = _sanitize_inline(error.bucket, allow_empty=True) or "(unknown)"
+            message = _sanitize_inline(error.message, allow_empty=True) or "n/a"
+            lines.append(f"• {bucket}: {message}")
+
+    next_refresh = _format_next_refresh(summary.next_refresh_delta, summary.next_refresh_at)
+    lines.append(f"next refresh: {next_refresh}")
+    return "\n".join(lines)
+
+
+def _build_sheets_field(summary: DigestSheetsSummary | None) -> str:
+    if summary is None:
+        first_line = "last success: n/a • latency: n/a • retries: n/a"
+        next_line = "next refresh: n/a"
+        return "\n".join([first_line, next_line])
+
+    success_text = _format_humanized(summary.last_success_age) if summary.last_success_age is not None else "n/a"
+    if success_text != "n/a":
+        success_text = f"{success_text} ago"
+    latency_text = _format_latency_ms(summary.latency_ms)
+    retries_text = "n/a" if summary.retries is None else str(summary.retries)
+
+    lines = [f"last success: {success_text} • latency: {latency_text} • retries: {retries_text}"]
+
+    if summary.last_error:
+        lines.append(f"last error: {_sanitize_inline(summary.last_error)}")
+
+    next_refresh = _format_next_refresh(summary.next_refresh_delta, summary.next_refresh_at)
+    lines.append(f"next refresh: {next_refresh}")
+    return "\n".join(lines)
+
+
+def _format_description(data: DigestEmbedData) -> str:
+    uptime = _format_humanized(data.uptime_seconds if data.uptime_seconds is not None else None)
+    latency = _format_latency_seconds(data.latency_seconds)
+    gateway = _format_humanized(data.gateway_age_seconds if data.gateway_age_seconds is not None else None)
+    return (
+        f"bot: {_sanitize_inline(data.bot_name)}{_EM_DOT}env: {_sanitize_inline(data.env)}{_EM_DOT}"
+        f"uptime: {uptime}{_EM_DOT}latency: {latency}{_EM_DOT}gateway: last {gateway}"
+    )
+
+
 def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
-    """
-    Back-compat wrapper: build a simple embed using the existing digest line.
-    This restores imports for CoreOpsCog without changing digest semantics.
-    """
     colour_factory = getattr(discord.Colour, "blurple", None)
     color = colour_factory() if callable(colour_factory) else discord.Colour.blue()
-    desc = build_digest_line(
-        bot_name=data.bot_name,
-        env=data.env,
-        uptime_sec=float(data.uptime_seconds or 0),
-        latency_s=data.latency_seconds,
-        last_event_age=float(data.gateway_age_seconds or 0),
+    embed = discord.Embed(title="Digest", description=_format_description(data), colour=color)
+
+    embed.add_field(name="Caches", value=_build_cache_field(data.cache), inline=False)
+    embed.add_field(name="Sheets", value=_build_sheets_field(data.sheets), inline=False)
+
+    timestamp = data.timestamp.astimezone(dt.timezone.utc)
+    footer_text = (
+        f"Bot v{_sanitize_inline(data.bot_version)} · "
+        f"CoreOps v{_sanitize_inline(data.coreops_version)} · "
+        f"{timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}"
     )
-    embed = discord.Embed(title="Digest", description=desc, colour=color)
-    # Intentionally do not set a timestamp to match existing digest behavior.
+    embed.set_footer(text=footer_text)
+    embed.timestamp = timestamp
     return embed
 
 
@@ -50,14 +146,9 @@ class DigestCacheError:
 
 @dataclass(frozen=True)
 class DigestCacheSummary:
-    bucket: str = ""
-    ttl: str | None = None
-    retries: int = 0
-    last_result: str | None = None
-    error: str | None = None
     total: int | None = None
     stale: int | None = None
-    recent_errors: int | None = None
+    errors_total: int | None = None
     next_refresh_at: dt.datetime | None = None
     next_refresh_delta: int | None = None
     errors: Sequence[DigestCacheError] = ()
@@ -66,11 +157,12 @@ class DigestCacheSummary:
 @dataclass(frozen=True)
 class DigestSheetsSummary:
     # Keep fields optional so we can fail-soft if any signal isn't available
-    last_success: str | None = None
-    last_error: str | None = None
+    last_success_age: int | None = None
     latency_ms: int | None = None
     retries: int | None = None
-    next_refresh: str | None = None
+    last_error: str | None = None
+    next_refresh_at: dt.datetime | None = None
+    next_refresh_delta: int | None = None
 
 
 @dataclass(frozen=True)
