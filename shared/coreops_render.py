@@ -32,9 +32,10 @@ class DigestCacheError:
 @dataclass(frozen=True)
 class DigestCacheSummary:
     bucket: str = ""
-    ttl: str = ""
+    ttl: str | None = None
     retries: int = 0
-    last_result: str = ""
+    last_result: str | None = None
+    error: str | None = None
     total: int | None = None
     stale: int | None = None
     recent_errors: int | None = None
