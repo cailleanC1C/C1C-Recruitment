@@ -171,6 +171,8 @@ async def on_ready():
         bot._cron_summary_task = True
         log.info("[cron] summary scheduler started (00:05Z)")
 
+    runtime.schedule_startup_preload()
+
 
 @bot.event
 async def on_connect():

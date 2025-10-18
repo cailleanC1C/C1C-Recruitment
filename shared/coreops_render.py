@@ -96,7 +96,7 @@ def _build_sheets_field(entries: Sequence[DigestSheetEntry]) -> str:
         )
         retries_text = "n/a" if entry.retries is None else str(entry.retries)
         error_raw = _sanitize_inline(entry.error, allow_empty=True)
-        error_text = error_raw if error_raw else "-"
+        error_text = error_raw if error_raw else "n/a"
         line = (
             f"{entry.display_name} — {status} · "
             f"age {age_text} · next {next_text} · "
@@ -127,8 +127,8 @@ def _format_description(data: DigestEmbedData) -> str:
     latency = _format_latency_seconds(data.latency_seconds)
     gateway = _format_humanized(data.gateway_age_seconds if data.gateway_age_seconds is not None else None)
     return (
-        f"env: {_sanitize_inline(data.env)}{_EM_DOT}uptime: {uptime}{_EM_DOT}"
-        f"latency: {latency}{_EM_DOT}gateway: last {gateway}"
+        f"{_sanitize_inline(data.env)}{_EM_DOT}uptime {uptime}{_EM_DOT}"
+        f"latency {latency}{_EM_DOT}gateway last {gateway}"
     )
 
 
@@ -142,7 +142,7 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
 
     tip_text = _maybe_build_tip(data.sheets)
     if tip_text:
-        embed.add_field(name="Tip", value=tip_text, inline=False)
+        embed.add_field(name="​", value=tip_text, inline=False)
 
     footer_text = (
         f"Bot v{_sanitize_inline(data.bot_version)} · "
@@ -153,15 +153,8 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
 
 
 def _maybe_build_tip(entries: Sequence[DigestSheetEntry]) -> str | None:
-    for entry in entries:
-        if entry.display_name.lower() != "claninfo":
-            continue
-        status = (entry.status or "").strip().lower()
-        status_ok = status in {"ok", "n/a", ""}
-        age_unknown = entry.age_seconds is None or entry.age_estimated
-        if status_ok and age_unknown:
-            return 'Tip: need latest openings? run "!rec refresh clans" and retry.'
-        break
+    if entries:
+        return 'Need latest openings? run "!rec refresh clansinfo" and retry.'
     return None
 
 
