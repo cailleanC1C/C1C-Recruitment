@@ -55,6 +55,7 @@ from shared.help import (
 )
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
+from shared.sheets.async_core import aget_worksheet
 from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
@@ -65,6 +66,7 @@ from .coreops_rbac import (
     is_admin_member,
     is_staff_member,
     ops_only,
+    staff_only,
 )
 
 UTC = dt.timezone.utc
@@ -96,6 +98,41 @@ _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("clans", "ClanInfo"),
     ("templates", "Templates"),
     ("clan_tags", "ClanTags"),
+)
+_CHECKSHEET_PING_TIMEOUT_SEC = 8.0
+
+
+@dataclass(frozen=True)
+class _ChecksheetBucket:
+    key: str
+    display: str
+    sheet_id_source: str
+    config_module: str
+    config_keys: Tuple[str, ...]
+
+
+_CHECKSHEET_BUCKETS: Tuple[_ChecksheetBucket, ...] = (
+    _ChecksheetBucket(
+        key="clans",
+        display="ClanInfo",
+        sheet_id_source="recruitment",
+        config_module="sheets.recruitment",
+        config_keys=("clans_tab",),
+    ),
+    _ChecksheetBucket(
+        key="templates",
+        display="Templates",
+        sheet_id_source="recruitment",
+        config_module="sheets.recruitment",
+        config_keys=("welcome_templates_tab",),
+    ),
+    _ChecksheetBucket(
+        key="clan_tags",
+        display="ClanTags",
+        sheet_id_source="onboarding",
+        config_module="sheets.onboarding",
+        config_keys=("clanlist_tab",),
+    ),
 )
 
 
@@ -800,6 +837,153 @@ class CoreOpsCog(commands.Cog):
             )
 
         return entries
+
+    def _resolve_sheet_id_for_bucket(self, bucket: _ChecksheetBucket) -> Optional[str]:
+        if bucket.sheet_id_source == "recruitment":
+            sheet_id = get_recruitment_sheet_id()
+        elif bucket.sheet_id_source == "onboarding":
+            sheet_id = get_onboarding_sheet_id()
+        else:
+            sheet_id = ""
+        sheet_id = str(sheet_id or "").strip()
+        return sheet_id or None
+
+    def _resolve_tab_name_for_bucket(self, bucket: _ChecksheetBucket) -> Optional[str]:
+        snapshot = _sheet_cache_snapshot(bucket.config_module)
+        for key in bucket.config_keys:
+            candidates = {key, key.lower(), key.upper()}
+            for candidate in candidates:
+                value = snapshot.get(candidate)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+        config_snapshot = get_config_snapshot()
+        for key in bucket.config_keys:
+            candidate = key.upper()
+            value = config_snapshot.get(candidate)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    def _count_rows(self, data: object) -> Optional[int]:
+        if data is None:
+            return None
+        if isinstance(data, (str, bytes)):
+            return None
+        try:
+            return len(data)  # type: ignore[arg-type]
+        except Exception:
+            return None
+
+    def _get_cached_row_count(self, bucket: _ChecksheetBucket) -> Optional[int]:
+        try:
+            cache_bucket = sheets_cache.get_bucket(bucket.key)
+        except Exception:
+            return None
+        if cache_bucket is None:
+            return None
+        value = getattr(cache_bucket, "value", None)
+        count = self._count_rows(value)
+        if count is None:
+            return None
+        if bucket.key == "clans" and isinstance(value, list):
+            return max(0, int(count) - 1)
+        return int(count)
+
+    def _derive_last_status(
+        self, snapshot: cache_telemetry.CacheSnapshot
+    ) -> tuple[str, Optional[str]]:
+        error = snapshot.last_error or ""
+        if error:
+            return "fail", self._trim_error_text(error)
+
+        result = (snapshot.last_result or "").strip().lower()
+        if result:
+            if result in {"ok", "retry_ok"}:
+                return "ok", None
+            return "fail", self._trim_error_text(snapshot.last_result or result)
+
+        if snapshot.available:
+            return "ok", None
+        return "n/a", None
+
+    async def _probe_bucket(
+        self, bucket: _ChecksheetBucket, *, sheet_id: Optional[str], tab_name: Optional[str]
+    ) -> tuple[bool, Optional[str]]:
+        if not sheet_id:
+            return False, "missing sheet id"
+        if not tab_name:
+            return False, "missing tab name"
+        try:
+            await asyncio.wait_for(
+                aget_worksheet(sheet_id, tab_name), timeout=_CHECKSHEET_PING_TIMEOUT_SEC
+            )
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            return False, "timeout"
+        except Exception as exc:
+            return False, self._trim_error_text(exc)
+        return True, None
+
+    async def _checksheet_impl(self, ctx: commands.Context) -> None:
+        env = get_env_name()
+        bot_version = os.getenv("BOT_VERSION", "dev")
+        lines: list[str] = []
+
+        for bucket in _CHECKSHEET_BUCKETS:
+            snapshot = cache_telemetry.get_snapshot(bucket.key)
+            row_count = self._get_cached_row_count(bucket)
+            age_text = snapshot.age_human or "n/a"
+            last_status, last_error = self._derive_last_status(snapshot)
+
+            sheet_id = self._resolve_sheet_id_for_bucket(bucket)
+            tab_name = self._resolve_tab_name_for_bucket(bucket)
+            ok, error_text = await self._probe_bucket(
+                bucket, sheet_id=sheet_id, tab_name=tab_name
+            )
+
+            status_marker = "🟢" if ok else "🔴"
+            status_text = "ok" if ok else "fail"
+            rows_text = str(row_count) if row_count is not None else "n/a"
+
+            parts = [
+                f"{bucket.display} — {status_marker} {status_text}",
+                f"rows {rows_text}",
+                f"age {age_text}",
+                f"last {last_status}",
+            ]
+
+            if last_error:
+                parts.append(f"last_err {last_error}")
+            if error_text:
+                parts.append(f"error {error_text}")
+
+            lines.append(" · ".join(parts))
+
+        embed = discord.Embed(title="Checksheet", colour=discord.Colour.dark_teal())
+        description_lines = [f"env: {env}"]
+        description_lines.extend(lines)
+        embed.description = "\n".join(description_lines)
+
+        footer_text = build_coreops_footer(bot_version=bot_version, coreops_version=COREOPS_VERSION)
+        embed.set_footer(text=footer_text)
+
+        await ctx.reply(embed=sanitize_embed(embed))
+
+    @tier("staff")
+    @rec.command(name="checksheet")
+    @guild_only_denied_msg()
+    @staff_only()
+    async def rec_checksheet(self, ctx: commands.Context) -> None:
+        await self._checksheet_impl(ctx)
+
+    @tier("staff")
+    @commands.command(name="checksheet", hidden=True)
+    @guild_only_denied_msg()
+    @ops_only()
+    async def checksheet(self, ctx: commands.Context) -> None:
+        await self._checksheet_impl(ctx)
 
     def _collect_sheets_client_summary(self, now: dt.datetime) -> Optional[DigestSheetsClientSummary]:
         try:
