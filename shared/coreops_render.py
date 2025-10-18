@@ -190,6 +190,76 @@ class DigestSheetsClientSummary:
     retries: int | None = None
     last_error: str | None = None
 
+
+@dataclass(frozen=True)
+class ChecksheetTabEntry:
+    name: str
+    ok: bool
+    rows: str
+    headers: str
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class ChecksheetSheetEntry:
+    title: str
+    sheet_id: str
+    tabs: Sequence[ChecksheetTabEntry]
+    warnings: Sequence[str] = ()
+
+
+@dataclass(frozen=True)
+class ChecksheetEmbedData:
+    sheets: Sequence[ChecksheetSheetEntry]
+    bot_version: str
+    coreops_version: str = COREOPS_VERSION
+
+
+def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
+    colour_factory = getattr(discord.Colour, "dark_teal", None)
+    colour = colour_factory() if callable(colour_factory) else discord.Colour.teal()
+    embed = discord.Embed(title="Checksheet — Tabs & Headers", colour=colour)
+
+    embed.add_field(name="Backend", value="Google Sheets", inline=False)
+
+    for sheet in data.sheets:
+        lines: list[str] = []
+        sheet_ok = not sheet.warnings and all(tab.ok for tab in sheet.tabs)
+        icon = "✅" if sheet_ok else "🔴"
+        title_text = _sanitize_inline(sheet.title)
+        sheet_id = _sanitize_inline(sheet.sheet_id or "—")
+        lines.append(f"{icon} {title_text} — {sheet_id}")
+
+        for warning in sheet.warnings:
+            lines.append(f"⚠️ {_sanitize_inline(warning)}")
+
+        if sheet.warnings and sheet.tabs:
+            lines.append("")
+
+        for tab in sheet.tabs:
+            tab_name = _sanitize_inline(tab.name)
+            headers_preview = _sanitize_inline(tab.headers) if tab.headers else "—"
+            if tab.ok:
+                rows_text = _sanitize_inline(tab.rows or "0")
+                lines.append(f"✅ {tab_name} — {rows_text} rows")
+            else:
+                rows_text = _sanitize_inline(tab.rows or "n/a")
+                lines.append(f"🔴 {tab_name} — rows {rows_text}")
+            lines.append(f"Headers: {headers_preview if headers_preview else '—'}")
+            if not tab.ok and tab.error:
+                lines.append(f"Error: {_sanitize_inline(tab.error)}")
+            lines.append("")
+
+        if lines and lines[-1] == "":
+            lines.pop()
+
+        block = "\n".join(lines) if lines else "—"
+        embed.add_field(name="​", value=block, inline=False)
+
+    footer_text = f"Bot v{_sanitize_inline(data.bot_version)} · CoreOps v{_sanitize_inline(data.coreops_version)}"
+    embed.set_footer(text=footer_text)
+    return embed
+
 def build_health_embed(
     *,
     bot_name: str,

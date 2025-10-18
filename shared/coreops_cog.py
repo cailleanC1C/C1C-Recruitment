@@ -11,7 +11,7 @@ import sys
 import time
 from importlib import import_module
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import discord
 from discord.ext import commands
@@ -35,10 +35,14 @@ from shared.config import (
     redact_value,
 )
 from shared.coreops_render import (
+    ChecksheetEmbedData,
+    ChecksheetSheetEntry,
+    ChecksheetTabEntry,
     DigestEmbedData,
     DigestSheetEntry,
     DigestSheetsClientSummary,
     RefreshEmbedRow,
+    build_checksheet_tabs_embed,
     build_digest_embed,
     build_digest_line,
     build_health_embed,
@@ -55,7 +59,7 @@ from shared.help import (
 )
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
-from shared.sheets.async_core import aget_worksheet
+from shared.sheets.async_core import aget_worksheet, aopen_by_key, acall_with_backoff
 from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
@@ -98,41 +102,23 @@ _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("templates", "Templates"),
     ("clan_tags", "ClanTags"),
 )
-_CHECKSHEET_PING_TIMEOUT_SEC = 8.0
 
 
 @dataclass(frozen=True)
-class _ChecksheetBucket:
-    key: str
-    display: str
-    sheet_id_source: str
-    config_module: str
-    config_keys: Tuple[str, ...]
+class _ChecksheetSheetTarget:
+    label: str
+    sheet_id_key: str
+    config_tab_key: str
+    sheet_id: str
+    config_tab: str
 
 
-_CHECKSHEET_BUCKETS: Tuple[_ChecksheetBucket, ...] = (
-    _ChecksheetBucket(
-        key="clans",
-        display="ClanInfo",
-        sheet_id_source="recruitment",
-        config_module="sheets.recruitment",
-        config_keys=("clans_tab",),
-    ),
-    _ChecksheetBucket(
-        key="templates",
-        display="Templates",
-        sheet_id_source="recruitment",
-        config_module="sheets.recruitment",
-        config_keys=("welcome_templates_tab",),
-    ),
-    _ChecksheetBucket(
-        key="clan_tags",
-        display="ClanTags",
-        sheet_id_source="onboarding",
-        config_module="sheets.onboarding",
-        config_keys=("clanlist_tab",),
-    ),
+_CHECKSHEET_SHEET_CONFIGS: Tuple[Tuple[str, str, str], ...] = (
+    ("Recruitment", "RECRUITMENT_SHEET_ID", "RECRUITMENT_CONFIG_TAB"),
+    ("Onboarding", "ONBOARDING_SHEET_ID", "ONBOARDING_CONFIG_TAB"),
 )
+
+_CHECKSHEET_ROW_LIMIT = 5000
 
 
 @dataclass(frozen=True)
@@ -821,136 +807,342 @@ class CoreOpsCog(commands.Cog):
 
         return entries
 
-    def _resolve_sheet_id_for_bucket(self, bucket: _ChecksheetBucket) -> Optional[str]:
-        if bucket.sheet_id_source == "recruitment":
-            sheet_id = get_recruitment_sheet_id()
-        elif bucket.sheet_id_source == "onboarding":
-            sheet_id = get_onboarding_sheet_id()
-        else:
-            sheet_id = ""
-        sheet_id = str(sheet_id or "").strip()
-        return sheet_id or None
+    def _log_checksheet_issue(
+        self,
+        *,
+        level: int,
+        sheet_id: str,
+        sheet_title: str,
+        tab_name: Optional[str],
+        detail: str,
+        context: str,
+    ) -> None:
+        msg, extra = sanitize_log(
+            "checksheet issue",
+            extra={
+                "sheet_id": sheet_id or "-",
+                "sheet_title": sheet_title or "-",
+                "tab": tab_name or "-",
+                "context": context,
+                "detail": detail,
+            },
+        )
+        logger.log(level, msg, extra=extra)
 
-    def _resolve_tab_name_for_bucket(self, bucket: _ChecksheetBucket) -> Optional[str]:
-        snapshot = _sheet_cache_snapshot(bucket.config_module)
-        for key in bucket.config_keys:
-            candidates = {key, key.lower(), key.upper()}
-            for candidate in candidates:
-                value = snapshot.get(candidate)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
+    def _normalize_tab_header(self, header: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "", str(header or "").lower())
+        return cleaned
 
-        config_snapshot = get_config_snapshot()
-        for key in bucket.config_keys:
-            candidate = key.upper()
-            value = config_snapshot.get(candidate)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return None
+    def _parse_config_tab_names(self, records: Sequence[Mapping[str, Any]]) -> list[str]:
+        candidates = {
+            "tab",
+            "worksheet",
+            "worksheettab",
+            "worksheetname",
+            "sheet",
+            "sheetname",
+            "tabname",
+            "worksheettabname",
+        }
+        names: list[str] = []
+        seen: Set[str] = set()
+        for row in records:
+            if not isinstance(row, Mapping):
+                continue
+            for key, value in row.items():
+                normalized = self._normalize_tab_header(key)
+                if normalized not in candidates:
+                    continue
+                candidate = str(value or "").strip()
+                if not candidate:
+                    continue
+                dedupe_key = candidate.lower()
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                names.append(candidate)
+        return names
 
-    def _count_rows(self, data: object) -> Optional[int]:
-        if data is None:
-            return None
-        if isinstance(data, (str, bytes)):
-            return None
+    def _format_headers_preview(self, header_row: Sequence[object]) -> str:
+        preview: list[str] = []
+        for raw in list(header_row)[:12]:
+            text = str(raw or "").strip()
+            if not text:
+                continue
+            preview.append(text.replace("\n", " "))
+        return ", ".join(preview) if preview else "—"
+
+    async def _determine_row_text(self, worksheet) -> tuple[str, Optional[str]]:
         try:
-            return len(data)  # type: ignore[arg-type]
-        except Exception:
-            return None
-
-    def _get_cached_row_count(self, bucket: _ChecksheetBucket) -> Optional[int]:
-        try:
-            cache_bucket = sheets_cache.get_bucket(bucket.key)
-        except Exception:
-            return None
-        if cache_bucket is None:
-            return None
-        value = getattr(cache_bucket, "value", None)
-        count = self._count_rows(value)
-        if count is None:
-            return None
-        if bucket.key == "clans" and isinstance(value, list):
-            return max(0, int(count) - 1)
-        return int(count)
-
-    def _derive_last_status(
-        self, snapshot: cache_telemetry.CacheSnapshot
-    ) -> tuple[str, Optional[str]]:
-        error = snapshot.last_error or ""
-        if error:
-            return "fail", self._trim_error_text(error)
-
-        result = (snapshot.last_result or "").strip().lower()
-        if result:
-            if result in {"ok", "retry_ok"}:
-                return "ok", None
-            return "fail", self._trim_error_text(snapshot.last_result or result)
-
-        if snapshot.available:
-            return "ok", None
-        return "n/a", None
-
-    async def _probe_bucket(
-        self, bucket: _ChecksheetBucket, *, sheet_id: Optional[str], tab_name: Optional[str]
-    ) -> tuple[bool, Optional[str]]:
-        if not sheet_id:
-            return False, "missing sheet id"
-        if not tab_name:
-            return False, "missing tab name"
-        try:
-            await asyncio.wait_for(
-                aget_worksheet(sheet_id, tab_name), timeout=_CHECKSHEET_PING_TIMEOUT_SEC
+            params = {"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"}
+            values = await acall_with_backoff(
+                worksheet.get,
+                f"A2:ZZZ{_CHECKSHEET_ROW_LIMIT + 1}",
+                params=params,
             )
         except asyncio.CancelledError:
             raise
-        except asyncio.TimeoutError:
-            return False, "timeout"
         except Exception as exc:
-            return False, self._trim_error_text(exc)
-        return True, None
+            return "n/a", self._trim_error_text(exc)
 
-    async def _checksheet_impl(self, ctx: commands.Context) -> None:
-        env = get_env_name()
-        bot_version = os.getenv("BOT_VERSION", "dev")
-        lines: list[str] = []
+        count = 0
+        for row in values or []:
+            if any(str(cell or "").strip() for cell in row):
+                count += 1
 
-        for bucket in _CHECKSHEET_BUCKETS:
-            snapshot = cache_telemetry.get_snapshot(bucket.key)
-            row_count = self._get_cached_row_count(bucket)
-            age_text = snapshot.age_human or "n/a"
-            last_status, last_error = self._derive_last_status(snapshot)
+        if count >= _CHECKSHEET_ROW_LIMIT and values:
+            last = values[-1]
+            if any(str(cell or "").strip() for cell in last):
+                return ">5k", None
+        return str(count), None
 
-            sheet_id = self._resolve_sheet_id_for_bucket(bucket)
-            tab_name = self._resolve_tab_name_for_bucket(bucket)
-            ok, error_text = await self._probe_bucket(
-                bucket, sheet_id=sheet_id, tab_name=tab_name
+    async def _inspect_tab(
+        self,
+        *,
+        sheet_id: str,
+        sheet_title: str,
+        tab_name: str,
+    ) -> ChecksheetTabEntry:
+        try:
+            worksheet = await aget_worksheet(sheet_id, tab_name)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = self._trim_error_text(exc)
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=tab_name,
+                detail=error,
+                context="worksheet_open",
+            )
+            return ChecksheetTabEntry(name=tab_name, ok=False, rows="n/a", headers="—", error=error)
+
+        try:
+            header_row = await acall_with_backoff(worksheet.row_values, 1)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = self._trim_error_text(exc)
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=tab_name,
+                detail=error,
+                context="headers",
+            )
+            return ChecksheetTabEntry(name=tab_name, ok=False, rows="n/a", headers="—", error=error)
+
+        headers_preview = self._format_headers_preview(header_row)
+        rows_text, row_error = await self._determine_row_text(worksheet)
+        if row_error:
+            self._log_checksheet_issue(
+                level=logging.INFO,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=tab_name,
+                detail=row_error,
+                context="rows",
+            )
+        return ChecksheetTabEntry(
+            name=tab_name,
+            ok=True,
+            rows=rows_text,
+            headers=headers_preview,
+            error=None,
+        )
+
+    async def _inspect_sheet(self, target: _ChecksheetSheetTarget) -> ChecksheetSheetEntry:
+        sheet_id = target.sheet_id
+        config_tab = target.config_tab
+        sheet_title = target.label
+        warnings: list[str] = []
+        tabs: list[ChecksheetTabEntry] = []
+
+        if not sheet_id:
+            warning = "missing sheet id"
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id="",
+                sheet_title=sheet_title,
+                tab_name=None,
+                detail=warning,
+                context="sheet_id",
+            )
+            warnings.append(warning)
+            return ChecksheetSheetEntry(
+                title=sheet_title,
+                sheet_id="—",
+                tabs=tuple(tabs),
+                warnings=tuple(warnings),
             )
 
-            status_marker = "🟢" if ok else "🔴"
-            status_text = "ok" if ok else "fail"
-            rows_text = str(row_count) if row_count is not None else "n/a"
+        try:
+            workbook = await aopen_by_key(sheet_id)
+            title_candidate = getattr(workbook, "title", None)
+            if isinstance(title_candidate, str) and title_candidate.strip():
+                sheet_title = title_candidate.strip()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = self._trim_error_text(exc)
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=None,
+                detail=error,
+                context="open_sheet",
+            )
+            warnings.append(f"Failed to open sheet: {error}")
+            return ChecksheetSheetEntry(
+                title=sheet_title,
+                sheet_id=sheet_id,
+                tabs=tuple(tabs),
+                warnings=tuple(warnings),
+            )
 
-            parts = [
-                f"{bucket.display} — {status_marker} {status_text}",
-                f"rows {rows_text}",
-                f"age {age_text}",
-                f"last {last_status}",
-            ]
+        try:
+            config_ws = await aget_worksheet(sheet_id, config_tab)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = self._trim_error_text(exc)
+            warning = f"Config tab '{config_tab}' unavailable: {error}"
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=config_tab,
+                detail=error,
+                context="config_tab",
+            )
+            warnings.append(warning)
+            return ChecksheetSheetEntry(
+                title=sheet_title,
+                sheet_id=sheet_id,
+                tabs=tuple(tabs),
+                warnings=tuple(warnings),
+            )
 
-            if last_error:
-                parts.append(f"last_err {last_error}")
-            if error_text:
-                parts.append(f"error {error_text}")
+        try:
+            records = await acall_with_backoff(config_ws.get_all_records)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            error = self._trim_error_text(exc)
+            warning = f"Failed to read Config tab: {error}"
+            self._log_checksheet_issue(
+                level=logging.WARNING,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=config_tab,
+                detail=error,
+                context="config_read",
+            )
+            warnings.append(warning)
+            return ChecksheetSheetEntry(
+                title=sheet_title,
+                sheet_id=sheet_id,
+                tabs=tuple(tabs),
+                warnings=tuple(warnings),
+            )
 
-            lines.append(" · ".join(parts))
+        tab_names = self._parse_config_tab_names(records)
+        if not tab_names:
+            warning = f"No tabs listed in '{config_tab}'"
+            self._log_checksheet_issue(
+                level=logging.INFO,
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=config_tab,
+                detail=warning,
+                context="config_tabs",
+            )
+            warnings.append(warning)
+            return ChecksheetSheetEntry(
+                title=sheet_title,
+                sheet_id=sheet_id,
+                tabs=tuple(tabs),
+                warnings=tuple(warnings),
+            )
 
-        embed = discord.Embed(title="Checksheet", colour=discord.Colour.dark_teal())
-        description_lines = [f"env: {env}"]
-        description_lines.extend(lines)
-        embed.description = "\n".join(description_lines)
+        for tab_name in tab_names:
+            tab_entry = await self._inspect_tab(
+                sheet_id=sheet_id,
+                sheet_title=sheet_title,
+                tab_name=tab_name,
+            )
+            tabs.append(tab_entry)
 
-        footer_text = build_coreops_footer(bot_version=bot_version, coreops_version=COREOPS_VERSION)
-        embed.set_footer(text=footer_text)
+        return ChecksheetSheetEntry(
+            title=sheet_title,
+            sheet_id=sheet_id,
+            tabs=tuple(tabs),
+            warnings=tuple(warnings),
+        )
+
+    def _build_checksheet_targets(self) -> Sequence[_ChecksheetSheetTarget]:
+        snapshot = get_config_snapshot()
+        targets: list[_ChecksheetSheetTarget] = []
+        for label, sheet_key, config_key in _CHECKSHEET_SHEET_CONFIGS:
+            raw_id = snapshot.get(sheet_key)
+            sheet_id = str(raw_id).strip() if isinstance(raw_id, str) else str(raw_id or "").strip()
+            raw_config = snapshot.get(config_key)
+            config_tab = (
+                raw_config.strip() if isinstance(raw_config, str) and raw_config.strip() else "Config"
+            )
+            targets.append(
+                _ChecksheetSheetTarget(
+                    label=label,
+                    sheet_id_key=sheet_key,
+                    config_tab_key=config_key,
+                    sheet_id=sheet_id,
+                    config_tab=config_tab,
+                )
+            )
+        return targets
+
+    async def _checksheet_impl(self, ctx: commands.Context) -> None:
+        bot_version = os.getenv("BOT_VERSION", "dev")
+        targets = self._build_checksheet_targets()
+        results: list[ChecksheetSheetEntry] = []
+
+        for target in targets:
+            try:
+                result = await self._inspect_sheet(target)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                error = self._trim_error_text(exc)
+                self._log_checksheet_issue(
+                    level=logging.ERROR,
+                    sheet_id=target.sheet_id,
+                    sheet_title=target.label,
+                    tab_name=None,
+                    detail=error,
+                    context="sheet_unhandled",
+                )
+                results.append(
+                    ChecksheetSheetEntry(
+                        title=target.label,
+                        sheet_id=target.sheet_id or "—",
+                        tabs=(),
+                        warnings=(f"Unexpected error: {error}",),
+                    )
+                )
+            else:
+                results.append(result)
+
+        embed = build_checksheet_tabs_embed(
+            ChecksheetEmbedData(
+                sheets=results,
+                bot_version=bot_version,
+                coreops_version=COREOPS_VERSION,
+            )
+        )
 
         await ctx.reply(embed=sanitize_embed(embed))
 
