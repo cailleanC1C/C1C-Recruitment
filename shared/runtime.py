@@ -35,13 +35,83 @@ _ACTIVE_RUNTIME: "Runtime | None" = None
 _PRELOAD_TASK: asyncio.Task[None] | None = None
 
 
-async def _startup_preload() -> None:
+async def _startup_preload(bot: commands.Bot | None) -> None:
     await asyncio.sleep(15)
-    from shared.sheets import cache_service
 
     try:
-        await cache_service.refresh_now(all_buckets=True, trigger="startup")
-        log.info("Cache preloader completed")
+        from shared.cache import telemetry as cache_telemetry
+        from shared.coreops_render import build_refresh_embed
+    except Exception as e:  # pragma: no cover - startup best-effort
+        log.warning(f"Preloader init failed (imports): {e}")
+        return
+
+    try:
+        names = list(cache_telemetry.list_buckets() or [])
+        rows = []
+        started = time.monotonic()
+
+        for name in names:
+            res = await cache_telemetry.refresh_now(
+                name=name,
+                actor="startup",
+                trigger="startup",
+            )
+            rows.append(
+                {
+                    "name": res.name,
+                    "duration_ms": getattr(res, "duration_ms", 0),
+                    "result": "ok" if getattr(res, "ok", False) else "fail",
+                    "retries": getattr(getattr(res, "snapshot", None), "retries", 0) or 0,
+                    "error": getattr(res, "error_text", "") or "-",
+                }
+            )
+
+        total_ms = int((time.monotonic() - started) * 1000)
+
+        try:
+            emb = build_refresh_embed(
+                scope="all",
+                actor="startup",
+                trigger="startup",
+                buckets=rows,
+                total_ms=total_ms,
+                bot_version=getattr(bot, "version", None) if bot else None,
+                coreops_version=getattr(bot, "coreops_version", None) if bot else None,
+                now_utc=None,
+            )
+        except Exception as e:  # pragma: no cover - startup best-effort
+            emb = None
+            log.warning(f"Preloader embed build failed: {e}")
+
+        try:
+            if emb is None:
+                log.info("Preloader completed; embed unavailable for ops log dispatch.")
+            else:
+                send_fn = getattr(bot, "send_ops_log", None) if bot else None
+                if callable(send_fn):
+                    await send_fn(embed=emb)
+                else:
+                    cfg = getattr(bot, "config", None) if bot else None
+                    channel_id = None
+                    if cfg is not None:
+                        channel_id = getattr(cfg, "log_channel_id", None) or getattr(
+                            cfg, "ops_log_channel_id", None
+                        )
+                    if channel_id and bot is not None:
+                        chan = bot.get_channel(int(channel_id))
+                        if chan:
+                            await chan.send(embed=emb)
+                        else:
+                            log.info(
+                                "Preloader completed; ops log channel not found in cache."
+                            )
+                    elif channel_id:
+                        log.info("Preloader completed; bot unavailable for ops log dispatch.")
+                    else:
+                        log.info("Preloader completed; no ops log channel configured.")
+        except Exception as e:  # pragma: no cover - startup best-effort
+            log.warning(f"Preloader log send failed: {e}")
+
     except Exception as e:  # pragma: no cover - startup best-effort
         log.warning(f"Cache preloader failed: {e}")
 
@@ -59,7 +129,7 @@ def get_active_runtime() -> "Runtime | None":
     return _ACTIVE_RUNTIME
 
 
-def schedule_startup_preload() -> None:
+def schedule_startup_preload(bot: commands.Bot) -> None:
     """Ensure the startup cache preload task has been scheduled."""
 
     global _PRELOAD_TASK
@@ -72,7 +142,7 @@ def schedule_startup_preload() -> None:
         except Exception:
             log.debug("previous cache preloader task completed with error", exc_info=True)
     _PRELOAD_TASK = asyncio.create_task(
-        _startup_preload(), name="cache_startup_preload"
+        _startup_preload(bot), name="cache_startup_preload"
     )
 
 
@@ -287,7 +357,7 @@ class Runtime:
             log.exception("failed to send log message", extra={"channel_id": channel_id})
 
     def schedule_startup_preload(self) -> None:
-        schedule_startup_preload()
+        schedule_startup_preload(self.bot)
 
     def watchdog(
         self,
