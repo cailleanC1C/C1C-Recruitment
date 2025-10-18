@@ -56,7 +56,6 @@ from shared.help import (
 )
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
-from shared.utils import humanize_duration
 from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
@@ -92,6 +91,7 @@ _SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
     ("Onboarding", "sheets.onboarding"),
 )
 _sheet_cache_errors_logged: Set[str] = set()
+_digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
 
 
@@ -683,6 +683,7 @@ class CoreOpsCog(commands.Cog):
 
     def _trim_error_text(self, text: str, *, limit: int = 120) -> str:
         cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+        cleaned = cleaned.replace("`", "ʼ")
         if not cleaned:
             return "n/a"
         if len(cleaned) > limit:
@@ -705,35 +706,36 @@ class CoreOpsCog(commands.Cog):
             return computed, at
         return None, None
 
+    def _log_digest_section_error(self, section: str, exc: BaseException) -> None:
+        if section in _digest_section_errors_logged:
+            return
+        _digest_section_errors_logged.add(section)
+        msg, extra = sanitize_log("failed to collect digest section", extra={"section": section})
+        logger.warning(msg, extra=extra, exc_info=exc)
+
     def _collect_cache_digest_summary(self, now: dt.datetime) -> Optional[DigestCacheSummary]:
         try:
             snapshots = cache_telemetry.get_all_snapshots()
-        except Exception:
+        except Exception as exc:
+            self._log_digest_section_error("cache", exc)
             return None
 
-        if not isinstance(snapshots, dict) or not snapshots:
-            return DigestCacheSummary(
-                total=0,
-                stale=0,
-                recent_errors=0,
-                next_refresh_at=None,
-                next_refresh_delta=None,
-                errors=(),
-            )
+        if not isinstance(snapshots, dict):
+            return None
+
+        if not snapshots:
+            return DigestCacheSummary(total=0, stale=0, errors_total=0, next_refresh_at=None, next_refresh_delta=None, errors=())
 
         total = len(snapshots)
         stale = 0
-        recent_errors = 0
+        error_count = 0
         error_items: List[DigestCacheError] = []
         next_candidates: List[Tuple[Optional[int], Optional[dt.datetime]]] = []
-        error_window = 3600
 
         for snapshot in snapshots.values():
             ttl = snapshot.ttl_seconds
             age = snapshot.age_seconds
-            if not snapshot.available or ttl is None:
-                stale += 1
-            elif age is None or age > ttl:
+            if ttl is not None and age is not None and age > ttl:
                 stale += 1
 
             delta = snapshot.next_refresh_delta_seconds
@@ -749,23 +751,7 @@ class CoreOpsCog(commands.Cog):
             if not has_error:
                 continue
 
-            is_recent = False
-            if snapshot.age_seconds is not None:
-                is_recent = snapshot.age_seconds <= error_window
-            elif snapshot.last_refresh_at is not None:
-                try:
-                    delta_seconds = abs(int((now - snapshot.last_refresh_at).total_seconds()))
-                except Exception:
-                    delta_seconds = None
-                if delta_seconds is not None:
-                    is_recent = delta_seconds <= error_window
-            else:
-                is_recent = True
-
-            if not is_recent:
-                continue
-
-            recent_errors += 1
+            error_count += 1
             if len(error_items) >= 3:
                 continue
             message_source = snapshot.last_error or snapshot.last_result or "fail"
@@ -776,7 +762,7 @@ class CoreOpsCog(commands.Cog):
         return DigestCacheSummary(
             total=total,
             stale=stale,
-            recent_errors=recent_errors,
+            errors_total=error_count,
             next_refresh_at=next_at,
             next_refresh_delta=next_delta,
             errors=tuple(error_items),
@@ -785,7 +771,8 @@ class CoreOpsCog(commands.Cog):
     def _collect_sheets_digest_summary(self, now: dt.datetime) -> Optional[DigestSheetsSummary]:
         try:
             capabilities = sheets_cache.capabilities()
-        except Exception:
+        except Exception as exc:
+            self._log_digest_section_error("sheets", exc)
             return None
 
         if not isinstance(capabilities, dict):
@@ -804,7 +791,7 @@ class CoreOpsCog(commands.Cog):
             buckets.append((key, bucket))
 
         if not buckets:
-            return None
+            return DigestSheetsSummary()
 
         latest_success_age: Optional[int] = None
         latest_latency: Optional[int] = None
@@ -869,30 +856,13 @@ class CoreOpsCog(commands.Cog):
         if summary_error is None and latest_result:
             summary_error = self._trim_error_text(latest_result)
 
-        last_success_text: Optional[str]
-        if latest_success_age is None:
-            last_success_text = None
-        else:
-            last_success_text = f"{humanize_duration(latest_success_age)} ago"
-
-        next_refresh_text: Optional[str]
-        if next_delta is not None:
-            direction = "ago" if next_delta < 0 else "in"
-            next_refresh_text = f"{direction} {humanize_duration(abs(next_delta))}" if next_delta != 0 else "now"
-        elif next_at is not None:
-            try:
-                next_refresh_text = next_at.astimezone(UTC).strftime("%H:%M UTC")
-            except Exception:
-                next_refresh_text = next_at.isoformat()
-        else:
-            next_refresh_text = None
-
         return DigestSheetsSummary(
-            last_success=last_success_text,
-            last_error=summary_error,
+            last_success_age=latest_success_age,
             latency_ms=latest_latency,
             retries=latest_retries,
-            next_refresh=next_refresh_text,
+            last_error=summary_error,
+            next_refresh_at=next_at,
+            next_refresh_delta=next_delta,
         )
 
     async def _digest_impl(self, ctx: commands.Context) -> None:
