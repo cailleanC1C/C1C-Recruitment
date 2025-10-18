@@ -28,6 +28,7 @@ from shared import socket_heartbeat as hb
 from shared.config import (
     get_allowed_guild_ids,
     get_config_snapshot,
+    reload_config,
     get_onboarding_sheet_id,
     get_recruitment_sheet_id,
     redact_ids,
@@ -37,6 +38,7 @@ from shared.coreops_render import (
     build_digest_line,
     build_health_embed,
 )
+from shared.cache import telemetry as cache_telemetry
 from shared.help import (
     HelpCommandInfo,
     HelpOverviewSection,
@@ -45,8 +47,8 @@ from shared.help import (
     build_help_overview_embed,
 )
 from shared.coreops.helpers.tiers import tier
-from shared.sheets import cache_service
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
+from shared.utils import humanize_duration
 
 from .coreops_rbac import (
     admin_only,
@@ -89,6 +91,13 @@ class _EnvEntry:
     key: str
     normalized: object
     display: str
+
+
+def _format_bucket_label(name: str) -> str:
+    cleaned = name.replace("_", " ").strip()
+    if not cleaned:
+        return name
+    return " ".join(part.capitalize() for part in cleaned.split())
 
 
 def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
@@ -216,25 +225,6 @@ def _latency_sec(bot: commands.Bot) -> Optional[float]:
         return float(getattr(bot, "latency", None)) if bot.latency is not None else None
     except Exception:
         return None
-
-
-def _humanize_duration(seconds: Optional[int]) -> str:
-    if seconds is None:
-        return "-"
-    total = max(0, int(seconds))
-    units = (("d", 86400), ("h", 3600), ("m", 60), ("s", 1))
-    parts = []
-    for suffix, length in units:
-        if total >= length:
-            qty, total = divmod(total, length)
-            parts.append(f"{qty}{suffix}")
-        if len(parts) == 2:
-            break
-    if not parts:
-        parts.append("0s")
-    return "".join(parts)
-
-
 def _config_meta_from_app() -> dict:
     # Try to read CONFIG_META from app; else fallback
     app = sys.modules.get("app")
@@ -477,46 +467,125 @@ class CoreOpsCog(commands.Cog):
             disconnect_grace_sec=dgrace,
         )
 
-        caps = cache_service.capabilities()
-        now = dt.datetime.now(UTC)
+        snapshots = cache_telemetry.get_all_snapshots()
 
         for bucket in ("clans", "templates", "clan_tags"):
-            info_raw = caps.get(bucket) or {}
-            info = info_raw if isinstance(info_raw, dict) else {}
-            last_refresh = info.get("last_refresh_at")
-            ttl_value = info.get("ttl_sec")
-            next_refresh = info.get("next_refresh_at")
+            snapshot = snapshots.get(bucket)
+            if snapshot is None:
+                snapshot = cache_telemetry.get_snapshot(bucket)
 
-            age_seconds: Optional[int] = None
-            if isinstance(last_refresh, dt.datetime):
-                lr = last_refresh if last_refresh.tzinfo else last_refresh.replace(tzinfo=UTC)
-                age_seconds = int((now - lr.astimezone(UTC)).total_seconds())
-                if age_seconds < 0:
-                    age_seconds = 0
-
-            ttl_seconds: Optional[int] = None
-            if isinstance(ttl_value, (int, float)):
-                ttl_seconds = int(ttl_value)
-
+            age_text = snapshot.age_human or "-"
+            ttl_text = snapshot.ttl_human or "-"
             next_text = "-"
-            if isinstance(next_refresh, dt.datetime):
-                nr = next_refresh if next_refresh.tzinfo else next_refresh.replace(tzinfo=UTC)
-                delta = int((nr.astimezone(UTC) - now).total_seconds())
+            delta = snapshot.next_refresh_delta_seconds
+            if delta is not None and snapshot.next_refresh_human:
                 if delta >= 0:
-                    next_text = f"in {_humanize_duration(delta)}"
+                    next_text = f"in {snapshot.next_refresh_human}"
                 else:
-                    next_text = f"{_humanize_duration(abs(delta))} overdue"
+                    next_text = f"{snapshot.next_refresh_human} overdue"
 
             embed.add_field(
                 name=bucket,
                 value=(
-                    f"age: {_humanize_duration(age_seconds)}, "
-                    f"TTL: {_humanize_duration(ttl_seconds)}, "
+                    f"age: {age_text}, "
+                    f"TTL: {ttl_text}, "
                     f"next: {next_text}"
                 ),
                 inline=False,
-                )
+            )
         await ctx.reply(embed=sanitize_embed(embed))
+
+    def _format_refresh_summary(
+        self, result: cache_telemetry.RefreshResult
+    ) -> tuple[str, bool]:
+        snapshot = result.snapshot
+        label = _format_bucket_label(result.name) or result.name
+
+        parts: list[str] = []
+        if result.ok:
+            duration_ms = result.duration_ms if result.duration_ms is not None else 0
+            parts.append(f"refreshed in {duration_ms} ms")
+        else:
+            error_text = (result.error or "unknown error").strip()
+            if len(error_text) > 120:
+                error_text = f"{error_text[:117]}…"
+            parts.append(f"error: {error_text}")
+
+        if snapshot.ttl_human is not None:
+            parts.append(f"ttl {snapshot.ttl_human}")
+        if snapshot.age_human is not None:
+            parts.append(f"age {snapshot.age_human}")
+
+        next_at = snapshot.next_refresh_at
+        if next_at is not None:
+            next_utc = next_at.astimezone(UTC)
+            parts.append(f"next {next_utc:%H:%M} UTC")
+        elif snapshot.next_refresh_delta_seconds is not None and snapshot.next_refresh_human:
+            delta = snapshot.next_refresh_delta_seconds
+            if delta >= 0:
+                parts.append(f"next in {snapshot.next_refresh_human}")
+            else:
+                parts.append(f"next overdue by {snapshot.next_refresh_human}")
+
+        if not parts:
+            parts.append("no telemetry")
+
+        return f"{label} — {' · '.join(parts)}", result.ok
+
+    def _parse_reload_flags(self, flags: Sequence[str]) -> tuple[bool, Optional[str]]:
+        reboot = False
+        for flag in flags:
+            if flag == "--reboot":
+                reboot = True
+                continue
+            return reboot, flag
+        return reboot, None
+
+    async def _reload_impl(self, ctx: commands.Context, *, reboot: bool) -> None:
+        actor = str(ctx.author)
+        actor_display = getattr(ctx.author, "display_name", None) or actor
+        actor_id = getattr(ctx.author, "id", None)
+        action = "reboot" if reboot else "reload"
+
+        start = time.monotonic()
+        try:
+            reload_config()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            msg, extra = sanitize_log(
+                "config reload failed",
+                extra={
+                    "actor": actor,
+                    "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
+                    "action": action,
+                },
+            )
+            logger.exception(msg, extra=extra)
+            error_text = (str(exc).strip()) or exc.__class__.__name__
+            await ctx.send(str(sanitize_text(f"⚠️ {action} failed — {error_text}")))
+            return
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        status = "graceful reboot scheduled" if reboot else "config reloaded"
+        message = f"{status} · {duration_ms} ms · by {actor_display}"
+        await ctx.send(str(sanitize_text(message)))
+
+        log_msg, extra = sanitize_log(
+            "config reload completed",
+            extra={
+                "actor": actor,
+                "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
+                "action": action,
+                "duration_ms": duration_ms,
+            },
+        )
+        logger.info(log_msg, extra=extra)
+
+        if reboot:
+            async def _shutdown() -> None:
+                await asyncio.sleep(1)
+                await self.bot.close()
+
+            asyncio.create_task(_shutdown())
 
     @tier("admin")
     @rec.command(name="health")
@@ -716,6 +785,34 @@ class CoreOpsCog(commands.Cog):
         )
 
     @tier("admin")
+    @commands.command(name="reload", hidden=True)
+    @guild_only_denied_msg()
+    @admin_only()
+    async def reload(self, ctx: commands.Context, *flags: str) -> None:
+        reboot, unknown = self._parse_reload_flags(flags)
+        if unknown is not None:
+            await ctx.send(
+                str(sanitize_text(f"⚠️ Unknown flag: {unknown}"))
+            )
+            return
+
+        await self._reload_impl(ctx, reboot=reboot)
+
+    @tier("admin")
+    @rec.command(name="reload")
+    @guild_only_denied_msg()
+    @ops_only()
+    async def rec_reload(self, ctx: commands.Context, *flags: str) -> None:
+        reboot, unknown = self._parse_reload_flags(flags)
+        if unknown is not None:
+            await ctx.send(
+                str(sanitize_text(f"⚠️ Unknown flag: {unknown}"))
+            )
+            return
+
+        await self._reload_impl(ctx, reboot=reboot)
+
+    @tier("admin")
     @commands.group(name="refresh", invoke_without_command=True, hidden=True)
     @guild_only_denied_msg()
     @admin_only()
@@ -732,103 +829,56 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_root(ctx)
 
     async def _refresh_all_impl(self, ctx: commands.Context) -> None:
-        caps = cache_service.capabilities()
-        buckets = list(caps.keys())
+        buckets = cache_telemetry.list_buckets()
         if not buckets:
             await ctx.send(str(sanitize_text("⚠️ No cache buckets registered.")))
             return
 
         actor_display = getattr(ctx.author, "display_name", None) or str(ctx.author)
         actor = str(ctx.author)
-        rows: List[dict[str, Any]] = []
-        total_duration = 0
+        actor_id = getattr(ctx.author, "id", None)
+
+        overall_start = time.monotonic()
+        summaries: list[str] = []
+        failures: list[str] = []
 
         for name in buckets:
-            exc_text: Optional[str] = None
             try:
-                await cache_service.cache.refresh_now(
-                    name, trigger="manual", actor=actor
-                )
+                result = await cache_telemetry.refresh_now(name, actor=actor)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # pragma: no cover - defensive logging
-                msg, extra = sanitize_log(
-                    "refresh-all bucket failed", extra={"bucket": name}
-                )
-                logger.exception(msg, extra=extra)
-                exc_text = str(exc).strip() or exc.__class__.__name__
 
-            bucket = cache_service.cache.get_bucket(name)
-            duration_ms = 0
-            retries = 0
-            outcome = "error"
-            error_text = exc_text or "-"
+            summary, ok = self._format_refresh_summary(result)
+            prefix = "•" if ok else "⚠"
+            summaries.append(f"{prefix} {summary}")
+            if not ok:
+                failures.append(name)
 
-            if bucket is not None:
-                duration_ms = bucket.last_latency_ms or 0
-                retries = getattr(bucket, "last_retries", 0)
-                raw_result = (bucket.last_result or "").lower()
-                if raw_result in ("ok", "retry_ok"):
-                    outcome = "ok"
-                else:
-                    outcome = "error"
-                bucket_error = (bucket.last_error or "").strip()
-                if bucket_error:
-                    error_text = bucket_error
-            else:
-                error_text = exc_text or "missing bucket"
-
-            total_duration += duration_ms
-
-            cleaned_error = (error_text or "-").strip() or "-"
-            cleaned_error = cleaned_error.replace("\n", " ")
-            if len(cleaned_error) > 60:
-                cleaned_error = f"{cleaned_error[:57]}..."
-
-            rows.append(
-                {
-                    "bucket": name,
-                    "duration_ms": duration_ms,
-                    "result": outcome,
-                    "retries": retries,
-                    "error": cleaned_error,
-                }
-            )
-
-        header = "bucket        duration   result   retries   error"
-        separator = "-----------   --------   ------   -------   -----"
-        table_lines = [header, separator]
-        for row in rows:
-            duration = f"{row['duration_ms']}ms"
-            line = (
-                f"{row['bucket']:<11}   "
-                f"{duration:<8}   "
-                f"{row['result']:<6}   "
-                f"{row['retries']:<7}   "
-                f"{row['error']}"
-            )
-            table_lines.append(line.rstrip())
-
-        embed = discord.Embed(
-            title="Refresh · all",
-            description=f"actor: {actor_display} • trigger: manual",
-            colour=discord.Colour.blurple(),
+        total_duration = int((time.monotonic() - overall_start) * 1000)
+        header = (
+            f"cache refresh · {len(buckets)} bucket(s) · {total_duration} ms · by {actor_display}"
         )
-        bucket_block = "\n".join(table_lines)
-        embed.add_field(name="Buckets", value=f"```\n{bucket_block}\n```", inline=False)
-        embed.timestamp = dt.datetime.now(UTC)
-        footer_text = build_coreops_footer(
-            bot_version=os.getenv("BOT_VERSION", "dev"),
-            notes=f" • total: {total_duration}ms",
-        )
-        embed.set_footer(text=footer_text)
 
-        await ctx.send(embed=sanitize_embed(embed))
+        message = "\n".join([header, *summaries])
+        await ctx.send(str(sanitize_text(message)))
+
+        log_msg, extra = sanitize_log(
+            "cache refresh completed",
+            extra={
+                "actor": actor,
+                "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
+                "buckets": buckets,
+                "duration_ms": total_duration,
+                "failures": failures,
+            },
+        )
+        logger.info(log_msg, extra=extra)
 
     @tier("admin")
     @refresh.command(name="all")
     @guild_only_denied_msg()
     @admin_only()
+    @commands.cooldown(1, 30.0, commands.BucketType.guild)
     async def refresh_all(self, ctx: commands.Context) -> None:
         """Admin: clear & warm all registered Sheets caches."""
 
@@ -838,39 +888,32 @@ class CoreOpsCog(commands.Cog):
     @rec_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
+    @commands.cooldown(1, 30.0, commands.BucketType.guild)
     async def rec_refresh_all(self, ctx: commands.Context) -> None:
         await self._refresh_all_impl(ctx)
 
     async def _refresh_clansinfo_impl(self, ctx: commands.Context) -> None:
-        caps = cache_service.capabilities()
-        clans = caps.get("clans")
-        if not clans:
+        snapshot = cache_telemetry.get_snapshot("clans")
+        if not snapshot.available:
             await ctx.send(str(sanitize_text("⚠️ No clansinfo cache registered.")))
             return
 
-        last_refresh = clans.get("last_refresh_at")
-        now = dt.datetime.now(UTC)
-        age_sec = 10**9
-        if isinstance(last_refresh, dt.datetime):
-            age_sec = int((now - last_refresh.astimezone(UTC)).total_seconds())
-
-        if age_sec < 60 * 60:
-            mins = age_sec // 60
-            next_at = clans.get("next_refresh_at")
+        age_seconds = snapshot.age_seconds if snapshot.age_seconds is not None else 10**9
+        if age_seconds < 60 * 60:
+            mins = age_seconds // 60
             nxt = ""
-            if isinstance(next_at, dt.datetime):
-                nr = next_at if next_at.tzinfo else next_at.replace(tzinfo=UTC)
-                delta = int((nr.astimezone(UTC) - now).total_seconds())
+            if snapshot.next_refresh_delta_seconds is not None and snapshot.next_refresh_human:
+                delta = snapshot.next_refresh_delta_seconds
                 if delta >= 0:
-                    nxt = f" Next auto-refresh in {_humanize_duration(delta)}"
+                    nxt = f" Next auto-refresh in {snapshot.next_refresh_human}"
                 else:
-                    nxt = f" Next auto-refresh overdue by {_humanize_duration(abs(delta))}"
+                    nxt = f" Next auto-refresh overdue by {snapshot.next_refresh_human}"
             await ctx.send(str(sanitize_text(f"✅ Clans cache fresh ({mins}m old).{nxt}")))
             return
 
         await ctx.send(str(sanitize_text("Refreshing clans (background).")))
         asyncio.create_task(
-            cache_service.cache.refresh_now("clans", trigger="manual", actor=str(ctx.author))
+            cache_telemetry.refresh_now("clans", actor=str(ctx.author))
         )
 
     @tier("admin")
