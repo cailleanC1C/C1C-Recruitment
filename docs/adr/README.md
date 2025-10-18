@@ -10,3 +10,4 @@ This directory contains the architectural decision records (ADRs) that document 
 - [ADR-0003 — CoreOps Contract (Command Surface and Guardrails)](ADR-0003-coreops-contract.md)
 - [ADR-0004 — Ops Command RBAC and Cooldowns](ADR-0004-ops-command-rbac.md)
 - [ADR-0005 — Docs and PR Metadata Workflow](ADR-0005-docs-and-pr-metadata-workflow.md)
+- [ADR-0006 — Public cache telemetry wrapper + CoreOps reload consolidation](ADR-0006-cache-telemetry-and-coreops-reload.md)
