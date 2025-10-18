@@ -35,10 +35,9 @@ from shared.config import (
     redact_value,
 )
 from shared.coreops_render import (
-    DigestCacheError,
-    DigestCacheSummary,
     DigestEmbedData,
-    DigestSheetsSummary,
+    DigestSheetEntry,
+    DigestSheetsClientSummary,
     RefreshEmbedRow,
     build_digest_embed,
     build_digest_line,
@@ -93,6 +92,11 @@ _SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
 _sheet_cache_errors_logged: Set[str] = set()
 _digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
+_DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
+    ("clans", "ClanInfo"),
+    ("templates", "Templates"),
+    ("clan_tags", "ClanTags"),
+)
 
 
 @dataclass(frozen=True)
@@ -713,72 +717,71 @@ class CoreOpsCog(commands.Cog):
         msg, extra = sanitize_log("failed to collect digest section", extra={"section": section})
         logger.warning(msg, extra=extra, exc_info=exc)
 
-    def _collect_cache_digest_summary(self, now: dt.datetime) -> Optional[DigestCacheSummary]:
-        try:
-            snapshots = cache_telemetry.get_all_snapshots()
-        except Exception as exc:
-            self._log_digest_section_error("cache", exc)
-            return None
+    def _collect_sheet_bucket_entries(self) -> Sequence[DigestSheetEntry]:
+        entries: List[DigestSheetEntry] = []
+        for bucket_key, display_name in _DIGEST_SHEET_BUCKETS:
+            try:
+                snapshot = cache_telemetry.get_snapshot(bucket_key)
+            except Exception as exc:
+                self._log_digest_section_error("sheets", exc)
+                snapshot = None
 
-        if not isinstance(snapshots, dict):
-            return None
-
-        if not snapshots:
-            return DigestCacheSummary(total=0, stale=0, errors_total=0, next_refresh_at=None, next_refresh_delta=None, errors=())
-
-        total = len(snapshots)
-        stale = 0
-        error_count = 0
-        error_items: List[DigestCacheError] = []
-        next_candidates: List[Tuple[Optional[int], Optional[dt.datetime]]] = []
-
-        for snapshot in snapshots.values():
-            ttl = snapshot.ttl_seconds
-            age = snapshot.age_seconds
-            if ttl is not None and age is not None and age > ttl:
-                stale += 1
-
-            delta = snapshot.next_refresh_delta_seconds
-            at = snapshot.next_refresh_at
-            if at is not None or delta is not None:
-                if delta is None:
-                    delta = _delta_seconds(now, at)
-                next_candidates.append((delta, at))
-
-            last_error = snapshot.last_error or ""
-            last_result = (snapshot.last_result or "").strip()
-            has_error = bool(last_error) or last_result.lower().startswith("fail")
-            if not has_error:
+            if snapshot is None or not hasattr(snapshot, "available"):
+                entries.append(
+                    DigestSheetEntry(
+                        display_name=display_name,
+                        status="n/a",
+                        age_seconds=None,
+                        next_refresh_delta_seconds=None,
+                        next_refresh_at=None,
+                        retries=None,
+                        error=None,
+                    )
+                )
                 continue
 
-            error_count += 1
-            if len(error_items) >= 3:
-                continue
-            message_source = snapshot.last_error or snapshot.last_result or "fail"
-            error_items.append(DigestCacheError(snapshot.name, self._trim_error_text(message_source)))
+            available = getattr(snapshot, "available", False)
+            age_seconds = getattr(snapshot, "age_seconds", None) if available else None
+            next_delta = getattr(snapshot, "next_refresh_delta_seconds", None) if available else None
+            next_at = getattr(snapshot, "next_refresh_at", None) if available else None
+            last_error = getattr(snapshot, "last_error", None) if available else None
+            last_result = getattr(snapshot, "last_result", None) if available else None
 
-        next_delta, next_at = self._select_next_refresh_candidate(next_candidates, now)
+            status = "n/a"
+            error_text: Optional[str] = None
+            if available:
+                result_norm = (last_result or "").strip().lower()
+                has_error = bool(last_error) or result_norm.startswith("fail")
+                status = "fail" if has_error else "ok"
+                if has_error:
+                    source = last_error or last_result or "fail"
+                    error_text = self._trim_error_text(source)
 
-        return DigestCacheSummary(
-            total=total,
-            stale=stale,
-            errors_total=error_count,
-            next_refresh_at=next_at,
-            next_refresh_delta=next_delta,
-            errors=tuple(error_items),
-        )
+            entries.append(
+                DigestSheetEntry(
+                    display_name=display_name,
+                    status=status,
+                    age_seconds=age_seconds,
+                    next_refresh_delta_seconds=next_delta,
+                    next_refresh_at=next_at,
+                    retries=None,
+                    error=error_text,
+                )
+            )
 
-    def _collect_sheets_digest_summary(self, now: dt.datetime) -> Optional[DigestSheetsSummary]:
+        return entries
+
+    def _collect_sheets_client_summary(self, now: dt.datetime) -> Optional[DigestSheetsClientSummary]:
         try:
             capabilities = sheets_cache.capabilities()
         except Exception as exc:
-            self._log_digest_section_error("sheets", exc)
+            self._log_digest_section_error("sheets_client", exc)
             return None
 
         if not isinstance(capabilities, dict):
             return None
 
-        buckets: List[Tuple[str, object]] = []
+        buckets: List[object] = []
         for key in capabilities.keys():
             if not isinstance(key, str):
                 continue
@@ -788,34 +791,24 @@ class CoreOpsCog(commands.Cog):
                 bucket = None
             if bucket is None:
                 continue
-            buckets.append((key, bucket))
+            buckets.append(bucket)
 
         if not buckets:
-            return DigestSheetsSummary()
+            return None
 
-        latest_success_age: Optional[int] = None
+        latest_refresh_at: Optional[dt.datetime] = None
         latest_latency: Optional[int] = None
         latest_retries: Optional[int] = None
-        latest_result: Optional[str] = None
         latest_error: Optional[str] = None
-        failure_result: Optional[str] = None
+        latest_result: Optional[str] = None
         failure_error: Optional[str] = None
-        next_candidates: List[Tuple[Optional[int], Optional[dt.datetime]]] = []
 
-        for name, bucket in buckets:
+        for bucket in buckets:
             last_refresh = getattr(bucket, "last_refresh", None)
-            if isinstance(last_refresh, dt.datetime):
-                try:
-                    age_seconds = max(0, int((now - last_refresh).total_seconds()))
-                except Exception:
-                    age_seconds = None
-            else:
-                age_seconds = None
-
-            if age_seconds is not None and (
-                latest_success_age is None or age_seconds < latest_success_age
+            if isinstance(last_refresh, dt.datetime) and (
+                latest_refresh_at is None or last_refresh > latest_refresh_at
             ):
-                latest_success_age = age_seconds
+                latest_refresh_at = last_refresh
                 latency_ms = getattr(bucket, "last_latency_ms", None)
                 latest_latency = (
                     int(latency_ms)
@@ -831,42 +824,33 @@ class CoreOpsCog(commands.Cog):
                 latest_result = getattr(bucket, "last_result", None)
                 latest_error = getattr(bucket, "last_error", None)
 
-            try:
-                next_at = bucket.next_refresh_at()
-            except Exception:
-                next_at = None
-            delta = _delta_seconds(now, next_at)
-            if next_at is not None or delta is not None:
-                next_candidates.append((delta, next_at))
-
             result_text = getattr(bucket, "last_result", None)
             result_norm = (result_text or "").strip().lower()
-            if result_norm and result_norm not in {"ok", "retry_ok"} and failure_result is None:
-                failure_result = result_text
-                err = getattr(bucket, "last_error", None)
-                failure_error = self._trim_error_text(err) if err else None
-                if failure_error is None and result_text:
-                    failure_error = self._trim_error_text(result_text)
+            if result_norm and result_norm not in {"ok", "retry_ok"} and failure_error is None:
+                err_source = getattr(bucket, "last_error", None) or result_text
+                failure_error = self._trim_error_text(err_source)
 
-        next_delta, next_at = self._select_next_refresh_candidate(next_candidates, now)
+        last_success_age: Optional[int] = None
+        if isinstance(latest_refresh_at, dt.datetime):
+            try:
+                last_success_age = max(0, int((now - latest_refresh_at).total_seconds()))
+            except Exception:
+                last_success_age = None
 
-        summary_error = failure_error or (self._trim_error_text(latest_error) if latest_error else None)
-        if summary_error is None and failure_result:
-            summary_error = self._trim_error_text(failure_result)
+        summary_error = failure_error
+        if summary_error is None and latest_error:
+            summary_error = self._trim_error_text(latest_error)
         if summary_error is None and latest_result:
             summary_error = self._trim_error_text(latest_result)
 
-        return DigestSheetsSummary(
-            last_success_age=latest_success_age,
+        return DigestSheetsClientSummary(
+            last_success_age=last_success_age,
             latency_ms=latest_latency,
             retries=latest_retries,
             last_error=summary_error,
-            next_refresh_at=next_at,
-            next_refresh_delta=next_delta,
         )
 
     async def _digest_impl(self, ctx: commands.Context) -> None:
-        bot_name = get_bot_name()
         env = get_env_name()
         uptime = _uptime_sec(self.bot)
         latency = _latency_sec(self.bot)
@@ -876,28 +860,25 @@ class CoreOpsCog(commands.Cog):
             gateway_age = None
 
         now = dt.datetime.now(UTC)
-        cache_summary = self._collect_cache_digest_summary(now)
-        sheets_summary = self._collect_sheets_digest_summary(now)
+        sheet_entries = self._collect_sheet_bucket_entries()
+        sheets_summary = self._collect_sheets_client_summary(now)
         bot_version = os.getenv("BOT_VERSION", "dev")
 
         embed_data = DigestEmbedData(
-            bot_name=bot_name,
             env=env,
             uptime_seconds=int(uptime) if uptime is not None else None,
             latency_seconds=latency,
             gateway_age_seconds=int(gateway_age) if gateway_age is not None else None,
-            cache=cache_summary,
-            sheets=sheets_summary,
+            sheets=tuple(sheet_entries),
+            sheets_client=sheets_summary,
             bot_version=bot_version,
-            timestamp=now,
         )
 
         fallback_line = build_digest_line(
-            bot_name=bot_name,
             env=env,
             uptime_sec=uptime,
             latency_s=latency,
-            last_event_age=gateway_age if isinstance(gateway_age, (int, float)) else 0.0,
+            last_event_age=gateway_age if isinstance(gateway_age, (int, float)) else None,
         )
 
         try:
