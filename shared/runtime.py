@@ -32,6 +32,18 @@ from shared.coreops.helpers.tiers import audit_tiers, rehydrate_tiers
 log = logging.getLogger("c1c.runtime")
 
 _ACTIVE_RUNTIME: "Runtime | None" = None
+_PRELOAD_TASK: asyncio.Task[None] | None = None
+
+
+async def _startup_preload() -> None:
+    await asyncio.sleep(15)
+    from shared.sheets import cache_service
+
+    try:
+        await cache_service.refresh_now(all_buckets=True, trigger="startup")
+        log.info("Cache preloader completed")
+    except Exception as e:  # pragma: no cover - startup best-effort
+        log.warning(f"Cache preloader failed: {e}")
 
 
 def set_active_runtime(runtime: "Runtime | None") -> None:
@@ -45,6 +57,23 @@ def get_active_runtime() -> "Runtime | None":
     """Return the active runtime instance if one has been registered."""
 
     return _ACTIVE_RUNTIME
+
+
+def schedule_startup_preload() -> None:
+    """Ensure the startup cache preload task has been scheduled."""
+
+    global _PRELOAD_TASK
+    task = _PRELOAD_TASK
+    if task is not None and not task.done():
+        return
+    if task is not None and task.done():
+        try:  # pragma: no cover - defensive logging
+            task.result()
+        except Exception:
+            log.debug("previous cache preloader task completed with error", exc_info=True)
+    _PRELOAD_TASK = asyncio.create_task(
+        _startup_preload(), name="cache_startup_preload"
+    )
 
 
 async def send_log_message(message: str) -> None:
@@ -256,6 +285,9 @@ class Runtime:
             await channel.send(content)
         except Exception:
             log.exception("failed to send log message", extra={"channel_id": channel_id})
+
+    def schedule_startup_preload(self) -> None:
+        schedule_startup_preload()
 
     def watchdog(
         self,

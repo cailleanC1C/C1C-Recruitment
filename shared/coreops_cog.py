@@ -717,9 +717,7 @@ class CoreOpsCog(commands.Cog):
         msg, extra = sanitize_log("failed to collect digest section", extra={"section": section})
         logger.warning(msg, extra=extra, exc_info=exc)
 
-    def _collect_sheet_bucket_entries(
-        self, *, uptime_seconds: Optional[int]
-    ) -> Sequence[DigestSheetEntry]:
+    def _collect_sheet_bucket_entries(self) -> Sequence[DigestSheetEntry]:
         entries: List[DigestSheetEntry] = []
         for bucket_key, display_name in _DIGEST_SHEET_BUCKETS:
             try:
@@ -745,60 +743,47 @@ class CoreOpsCog(commands.Cog):
                 continue
 
             available = getattr(snapshot, "available", False)
-            age_seconds = getattr(snapshot, "age_seconds", None) if available else None
-            next_delta = (
+
+            raw_age = getattr(snapshot, "age_seconds", None) if available else None
+            age_seconds = None
+            if isinstance(raw_age, (int, float)):
+                try:
+                    age_seconds = int(raw_age)
+                except Exception:
+                    age_seconds = None
+
+            raw_next_delta = (
                 getattr(snapshot, "next_refresh_delta_seconds", None) if available else None
             )
+            next_delta = None
+            if isinstance(raw_next_delta, (int, float)):
+                try:
+                    next_delta = int(raw_next_delta)
+                except Exception:
+                    next_delta = None
+
             next_at = getattr(snapshot, "next_refresh_at", None) if available else None
-            last_error = getattr(snapshot, "last_error", None) if available else None
-            last_result = getattr(snapshot, "last_result", None) if available else None
-            last_refresh_at = (
-                getattr(snapshot, "last_refresh_at", None) if available else None
-            )
-            ttl_raw = None
-            if available:
-                ttl_raw = getattr(snapshot, "ttl_sec", None)
-                if ttl_raw is None:
-                    ttl_raw = getattr(snapshot, "ttl_seconds", None)
-
-            ttl_seconds = None
-            if isinstance(ttl_raw, (int, float)):
-                try:
-                    ttl_seconds = int(ttl_raw)
-                except Exception:
-                    ttl_seconds = None
-
-            age_estimated = False
-            if available and age_seconds is None and uptime_seconds is not None:
-                candidate = uptime_seconds
-                if ttl_seconds is not None:
-                    candidate = min(uptime_seconds, ttl_seconds)
-                age_seconds = max(0, int(candidate))
-                age_estimated = True
-
-            next_estimated = False
-            if (
-                available
-                and next_at is None
-                and ttl_seconds is not None
-                and isinstance(last_refresh_at, dt.datetime)
-            ):
-                try:
-                    next_at = last_refresh_at + dt.timedelta(seconds=ttl_seconds)
-                    next_estimated = True
-                except Exception:
-                    next_at = None
-                    next_estimated = False
+            last_error = getattr(snapshot, "last_error", None)
+            last_result = getattr(snapshot, "last_result", None)
+            retries_raw = getattr(snapshot, "retries", None)
+            retries = None
+            if isinstance(retries_raw, int):
+                retries = retries_raw
 
             status = "n/a"
             error_text: Optional[str] = None
+
+            result_norm = (last_result or "").strip().lower()
+            has_error = bool(last_error) or result_norm.startswith("fail")
+
             if available:
-                result_norm = (last_result or "").strip().lower()
-                has_error = bool(last_error) or result_norm.startswith("fail")
                 status = "fail" if has_error else "ok"
-                if has_error:
-                    source = last_error or last_result or "fail"
-                    error_text = self._trim_error_text(source)
+            elif has_error:
+                status = "fail"
+
+            if has_error:
+                source = last_error or last_result or "fail"
+                error_text = self._trim_error_text(source)
 
             entries.append(
                 DigestSheetEntry(
@@ -807,10 +792,10 @@ class CoreOpsCog(commands.Cog):
                     age_seconds=age_seconds,
                     next_refresh_delta_seconds=next_delta,
                     next_refresh_at=next_at,
-                    retries=None,
+                    retries=retries,
                     error=error_text,
-                    age_estimated=age_estimated,
-                    next_refresh_estimated=next_estimated,
+                    age_estimated=False,
+                    next_refresh_estimated=False,
                 )
             )
 
@@ -906,7 +891,7 @@ class CoreOpsCog(commands.Cog):
 
         now = dt.datetime.now(UTC)
         uptime_seconds = int(uptime) if uptime is not None else None
-        sheet_entries = self._collect_sheet_bucket_entries(uptime_seconds=uptime_seconds)
+        sheet_entries = self._collect_sheet_bucket_entries()
         sheets_summary = self._collect_sheets_client_summary(now)
         bot_version = os.getenv("BOT_VERSION", "dev")
 
