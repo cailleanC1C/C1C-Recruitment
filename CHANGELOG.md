@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.9.3-phase3b-rc6] — 2025-10-19
 
 ### Added
 - ✅ `!checksheet` diagnostics (Tabs & Headers) + `--debug` preview
