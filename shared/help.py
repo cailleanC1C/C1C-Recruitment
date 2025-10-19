@@ -141,7 +141,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
             "⚠️ If you use `checksheet` without the prefix, all bots with the same command will answer. Always use `!rec checksheet`.\n"
             "Tip: Quick sanity check before troubleshooting a missing clan."
         ),
-        tier="staff",
+        tier="admin",
     ),
     "rec checksheet": _metadata(
         short="Shows loaded tabs and headers.",
