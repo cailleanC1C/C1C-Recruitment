@@ -121,6 +121,52 @@ _CHECKSHEET_SHEET_CONFIGS: Tuple[Tuple[str, str, str], ...] = (
 )
 
 
+def resolve_ops_log_channel_id(
+    *, bot: commands.Bot | None = None, snapshot: Mapping[str, object] | None = None
+) -> int | None:
+    """Return the configured ops/log channel ID, if available."""
+
+    mapping: Mapping[str, object] | None
+    if isinstance(snapshot, Mapping):
+        mapping = snapshot
+    else:
+        mapping = get_config_snapshot()
+
+    candidate: object | None = None
+    if mapping is not None:
+        for key in (
+            "ops_log_channel_id",
+            "OPS_LOG_CHANNEL_ID",
+            "log_channel_id",
+            "LOG_CHANNEL_ID",
+        ):
+            value = mapping.get(key)
+            if isinstance(value, str):
+                trimmed = value.strip()
+                if trimmed:
+                    candidate = trimmed
+                    break
+            elif value is not None:
+                candidate = value
+                break
+
+    if candidate is None and bot is not None:
+        bot_config = getattr(bot, "config", None)
+        if bot_config is not None:
+            candidate = (
+                getattr(bot_config, "ops_log_channel_id", None)
+                or getattr(bot_config, "log_channel_id", None)
+            )
+
+    if isinstance(candidate, str):
+        candidate = candidate.strip()
+
+    try:
+        return int(candidate)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
 def _column_label(index: int) -> str:
     if index <= 0:
         return ""
@@ -1872,24 +1918,7 @@ class CoreOpsCog(commands.Cog):
         else:
             snapshot_mapping = None
 
-        ops_chan_id: object | None = None
-        if snapshot_mapping is not None:
-            for key in ("ops_log_channel_id", "OPS_LOG_CHANNEL_ID", "log_channel_id", "LOG_CHANNEL_ID"):
-                value = snapshot_mapping.get(key)
-                if isinstance(value, str):
-                    if value.strip():
-                        ops_chan_id = value.strip()
-                        break
-                elif value:
-                    ops_chan_id = value
-                    break
-
-        if ops_chan_id is None:
-            bot_config = getattr(self.bot, "config", None)
-            if bot_config is not None:
-                ops_chan_id = getattr(bot_config, "ops_log_channel_id", None) or getattr(
-                    bot_config, "log_channel_id", None
-                )
+        ops_chan_id = resolve_ops_log_channel_id(bot=self.bot, snapshot=snapshot_mapping)
 
         ops_line = "⚠️ Missing"
         if ops_chan_id:
