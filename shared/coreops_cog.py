@@ -2502,12 +2502,12 @@ class CoreOpsCog(commands.Cog):
 
     def _help_bot_description(self, *, bot_name: str) -> str:
         return (
-            "**C1C-Recruitment keeps the doors open and the hearths warm.**  \n"
+            "\n **C1C-Recruitment keeps the doors open and the hearths warm.**  \n"
             "It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.\n\n"
-            "Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.  \n\n"
-            "Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.  \n\n"
-            "All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care.\n\n"
-            "_To learn what a command does, type like this:_  \n"
+            "**Members** can peek at which clans have room, check what’s needed to join or dig into details about any clan across the cluster.  \n\n"
+            "**Recruiters** use it to spot open slots, match new arrivals and drop welcome notes so nobody gets lost on day one.  \n\n"
+            "_All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care._ \n\n"
+            "**To learn what a command does, type like this:**  \n"
             "`!rec help rec ping` → shows info for `!rec ping`"
         )
 
