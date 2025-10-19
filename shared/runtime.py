@@ -584,18 +584,30 @@ class Runtime:
         ) -> None:
             enabled_keys = [key for key in feature_keys if features.is_enabled(key)]
             if not enabled_keys:
+                extra_info = {
+                    "feature_module": module_path,
+                    "feature_keys": list(feature_keys),
+                }
+                if len(extra_info["feature_keys"]) == 1:
+                    extra_info["feature_key"] = extra_info["feature_keys"][0]
                 log.info(
                     "feature toggles disabled; skipping module",
-                    extra={"module": module_path, "features": list(feature_keys)},
+                    extra=extra_info,
                 )
                 return
 
             try:
                 module = importlib.import_module(module_path)
             except Exception as exc:  # pragma: no cover - defensive guard
+                extra_info = {
+                    "feature_module": module_path,
+                    "feature_keys": enabled_keys,
+                }
+                if len(extra_info["feature_keys"]) == 1:
+                    extra_info["feature_key"] = extra_info["feature_keys"][0]
                 log.exception(
                     "failed to import feature module",
-                    extra={"module": module_path, "features": enabled_keys},
+                    extra=extra_info,
                 )
                 try:
                     await self.send_log_message(
@@ -607,9 +619,15 @@ class Runtime:
 
             setup = getattr(module, "setup", None)
             if setup is None:
+                extra_info = {
+                    "feature_module": module_path,
+                    "feature_keys": enabled_keys,
+                }
+                if len(extra_info["feature_keys"]) == 1:
+                    extra_info["feature_key"] = extra_info["feature_keys"][0]
                 log.warning(
                     "feature module missing setup()",
-                    extra={"module": module_path, "features": enabled_keys},
+                    extra=extra_info,
                 )
                 return
 
@@ -618,9 +636,15 @@ class Runtime:
                 if asyncio.iscoroutine(result):
                     await result
             except Exception as exc:  # pragma: no cover - defensive guard
+                extra_info = {
+                    "feature_module": module_path,
+                    "feature_keys": enabled_keys,
+                }
+                if len(extra_info["feature_keys"]) == 1:
+                    extra_info["feature_key"] = extra_info["feature_keys"][0]
                 log.exception(
                     "feature module setup failed",
-                    extra={"module": module_path, "features": enabled_keys},
+                    extra=extra_info,
                 )
                 try:
                     await self.send_log_message(
@@ -630,9 +654,15 @@ class Runtime:
                     pass
                 return
 
+            extra_info = {
+                "feature_module": module_path,
+                "feature_keys": enabled_keys,
+            }
+            if len(extra_info["feature_keys"]) == 1:
+                extra_info["feature_key"] = extra_info["feature_keys"][0]
             log.info(
                 "feature module loaded",
-                extra={"module": module_path, "features": enabled_keys},
+                extra=extra_info,
             )
 
         await _load_feature_module(
