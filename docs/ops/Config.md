@@ -1,4 +1,22 @@
-# Configuration Reference — Phase 3b
+# Configuration Reference — Phase 3 + 3b
+
+## Live `!config` embed example
+```
+Configuration Snapshot — prod
+Guilds: Clash Champs (Recruitment), Clash Champs Lounge (Onboarding)
+Sheets: Recruitment → 1aBCDefGhijKLMnoPqrStuV · Onboarding → 9zYXwvUTsrQpoNMlkJihGFed
+Watchers: welcome✅ promo✅
+Toggles: STRICT_PROBE=off · ENABLE_NOTIFY_FALLBACK=on · SEARCH_RESULTS_SOFT_CAP=25
+```
+
+- Guild display names replace raw snowflake IDs across the embed.
+- Recruitment and Onboarding Sheet IDs appear in full; click-through URLs remain hidden
+  to avoid clutter.
+- Date/time fields are removed entirely. Embed footers continue to show
+  `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
+
+> **Note:** Values are pulled live from the runtime cache; embeds no longer carry Discord
+> timestamps.
 
 ## Environment keys
 | Group | Key | Type | Default | Notes |
@@ -58,4 +76,4 @@ Leave values blank only if a module is disabled via toggles.
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_

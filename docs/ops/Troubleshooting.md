@@ -10,6 +10,13 @@
   `[watcher]` lines around the attempt.
 - **Sheets error** → switch to manual spreadsheet updates and note the outage window.
 
+### Quick fixes
+| Symptom | Likely Cause | Check Command |
+| --- | --- | --- |
+| `n/a` ages in `!digest` | Bot restarted → cache not yet warmed | wait 5 min or run `!rec refresh all` |
+| “No tabs listed in Config” | Missing key in Sheet Config tab | check sheet permissions + tab names |
+| Missing welcome template | Sheet cache stale | `!rec refresh templates` |
+
 Refer to the automation keys listed in [`Config.md`](Config.md#automation-listeners--cron-jobs)
 when adjusting cadences or toggles.
 
@@ -36,4 +43,4 @@ when adjusting cadences or toggles.
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_

@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ✅ `!checksheet` diagnostics (Tabs & Headers) + `--debug` preview
+- ✅ Public API telemetry in `!digest` & `!health`
+- ✅ Preloader warm-up on startup; `bot_info` auto-refresh every 3 h
+- ✅ Detailed help embeds now show command usage signature
+- ✅ Refreshed `!config` embed (viewer style with meta overlay)
+
+### Changed
+- ⚙️ Removed embed timestamps; footer shows versions only
+- ⚙️ `!help` split into short list vs detailed subcommand views
+- ⚙️ Guardrail compliance: no private cache reads, public API only
+
+### Fixed
+- 🛠 Cron refresh logs not writing to ops channel
+- 🛠 `refresh_now()` argument alignment (trigger → actor)
+- 🛠 Help embed usage signatures restored for parameterized commands
+
 ## [v0.9.3-phase3b-rc4] — 2025-10-17
 ### Changed
 - Unified all command prefixes under `!` and `@mention`.

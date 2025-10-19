@@ -39,6 +39,18 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 - Admin bang shortcuts: `!health|!env|!digest|!help` (Admin role only).
 - No bare-word shortcuts.
 
+## CoreOps v1.5 contract
+- CoreOps integrates with the cache service exclusively through the public API surface:
+  `get_snapshot(name)`, `refresh_now(name, actor=…)`, and telemetry helpers.
+- Private internals such as `_CONFIG_CACHE` or `_sheet_cache_snapshot` are considered
+  implementation details and **must not** be imported or accessed directly.
+- Commands that render operational embeds (`!rec health`, `!rec digest`, `!checksheet`)
+  consume only public telemetry payloads.
+- Guardrails:
+  - Manual refresh commands always include the invoking actor in the telemetry record.
+  - Health/Digest/Checksheet embeds are validated in CI to ensure they do not reference
+    private cache structures.
+
 ## RBAC (Role-based)
 - Staff gate = Admin role OR any Staff role.
 - Admin-only actions (e.g., bang shortcuts).
@@ -65,4 +77,4 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 
 ---
 
-_Doc last updated: 2025-10-15 (v0.9.2)_
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_

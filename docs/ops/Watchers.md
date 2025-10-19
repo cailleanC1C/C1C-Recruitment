@@ -25,9 +25,11 @@ single structured log._
 
 ## Current Watchers (event listeners)
 - **Welcome listeners** (`ENABLE_WELCOME_LISTENERS`) — greet new members, open tickets, and
-  sync sheet rows.
+  sync sheet rows. They now resolve channel, thread, and role targets from the shared
+  config registry — no hard-coded IDs remain.
 - **Promo listeners** (`ENABLE_PROMO_LISTENERS`) — track promo requests, tag recruiters, and
-  update onboarding tabs.
+  update onboarding tabs. Targets load from the same registry to maintain parity between
+  environments.
 
 Watchers read clan tags, templates, and ticket rows via the Sheets adapters listed above.
 Writes go back to `WelcomeTickets` / `PromoTickets` using bounded retry helpers that
@@ -59,6 +61,13 @@ stay active while promo listeners are paused).
 - Deliver the daily recruiter digest.
 - Register cleanup or hygiene jobs supplied by watcher modules.
 
+### `bot_info` telemetry refresh
+- **Cadence:** Every 3 hours via scheduler cron (`bot_info` bucket).
+- **Source:** Preloader seeds the initial snapshot; scheduled jobs call the public cache
+  API to refresh.
+- **Logging:** `[refresh]` lines show `bucket=bot_info actor=cron` alongside duration and
+  retries. Use `!rec refresh bot_info` if manual validation is required after deploys.
+
 ## Failure handling & health
 - Read failure → serve stale cache (if present) and log error.
 - Write failure → log structured error (ticket, tab, row, reason) and enqueue bounded
@@ -69,4 +78,4 @@ stay active while promo listeners are paused).
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
