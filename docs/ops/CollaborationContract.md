@@ -1,8 +1,4 @@
-Got it — updating your collaboration rule-set with those corrections and the ADR note baked in. Here’s the new full version, ready for reuse at chat start:
-
----
-
-## 🧭 C1C Bot Collaboration Ground Rules (Updated)
+## 🧭 C1C Bot Collaboration Ground Rules 
 
 These rules define **how planning and implementation are handled** during bot development.
 They apply to **all phases, PRs, and documentation changes**.
@@ -141,6 +137,3 @@ AUDIT/20251010_src/WC   → WelcomeCrew legacy clone
 * Keep ENV + Sheet config consistent.
 * Stop and ask if unsure.
 
----
-
-Would you like me to add a **short “quick-load” version** (a one-paragraph summary you can paste at chat start) under this for convenience?
