@@ -53,6 +53,7 @@ from shared.help import (
     build_coreops_footer,
     build_help_detail_embed,
     build_help_overview_embed,
+    lookup_help_metadata,
 )
 from shared.coreops.helpers.tiers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
@@ -1919,11 +1920,9 @@ class CoreOpsCog(commands.Cog):
             return
 
         command_info = self._build_help_info(command)
-        subcommands = await self._gather_subcommand_infos(command, ctx)
         embed = build_help_detail_embed(
             prefix=prefix,
             command=command_info,
-            subcommands=subcommands,
             bot_version=bot_version,
             bot_name=bot_name,
         )
@@ -2480,22 +2479,36 @@ class CoreOpsCog(commands.Cog):
 
     def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
         signature = command.signature or ""
-        summary = command.short_doc or command.help or command.brief or ""
+        metadata = (
+            lookup_help_metadata(command.qualified_name)
+            or lookup_help_metadata(command.name)
+            or None
+        )
+        if metadata is not None:
+            short = metadata.short
+            detailed = metadata.detailed
+        else:
+            fallback = command.short_doc or command.help or command.brief or ""
+            short = fallback.strip()
+            detailed = (command.help or fallback or "").strip()
         aliases = tuple(sorted(alias.strip() for alias in command.aliases if alias.strip()))
         return HelpCommandInfo(
             qualified_name=command.qualified_name,
             signature=signature,
-            summary=summary.strip(),
+            short=short,
+            detailed=detailed,
             aliases=aliases,
         )
 
     def _help_bot_description(self, *, bot_name: str) -> str:
         return (
-            "C1C-Recruitment keeps the doors open and the hearths warm.\n"
-            "It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.\n"
-            "Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.\n"
-            "Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.\n"
-            "All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care."
+            "**C1C-Recruitment keeps the doors open and the hearths warm.**  \n"
+            "It’s how we find new clanmates, help old friends move up, and keep every hall filled with good company.\n\n"
+            "Members can peek at which clans have room, check what’s needed to join, or dig into details about any clan across the cluster.  \n\n"
+            "Recruiters use it to spot open slots, match new arrivals, and drop welcome notes so nobody gets lost on day one.  \n\n"
+            "All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care.\n\n"
+            "_To learn what a command does, type like this:_  \n"
+            "`!rec help rec ping` → shows info for `!rec ping`"
         )
 
     def _add_embed_group(
