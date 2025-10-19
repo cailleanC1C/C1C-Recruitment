@@ -49,7 +49,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | Toggles | `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to fallback channel when true. |
 | Toggles | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | Toggles | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
-| Toggles | _Feature toggles_ | sheet | `enabled` | Recruitment/placement modules use the `FeatureToggles` worksheet described below. |
+| Toggles | _Feature toggles_ | sheet | `FeatureToggles` | Recruitment/placement modules use the `FeatureToggles` worksheet described below. Only `TRUE` enables a feature. |
 | Watchdog | `WATCHDOG_CHECK_SEC` | int | `30` | Interval between watchdog polls. |
 | Watchdog | `WATCHDOG_STALL_SEC` | int | `45` | Connected stall threshold in seconds. |
 | Watchdog | `WATCHDOG_DISCONNECT_GRACE_SEC` | int | `300` | Disconnect grace period before restart. |
@@ -72,7 +72,7 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 ### Recruitment sheet keys
 - `CLANS_TAB`
 - `WELCOME_TEMPLATES_TAB`
-- `FeatureToggles`
+- `FEATURE_TOGGLES_TAB`
 
 ### Onboarding sheet keys
 - `WELCOME_TICKETS_TAB`
@@ -82,14 +82,41 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 Leave values blank only if a module is disabled via toggles.
 
 ### Feature toggles worksheet
-- Worksheet name: `FeatureToggles`
-- Columns: `feature_name`, `enabled_in_test`, `enabled_in_prod`
-- Accepted values: `TRUE/FALSE`, `YES/NO`, `1/0` (case-insensitive). Leave blank to treat the
-  feature as enabled.
-- Missing worksheet or lookup failures default to **enabled** for all features. Startup logs a
-  single warning: `FeatureToggles unavailable; assuming enabled`.
-- Feature keys must match the module declarations listed in ADR-0007.
+
+**Config key**
+
+| KEY | VALUE |
+| --- | --- |
+| `FEATURE_TOGGLES_TAB` | `FeatureToggles` |
+
+**FeatureToggles tab (recruitment Sheet)**
+
+- Headers: `feature_name`, `enabled` (case-insensitive).
+- **Only `TRUE` enables a feature.** Any other value (`FALSE`, numbers, text, blank) disables it.
+- Seed rows:
+  ```
+  feature_name,enabled
+  member_panel,TRUE
+  recruiter_panel,TRUE
+  recruitment_welcome,TRUE
+  recruitment_reports,TRUE
+  placement_target_select,TRUE
+  placement_reservations,TRUE
+  ```
+
+**Behavior**
+
+- Missing tab or header ⇒ all features disabled; emits one admin-ping warning in the runtime log channel.
+- Missing feature row ⇒ that feature disabled; logs one admin-ping warning the first time the key is evaluated.
+- Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
+- Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
+
+**Troubleshooting**
+
+- Warnings mention the first role listed in `ADMIN_ROLE_IDS` and are posted to the runtime log channel.
+- Verify the worksheet name matches the Config key and that headers are spelled correctly.
+- Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-21 (Phase 4 fail-closed toggles)_
