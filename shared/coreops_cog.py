@@ -1310,6 +1310,7 @@ class CoreOpsCog(commands.Cog):
         warnings: list[str] = []
         tabs: list[ChecksheetTabEntry] = []
 
+        config_tab_display = config_tab or "Config"
         display_sheet_id = _mask_sheet_id(sheet_id)
 
         if not sheet_id:
@@ -1328,11 +1329,12 @@ class CoreOpsCog(commands.Cog):
                 sheet_id="—",
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_tab=config_tab_display,
                 config_headers="n/a",
+                config_preview_rows=(),
                 discovered_tabs=(),
             )
 
-        config_tab_display = config_tab or "Config"
         log_title = sanitize_text(sheet_title or "Sheet")
         log_last4 = sheet_id[-4:] if sheet_id else "----"
         log_config = sanitize_text(config_tab_display)
@@ -1390,7 +1392,9 @@ class CoreOpsCog(commands.Cog):
                 sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_tab=config_tab_display,
                 config_headers=config_headers_label,
+                config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
                 discovered_tabs=tuple(discovery.tabs),
             )
 
@@ -1409,7 +1413,9 @@ class CoreOpsCog(commands.Cog):
                 sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_tab=config_tab_display,
                 config_headers=config_headers_label,
+                config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
                 discovered_tabs=tuple(discovery.tabs),
             )
 
@@ -1433,7 +1439,9 @@ class CoreOpsCog(commands.Cog):
             sheet_id=display_sheet_id,
             tabs=tuple(tabs),
             warnings=tuple(warnings),
+            config_tab=config_tab_display,
             config_headers=config_headers_label,
+            config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
             discovered_tabs=tuple(discovery.tabs),
         )
 
@@ -1494,6 +1502,10 @@ class CoreOpsCog(commands.Cog):
                         sheet_id=target.sheet_id or "—",
                         tabs=(),
                         warnings=(f"Unexpected error: {error}",),
+                        config_tab=target.config_tab or "Config",
+                        config_headers=None,
+                        config_preview_rows=(),
+                        discovered_tabs=(),
                     )
                 )
             else:
