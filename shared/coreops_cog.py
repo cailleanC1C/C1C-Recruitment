@@ -2363,6 +2363,13 @@ class CoreOpsCog(commands.Cog):
             if not await self._can_display_command(command, ctx):
                 continue
             level = _get_tier(command)
+            metadata = (
+                lookup_help_metadata(command.qualified_name)
+                or lookup_help_metadata(command.name)
+                or None
+            )
+            if metadata and metadata.tier:
+                level = metadata.tier
             if level not in grouped:
                 level = "user"
             grouped[level].append(command)
