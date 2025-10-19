@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 import logging
 import os
 import re
@@ -146,68 +147,112 @@ class _SheetsDiscoveryClient:
 _DISCOVERY_SHEETS_CLIENT = _SheetsDiscoveryClient()
 
 
-async def _discover_tabs_from_config(sheets_client, sheet_id: str, config_tab_name: str | None) -> list[str]:
-    """Return ordered unique tab names discovered from a sheet's Config tab."""
+@dataclass(frozen=True)
+class _ConfigDiscoveryResult:
+    tabs: list[str]
+    header_names: tuple[str, str]
+    preview_rows: list[list[str]]
+
+
+async def _discover_tabs_from_config(
+    sheets_client,
+    sheet_id: str,
+    config_tab_name: str | None,
+) -> _ConfigDiscoveryResult:
+    """Returns ordered unique tab names for a sheet based on its Config worksheet.
+
+    Rules:
+      • Open worksheet named ``config_tab_name`` or fallback "Config".
+      • Read up to 200 rows × 2 cols (A:B) only.
+      • Detect header row within first 3 rows (case-insensitive) for KEY / VALUE.
+        - If not found, assume A=KEY, B=VALUE.
+      • Normalize KEY as upper(). If KEY endswith "_TAB" and VALUE non-empty,
+        append VALUE.strip() to result (dedupe preserving order).
+      • Fail soft: on any exception, return [] (tabs empty).
+    """
+
+    config_tab = config_tab_name or "Config"
     try:
-        worksheet = await sheets_client.get_worksheet(
-            sheet_id=sheet_id,
-            tab=config_tab_name or "Config",
-        )
-        rows = await sheets_client.get_values(
-            worksheet,
-            max_rows=200,
-            max_cols=2,
-        )
-        if not rows or not isinstance(rows, Sequence):
-            return []
-
-        rows_seq = list(rows)
-        key_idx: int | None = None
-        val_idx: int | None = None
-        header_row_index: int | None = None
-        for r_i in range(min(3, len(rows_seq))):
-            raw_row = rows_seq[r_i]
-            if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
-                cells: list[str] = []
-            else:
-                cells = [str(cell or "").strip() for cell in raw_row]
-            lowered = [cell.lower() for cell in cells]
-            if "key" in lowered and "value" in lowered:
-                key_idx = lowered.index("key")
-                val_idx = lowered.index("value")
-                header_row_index = r_i
-                break
-
-        if key_idx is None or val_idx is None:
-            key_idx, val_idx = 0, 1
-            header_row_index = -1
-
-        discovered: list[str] = []
-        seen: set[str] = set()
-        max_index = max(key_idx, val_idx)
-        for r_i, raw_row in enumerate(rows_seq):
-            if r_i <= header_row_index:
-                continue
-            if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
-                cells = []
-            else:
-                cells = list(raw_row)
-            if len(cells) <= max_index:
-                cells.extend([""] * (max_index + 1 - len(cells)))
-            key = str(cells[key_idx] or "").strip()
-            val = str(cells[val_idx] or "").strip()
-            if not key or not val:
-                continue
-            if key.upper().endswith("_TAB"):
-                dedupe = val.lower()
-                if dedupe in seen:
-                    continue
-                seen.add(dedupe)
-                discovered.append(val)
-
-        return discovered
+        worksheet = await sheets_client.get_worksheet(sheet_id=sheet_id, tab=config_tab)
+        rows = await sheets_client.get_values(worksheet, max_rows=200, max_cols=2)
     except Exception:
-        return []
+        return _ConfigDiscoveryResult(tabs=[], header_names=("A", "B"), preview_rows=[])
+
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        rows_seq: list[Sequence[object]] = []
+    else:
+        rows_seq = []
+        for row in rows:
+            if isinstance(row, Sequence) and not isinstance(row, (str, bytes)):
+                rows_seq.append(list(row))
+            else:
+                rows_seq.append([row])
+
+    preview_rows: list[list[str]] = []
+    for raw_row in rows_seq[:5]:
+        if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
+            cells = []
+        else:
+            cells = list(raw_row)
+        trimmed: list[str] = []
+        for cell in cells[:2]:
+            text = str(cell or "").strip()
+            if len(text) > 40:
+                text = f"{text[:37]}…"
+            trimmed.append(text)
+        preview_rows.append([sanitize_text(value) for value in trimmed])
+
+    key_idx: int | None = None
+    val_idx: int | None = None
+    header_row_index: int = -1
+    header_names: tuple[str, str] = ("A", "B")
+
+    for r_i in range(min(3, len(rows_seq))):
+        raw_row = rows_seq[r_i]
+        if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
+            cells: list[str] = []
+        else:
+            cells = [str(cell or "").strip() for cell in raw_row]
+        lowered = [cell.lower() for cell in cells]
+        if "key" in lowered and "value" in lowered:
+            key_idx = lowered.index("key")
+            val_idx = lowered.index("value")
+            header_row_index = r_i
+            key_name = cells[key_idx] if key_idx < len(cells) else "KEY"
+            val_name = cells[val_idx] if val_idx < len(cells) else "VALUE"
+            header_names = (
+                str(key_name or "KEY").strip().upper() or "KEY",
+                str(val_name or "VALUE").strip().upper() or "VALUE",
+            )
+            break
+
+    if key_idx is None or val_idx is None:
+        key_idx, val_idx = 0, 1
+
+    discovered: list[str] = []
+    seen: set[str] = set()
+    max_index = max(key_idx, val_idx)
+    for r_i, raw_row in enumerate(rows_seq):
+        if header_row_index >= 0 and r_i <= header_row_index:
+            continue
+        if not isinstance(raw_row, Sequence) or isinstance(raw_row, (str, bytes)):
+            cells = []
+        else:
+            cells = list(raw_row)
+        if len(cells) <= max_index:
+            cells.extend([""] * (max_index + 1 - len(cells)))
+        key = str(cells[key_idx] or "").strip()
+        val = str(cells[val_idx] or "").strip()
+        if not key or not val:
+            continue
+        if key.upper().endswith("_TAB"):
+            dedupe = val.lower()
+            if not dedupe or dedupe in seen:
+                continue
+            seen.add(dedupe)
+            discovered.append(val.strip())
+
+    return _ConfigDiscoveryResult(tabs=discovered, header_names=header_names, preview_rows=preview_rows)
 
 
 @dataclass(frozen=True)
@@ -1024,6 +1069,17 @@ class CoreOpsCog(commands.Cog):
             preview.append(text.replace("\n", " "))
         return ", ".join(preview) if preview else "—"
 
+    def _format_config_headers_label(self, header_names: tuple[str, str] | None) -> str:
+        if not header_names:
+            return "n/a"
+        cleaned: list[str] = []
+        for name in header_names:
+            text = str(name or "").strip()
+            cleaned.append(text.upper() if text else "—")
+        if not cleaned:
+            return "n/a"
+        return " / ".join(cleaned[:2])
+
     async def _determine_row_text(
         self,
         *,
@@ -1086,7 +1142,14 @@ class CoreOpsCog(commands.Cog):
                 detail=error,
                 context="worksheet_open",
             )
-            return ChecksheetTabEntry(name=tab_name, ok=False, rows="n/a", headers="—", error=error)
+            return ChecksheetTabEntry(
+                name=tab_name,
+                ok=False,
+                rows="n/a",
+                headers="—",
+                error=error,
+                first_headers=(),
+            )
 
         try:
             header_row = await acall_with_backoff(worksheet.row_values, 1)
@@ -1102,9 +1165,21 @@ class CoreOpsCog(commands.Cog):
                 detail=error,
                 context="headers",
             )
-            return ChecksheetTabEntry(name=tab_name, ok=False, rows="n/a", headers="—", error=error)
+            return ChecksheetTabEntry(
+                name=tab_name,
+                ok=False,
+                rows="n/a",
+                headers="—",
+                error=error,
+                first_headers=(),
+            )
 
         headers_preview = self._format_headers_preview(header_row)
+        first_headers = [
+            str(raw or "").strip()
+            for raw in list(header_row)[:4]
+            if str(raw or "").strip()
+        ]
         rows_text, row_error = await self._determine_row_text(
             sheet_id=sheet_id,
             tab_name=tab_name,
@@ -1125,6 +1200,7 @@ class CoreOpsCog(commands.Cog):
             rows=rows_text,
             headers=headers_preview,
             error=None,
+            first_headers=tuple(first_headers),
         )
 
     async def _inspect_sheet(self, target: _ChecksheetSheetTarget) -> ChecksheetSheetEntry:
@@ -1152,7 +1228,43 @@ class CoreOpsCog(commands.Cog):
                 sheet_id="—",
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_headers="n/a",
+                discovered_tabs=(),
             )
+
+        config_tab_display = config_tab or "Config"
+        log_title = sanitize_text(sheet_title or "Sheet")
+        log_last4 = sheet_id[-4:] if sheet_id else "----"
+        log_config = sanitize_text(config_tab_display)
+        logger.info(
+            '[checksheet] sheet="%s"(…%s) using config_tab="%s"',
+            log_title,
+            log_last4 or "----",
+            log_config,
+        )
+
+        discovery = await _discover_tabs_from_config(
+            _DISCOVERY_SHEETS_CLIENT,
+            sheet_id=sheet_id,
+            config_tab_name=config_tab,
+        )
+
+        preview_json = json.dumps(discovery.preview_rows, ensure_ascii=False, separators=(",", ":"))
+        logger.info("[checksheet] first_rows=%s", preview_json)
+
+        config_headers_label = self._format_config_headers_label(discovery.header_names)
+        sanitized_tabs_for_log = [sanitize_text(name) for name in discovery.tabs]
+        joined = ", ".join(sanitized_tabs_for_log)
+        if len(joined) > 120:
+            joined = f"{joined[:117]}…"
+        if discovery.tabs:
+            logger.info(
+                "[checksheet] discovered %d tabs: %s",
+                len(discovery.tabs),
+                joined,
+            )
+        else:
+            logger.info("[checksheet] no *_TAB rows found in Config")
 
         try:
             workbook = await aopen_by_key(sheet_id)
@@ -1177,13 +1289,11 @@ class CoreOpsCog(commands.Cog):
                 sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_headers=config_headers_label,
+                discovered_tabs=tuple(discovery.tabs),
             )
 
-        tab_names = await _discover_tabs_from_config(
-            _DISCOVERY_SHEETS_CLIENT,
-            sheet_id=sheet_id,
-            config_tab_name=config_tab,
-        )
+        tab_names = discovery.tabs
 
         if not tab_names:
             sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
@@ -1191,13 +1301,15 @@ class CoreOpsCog(commands.Cog):
                 "[checksheet] no *_TAB entries in Config for sheet %s",
                 sheet_label,
             )
-            warning = f"⚠️ No tabs listed in '{config_tab}'"
+            warning = f"⚠️ No tabs listed in '{config_tab_display}'"
             warnings.append(warning)
             return ChecksheetSheetEntry(
                 title=sheet_title,
                 sheet_id=display_sheet_id,
                 tabs=tuple(tabs),
                 warnings=tuple(warnings),
+                config_headers=config_headers_label,
+                discovered_tabs=tuple(discovery.tabs),
             )
 
         sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
@@ -1220,6 +1332,8 @@ class CoreOpsCog(commands.Cog):
             sheet_id=display_sheet_id,
             tabs=tuple(tabs),
             warnings=tuple(warnings),
+            config_headers=config_headers_label,
+            discovered_tabs=tuple(discovery.tabs),
         )
 
     def _build_checksheet_targets(self) -> Sequence[_ChecksheetSheetTarget]:
@@ -1243,7 +1357,17 @@ class CoreOpsCog(commands.Cog):
             )
         return targets
 
-    async def _checksheet_impl(self, ctx: commands.Context) -> None:
+    def _has_debug_flag(self, ctx: commands.Context) -> bool:
+        message = getattr(ctx, "message", None)
+        content = getattr(message, "content", "")
+        if not isinstance(content, str):
+            return False
+        tokens = content.split()
+        if len(tokens) <= 1:
+            return False
+        return any(token.lower() == "--debug" for token in tokens[1:])
+
+    async def _checksheet_impl(self, ctx: commands.Context, *, debug: bool = False) -> None:
         bot_version = os.getenv("BOT_VERSION", "dev")
         targets = self._build_checksheet_targets()
         results: list[ChecksheetSheetEntry] = []
@@ -1279,6 +1403,7 @@ class CoreOpsCog(commands.Cog):
                 sheets=results,
                 bot_version=bot_version,
                 coreops_version=COREOPS_VERSION,
+                debug=debug,
             )
         )
 
@@ -1289,14 +1414,14 @@ class CoreOpsCog(commands.Cog):
     @guild_only_denied_msg()
     @ops_only()
     async def rec_checksheet(self, ctx: commands.Context) -> None:
-        await self._checksheet_impl(ctx)
+        await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     @tier("staff")
     @commands.command(name="checksheet", hidden=True)
     @guild_only_denied_msg()
     @ops_only()
     async def checksheet(self, ctx: commands.Context) -> None:
-        await self._checksheet_impl(ctx)
+        await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     def _collect_sheets_client_summary(self, now: dt.datetime) -> Optional[DigestSheetsClientSummary]:
         try:

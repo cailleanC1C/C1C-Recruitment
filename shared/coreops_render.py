@@ -387,6 +387,7 @@ class ChecksheetTabEntry:
     rows: str
     headers: str
     error: str | None = None
+    first_headers: Sequence[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -395,6 +396,8 @@ class ChecksheetSheetEntry:
     sheet_id: str
     tabs: Sequence[ChecksheetTabEntry]
     warnings: Sequence[str] = ()
+    config_headers: str | None = None
+    discovered_tabs: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
@@ -402,6 +405,7 @@ class ChecksheetEmbedData:
     sheets: Sequence[ChecksheetSheetEntry]
     bot_version: str
     coreops_version: str = COREOPS_VERSION
+    debug: bool = False
 
 
 def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
@@ -434,7 +438,16 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
             else:
                 rows_text = _sanitize_inline(tab.rows or "n/a")
                 lines.append(f"🔴 {tab_name} — rows {rows_text}")
-            lines.append(f"Headers: {headers_preview if headers_preview else '—'}")
+            header_line = f"Headers: {headers_preview if headers_preview else '—'}"
+            if data.debug:
+                sanitized_first: list[str] = []
+                for raw_item in tab.first_headers or []:
+                    cleaned = _sanitize_inline(raw_item, allow_empty=True)
+                    if cleaned and cleaned.strip():
+                        sanitized_first.append(cleaned.strip())
+                first_headers = ", ".join(sanitized_first) if sanitized_first else "—"
+                header_line = f"{header_line} • First headers: {first_headers}"
+            lines.append(header_line)
             if not tab.ok and tab.error:
                 lines.append(f"Error: {_sanitize_inline(tab.error)}")
             lines.append("")
@@ -444,6 +457,20 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
 
         block = "\n".join(lines) if lines else "—"
         embed.add_field(name="​", value=block, inline=False)
+
+        if data.debug:
+            config_headers = _sanitize_inline(sheet.config_headers or "n/a")
+            sanitized_tabs: list[str] = []
+            for raw_name in sheet.discovered_tabs:
+                cleaned = _sanitize_inline(raw_name, allow_empty=True)
+                if cleaned and cleaned.strip():
+                    sanitized_tabs.append(cleaned.strip())
+            discovered_list = ", ".join(sanitized_tabs) if sanitized_tabs else "—"
+            debug_lines = [
+                f"Config headers: {config_headers if config_headers else 'n/a'}",
+                f"Discovered: {discovered_list}",
+            ]
+            embed.add_field(name="Debug preview", value="\n".join(debug_lines), inline=False)
 
     footer_text = f"Bot v{_sanitize_inline(data.bot_version)} · CoreOps v{_sanitize_inline(data.coreops_version)}"
     embed.set_footer(text=footer_text)
