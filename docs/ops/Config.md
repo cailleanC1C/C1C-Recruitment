@@ -49,6 +49,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | Toggles | `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to fallback channel when true. |
 | Toggles | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | Toggles | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
+| Toggles | _Feature toggles_ | sheet | `enabled` | Recruitment/placement modules use the `FeatureToggles` worksheet described below. |
 | Watchdog | `WATCHDOG_CHECK_SEC` | int | `30` | Interval between watchdog polls. |
 | Watchdog | `WATCHDOG_STALL_SEC` | int | `45` | Connected stall threshold in seconds. |
 | Watchdog | `WATCHDOG_DISCONNECT_GRACE_SEC` | int | `300` | Disconnect grace period before restart. |
@@ -71,6 +72,7 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 ### Recruitment sheet keys
 - `CLANS_TAB`
 - `WELCOME_TEMPLATES_TAB`
+- `FeatureToggles`
 
 ### Onboarding sheet keys
 - `WELCOME_TICKETS_TAB`
@@ -78,6 +80,15 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - `CLANLIST_TAB`
 
 Leave values blank only if a module is disabled via toggles.
+
+### Feature toggles worksheet
+- Worksheet name: `FeatureToggles`
+- Columns: `feature_name`, `enabled_in_test`, `enabled_in_prod`
+- Accepted values: `TRUE/FALSE`, `YES/NO`, `1/0` (case-insensitive). Leave blank to treat the
+  feature as enabled.
+- Missing worksheet or lookup failures default to **enabled** for all features. Startup logs a
+  single warning: `FeatureToggles unavailable; assuming enabled`.
+- Feature keys must match the module declarations listed in ADR-0007.
 
 ---
 
