@@ -42,6 +42,7 @@ class RefreshResult:
     ok: bool
     duration_ms: Optional[int]
     error: Optional[str]
+    retries: Optional[int]
     snapshot: CacheSnapshot
 
 
@@ -167,6 +168,28 @@ def get_all_snapshots() -> Dict[str, CacheSnapshot]:
     return snapshots
 
 
+def _format_exception(exc: BaseException) -> str:
+    message = str(exc).strip().strip("\"")
+    if message:
+        return f"{type(exc).__name__}: {message}"
+    return type(exc).__name__
+
+
+def _normalize_bucket_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("cache bucket name must be non-empty")
+    return cleaned
+
+
+def _derive_error_text(snapshot: CacheSnapshot) -> Optional[str]:
+    if snapshot.last_error:
+        return snapshot.last_error
+    if snapshot.last_result and snapshot.last_result.lower().startswith("fail"):
+        return snapshot.last_result
+    return None
+
+
 async def refresh_now(name: str, actor: Optional[str] = None) -> RefreshResult:
     """Trigger an immediate refresh and return result metadata.
 
@@ -176,29 +199,38 @@ async def refresh_now(name: str, actor: Optional[str] = None) -> RefreshResult:
         accordingly to avoid reporting a false success.
     """
 
+    bucket = _normalize_bucket_name(name)
     start = time.monotonic()
     error_text: Optional[str] = None
     ok = True
+    trigger = "schedule" if actor == "cron" else "manual"
     try:
-        await cache_service.cache.refresh_now(name, trigger="manual", actor=actor)
+        await cache_service.cache.refresh_now(bucket, trigger=trigger, actor=actor)
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # pragma: no cover - defensive guard
         ok = False
-        error_text = (str(exc).strip()) or exc.__class__.__name__
+        error_text = _format_exception(exc)
     duration_ms = int((time.monotonic() - start) * 1000)
-    snapshot = get_snapshot(name)
+    snapshot = get_snapshot(bucket)
+    retries = snapshot.retries
+    if retries is not None:
+        try:
+            retries = int(retries)
+        except (TypeError, ValueError):  # pragma: no cover - defensive guard
+            retries = None
     if ok:
-        last_error = snapshot.last_error or ""
-        last_result = snapshot.last_result or ""
-        last_result_norm = last_result.lower()
-        if last_error or last_result_norm.startswith("fail"):
+        derived = _derive_error_text(snapshot)
+        if derived:
             ok = False
-            error_text = last_error or last_result or "fail"
+            error_text = derived
+    if error_text:
+        error_text = error_text.strip().strip("\"")
     return RefreshResult(
-        name=name,
+        name=bucket,
         ok=ok,
         duration_ms=duration_ms,
         error=error_text,
+        retries=retries,
         snapshot=snapshot,
     )
