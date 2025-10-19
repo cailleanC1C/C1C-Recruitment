@@ -22,6 +22,16 @@ friends find a hall, and makes sure every welcome lands in the right place.
 - [Ops suite](docs/ops/Runbook.md) — runbooks, command matrix, config tables, and
   troubleshooting references.
 
+## Emoji pipeline configuration
+- `PUBLIC_BASE_URL` — external base for `/emoji-pad` (falls back to `RENDER_EXTERNAL_URL`).
+- `RENDER_EXTERNAL_URL` — render.com external hostname when `PUBLIC_BASE_URL` is unset.
+- `EMOJI_MAX_BYTES` — maximum emoji payload size in bytes (default: `2000000`).
+- `EMOJI_PAD_SIZE` — square canvas size for padded emoji PNGs (default: `256`).
+- `EMOJI_PAD_BOX` — fraction of the canvas filled by the emoji glyph (default: `0.85`).
+- `TAG_BADGE_PX` — attachment badge size used in search/profile views (default: `128`).
+- `TAG_BADGE_BOX` — badge glyph fill ratio for attachments (default: `0.90`).
+- `STRICT_EMOJI_PROXY` — when `1`, skip raw CDN thumbnails and require the proxy (default: `1`).
+
 ---
 
 _Doc last updated: 2025-10-22 (v0.9.4)_

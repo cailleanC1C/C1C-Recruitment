@@ -49,6 +49,14 @@ __all__ = [
     "get_cleanup_age_hours",
     "get_panel_thread_mode",
     "get_panel_fixed_thread_id",
+    "get_public_base_url",
+    "get_render_external_url",
+    "get_emoji_max_bytes",
+    "get_emoji_pad_size",
+    "get_emoji_pad_box",
+    "get_tag_badge_px",
+    "get_tag_badge_box",
+    "get_strict_emoji_proxy",
     "redact_token",
     "redact_ids",
     "redact_value",
@@ -183,6 +191,40 @@ def _int_env(
     return value
 
 
+def _float_env(
+    key: str,
+    default: float,
+    *,
+    min_value: float | None = None,
+    max_value: float | None = None,
+) -> float:
+    """Parse an optional float environment variable defensively."""
+
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+
+    text = str(raw).strip()
+    if not text:
+        return default
+
+    try:
+        value = float(text)
+    except Exception:  # pragma: no cover - defensive logging path
+        logging.warning("config: %s='%s' invalid; using default %s", key, text, default)
+        return default
+
+    if min_value is not None and value < min_value:
+        logging.warning("config: %s=%s < min %s; clamping", key, value, min_value)
+        value = min_value
+
+    if max_value is not None and value > max_value:
+        logging.warning("config: %s=%s > max %s; clamping", key, value, max_value)
+        value = max_value
+
+    return value
+
+
 def _log_snapshot(snapshot: Dict[str, object]) -> None:
     redacted = {key: _redact_value(key, value) for key, value in snapshot.items()}
     log.info("config loaded", extra={"config": redacted})
@@ -236,6 +278,14 @@ def _load_config() -> Dict[str, object]:
         "PANEL_FIXED_THREAD_ID": _first_int(os.getenv("PANEL_FIXED_THREAD_ID")),
         "BOT_VERSION": os.getenv("BOT_VERSION", "dev"),
         "LOG_LEVEL": os.getenv("LOG_LEVEL", "INFO"),
+        "PUBLIC_BASE_URL": (os.getenv("PUBLIC_BASE_URL") or "").strip(),
+        "RENDER_EXTERNAL_URL": (os.getenv("RENDER_EXTERNAL_URL") or "").strip(),
+        "EMOJI_MAX_BYTES": _int_env("EMOJI_MAX_BYTES", 2_000_000, min_value=1),
+        "EMOJI_PAD_SIZE": _int_env("EMOJI_PAD_SIZE", 256, min_value=64, max_value=512),
+        "EMOJI_PAD_BOX": _float_env("EMOJI_PAD_BOX", 0.85, min_value=0.2, max_value=0.95),
+        "TAG_BADGE_PX": _int_env("TAG_BADGE_PX", 128, min_value=32, max_value=512),
+        "TAG_BADGE_BOX": _float_env("TAG_BADGE_BOX", 0.90, min_value=0.2, max_value=0.95),
+        "STRICT_EMOJI_PROXY": _env_bool("STRICT_EMOJI_PROXY", True),
     }
 
     return config
@@ -496,6 +546,72 @@ def get_panel_thread_mode(default: str = "same") -> str:
 
 def get_panel_fixed_thread_id() -> Optional[int]:
     return _optional_id("PANEL_FIXED_THREAD_ID")
+
+
+def get_public_base_url() -> str | None:
+    value = _CONFIG.get("PUBLIC_BASE_URL")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def get_render_external_url() -> str | None:
+    value = _CONFIG.get("RENDER_EXTERNAL_URL")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def get_emoji_max_bytes(default: int = 2_000_000) -> int:
+    value = _CONFIG.get("EMOJI_MAX_BYTES", default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def get_emoji_pad_size(default: int = 256) -> int:
+    value = _CONFIG.get("EMOJI_PAD_SIZE", default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(64, min(512, parsed))
+
+
+def get_emoji_pad_box(default: float = 0.85) -> float:
+    value = _CONFIG.get("EMOJI_PAD_BOX", default)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0.2, min(0.95, parsed))
+
+
+def get_tag_badge_px(default: int = 128) -> int:
+    value = _CONFIG.get("TAG_BADGE_PX", default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(32, min(512, parsed))
+
+
+def get_tag_badge_box(default: float = 0.9) -> float:
+    value = _CONFIG.get("TAG_BADGE_BOX", default)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0.2, min(0.95, parsed))
+
+
+def get_strict_emoji_proxy(default: bool = True) -> bool:
+    value = _CONFIG.get("STRICT_EMOJI_PROXY")
+    if isinstance(value, bool):
+        return value
+    return default
 
 
 def redact_token(token: Optional[str]) -> str:

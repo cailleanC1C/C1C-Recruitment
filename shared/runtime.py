@@ -29,8 +29,10 @@ from shared.config import (
     get_log_channel_id,
     get_refresh_times,
     get_refresh_timezone,
+    get_strict_emoji_proxy,
 )
 from shared.coreops.helpers.tiers import audit_tiers, rehydrate_tiers
+from .web_routes import mount_emoji_pad
 
 log = logging.getLogger("c1c.runtime")
 
@@ -402,6 +404,9 @@ class Runtime:
             return web.json_response(payload, status=200 if healthy else 503)
 
         app = web.Application()
+        mount_emoji_pad(app)
+        strict_proxy_flag = "1" if get_strict_emoji_proxy() else "0"
+        log.info("web: /emoji-pad mounted (STRICT_EMOJI_PROXY=%s)", strict_proxy_flag)
         app.router.add_get("/", root)
         app.router.add_get("/health", health)
         app.router.add_get("/healthz", healthz)
