@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import math
 import os
@@ -565,15 +566,87 @@ class Runtime:
         """Load all feature modules into the shared bot instance."""
 
         from modules.coreops import cog as coreops_cog
-        from recruitment import search as recruitment_search
-        from recruitment import welcome as recruitment_welcome
         from onboarding import watcher_welcome as onboarding_welcome
         from onboarding import watcher_promo as onboarding_promo
         from ops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
-        await recruitment_search.setup(self.bot)
-        await recruitment_welcome.setup(self.bot)
+
+        from shared import features
+
+        try:
+            await features.refresh()
+        except Exception:
+            log.exception("feature toggle refresh failed")
+
+        async def _load_feature_module(
+            module_path: str, feature_keys: Sequence[str]
+        ) -> None:
+            enabled_keys = [key for key in feature_keys if features.is_enabled(key)]
+            if not enabled_keys:
+                log.info(
+                    "feature toggles disabled; skipping module",
+                    extra={"module": module_path, "features": list(feature_keys)},
+                )
+                return
+
+            try:
+                module = importlib.import_module(module_path)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception(
+                    "failed to import feature module",
+                    extra={"module": module_path, "features": enabled_keys},
+                )
+                try:
+                    await self.send_log_message(
+                        f"❌ Failed to import {module_path}: {exc}"
+                    )
+                except Exception:
+                    pass
+                return
+
+            setup = getattr(module, "setup", None)
+            if setup is None:
+                log.warning(
+                    "feature module missing setup()",
+                    extra={"module": module_path, "features": enabled_keys},
+                )
+                return
+
+            try:
+                result = setup(self.bot)
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception(
+                    "feature module setup failed",
+                    extra={"module": module_path, "features": enabled_keys},
+                )
+                try:
+                    await self.send_log_message(
+                        f"❌ {module_path}.setup failed: {exc}"
+                    )
+                except Exception:
+                    pass
+                return
+
+            log.info(
+                "feature module loaded",
+                extra={"module": module_path, "features": enabled_keys},
+            )
+
+        await _load_feature_module(
+            "recruitment.search", ("member_panel", "recruiter_panel")
+        )
+        await _load_feature_module("recruitment.welcome", ("recruitment_welcome",))
+        await _load_feature_module("recruitment.reports", ("recruitment_reports",))
+        await _load_feature_module(
+            "placement.target_select", ("placement_target_select",)
+        )
+        await _load_feature_module(
+            "placement.reservations", ("placement_reservations",)
+        )
+
         await onboarding_welcome.setup(self.bot)
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
