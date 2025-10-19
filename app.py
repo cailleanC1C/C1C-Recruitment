@@ -26,7 +26,6 @@ from shared.coreops_rbac import (
     is_admin_member,
 )
 from modules.coreops.cron_summary import emit_daily_summary
-from shared.sheets.cache_scheduler import CRON_JOB_NAMES
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
