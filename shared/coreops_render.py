@@ -396,7 +396,9 @@ class ChecksheetSheetEntry:
     sheet_id: str
     tabs: Sequence[ChecksheetTabEntry]
     warnings: Sequence[str] = ()
+    config_tab: str | None = None
     config_headers: str | None = None
+    config_preview_rows: Sequence[Sequence[str]] = ()
     discovered_tabs: Sequence[str] = ()
 
 
@@ -413,7 +415,7 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
     colour = colour_factory() if callable(colour_factory) else discord.Colour.teal()
     embed = discord.Embed(title="Checksheet — Tabs & Headers", colour=colour)
 
-    embed.add_field(name="Backend", value="Google Sheets", inline=False)
+    embed.add_field(name="Google Sheets", value="Public client", inline=False)
 
     for sheet in data.sheets:
         lines: list[str] = []
@@ -431,14 +433,16 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
 
         for tab in sheet.tabs:
             tab_name = _sanitize_inline(tab.name)
-            headers_preview = _sanitize_inline(tab.headers) if tab.headers else "—"
+            headers_preview = _sanitize_inline(tab.headers) if tab.headers else ""
             if tab.ok:
                 rows_text = _sanitize_inline(tab.rows or "0")
                 lines.append(f"✅ {tab_name} — {rows_text} rows")
             else:
                 rows_text = _sanitize_inline(tab.rows or "n/a")
                 lines.append(f"🔴 {tab_name} — rows {rows_text}")
-            header_line = f"Headers: {headers_preview if headers_preview else '—'}"
+
+            header_text = headers_preview if headers_preview else "—"
+            header_line = f"Headers: {header_text}"
             if data.debug:
                 sanitized_first: list[str] = []
                 for raw_item in tab.first_headers or []:
@@ -450,26 +454,53 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
             lines.append(header_line)
             if not tab.ok and tab.error:
                 lines.append(f"Error: {_sanitize_inline(tab.error)}")
-            lines.append("")
-
-        if lines and lines[-1] == "":
-            lines.pop()
 
         block = "\n".join(lines) if lines else "—"
         embed.add_field(name="​", value=block, inline=False)
 
         if data.debug:
-            config_headers = _sanitize_inline(sheet.config_headers or "n/a")
+            config_tab = _sanitize_inline(sheet.config_tab or "Config") or "Config"
+            preview_rows: list[str] = []
+            for raw_row in sheet.config_preview_rows[:5]:
+                if isinstance(raw_row, Sequence) and not isinstance(raw_row, (str, bytes)):
+                    raw_cells = list(raw_row)[:2]
+                else:
+                    raw_cells = []
+                formatted_cells: list[str] = []
+                for cell in raw_cells:
+                    cleaned = _sanitize_inline(cell, allow_empty=True)
+                    cleaned = cleaned.strip()
+                    formatted_cells.append(cleaned)
+                if not formatted_cells:
+                    preview_rows.append("[]")
+                    continue
+                formatted = ", ".join(
+                    f'"{value}"' if value else '""' for value in formatted_cells
+                )
+                preview_rows.append(f"[{formatted}]")
+            if preview_rows and all(item == "[]" for item in preview_rows):
+                first_rows = "—"
+            elif preview_rows:
+                first_rows = "; ".join(preview_rows)
+            else:
+                first_rows = "—"
+            if len(first_rows) > 120:
+                first_rows = f"{first_rows[:117]}…"
+            first_rows_value = _sanitize_inline(first_rows, allow_empty=True) or "—"
+
             sanitized_tabs: list[str] = []
             for raw_name in sheet.discovered_tabs:
                 cleaned = _sanitize_inline(raw_name, allow_empty=True)
                 if cleaned and cleaned.strip():
                     sanitized_tabs.append(cleaned.strip())
-            discovered_list = ", ".join(sanitized_tabs) if sanitized_tabs else "—"
-            debug_lines = [
-                f"Config headers: {config_headers if config_headers else 'n/a'}",
-                f"Discovered: {discovered_list}",
-            ]
+            joined_tabs = ", ".join(sanitized_tabs)
+            if len(joined_tabs) > 120:
+                joined_tabs = f"{joined_tabs[:117]}…"
+            joined_tabs_value = _sanitize_inline(joined_tabs, allow_empty=True)
+
+            debug_lines = [f"config_tab: {config_tab}", f"first_rows: {first_rows_value or '—'}"]
+            if joined_tabs_value:
+                debug_lines.append(f"discovered: {joined_tabs_value}")
             embed.add_field(name="Debug preview", value="\n".join(debug_lines), inline=False)
 
     footer_text = f"Bot v{_sanitize_inline(data.bot_version)} · CoreOps v{_sanitize_inline(data.coreops_version)}"
