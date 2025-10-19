@@ -25,9 +25,11 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 | --- | --- | --- | --- |
 | `!rec checksheet` | 🧩 | Staff view of Sheets linkage for recruitment/onboarding tabs. | `!rec checksheet [--debug]` |
 | `!rec config` | 🧩 | Staff summary of guild routing, sheet IDs, and watcher toggles. | `!rec config` |
-| `!rec digest` | ✅ | Post the recruiter digest with cache age, next run, and retries. | `!rec digest` |
+| `!rec digest` | ✅ | Post the recruiter digest with cache age, next run, and retries. [gated: `recruitment_reports`] | `!rec digest` |
 | `!rec refresh clansinfo` | 🧩 | Refresh clan roster data when Sheets updates land. | `!rec refresh clansinfo` |
-| `!welcome [clan] @mention` | ✅ | Issue a welcome panel seeded from the cached templates. | `!welcome [clan] @mention` |
+| `!clansearch <name>` | 🧩 | Recruitment search panel for members (reserved under toggle). [gated: `member_panel`] | `!clansearch <name>` |
+| `!clanmatch` | 🧩 | Recruiter match workflow (reserved under toggle). [gated: `recruiter_panel`] | `!clanmatch` |
+| `!welcome [clan] @mention` | ✅ | Issue a welcome panel seeded from the cached templates. [gated: `recruitment_welcome`] | `!welcome [clan] @mention` |
 
 ## User — general members
 | Command | Status | Short text | Usage |
@@ -35,6 +37,8 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 | `!rec help [command]` | 🧩 | List accessible commands or expand one with usage and tips. | `!rec help` / `!rec help <command>` |
 | `!rec ping` | ✅ | Report bot latency and shard status without hitting the cache. | `!rec ping` |
 
+> Daily recruiter digest watcher — [gated: `recruitment_reports`]
+
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_

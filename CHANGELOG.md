@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.9.4] — 2025-10-22
+
+### Added
+- Feature toggles (Config-driven) with strict TRUE-only policy and admin-ping on misconfig.
+
+### Changed
+- Runtime loader gates user-facing recruitment modules behind toggles.
+
+### Docs
+- Integrated toggles docs into README/Architecture/Config/Runbook/Troubleshooting/CommandMatrix/Watchers; removed redundant contracts page.
+
 ## [v0.9.3-phase3b-rc6] — 2025-10-19
 
 ### Added

@@ -1,4 +1,4 @@
-# Core Infra Contract — v0.9.2
+# Core Infra Contract — v0.9.4
 
 ## Scope
 Infra must provide reliable runtime, deployment, and observability surfaces while the bot guarantees readiness probes, watchdog
@@ -14,6 +14,12 @@ exits, and structured logging consistent with Phase 1 behavior.
 - `BOT_VERSION` (optional)
 - `LOG_LEVEL` (optional)
 - `PORT` (Render-provided)
+
+## Sheets / Config
+- Recruitment Sheet Config must expose `FEATURE_TOGGLES_TAB → FeatureToggles`.
+- `FeatureToggles` worksheet schema: headers `feature_name`, `enabled` (case-insensitive).
+- Only `TRUE` enables a feature; missing tabs/rows fail closed. See [README](../../README.md#feature-toggles)
+  and [Ops Config](../ops/Config.md#feature-toggles-worksheet) for operator workflow.
 
 ## Intents / Permissions
 - Dev Portal: enable **Server Members Intent** and **Message Content**.
@@ -82,4 +88,4 @@ exits, and structured logging consistent with Phase 1 behavior.
 
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_

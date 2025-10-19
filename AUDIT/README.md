@@ -6,4 +6,4 @@ edit entries when responding to incidents; append new notes instead.
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-22 (v0.9.4)_

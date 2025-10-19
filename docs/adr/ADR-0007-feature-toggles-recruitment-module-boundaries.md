@@ -68,15 +68,16 @@ single warning is logged at startup.
 ### 5. Default Behavior
 If a row is missing or the worksheet is unreachable:
 
-- `is_enabled()` returns `True`.
-- A single warning is logged: "FeatureToggles unavailable; assuming enabled".
+- `is_enabled()` returns `False` (fail closed).
+- A single admin-ping warning logs the condition and the module remains offline until
+  fixed.
 - Startup continues without retries.
 
 ### 6. Documentation & Operations
 
 - `docs/ops/Config.md` documents how to flip toggles.
-- `docs/contracts/feature_toggles.md` describes the schema, cache behavior, and failure
-  modes.
+- `README.md#feature-toggles` and `docs/contracts/core_infra.md#sheets--config` summarize the
+  schema, cache behavior, and fail-closed handling.
 - Each new or changed feature must declare its key in code and update the worksheet prior
   to deployment.
 

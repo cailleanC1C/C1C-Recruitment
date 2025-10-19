@@ -1,4 +1,4 @@
-# Architecture — v0.9.3-phase3b-rc4
+# Architecture — v0.9.4
 
 ## Runtime map
 ```
@@ -38,9 +38,22 @@ off in production until the panels ship._
   per-tab cache invalidation.
 
 ## Feature toggles & gating
-- `WELCOME_ENABLED` controls the welcome command plus both onboarding listeners.
-- `ENABLE_WELCOME_LISTENERS` and `ENABLE_PROMO_LISTENERS` register their event hooks only
-  when true (aliases ending in `_WATCHER` remain for backward compatibility).
+- `shared.features.is_enabled(<key>)` runs during module boot; missing worksheets, headers,
+  or values fail closed and keep the feature offline.
+- Backbone services (cache, scheduler, health server, RBAC) never consult the toggle
+  sheet and always load.
+- Approved keys:
+  - `member_panel` — member search panels.
+  - `recruiter_panel` — recruiter dashboards and match tools.
+  - `recruitment_welcome` — welcome command plus onboarding listeners.
+  - `recruitment_reports` — daily recruiter digest watcher and manual digest command.
+  - `placement_target_select` — placement picker UI inside panels.
+  - `placement_reservations` — reservation workflow for recruiter holds.
+- Toggles live in the recruitment Sheet `FeatureToggles` worksheet; only `TRUE`
+  enables a feature. Misconfigurations post a single admin-ping warning to the runtime log
+  channel.
+- `ENABLE_WELCOME_LISTENERS` and `ENABLE_PROMO_LISTENERS` environment flags still control
+  watcher registration independently of the feature sheet.
 - RBAC derives from `shared.coreops_rbac`, mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 
@@ -53,4 +66,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-22 (v0.9.4)_

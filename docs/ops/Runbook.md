@@ -50,6 +50,14 @@ tabs.
 5. If any validations fail, double-check Sheet permissions and the Config tab contents
    before escalating.
 
+## Features unexpectedly disabled at startup
+- **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
+  match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
+- **Signals:** Startup posts an admin-ping warning in the runtime log channel when the tab,
+  headers, or row values are missing or invalid.
+- **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
+  verify the tab with `!checksheet` before retrying the feature.
+
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_

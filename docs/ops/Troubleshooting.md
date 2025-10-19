@@ -20,6 +20,20 @@
 Refer to the automation keys listed in [`Config.md`](Config.md#automation-listeners--cron-jobs)
 when adjusting cadences or toggles.
 
+## Feature toggles Q&A
+- **Tab missing or misnamed?** Ensure the Config row `FEATURE_TOGGLES_TAB → FeatureToggles`
+  exists in the recruitment Sheet. Missing tabs fail closed and trigger a single
+  admin-ping warning in the runtime log channel.
+- **Headers wrong?** The worksheet must expose `feature_name` and `enabled`. Fix the
+  headers, save, then run `!rec refresh config` and re-verify with `!checksheet`.
+- **Row missing?** Add the feature row using the approved key and `enabled` value. Rows
+  absent from the worksheet evaluate to disabled until present.
+- **Value ignored?** Only `TRUE` (case-insensitive) enables a feature. Any other value —
+  including `FALSE`, blanks, or typos — keeps the module off and logs an admin-ping
+  warning.
+- **Change not taking effect?** After editing the Sheet, run `!rec refresh config`, then
+  confirm with `!checksheet` to ensure the worksheet and headers are clean.
+
 ## Redaction policy
 - Secrets display as `(masked)` with only the final four characters visible.
 - High-sensitivity keys (tokens, service accounts) never appear in embeds or logs.
@@ -43,4 +57,4 @@ when adjusting cadences or toggles.
 
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_

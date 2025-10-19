@@ -1,5 +1,5 @@
 <!-- Keep README user-facing -->
-# C1C Recruitment Bot v0.9.3-phase3b-rc4
+# C1C Recruitment Bot v0.9.4
 Welcome to the C1C recruitment helper. The bot keeps clan rosters healthy, helps new
 friends find a hall, and makes sure every welcome lands in the right place.
 
@@ -11,11 +11,6 @@ friends find a hall, and makes sure every welcome lands in the right place.
   review.
 
 > Recruitment Search: pilot • backend active, panels pending release
-
-## Behind the scenes
-- Sheets hold all roster data; the bot refreshes automatically throughout the day.
-- Watchers keep ticket threads tidy and log every welcome or promo update.
-- Staff have extra panels and refresh controls gated behind recruiter/admin roles.
 
 ## Need help?
 - Ping the recruitment team in Discord for command walkthroughs.
@@ -29,4 +24,4 @@ friends find a hall, and makes sure every welcome lands in the right place.
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-22 (v0.9.4)_
