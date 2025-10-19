@@ -134,14 +134,18 @@ class _SheetsDiscoveryClient:
     async def get_worksheet(self, *, sheet_id: str, tab: str):
         return await aget_worksheet(sheet_id, tab)
 
-    async def get_values(self, worksheet, *, max_rows: int, max_cols: int):
-        end_col = _column_label(max_cols)
-        if not end_col:
-            end_col = "A"
-        rng = f"A1:{end_col}{max_rows}"
+    async def get_values(self, *, sheet_id: str, range_name: str):
+        workbook = await aopen_by_key(sheet_id)
         params = {"majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE"}
-        values = await acall_with_backoff(worksheet.get, rng, params=params)
-        return values or []
+        response = await acall_with_backoff(workbook.values_get, range_name, params=params)
+        if isinstance(response, Mapping):
+            values = response.get("values")
+            if isinstance(values, Sequence):
+                return list(values)
+            return []
+        if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
+            return list(response)
+        return []
 
 
 _DISCOVERY_SHEETS_CLIENT = _SheetsDiscoveryClient()
@@ -158,6 +162,8 @@ async def _discover_tabs_from_config(
     sheets_client,
     sheet_id: str,
     config_tab_name: str | None,
+    *,
+    debug: bool = False,
 ) -> _ConfigDiscoveryResult:
     """Returns ordered unique tab names for a sheet based on its Config worksheet.
 
@@ -172,11 +178,24 @@ async def _discover_tabs_from_config(
     """
 
     config_tab = config_tab_name or "Config"
+    tab_range = f"{config_tab}!A1:B200"
+    rows: Sequence[object] = []
     try:
-        worksheet = await sheets_client.get_worksheet(sheet_id=sheet_id, tab=config_tab)
-        rows = await sheets_client.get_values(worksheet, max_rows=200, max_cols=2)
-    except Exception:
+        rows = await sheets_client.get_values(sheet_id=sheet_id, range_name=tab_range)
+        logger.info("[checksheet] raw Config rows (%s): %d", tab_range, len(rows))
+    except Exception as exc:
+        logger.warning("[checksheet] failed to read Config range %s: %s", config_tab, exc)
         return _ConfigDiscoveryResult(tabs=[], header_names=("A", "B"), preview_rows=[])
+
+    if debug and rows:
+        preview: list[str] = []
+        if isinstance(rows, Sequence) and not isinstance(rows, (str, bytes)):
+            for raw in rows[:5]:
+                if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
+                    preview.append(str(list(raw[:2])))
+                else:
+                    preview.append(str(raw))
+        logger.info("[checksheet] Config preview %s: %s", sheet_id[-4:] if sheet_id else "----", preview)
 
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         rows_seq: list[Sequence[object]] = []
@@ -1203,7 +1222,9 @@ class CoreOpsCog(commands.Cog):
             first_headers=tuple(first_headers),
         )
 
-    async def _inspect_sheet(self, target: _ChecksheetSheetTarget) -> ChecksheetSheetEntry:
+    async def _inspect_sheet(
+        self, target: _ChecksheetSheetTarget, *, debug: bool = False
+    ) -> ChecksheetSheetEntry:
         sheet_id = target.sheet_id
         config_tab = target.config_tab
         sheet_title = target.label
@@ -1247,6 +1268,7 @@ class CoreOpsCog(commands.Cog):
             _DISCOVERY_SHEETS_CLIENT,
             sheet_id=sheet_id,
             config_tab_name=config_tab,
+            debug=debug,
         )
 
         preview_json = json.dumps(discovery.preview_rows, ensure_ascii=False, separators=(",", ":"))
@@ -1374,7 +1396,7 @@ class CoreOpsCog(commands.Cog):
 
         for target in targets:
             try:
-                result = await self._inspect_sheet(target)
+                result = await self._inspect_sheet(target, debug=debug)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
