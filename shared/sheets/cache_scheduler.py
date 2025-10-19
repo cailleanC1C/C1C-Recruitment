@@ -20,13 +20,6 @@ UTC = dt.timezone.utc
 log = logging.getLogger("c1c.cache.scheduler")
 
 
-CRON_JOB_NAMES: Tuple[str, ...] = (
-    "refresh_clans",
-    "refresh_templates",
-    "refresh_clan_tags",
-)
-
-
 @dataclass(frozen=True)
 class _JobSpec:
     bucket: str
@@ -34,13 +27,7 @@ class _JobSpec:
     cadence_label: str
 
 
-_JOB_SPECS: Tuple[_JobSpec, ...] = (
-    _JobSpec(bucket="clans", interval=dt.timedelta(hours=3), cadence_label="3h"),
-    _JobSpec(bucket="templates", interval=dt.timedelta(days=7), cadence_label="7d"),
-    _JobSpec(bucket="clan_tags", interval=dt.timedelta(days=7), cadence_label="7d"),
-)
-
-_SPEC_BY_BUCKET: Dict[str, _JobSpec] = {spec.bucket: spec for spec in _JOB_SPECS}
+_SPEC_BY_BUCKET: Dict[str, _JobSpec] = {}
 _REGISTERED: Dict[str, Tuple[Any, asyncio.Task]] = {}
 
 
@@ -51,12 +38,14 @@ def _format_exception(exc: BaseException) -> str:
     return type(exc).__name__
 
 
-def _ensure_cache_registration() -> None:
+def ensure_cache_registration() -> None:
     if cache.get_bucket("clans") is None or cache.get_bucket("templates") is None:
         from sheets import recruitment  # noqa: F401  # ensures cache registration
 
     if cache.get_bucket("clan_tags") is None:
         from sheets import onboarding  # noqa: F401  # ensures cache registration
+ 
+
 def _safe_bucket(name: str) -> str:
     cleaned = name.strip()
     if not cleaned:
@@ -195,6 +184,19 @@ def _ensure_job(runtime: "rt.Runtime", spec: _JobSpec):
     return job
 
 
+def register_refresh_job(
+    runtime: "rt.Runtime",
+    *,
+    bucket: str,
+    interval: dt.timedelta,
+    cadence_label: str,
+) -> Tuple[_JobSpec, Any]:
+    spec = _JobSpec(bucket=_safe_bucket(bucket), interval=interval, cadence_label=cadence_label)
+    _SPEC_BY_BUCKET[spec.bucket] = spec
+    job = _ensure_job(runtime, spec)
+    return spec, job
+
+
 def _format_next_run(job: Any) -> str:
     next_run = getattr(job, "next_run", None)
     if next_run is None:
@@ -206,7 +208,7 @@ def _format_next_run(job: Any) -> str:
     return as_utc.replace(second=0, microsecond=0).strftime("%Y-%m-%d %H:%M UTC")
 
 
-async def _emit_schedule_log(
+async def emit_schedule_log(
     runtime: "rt.Runtime",
     successes: Iterable[Tuple[_JobSpec, Any]],
     failure: Optional[Tuple[str, BaseException]],
@@ -228,7 +230,7 @@ async def _emit_schedule_log(
             "[cron] scheduled • "
             + " • ".join(cadence_parts)
             + " • next: "
-            + "; ".join(next_parts)
+            + ", ".join(next_parts)
         )
         log.info(message)
         await _send_ops_message(runtime, message)
@@ -239,11 +241,19 @@ async def _emit_schedule_log(
 
 
 def schedule_default_jobs(runtime: "rt.Runtime") -> None:
-    _ensure_cache_registration()
+    """Legacy helper that schedules the standard cache refresh jobs."""
+
+    ensure_cache_registration()
+    specs = (
+        _JobSpec(bucket="clans", interval=dt.timedelta(hours=3), cadence_label="3h"),
+        _JobSpec(bucket="templates", interval=dt.timedelta(days=7), cadence_label="7d"),
+        _JobSpec(bucket="clan_tags", interval=dt.timedelta(days=7), cadence_label="7d"),
+    )
     successes: List[Tuple[_JobSpec, Any]] = []
     failure: Optional[Tuple[str, BaseException]] = None
-    for spec in _JOB_SPECS:
+    for spec in specs:
         try:
+            _SPEC_BY_BUCKET[spec.bucket] = spec
             job = _ensure_job(runtime, spec)
         except Exception as exc:  # pragma: no cover - defensive guard
             log.exception("failed to schedule cache refresh", extra={"bucket": spec.bucket})
@@ -252,6 +262,6 @@ def schedule_default_jobs(runtime: "rt.Runtime") -> None:
             continue
         successes.append((spec, job))
     runtime.scheduler.spawn(
-        _emit_schedule_log(runtime, successes, failure),
+        emit_schedule_log(runtime, successes, failure),
         name="cache_refresh_schedule_log",
     )
