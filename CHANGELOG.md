@@ -4,20 +4,20 @@
 
 ### Added
 - ✅ `!checksheet` diagnostics (Tabs & Headers) + `--debug` preview
-- ✅ Public API telemetry in `!digest` & `!health`
+- ✅ `!rec refresh all` summary embed with actor, duration, and retry telemetry
+- ✅ Detailed help embeds now show command usage signatures
 - ✅ Preloader warm-up on startup; `bot_info` auto-refresh every 3 h
-- ✅ Detailed help embeds now show command usage signature
 - ✅ Refreshed `!config` embed (viewer style with meta overlay)
 
 ### Changed
+- ⚙️ `!config` embed viewer replaces raw IDs with guild names + meta block
+- ⚙️ `!reload --reboot` documents soft reboot flag alongside config reload
 - ⚙️ Removed embed timestamps; footer shows versions only
-- ⚙️ `!help` split into short list vs detailed subcommand views
-- ⚙️ Guardrail compliance: no private cache reads, public API only
 
 ### Fixed
-- 🛠 Cron refresh logs not writing to ops channel
+- 🛠 Guardrail compliance: commands use public cache/sheets APIs only
 - 🛠 `refresh_now()` argument alignment (trigger → actor)
-- 🛠 Help embed usage signatures restored for parameterized commands
+- 🛠 Cron refresh logs write success/failure summaries to the ops channel
 
 ## [v0.9.3-phase3b-rc4] — 2025-10-17
 ### Changed

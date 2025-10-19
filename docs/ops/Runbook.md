@@ -4,38 +4,40 @@ This runbook consolidates the CoreOps lifecycle, cache controls, and telemetry s
 introduced in the Phase 3/3b rollout. Use it during startup verification, routine refresh
 workflows, and post-change validation.
 
-## Startup & preloader
-1. **Deploy** through Render as usual. The container boots the preloader before the cog
+## Startup preloader
+1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.
-2. **Cache warm-up** happens automatically via `refresh_now(name, actor="startup")` for
-   all registered buckets (Sheets, templates, bot_info, digest payloads).
-3. **Logging:**
-   - `[ops] startup` confirms preloader start and completion.
-   - `[refresh] startup` entries show bucket, duration, result, and retry count.
-   - Success and failure summaries post to the ops channel automatically.
-4. **Action:** If any startup bucket fails, re-run `!rec refresh all` once the bot is
-   online. If two consecutive startup attempts fail, escalate to platform on-call.
+2. **Warm-up:** The preloader calls `refresh_now(name, actor="startup")` for every
+   registered cache bucket (Sheets, templates, bot_info, digest payloads, etc.).
+3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
+   completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
+   result.
+4. **Action:** If any bucket fails to warm, rerun `!rec refresh all` after the bot is
+   online. Escalate to platform on-call if two consecutive startups fail for the same
+   bucket.
 
-## Refresh vs reload
-| Control | What it does | When to use | Logged fields |
+## Refresh vs reload controls
+| Control | What it does | When to use | Logging & guardrails |
 | --- | --- | --- | --- |
-| `refresh` | Hits the cache service public API (`refresh_now`) for the named bucket(s). Safe-fail per bucket; never restarts the bot. | Stale cache data, digest showing `n/a`, Sheets edits that need to propagate. | `[refresh] trigger=<actor> bucket=<name> duration=<ms> age=<sec> retries=<n> result=<ok|fail>` |
-| `reload` | Rebuilds the config registry, clears TTL caches, and (optionally) schedules a graceful reboot with `--reboot`. | Role/config updates, toggles changed in Sheets, post-migration config validation. | `[ops] reload actor=<member> flags=<...> result=<ok|fail>` plus optional `[ops] reboot scheduled`. |
+| `refresh` | Hits the public cache API (`refresh_now`) for the named bucket(s). Fails soft per bucket; stale data is served if refresh fails. | Stale cache data, `n/a` ages after reboot, Sheets edits that need to propagate. | `[refresh] trigger=<actor> bucket=<name> duration=<ms> age=<sec> retries=<n> result=<ok|fail>` |
+| `reload` | Rebuilds the config registry, clears TTL caches, and (optionally) schedules a graceful soft reboot when `--reboot` is supplied. | Role/config updates, registry edits, onboarding template changes. | `[ops] reload actor=<member> flags=<...> result=<ok|fail>` plus `[ops] reboot scheduled` when requested. |
 
-Both controls now record the invoking actor, even when triggered via admin bang aliases.
+Both controls record the invoking actor, even when triggered via admin bang aliases.
+Manual refreshes never force a restart; even repeated failures leave the bot online while
+logging the error for follow-up.
 
 ## Digest & health telemetry
 When operators run `!rec digest` or `!rec health`, the embeds render the following fields
-from the public telemetry API. Use them to triage cache behavior before paging core infra.
+from the public telemetry API:
 
 | Field | Meaning | Notes |
 | --- | --- | --- |
-| `age` | Seconds since the cache snapshot was last refreshed. | Healthy values stay below the configured TTL; `n/a` appears during warm-up. |
-| `next` | Scheduled UTC timestamp for the next automatic refresh. | Derived from scheduler cadence; ensures cron is firing. |
-| `retries` | Count of retry attempts during the last refresh cycle. | Non-zero values should trigger log review for the bucket. |
-| `actor` | Who triggered the last refresh (startup, cron, manual). | Helps confirm guardrail compliance (no private cache reads). |
+| `age` | Seconds since the cache snapshot was last refreshed. | Healthy values stay below the configured TTL; `n/a` appears while caches warm. |
+| `next` | Scheduled UTC timestamp for the next automatic refresh. | Confirms cron cadence and upcoming refresh window. |
+| `retries` | Count of retry attempts during the last refresh cycle. | Any non-zero value warrants a log review for that bucket. |
+| `actor` | Who triggered the last refresh (`startup`, `cron`, or a Discord user). | Validates guardrail compliance (public API only). |
 
-## Checksheet workflow
+## Checksheet validation
 `!checksheet` verifies the link between the configuration registry and the Google Sheets
 tabs.
 

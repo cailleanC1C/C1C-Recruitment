@@ -1,39 +1,47 @@
 # CoreOps help system — Phase 3 + 3b
 
-The help surfaces now pull entirely from the CoreOps cache API and the refreshed
-command registry. Operators should confirm both the short tier index and the detailed
-views after every deploy.
+The help surfaces pull from the command matrix and cache registry to render consistent
+copy across tiers. Use the following behavior notes when validating deploys or triaging
+reports from staff and recruiters.
 
 ## `!help` — short index
-- **Scope:** Admin-only shortcut (mirrors `!rec help`).
+- **Audience:** Admin-only shortcut; mirrors `!rec help` for the caller's tier.
 - **Behavior:** Returns a compact embed grouped by tier with one-line blurbs only. The
   embed footer shows `Bot vX.Y.Z · CoreOps vA.B.C`; timestamps are no longer rendered.
-- **Usage tip:** Trigger this view after reloads to ensure the tier catalog hydrated from
-  the live cache.
+- **Tip:** Trigger this after reloads to confirm the tier catalog hydrated from the live
+  cache.
 
 ### Example (Admin tier excerpt)
 ```
 Admin
-- !rec refresh all — Warm every cache bucket (actor logged)
-- !rec reload — Reload config + toggles
+- !config — Admin embed of the live registry with guild names and sheet linkage.
+- !rec reload — Rebuild the config registry; optionally schedule a soft reboot.
 ```
 
 ## `!help <command>` — detailed view
-- **Scope:** Available to any tier that can see the command in the short index.
+- **Audience:** Any tier that can see the command in the short index.
 - **Behavior:** Expands the command with the detailed copy from the Command Matrix,
-  including usage signatures, flag notes, and a reminder that prefixes other than `!rec`
-  are supported. The embed banner includes a warning if the caller lacks the required
-  tier.
+  including a **Usage** line, prefix warning (commands accept `!rec` and admin bang
+  aliases), and a contextual tip.
 - **Footer:** Version info only; embeds omit timestamps to match the new audit policy.
+- **Reminder:** The detailed embed highlights when the caller lacks the required tier.
+
+### Example (Admin)
+```
+!checksheet
+Usage: !checksheet [--debug]
+Tier: Admin (CoreOps)
+Detail: Validate Sheets tabs, named ranges, and headers using public telemetry.
+Tip: Run after registry edits or onboarding template changes.
+```
 
 ### Example (Recruiter / Staff)
 ```
-!rec refresh templates
-Usage: !rec refresh templates
+!rec refresh clansinfo
+Usage: !rec refresh clansinfo
 Tier: Staff (Recruiter role or higher required)
-Detail: Warms the templates bucket via the cache service and reports duration, retries,
-and next run.
-Tip: Run after template edits land in Sheets to ensure new copy reaches welcome panels.
+Detail: Refresh clan roster data when Sheets updates land.
+Tip: Re-run if digest ages drift after clan merges.
 ```
 
 ### Example (User)
@@ -41,7 +49,7 @@ Tip: Run after template edits land in Sheets to ensure new copy reaches welcome 
 !rec ping
 Usage: !rec ping
 Tier: User
-Detail: Simple latency check — no cache interaction required.
+Detail: Report bot latency and shard status without hitting the cache.
 Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
 ```
 

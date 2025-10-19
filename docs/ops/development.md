@@ -1,8 +1,8 @@
 # CoreOps Development Notes — Phase 3 + 3b
 
 ## Telemetry helpers only
-- Import telemetry data via `shared.coreops.cache_public` helpers (`get_snapshot`,
-  `get_summary`, `refresh_now`).
+- Import telemetry data via `shared.coreops.cache_public` helpers (`list_buckets`,
+  `get_snapshot`, `refresh_now`).
 - Never import or reference private cache attributes (anything prefixed with `_`). Guard
   checks in CI will fail the build if private modules leak into the cog.
 

@@ -1,7 +1,8 @@
 # Core Infra Contract — v0.9.2
 
 ## Scope
-Infra must provide reliable runtime, deployment, and observability surfaces while the bot guarantees readiness probes, watchdog exits, and structured logging consistent with Phase 1 behavior.
+Infra must provide reliable runtime, deployment, and observability surfaces while the bot guarantees readiness probes, watchdog
+exits, and structured logging consistent with Phase 1 behavior.
 
 ## Inputs (Env / Secrets)
 - `DISCORD_TOKEN` (required)
@@ -41,15 +42,19 @@ Infra must provide reliable runtime, deployment, and observability surfaces whil
 
 ## CoreOps v1.5 contract
 - CoreOps integrates with the cache service exclusively through the public API surface:
-  `get_snapshot(name)`, `refresh_now(name, actor=…)`, and telemetry helpers.
+  `list_buckets()`, `get_snapshot(name)`, `refresh_now(name, actor=…)`, and telemetry helpers.
 - Private internals such as `_CONFIG_CACHE` or `_sheet_cache_snapshot` are considered
   implementation details and **must not** be imported or accessed directly.
 - Commands that render operational embeds (`!rec health`, `!rec digest`, `!checksheet`)
   consume only public telemetry payloads.
 - Guardrails:
+  - No hard-coded IDs in commands or watchers; everything resolves through the config
+    registry and cache metadata.
   - Manual refresh commands always include the invoking actor in the telemetry record.
   - Health/Digest/Checksheet embeds are validated in CI to ensure they do not reference
     private cache structures.
+  - All external I/O must fail soft — return cached data when available and log the
+    failure rather than crashing the cog.
 
 ## RBAC (Role-based)
 - Staff gate = Admin role OR any Staff role.

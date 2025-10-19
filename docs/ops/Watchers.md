@@ -44,6 +44,9 @@ invalidate only the affected cache bucket. Role gates come from
   durations.
 - **Cache warmers** (`CRON_REFRESH_CACHE`, default 60m) — sweeps remaining caches and writes
   a daily roll-up summary to `[cron]`.
+- **`bot_info` telemetry refresh** (`cron` every 3 h) — scheduler triggers
+  `refresh_now("bot_info", actor="cron")`; completion logs post a success/failure summary
+  to the ops channel.
 
 Cron jobs run even if corresponding listeners are disabled (for example, refresh cycles can
 stay active while promo listeners are paused).
@@ -60,13 +63,6 @@ stay active while promo listeners are paused).
   `[cron retry]`, and `[cron summary]` events.
 - Deliver the daily recruiter digest.
 - Register cleanup or hygiene jobs supplied by watcher modules.
-
-### `bot_info` telemetry refresh
-- **Cadence:** Every 3 hours via scheduler cron (`bot_info` bucket).
-- **Source:** Preloader seeds the initial snapshot; scheduled jobs call the public cache
-  API to refresh.
-- **Logging:** `[refresh]` lines show `bucket=bot_info actor=cron` alongside duration and
-  retries. Use `!rec refresh bot_info` if manual validation is required after deploys.
 
 ## Failure handling & health
 - Read failure → serve stale cache (if present) and log error.

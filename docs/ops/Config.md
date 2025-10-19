@@ -7,13 +7,18 @@ Guilds: Clash Champs (Recruitment), Clash Champs Lounge (Onboarding)
 Sheets: Recruitment → 1aBCDefGhijKLMnoPqrStuV · Onboarding → 9zYXwvUTsrQpoNMlkJihGFed
 Watchers: welcome✅ promo✅
 Toggles: STRICT_PROBE=off · ENABLE_NOTIFY_FALLBACK=on · SEARCH_RESULTS_SOFT_CAP=25
+Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 ```
 
 - Guild display names replace raw snowflake IDs across the embed.
 - Recruitment and Onboarding Sheet IDs appear in full; click-through URLs remain hidden
   to avoid clutter.
+- The meta overlay surfaces cache age, next refresh, and actor pulled from the public
+  telemetry snapshot.
 - Date/time fields are removed entirely. Embed footers continue to show
   `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
+- No new environment or sheet keys were introduced for Phase 3/3b; reuse the existing
+  registry and Config tab structure described below.
 
 > **Note:** Values are pulled live from the runtime cache; embeds no longer carry Discord
 > timestamps.
