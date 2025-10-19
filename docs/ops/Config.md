@@ -45,6 +45,14 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | Channels | `LOG_CHANNEL_ID` | snowflake | — | Primary log channel ID (#bot-production). |
 | Channels | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | Channels | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
+| Media | `PUBLIC_BASE_URL` | url | — | External base URL for `/emoji-pad`; falls back to `RENDER_EXTERNAL_URL` when unset. |
+| Media | `RENDER_EXTERNAL_URL` | url | — | Render.com external hostname used when `PUBLIC_BASE_URL` is not provided. |
+| Media | `EMOJI_MAX_BYTES` | int | `2000000` | Maximum emoji payload size accepted by `/emoji-pad`. |
+| Media | `EMOJI_PAD_SIZE` | int | `256` | Square canvas dimension for padded emoji PNGs. |
+| Media | `EMOJI_PAD_BOX` | float | `0.85` | Fraction of the canvas filled by the emoji glyph after padding. |
+| Media | `TAG_BADGE_PX` | int | `128` | Pixel edge length used when generating clan badge attachments. |
+| Media | `TAG_BADGE_BOX` | float | `0.90` | Glyph fill ratio applied during clan badge attachment rendering. |
+| Media | `STRICT_EMOJI_PROXY` | bool | `true` | When truthy (`1`), require padded proxy thumbnails instead of raw CDN URLs. |
 | Toggles | `WELCOME_ENABLED` | bool | `true` | Enables welcome command plus automation. |
 | Toggles | `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to fallback channel when true. |
 | Toggles | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |

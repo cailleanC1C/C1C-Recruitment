@@ -37,6 +37,14 @@ off in production until the panels ship._
 - Writes: onboarding listeners call `sheets.onboarding` helpers with bounded retries and
   per-tab cache invalidation.
 
+## Recruitment visuals pipeline
+- `recruitment.cards` & `recruitment.views` compose embeds for clan panels.
+- `recruitment.emoji_pipeline` resolves guild emoji, falls back when proxies are strict,
+  and builds attachment thumbnails when needed.
+- `/emoji-pad` (aiohttp) trims, pads, and caches PNG emoji when `PUBLIC_BASE_URL` or
+  `RENDER_EXTERNAL_URL` is configured.
+- Sheets cache paths remain unchanged; data still flows through `sheets.recruitment`.
+
 ## Feature toggles & gating
 - `shared.features.is_enabled(<key>)` runs during module boot; missing worksheets, headers,
   or values fail closed and keep the feature offline.
