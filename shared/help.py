@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import discord
 
@@ -281,44 +281,32 @@ def build_help_detail_embed(
         description=command.detailed.strip() if command.detailed else "—",
     )
 
+    usage_text = _format_usage(prefix, command.qualified_name, command.signature)
+    embed.add_field(name="Usage", value=usage_text, inline=False)
+
+    if command.aliases:
+        alias_values = [
+            f"`{_format_usage(prefix, alias.strip(), None)}`"
+            for alias in command.aliases
+            if alias and alias.strip()
+        ]
+        if alias_values:
+            embed.add_field(
+                name="Aliases",
+                value=", ".join(alias_values),
+                inline=False,
+            )
+
     footer_text = build_coreops_footer(bot_version=bot_version)
     embed.set_footer(text=footer_text)
     return embed
 
 
-def _normalize_prefix(prefix: str) -> str:
-    trimmed = prefix.strip()
-    if not trimmed:
-        return "!"
-    return trimmed if trimmed.startswith("!") else f"!{trimmed}"
-
-
 def _format_usage(prefix: str, qualified_name: str, signature: str | None) -> str:
-    normalized_prefix = _normalize_prefix(prefix)
-    name = (qualified_name or "").strip()
     sig = (signature or "").strip()
-
-    if name:
-        base = f"{normalized_prefix}{name}"
-    else:
-        base = normalized_prefix
-
-    parts = [base]
-    if sig:
-        parts.append(sig)
-    return " ".join(part for part in parts if part)
-
-
-def _format_aliases(prefix: str, aliases: Iterable[str]) -> str:
-    formatted = []
-    for alias in aliases:
-        alias_text = alias.strip()
-        if not alias_text:
-            continue
-        formatted.append(f"`{_format_usage(prefix, alias_text, None)}`")
-    if not formatted:
-        return ""
-    return f"(aliases: {', '.join(formatted)})"
+    name = (qualified_name or "").strip()
+    prefix_text = prefix or ""
+    return f"{prefix_text}{name}{(' ' + sig) if sig else ''}"
 
 
 def _format_summary_line(prefix: str, command: HelpCommandInfo) -> str:
