@@ -111,6 +111,12 @@ Leave values blank only if a module is disabled via toggles.
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
 
+**Operator flow**
+
+1. Edit the `FeatureToggles` worksheet in the environment’s Mirralith Sheet.
+2. Run `!rec refresh config` (or the admin bang alias) to pull the latest worksheet values.
+3. Confirm the tab and headers with `!checksheet`; resolve any ⚠️ rows before retrying.
+
 **Troubleshooting**
 
 - Warnings mention the first role listed in `ADMIN_ROLE_IDS` and are posted to the runtime log channel.
@@ -119,4 +125,4 @@ Leave values blank only if a module is disabled via toggles.
 
 ---
 
-_Doc last updated: 2025-10-21 (Phase 4 fail-closed toggles)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles rollout)_

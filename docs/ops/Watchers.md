@@ -47,6 +47,10 @@ invalidate only the affected cache bucket. Role gates come from
 - **`bot_info` telemetry refresh** (`cron` every 3 h) — scheduler triggers
   `refresh_now("bot_info", actor="cron")`; completion logs post a success/failure summary
   to the ops channel.
+- **Recruiter digest** — loads only when `shared.features.is_enabled("recruitment_reports")`
+  evaluates `True`. The digest cron posts nightly summaries; when the toggle is off the
+  scheduler skips registration. Welcome and promo watchers remain controlled by their
+  `_LISTENERS` environment toggles and ignore feature flags.
 
 Cron jobs run even if corresponding listeners are disabled (for example, refresh cycles can
 stay active while promo listeners are paused).
@@ -74,4 +78,4 @@ stay active while promo listeners are paused).
 
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_

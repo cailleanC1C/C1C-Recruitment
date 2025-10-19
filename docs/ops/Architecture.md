@@ -30,6 +30,24 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 - **Telemetry → Embed renderer:** Command responses pull structured telemetry and render
   embeds without timestamps; version metadata lives solely in the footer.
 
+### Feature gating at load
+- **Module wiring:** Feature modules call `shared.features.is_enabled(<key>)` during boot.
+  Disabled toggles block command registration and watcher wiring; the bot logs the skip
+  and continues.
+- **Backbone always-on:** Scheduler, cache service, health probes, RBAC helpers, and the
+  watchdog never consult feature toggles. They remain active even when every feature key
+  fails.
+- **Fail-closed behavior:** Missing worksheet, headers, or row values evaluate to
+  `False`. The runtime emits a single admin-ping warning per issue in the log channel and
+  leaves the module offline until the Sheet is fixed and refreshed.
+- **Feature map:**
+  - `member_panel` — member view of recruitment roster/search panels.
+  - `recruiter_panel` — recruiter dashboard, match queue, and escalations.
+  - `recruitment_welcome` — welcome command plus onboarding listeners.
+  - `recruitment_reports` — daily recruiter digest watcher and embeds.
+  - `placement_target_select` — placement targeting picker inside panels.
+  - `placement_reservations` — reservation holds and release workflow.
+
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
