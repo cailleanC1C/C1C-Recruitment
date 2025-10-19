@@ -43,6 +43,9 @@ from shared.coreops_render import (
     build_refresh_embed,
 )
 from shared.cache import telemetry as cache_telemetry
+from shared.cache.telemetry import get_snapshot as cache_get_snapshot
+from shared.cache.telemetry import humanize_duration as cache_humanize_duration
+from shared.cache.telemetry import list_buckets as cache_list_buckets
 from shared.help import (
     COREOPS_VERSION,
     HelpCommandInfo,
@@ -746,22 +749,57 @@ class CoreOpsCog(commands.Cog):
             disconnect_grace_sec=dgrace,
         )
 
-        snapshots = cache_telemetry.get_all_snapshots()
+        now = dt.datetime.now(UTC)
+
+        try:
+            bucket_names = set(cache_list_buckets())
+        except Exception:
+            bucket_names = set()
 
         for bucket in ("clans", "templates", "clan_tags"):
-            snapshot = snapshots.get(bucket)
-            if snapshot is None:
-                snapshot = cache_telemetry.get_snapshot(bucket)
+            known_bucket = bucket in bucket_names
+            try:
+                snapshot = cache_get_snapshot(bucket)
+            except Exception:
+                snapshot = None
 
-            age_text = snapshot.age_human or "-"
-            ttl_text = snapshot.ttl_human or "-"
-            next_text = "-"
-            delta = snapshot.next_refresh_delta_seconds
-            if delta is not None and snapshot.next_refresh_human:
-                if delta >= 0:
-                    next_text = f"in {snapshot.next_refresh_human}"
-                else:
-                    next_text = f"{snapshot.next_refresh_human} overdue"
+            age_seconds = self._snapshot_int(snapshot, "age_seconds")
+            if age_seconds is None:
+                age_seconds = self._snapshot_int(snapshot, "age_sec")
+            last_refresh_at = self._snapshot_datetime(snapshot, "last_refresh_at")
+            if age_seconds is None and last_refresh_at is not None:
+                try:
+                    age_seconds = max(0, int((now - last_refresh_at).total_seconds()))
+                except Exception:
+                    age_seconds = None
+            age_text = "-" if known_bucket else "n/a"
+            if age_seconds is not None:
+                human = cache_humanize_duration(age_seconds)
+                if human != "n/a":
+                    age_text = human
+
+            ttl_seconds = self._snapshot_int(snapshot, "ttl_sec")
+            if ttl_seconds is None:
+                ttl_seconds = self._snapshot_int(snapshot, "ttl_seconds")
+            ttl_text = "-" if known_bucket else "n/a"
+            if ttl_seconds is not None:
+                human_ttl = cache_humanize_duration(ttl_seconds)
+                if human_ttl != "n/a":
+                    ttl_text = human_ttl
+
+            next_refresh_at = self._snapshot_datetime(snapshot, "next_refresh_at")
+            next_delta = self._snapshot_int(snapshot, "next_refresh_delta_seconds")
+            if next_delta is None and next_refresh_at is not None:
+                try:
+                    next_delta = int((next_refresh_at - now).total_seconds())
+                except Exception:
+                    next_delta = None
+
+            next_text = "-" if known_bucket else "n/a"
+            if next_delta is not None:
+                human_next = cache_humanize_duration(abs(next_delta))
+                if human_next != "n/a":
+                    next_text = f"in {human_next}" if next_delta >= 0 else f"{human_next} overdue"
 
             embed.add_field(
                 name=bucket,
@@ -973,73 +1011,114 @@ class CoreOpsCog(commands.Cog):
         msg, extra = sanitize_log("failed to collect digest section", extra={"section": section})
         logger.warning(msg, extra=extra, exc_info=exc)
 
+    def _snapshot_value(self, snapshot: object, key: str, default: object = None) -> object:
+        if snapshot is None:
+            return default
+        if isinstance(snapshot, Mapping):
+            return snapshot.get(key, default)
+        return getattr(snapshot, key, default)
+
+    def _snapshot_datetime(self, snapshot: object, key: str) -> Optional[dt.datetime]:
+        raw = self._snapshot_value(snapshot, key)
+        if isinstance(raw, dt.datetime):
+            return raw if raw.tzinfo else raw.replace(tzinfo=UTC)
+        if isinstance(raw, str):
+            text = raw.strip()
+            if not text:
+                return None
+            if text.endswith("Z"):
+                text = f"{text[:-1]}+00:00"
+            try:
+                parsed = dt.datetime.fromisoformat(text)
+            except ValueError:
+                return None
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        return None
+
+    def _snapshot_int(self, snapshot: object, key: str) -> Optional[int]:
+        raw = self._snapshot_value(snapshot, key)
+        if isinstance(raw, bool):
+            return int(raw)
+        if isinstance(raw, (int, float)):
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _snapshot_str(self, snapshot: object, key: str) -> Optional[str]:
+        raw = self._snapshot_value(snapshot, key)
+        if isinstance(raw, str):
+            text = raw.strip()
+            return text or None
+        return None
+
     def _collect_sheet_bucket_entries(self) -> Sequence[DigestSheetEntry]:
         entries: List[DigestSheetEntry] = []
+        available_names = set()
+        try:
+            available_names = set(cache_list_buckets())
+        except Exception as exc:
+            self._log_digest_section_error("sheets", exc)
+
+        now = dt.datetime.now(UTC)
+
         for bucket_key, display_name in _DIGEST_SHEET_BUCKETS:
+            snapshot: Optional[object]
             try:
-                snapshot = cache_telemetry.get_snapshot(bucket_key)
+                snapshot = cache_get_snapshot(bucket_key)
             except Exception as exc:
                 self._log_digest_section_error("sheets", exc)
                 snapshot = None
 
-            if snapshot is None or not hasattr(snapshot, "available"):
-                entries.append(
-                    DigestSheetEntry(
-                        display_name=display_name,
-                        status="n/a",
-                        age_seconds=None,
-                        next_refresh_delta_seconds=None,
-                        next_refresh_at=None,
-                        retries=None,
-                        error=None,
-                        age_estimated=False,
-                        next_refresh_estimated=False,
-                    )
-                )
-                continue
+            available = False
+            if bucket_key in available_names:
+                available = bool(self._snapshot_value(snapshot, "available", True))
+            else:
+                available = bool(self._snapshot_value(snapshot, "available", False))
 
-            available = getattr(snapshot, "available", False)
-
-            raw_age = getattr(snapshot, "age_seconds", None) if available else None
-            age_seconds = None
-            if isinstance(raw_age, (int, float)):
+            age_seconds = self._snapshot_int(snapshot, "age_seconds") if available else None
+            last_refresh_at = self._snapshot_datetime(snapshot, "last_refresh_at") if available else None
+            if age_seconds is None and last_refresh_at is not None:
                 try:
-                    age_seconds = int(raw_age)
+                    age_seconds = max(0, int((now - last_refresh_at).total_seconds()))
                 except Exception:
                     age_seconds = None
 
-            raw_next_delta = (
-                getattr(snapshot, "next_refresh_delta_seconds", None) if available else None
-            )
-            next_delta = None
-            if isinstance(raw_next_delta, (int, float)):
+            next_delta = self._snapshot_int(snapshot, "next_refresh_delta_seconds") if available else None
+            next_refresh_at = self._snapshot_datetime(snapshot, "next_refresh_at") if available else None
+            if next_delta is None and next_refresh_at is not None:
                 try:
-                    next_delta = int(raw_next_delta)
+                    next_delta = int((next_refresh_at - now).total_seconds())
                 except Exception:
                     next_delta = None
 
-            next_at = getattr(snapshot, "next_refresh_at", None) if available else None
-            last_error = getattr(snapshot, "last_error", None)
-            last_result = getattr(snapshot, "last_result", None)
-            retries_raw = getattr(snapshot, "retries", None)
-            retries = None
-            if isinstance(retries_raw, int):
-                retries = retries_raw
+            retries = self._snapshot_int(snapshot, "retries")
+
+            last_result = self._snapshot_str(snapshot, "last_result")
+            last_error = self._snapshot_str(snapshot, "last_error")
 
             status = "n/a"
-            error_text: Optional[str] = None
-
             result_norm = (last_result or "").strip().lower()
-            has_error = bool(last_error) or result_norm.startswith("fail")
+            has_error = bool(last_error) or (
+                bool(result_norm) and result_norm not in {"ok", "retry_ok"}
+            )
 
             if available:
                 status = "fail" if has_error else "ok"
             elif has_error:
                 status = "fail"
 
+            error_text: Optional[str] = "—"
             if has_error:
                 source = last_error or last_result or "fail"
                 error_text = self._trim_error_text(source)
+
+            if not has_error and not available:
+                error_text = "—"
+
+            if has_error and error_text and len(error_text) > 120:
+                error_text = f"{error_text[:117]}…"
 
             entries.append(
                 DigestSheetEntry(
@@ -1047,8 +1126,8 @@ class CoreOpsCog(commands.Cog):
                     status=status,
                     age_seconds=age_seconds,
                     next_refresh_delta_seconds=next_delta,
-                    next_refresh_at=next_at,
-                    retries=retries,
+                    next_refresh_at=next_refresh_at,
+                    retries=retries if retries is not None else None,
                     error=error_text,
                     age_estimated=False,
                     next_refresh_estimated=False,
@@ -1455,19 +1534,14 @@ class CoreOpsCog(commands.Cog):
         if not isinstance(capabilities, dict):
             return None
 
-        buckets: List[object] = []
-        for key in capabilities.keys():
-            if not isinstance(key, str):
-                continue
-            try:
-                bucket = sheets_cache.get_bucket(key)
-            except Exception:
-                bucket = None
-            if bucket is None:
-                continue
-            buckets.append(bucket)
+        bucket_names: List[str]
+        try:
+            bucket_names = cache_list_buckets()
+        except Exception as exc:
+            self._log_digest_section_error("sheets_client", exc)
+            bucket_names = []
 
-        if not buckets:
+        if not bucket_names:
             return None
 
         latest_refresh_at: Optional[dt.datetime] = None
@@ -1477,32 +1551,34 @@ class CoreOpsCog(commands.Cog):
         latest_result: Optional[str] = None
         failure_error: Optional[str] = None
 
-        for bucket in buckets:
-            last_refresh = getattr(bucket, "last_refresh", None)
-            if isinstance(last_refresh, dt.datetime) and (
-                latest_refresh_at is None or last_refresh > latest_refresh_at
+        for name in bucket_names:
+            try:
+                snapshot = cache_get_snapshot(name)
+            except Exception as exc:
+                self._log_digest_section_error("sheets_client", exc)
+                continue
+
+            last_refresh = self._snapshot_datetime(snapshot, "last_refresh_at")
+            if (
+                isinstance(last_refresh, dt.datetime)
+                and (latest_refresh_at is None or last_refresh > latest_refresh_at)
             ):
                 latest_refresh_at = last_refresh
-                latency_ms = getattr(bucket, "last_latency_ms", None)
-                latest_latency = (
-                    int(latency_ms)
-                    if isinstance(latency_ms, (int, float))
-                    else None
-                )
-                retries_val = getattr(bucket, "last_retries", None)
-                latest_retries = (
-                    int(retries_val)
-                    if isinstance(retries_val, (int, float))
-                    else None
-                )
-                latest_result = getattr(bucket, "last_result", None)
-                latest_error = getattr(bucket, "last_error", None)
+                latest_latency = self._snapshot_int(snapshot, "last_latency_ms")
+                latest_retries = self._snapshot_int(snapshot, "retries")
+                latest_result = self._snapshot_str(snapshot, "last_result")
+                latest_error = self._snapshot_str(snapshot, "last_error")
 
-            result_text = getattr(bucket, "last_result", None)
+            result_text = self._snapshot_str(snapshot, "last_result")
             result_norm = (result_text or "").strip().lower()
-            if result_norm and result_norm not in {"ok", "retry_ok"} and failure_error is None:
-                err_source = getattr(bucket, "last_error", None) or result_text
-                failure_error = self._trim_error_text(err_source)
+            if (
+                result_norm
+                and result_norm not in {"ok", "retry_ok"}
+                and failure_error is None
+            ):
+                err_source = self._snapshot_str(snapshot, "last_error") or result_text
+                if err_source:
+                    failure_error = self._trim_error_text(err_source)
 
         last_success_age: Optional[int] = None
         if isinstance(latest_refresh_at, dt.datetime):
