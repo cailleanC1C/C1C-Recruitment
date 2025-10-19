@@ -11,7 +11,7 @@ import re
 import sys
 import time
 from importlib import import_module
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import discord
@@ -62,7 +62,6 @@ from shared.sheets.async_core import (
     acall_with_backoff,
     afetch_records,
 )
-from shared.sheets.cache_service import cache as sheets_cache
 
 from .coreops_rbac import (
     admin_only,
@@ -97,6 +96,7 @@ _SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
     ("Onboarding", "sheets.onboarding"),
 )
 _sheet_cache_errors_logged: Set[str] = set()
+_sheet_cache_load_errors_logged: Set[str] = set()
 _digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
 _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
@@ -104,6 +104,33 @@ _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("templates", "Templates"),
     ("clan_tags", "ClanTags"),
 )
+_TELEMETRY_REQUIRED_KEYS: Tuple[str, ...] = (
+    "ttl_sec",
+    "last_refresh_at",
+    "next_refresh_at",
+    "last_result",
+    "last_error",
+    "retries",
+)
+_TELEMETRY_FALLBACK_KEYS: Tuple[str, ...] = (
+    "name",
+    "available",
+    "ttl_seconds",
+    "ttl_sec",
+    "ttl_human",
+    "age_seconds",
+    "age_sec",
+    "age_human",
+    "last_refresh_at",
+    "next_refresh_at",
+    "next_refresh_delta_seconds",
+    "next_refresh_human",
+    "last_result",
+    "last_error",
+    "retries",
+    "last_latency_ms",
+)
+_telemetry_missing_fields_logged: Set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -514,7 +541,79 @@ def _config_meta_from_app() -> dict:
     return meta or {"source": "runtime-only", "status": "ok", "loaded_at": None, "last_error": None}
 
 
-def _sheet_cache_snapshot(module_name: str) -> Dict[str, Any]:
+def _list_bucket_names() -> Set[str]:
+    try:
+        return set(cache_list_buckets())
+    except Exception:
+        return set()
+
+
+def _coerce_snapshot_dict(name: str, snapshot: object) -> Dict[str, Any]:
+    if isinstance(snapshot, Mapping):
+        data = dict(snapshot)
+    elif snapshot is None:
+        data = {}
+    else:
+        try:
+            data = asdict(snapshot)
+        except Exception:
+            data = {}
+            for key in _TELEMETRY_FALLBACK_KEYS:
+                if hasattr(snapshot, key):
+                    data[key] = getattr(snapshot, key)
+
+    missing = [field for field in _TELEMETRY_REQUIRED_KEYS if field not in data]
+    if (not data or missing) and name not in _telemetry_missing_fields_logged:
+        _telemetry_missing_fields_logged.add(name)
+        logger.info("[telemetry] snapshot missing fields for bucket %s", name)
+    return data
+
+
+def _get_snapshot_dict(name: str) -> Dict[str, Any]:
+    try:
+        snapshot = cache_get_snapshot(name)
+    except Exception:
+        snapshot = None
+    return _coerce_snapshot_dict(name, snapshot)
+
+
+def _gather_snapshot_dicts(names: Iterable[str]) -> Dict[str, Dict[str, Any]]:
+    snapshots: Dict[str, Dict[str, Any]] = {}
+    for name in names:
+        snapshots[name] = _get_snapshot_dict(name)
+    return snapshots
+
+
+def _extract_sheet_config_from_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
+    if not isinstance(snapshot, Mapping):
+        return {}
+
+    candidates = (
+        snapshot.get("config"),
+        snapshot.get("overrides"),
+        snapshot.get("value"),
+        snapshot.get("data"),
+        snapshot.get("payload"),
+        snapshot.get("snapshot"),
+    )
+
+    for candidate in candidates:
+        if isinstance(candidate, Mapping):
+            return dict(candidate)
+        if isinstance(candidate, str):
+            text = candidate.strip()
+            if not text:
+                continue
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, Mapping):
+                return dict(parsed)
+    return {}
+
+
+def _load_sheet_config_from_module(module_name: str) -> Dict[str, Any]:
     try:
         module = import_module(module_name)
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -527,9 +626,24 @@ def _sheet_cache_snapshot(module_name: str) -> Dict[str, Any]:
             logger.warning(msg, extra=extra, exc_info=exc)
         return {}
 
-    cache = getattr(module, "_CONFIG_CACHE", None)
-    if isinstance(cache, dict):
-        return dict(cache)
+    loader = getattr(module, "_load_config", None)
+    if not callable(loader):
+        return {}
+
+    try:
+        data = loader()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        if module_name not in _sheet_cache_load_errors_logged:
+            _sheet_cache_load_errors_logged.add(module_name)
+            msg, extra = sanitize_log(
+                "failed to load sheet config cache",
+                extra={"module": module_name},
+            )
+            logger.warning(msg, extra=extra, exc_info=exc)
+        return {}
+
+    if isinstance(data, Mapping):
+        return dict(data)
     return {}
 
 
@@ -751,17 +865,17 @@ class CoreOpsCog(commands.Cog):
 
         now = dt.datetime.now(UTC)
 
-        try:
-            bucket_names = set(cache_list_buckets())
-        except Exception:
-            bucket_names = set()
+        bucket_names = _list_bucket_names()
+        snapshot_cache: Dict[str, Dict[str, Any]] = {}
+
+        def _snapshot_for(name: str) -> Dict[str, Any]:
+            if name not in snapshot_cache:
+                snapshot_cache[name] = _get_snapshot_dict(name)
+            return snapshot_cache[name]
 
         for bucket in ("clans", "templates", "clan_tags"):
             known_bucket = bucket in bucket_names
-            try:
-                snapshot = cache_get_snapshot(bucket)
-            except Exception:
-                snapshot = None
+            snapshot = _snapshot_for(bucket)
 
             age_seconds = self._snapshot_int(snapshot, "age_seconds")
             if age_seconds is None:
@@ -1056,20 +1170,14 @@ class CoreOpsCog(commands.Cog):
     def _collect_sheet_bucket_entries(self) -> Sequence[DigestSheetEntry]:
         entries: List[DigestSheetEntry] = []
         available_names = set()
-        try:
-            available_names = set(cache_list_buckets())
-        except Exception as exc:
-            self._log_digest_section_error("sheets", exc)
-
+        available_names = _list_bucket_names()
+        snapshot_cache = _gather_snapshot_dicts(available_names)
         now = dt.datetime.now(UTC)
 
         for bucket_key, display_name in _DIGEST_SHEET_BUCKETS:
-            snapshot: Optional[object]
-            try:
-                snapshot = cache_get_snapshot(bucket_key)
-            except Exception as exc:
-                self._log_digest_section_error("sheets", exc)
-                snapshot = None
+            snapshot = snapshot_cache.get(bucket_key)
+            if snapshot is None:
+                snapshot = _get_snapshot_dict(bucket_key)
 
             available = False
             if bucket_key in available_names:
@@ -1537,25 +1645,12 @@ class CoreOpsCog(commands.Cog):
         await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     def _collect_sheets_client_summary(self, now: dt.datetime) -> Optional[DigestSheetsClientSummary]:
-        try:
-            capabilities = sheets_cache.capabilities()
-        except Exception as exc:
-            self._log_digest_section_error("sheets_client", exc)
-            return None
-
-        if not isinstance(capabilities, dict):
-            return None
-
-        bucket_names: List[str]
-        try:
-            bucket_names = cache_list_buckets()
-        except Exception as exc:
-            self._log_digest_section_error("sheets_client", exc)
-            bucket_names = []
+        bucket_names = list(_list_bucket_names())
 
         if not bucket_names:
             return None
 
+        snapshot_cache = _gather_snapshot_dicts(bucket_names)
         latest_refresh_at: Optional[dt.datetime] = None
         latest_latency: Optional[int] = None
         latest_retries: Optional[int] = None
@@ -1564,11 +1659,9 @@ class CoreOpsCog(commands.Cog):
         failure_error: Optional[str] = None
 
         for name in bucket_names:
-            try:
-                snapshot = cache_get_snapshot(name)
-            except Exception as exc:
-                self._log_digest_section_error("sheets_client", exc)
-                continue
+            snapshot = snapshot_cache.get(name)
+            if snapshot is None:
+                snapshot = _get_snapshot_dict(name)
 
             last_refresh = self._snapshot_datetime(snapshot, "last_refresh_at")
             if (
@@ -2658,15 +2751,39 @@ class CoreOpsCog(commands.Cog):
 
     def _collect_sheet_sections(self) -> List[Tuple[str, List[Tuple[str, str, str]]]]:
         sections: List[Tuple[str, List[Tuple[str, str, str]]]] = []
+        bucket_names = _list_bucket_names()
+        snapshot_cache = _gather_snapshot_dicts(bucket_names)
+
         for label, module_name in _SHEET_CONFIG_SOURCES:
-            snapshot = _sheet_cache_snapshot(module_name)
-            if not snapshot:
+            config_map: Dict[str, Any] = {}
+
+            module_hint = module_name.split(".")[-1].lower()
+            if module_hint:
+                candidates = [
+                    name for name in bucket_names if module_hint in name.lower()
+                ]
+            else:
+                candidates = list(bucket_names)
+
+            for candidate in candidates:
+                snapshot = snapshot_cache.get(candidate)
+                if snapshot is None:
+                    snapshot = _get_snapshot_dict(candidate)
+                    snapshot_cache[candidate] = snapshot
+                config_map = _extract_sheet_config_from_snapshot(snapshot)
+                if config_map:
+                    break
+
+            if not config_map:
+                config_map = _load_sheet_config_from_module(module_name)
+
+            if not config_map:
                 continue
 
             rows: List[Tuple[str, str, str]] = []
-            for key in sorted(snapshot.keys()):
+            for key in sorted(config_map.keys()):
                 display_key = str(key).upper()
-                normalized = _normalize_snapshot_value(snapshot[key])
+                normalized = _normalize_snapshot_value(config_map[key])
                 display_value = redact_value(display_key, normalized)
                 resolved = self._resolve_ids(_extract_ids(display_key, normalized))
                 rows.append((display_key, display_value, resolved))
