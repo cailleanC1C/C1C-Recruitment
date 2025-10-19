@@ -34,7 +34,7 @@ def _metadata(short: str, detailed: str, tier: str) -> HelpCommandMetadata:
 
 
 HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
-    # Admin
+    # 🛠 Admin Commands
     "config": _metadata(
         short="Shows the bot’s configuration and connected Sheets.",
         detailed=(
@@ -133,7 +133,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
-    # Recruiter/Staff
+    # 👥Recruiter/Staff Commands
     "checksheet": _metadata(
         short="Shows what sheet and tabs are currently loaded.",
         detailed=(
@@ -184,7 +184,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="staff",
     ),
-    # User
+    # 🎮User Commands
     "rec help": _metadata(
         short="Shows help for bot commands.",
         detailed=(
