@@ -1,13 +1,58 @@
-# CoreOps runtime commands
+# CoreOps help system — Phase 3 + 3b
 
-## `!refresh`
-- **RBAC:** Admins via `!refresh`; staff/admins via `!rec refresh`.
-- **Usage:** `!refresh all` refreshes every registered cache bucket. Each line of the response shows the bucket label, refresh latency, cache age, and next scheduled run in UTC. Buckets that fail are prefixed with `⚠` but do not abort the run.
-- **Clans shortcut:** `!refresh clansinfo` / `!rec refresh clansinfo` skips the manual refresh unless the cache is over an hour old and reuses the same telemetry wrapper when a refresh is necessary.
-- **Cooldown:** Commands share a 30 second guild-scoped cooldown to prevent thrashing.
+The help surfaces pull from the command matrix and cache registry to render consistent
+copy across tiers. Use the following behavior notes when validating deploys or triaging
+reports from staff and recruiters.
 
-## `!reload`
-- **RBAC:** Admins via `!reload`; staff/admins via `!rec reload`.
-- **Usage:** `!reload` reloads the environment-backed configuration and confirms with a single status line (`config reloaded · <ms> · by <actor>`).
-- **Graceful reboot:** Add `--reboot` to trigger a graceful shutdown after the reload (`graceful reboot scheduled · <ms> · by <actor>`). The platform supervisor restarts the bot.
-- **Failure handling:** Unknown flags respond with `⚠️` and a short notice. Reload failures log once and reply with a single-line warning.
+## `!help` — short index
+- **Audience:** Admin-only shortcut; mirrors `!rec help` for the caller's tier.
+- **Behavior:** Returns a compact embed grouped by tier with one-line blurbs only. The
+  embed footer shows `Bot vX.Y.Z · CoreOps vA.B.C`; timestamps are no longer rendered.
+- **Tip:** Trigger this after reloads to confirm the tier catalog hydrated from the live
+  cache.
+
+### Example (Admin tier excerpt)
+```
+Admin
+- !config — Admin embed of the live registry with guild names and sheet linkage.
+- !rec reload — Rebuild the config registry; optionally schedule a soft reboot.
+```
+
+## `!help <command>` — detailed view
+- **Audience:** Any tier that can see the command in the short index.
+- **Behavior:** Expands the command with the detailed copy from the Command Matrix,
+  including a **Usage** line, prefix warning (commands accept `!rec` and admin bang
+  aliases), and a contextual tip.
+- **Footer:** Version info only; embeds omit timestamps to match the new audit policy.
+- **Reminder:** The detailed embed highlights when the caller lacks the required tier.
+
+### Example (Admin)
+```
+!checksheet
+Usage: !checksheet [--debug]
+Tier: Admin (CoreOps)
+Detail: Validate Sheets tabs, named ranges, and headers using public telemetry.
+Tip: Run after registry edits or onboarding template changes.
+```
+
+### Example (Recruiter / Staff)
+```
+!rec refresh clansinfo
+Usage: !rec refresh clansinfo
+Tier: Staff (Recruiter role or higher required)
+Detail: Refresh clan roster data when Sheets updates land.
+Tip: Re-run if digest ages drift after clan merges.
+```
+
+### Example (User)
+```
+!rec ping
+Usage: !rec ping
+Tier: User
+Detail: Report bot latency and shard status without hitting the cache.
+Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
+```
+
+---
+
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_

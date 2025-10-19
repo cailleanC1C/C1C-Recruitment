@@ -1,44 +1,55 @@
-# Ops Runbook — Phase 3b
+# Ops Runbook — Phase 3 + 3b
 
-## Daily expectations
-- Confirm the bot is online and responding to `!ping` in production.
-- Review scheduled refresh logs via `[cron]` entries for duration anomalies.
-- Check the welcome and promo ticket channels for stuck threads or duplicate posts.
+This runbook consolidates the CoreOps lifecycle, cache controls, and telemetry surfaces
+introduced in the Phase 3/3b rollout. Use it during startup verification, routine refresh
+workflows, and post-change validation.
 
-### Logs to check
-1. `[ops]` — service lifecycle messages (boot, shutdown, deploy tags).
-2. `[watcher]` — event listeners (toggles, hook errors, ticket IDs).
-3. `[cron]` — scheduled jobs (start/result/retry/summary for refresh cycles).
+## Startup preloader
+1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
+   registers commands.
+2. **Warm-up:** The preloader calls `refresh_now(name, actor="startup")` for every
+   registered cache bucket (Sheets, templates, bot_info, digest payloads, etc.).
+3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
+   completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
+   result.
+4. **Action:** If any bucket fails to warm, rerun `!rec refresh all` after the bot is
+   online. Escalate to platform on-call if two consecutive startups fail for the same
+   bucket.
 
-_If `[cron]` lines stop appearing for longer than the configured cadence, assume the
-scheduler is stalled and inspect `/healthz` before triggering manual refresh commands._
+## Refresh vs reload controls
+| Control | What it does | When to use | Logging & guardrails |
+| --- | --- | --- | --- |
+| `refresh` | Hits the public cache API (`refresh_now`) for the named bucket(s). Fails soft per bucket; stale data is served if refresh fails. | Stale cache data, `n/a` ages after reboot, Sheets edits that need to propagate. | `[refresh] trigger=<actor> bucket=<name> duration=<ms> age=<sec> retries=<n> result=<ok|fail>` |
+| `reload` | Rebuilds the config registry, clears TTL caches, and (optionally) schedules a graceful soft reboot when `--reboot` is supplied. | Role/config updates, registry edits, onboarding template changes. | `[ops] reload actor=<member> flags=<...> result=<ok|fail>` plus `[ops] reboot scheduled` when requested. |
 
-## Deployment checklist
-1. Ship through the Render pipeline (GitHub Actions handles image builds).
-2. Pause the deployment queue if multiple releases are queued; resume when ready.
-3. After deploy, run `!rec help` (user account) and `!help` (admin) to verify tier
-   listings.
-4. Trigger `!rec refresh clansinfo` and watch for the success log with duration < 60s.
+Both controls record the invoking actor, even when triggered via admin bang aliases.
+Manual refreshes never force a restart; even repeated failures leave the bot online while
+logging the error for follow-up.
 
-## Incident handling
-| Scenario | Immediate actions | Follow-up |
+## Digest & health telemetry
+When operators run `!rec digest` or `!rec health`, the embeds render the following fields
+from the public telemetry API:
+
+| Field | Meaning | Notes |
 | --- | --- | --- |
-| Command denial for staff | Confirm role IDs in config, run `!rec config`, re-sync roles | File ticket with timestamp + member ID |
-| Watcher silent | Check toggles (`WELCOME_ENABLED`, `ENABLE_*`), review `/healthz` | Capture log snippet, open incident issue |
-| Sheets outage | Switch to manual spreadsheet updates, disable writes via toggles | Note outage window, plan postmortem |
-| Cache stale | Run `!rec refresh all`, confirm `[refresh]` completion | Monitor next scheduled refresh |
+| `age` | Seconds since the cache snapshot was last refreshed. | Healthy values stay below the configured TTL; `n/a` appears while caches warm. |
+| `next` | Scheduled UTC timestamp for the next automatic refresh. | Confirms cron cadence and upcoming refresh window. |
+| `retries` | Count of retry attempts during the last refresh cycle. | Any non-zero value warrants a log review for that bucket. |
+| `actor` | Who triggered the last refresh (`startup`, `cron`, or a Discord user). | Validates guardrail compliance (public API only). |
 
-## Logging quick reference
-- `[ops]` — deployment lifecycle, watchdog notices, and manual overrides.
-- `[cron]` — cron job lifecycle (start/result/retry/summary, duration, target cache).
-- `[watcher]` — watcher lifecycle messages (toggles, errors, thread IDs).
-- `[command]` — execution context for CoreOps commands (caller, guild, result).
+## Checksheet validation
+`!checksheet` verifies the link between the configuration registry and the Google Sheets
+tabs.
 
-## Escalation ladder
-1. Recruitment duty lead (Discord ping in #bot-production).
-2. Platform on-call (Render access + Sheets owner).
-3. Org admin for Google Workspace escalations.
+1. Run `!rec reload` after updating Sheet tab names or ranges.
+2. Trigger `!checksheet`.
+3. Review the embed for **Tabs**, **Named ranges**, and **Headers**. Missing entries show
+   as ⚠️ with the key that failed validation.
+4. Optional: `!checksheet --debug` posts the first few rows from each tab so you can
+   confirm recruiters see the expected columns.
+5. If any validations fail, double-check Sheet permissions and the Config tab contents
+   before escalating.
 
 ---
 
-_Doc last updated: 2025-10-18 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
