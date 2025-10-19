@@ -1756,16 +1756,45 @@ class CoreOpsCog(commands.Cog):
             _sheet_entry("onboarding", key="ONBOARDING_SHEET_ID", label="Onboarding Sheet", fallback_index=2),
         ]
 
-        log_channel_id = get_log_channel_id()
-        ops_detail: Optional[str] = None
-        if log_channel_id:
-            channel = self.bot.get_channel(log_channel_id)
-            if channel is not None:
-                ops_detail = _describe_channel(channel)
-            else:
-                short = _short_identifier(log_channel_id)
-                if short:
-                    ops_detail = f"Channel ({short})"
+        snapshot_mapping: Mapping[str, object] | None
+        if isinstance(snapshot, Mapping):
+            snapshot_mapping = snapshot
+        else:
+            snapshot_mapping = None
+
+        ops_chan_id: object | None = None
+        if snapshot_mapping is not None:
+            for key in ("ops_log_channel_id", "OPS_LOG_CHANNEL_ID", "log_channel_id", "LOG_CHANNEL_ID"):
+                value = snapshot_mapping.get(key)
+                if isinstance(value, str):
+                    if value.strip():
+                        ops_chan_id = value.strip()
+                        break
+                elif value:
+                    ops_chan_id = value
+                    break
+
+        if ops_chan_id is None:
+            bot_config = getattr(self.bot, "config", None)
+            if bot_config is not None:
+                ops_chan_id = getattr(bot_config, "ops_log_channel_id", None) or getattr(
+                    bot_config, "log_channel_id", None
+                )
+
+        ops_line = "⚠️ Missing"
+        if ops_chan_id:
+            try:
+                channel = self.bot.get_channel(int(ops_chan_id))
+                if channel:
+                    channel_name = getattr(channel, "name", None) or "unknown"
+                    ops_line = f"✅ #{channel_name}"
+                else:
+                    tail = str(ops_chan_id)[-4:]
+                    ops_line = f"✅ configured (…{tail})"
+            except Exception:
+                ops_line = "✅ configured"
+
+        ops_detail: Optional[str] = ops_line if ops_chan_id else None
 
         override_keys = _extract_override_keys(meta) if meta else []
 
@@ -1782,7 +1811,7 @@ class CoreOpsCog(commands.Cog):
             },
             "sheets": sheet_entries,
             "ops": {
-                "configured": bool(log_channel_id),
+                "configured": bool(ops_chan_id),
                 "detail": ops_detail,
             },
             "source": {
@@ -1799,6 +1828,18 @@ class CoreOpsCog(commands.Cog):
             bot_version=bot_version,
             coreops_version=COREOPS_VERSION,
         )
+
+        try:
+            fields = list(getattr(embed, "fields", []))
+            for idx, field in enumerate(fields):
+                name = str(getattr(field, "name", ""))
+                if name.strip().lower() == "ops channel":
+                    embed.remove_field(idx)
+                    break
+        except Exception:
+            pass
+
+        embed.add_field(name="Ops channel", value=ops_line, inline=False)
 
         await ctx.reply(embed=sanitize_embed(embed))
 
