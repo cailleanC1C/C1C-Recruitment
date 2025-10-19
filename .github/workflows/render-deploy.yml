@@ -18,6 +18,9 @@ on:
 
 jobs:
   deploy:
+    concurrency:
+      group: render-deploy-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (shallow)
@@ -31,8 +34,8 @@ jobs:
         with:
           node-version: '20'
 
-      # Wait until no active Render deploys (cancel in-flight), then continue
-      - name: Wait for lane (cancel older)
+      # Wait until there is no active Render deploy (do NOT cancel anything)
+      - name: Wait for lane (no cancel)
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
@@ -57,22 +60,14 @@ jobs:
             return list && list[0];
           }
 
-          async function cancel(id){
-            await fetch(`https://api.render.com/v1/services/${svc}/deploys/${id}/cancel`, { method:'POST', headers: hdr });
-          }
-
           async function waitClear(){
             const start = Date.now();
-            const timeoutMs = 10 * 60 * 1000;
+            const timeoutMs = 30 * 60 * 1000; // give Render plenty of time
             for(;;){
               const d = await latest();
               const st = d?.status || d?.deploy?.status || '';
-              const id = d?.id || d?.deploy?.id || '';
               if(active(st)){
-                if(id){
-                  try { await cancel(id); console.log('Canceled', id, st); }
-                  catch(e){ console.log('Cancel failed:', e.message); }
-                }
+                // just wait; do not cancel in-flight work
                 await new Promise(r=>setTimeout(r, 5000));
                 if(Date.now()-start > timeoutMs) throw new Error('Timeout waiting for lane');
               } else {
