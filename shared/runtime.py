@@ -9,7 +9,7 @@ import os
 import random
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
-from typing import Awaitable, Callable, Iterable, Optional, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Optional, Sequence
 
 from aiohttp import web
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -585,9 +585,38 @@ class Runtime:
         await self.load_extensions()
         rehydrate_tiers(self.bot)
         audit_tiers(self.bot, log)
-        from shared.sheets.cache_scheduler import schedule_default_jobs
+        from shared.sheets.cache_scheduler import (
+            emit_schedule_log,
+            ensure_cache_registration,
+            register_refresh_job,
+        )
 
-        schedule_default_jobs(self)
+        ensure_cache_registration()
+        cache_specs = (
+            ("clans", timedelta(hours=3), "3h"),
+            ("templates", timedelta(days=7), "7d"),
+            ("clan_tags", timedelta(days=7), "7d"),
+        )
+        successes: list[tuple[Any, Any]] = []
+        failure: tuple[str, BaseException] | None = None
+        for bucket, interval, cadence in cache_specs:
+            try:
+                spec, job = register_refresh_job(
+                    self,
+                    bucket=bucket,
+                    interval=interval,
+                    cadence_label=cadence,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception("failed to schedule cache refresh", extra={"bucket": bucket})
+                if failure is None:
+                    failure = (bucket, exc)
+                continue
+            successes.append((spec, job))
+        self.scheduler.spawn(
+            emit_schedule_log(self, successes, failure),
+            name="cache_refresh_schedule_log",
+        )
         await self.bot.start(token)
 
     async def close(self) -> None:
