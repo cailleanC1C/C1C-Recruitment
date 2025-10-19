@@ -163,6 +163,8 @@ class CacheService:
     async def _log_refresh(self, b: CacheBucket, *, trigger: str, actor: Optional[str], retries: int) -> None:
         # Format: [refresh] bucket=clans trigger=schedule actor=@user duration=842ms result=ok hits=?,misses=?,retries=1
         error_text = b.last_error or "-"
+        if actor == "cron":
+            return
         msg = (
             f"[refresh] bucket={b.name} trigger={trigger} "
             f"actor={actor or '-'} duration={b.last_latency_ms or 0}ms "
