@@ -228,7 +228,7 @@ async def _emit_schedule_log(
             "[cron] scheduled • "
             + " • ".join(cadence_parts)
             + " • next: "
-            + "; ".join(next_parts)
+            + ", ".join(next_parts)
         )
         log.info(message)
         await _send_ops_message(runtime, message)

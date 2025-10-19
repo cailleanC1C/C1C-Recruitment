@@ -26,15 +26,10 @@ from shared.config import (
     get_watchdog_stall_sec,
     get_watchdog_disconnect_grace_sec,
     get_log_channel_id,
-    get_config_snapshot,
     get_refresh_times,
     get_refresh_timezone,
 )
 from shared.coreops.helpers.tiers import audit_tiers, rehydrate_tiers
-from shared.cache.telemetry import refresh_now, get_snapshot, humanize_duration
-from shared.redaction import sanitize_text
-
-from shared.coreops_cog import resolve_ops_log_channel_id
 
 log = logging.getLogger("c1c.runtime")
 
@@ -187,43 +182,6 @@ def monotonic_ms() -> int:
     """Return a monotonic millisecond timestamp for lightweight timing."""
 
     return int(time.monotonic() * 1000)
-
-
-def _sanitize_error_text(value: object, *, limit: int = 120) -> str:
-    """Sanitize an error string for safe inline logging."""
-
-    if value is None:
-        return ""
-    try:
-        text = str(value)
-    except Exception:  # pragma: no cover - defensive fallback
-        text = repr(value)
-    cleaned = " ".join(text.split()).strip()
-    if not cleaned:
-        return ""
-    sanitized = sanitize_text(cleaned)
-    if isinstance(sanitized, str):
-        text = sanitized
-    else:
-        text = str(sanitized)
-    text = text.replace("\n", " ").replace("\r", " ")
-    text = text.replace("\"", "'")
-    if len(text) > limit:
-        text = f"{text[: limit - 1]}…"
-    return text
-
-
-def _format_bot_info_message(
-    *, ok: bool, duration_ms: int | None, retries: int, error_text: str | None = None
-) -> str:
-    duration = max(0, int(duration_ms or 0))
-    duration_text = f"{duration / 1000.0:.2f}s"
-    status = "ok" if ok else "FAIL"
-    parts = [f"[cache] bot_info — {status}", f"• {duration_text}"]
-    if not ok and error_text:
-        parts.append(f"• err=\"{error_text}\"")
-    parts.append(f"• retries={max(0, retries)}")
-    return " ".join(parts)
 
 
 def _parse_times(parts: Iterable[str]) -> list[dt_time]:
@@ -416,7 +374,6 @@ class Runtime:
         self._web_site: Optional[web.TCPSite] = None
         self._watchdog_task: Optional[asyncio.Task] = None
         self._watchdog_params: Optional[tuple[int, int, int]] = None
-        self._bot_info_job: _RecurringJob | None = None
         set_active_runtime(self)
 
     async def start_webserver(self, *, port: Optional[int] = None) -> None:
@@ -564,30 +521,6 @@ class Runtime:
         )
         return True, check, stall, disconnect
 
-    def _ensure_bot_info_refresh_job(self) -> None:
-        if self._bot_info_job is not None:
-            return
-        job = self.scheduler.every(
-            hours=3,
-            jitter="small",
-            tag="cache",
-            name="refresh:bot_info",
-        )
-        job.do(self._refresh_bot_info_job)
-        self._bot_info_job = job
-        log.info("[cron] registered job: refresh:bot_info (every 3h)")
-        if job.next_run is not None:
-            next_run_utc = job.next_run.astimezone(timezone.utc)
-            iso = next_run_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            now_utc = datetime.now(timezone.utc)
-            delta_seconds = max(0, int((next_run_utc - now_utc).total_seconds()))
-            suffix = ""
-            if delta_seconds:
-                human = humanize_duration(delta_seconds)
-                if human:
-                    suffix = f" (in {human})"
-            log.info("[cron] refresh:bot_info next at %s%s", iso, suffix)
-
     def schedule_at_times(
         self,
         callback: Callable[[], Awaitable[Optional[str]]],
@@ -628,106 +561,6 @@ class Runtime:
 
         return self.scheduler.spawn(runner(), name=name)
 
-    async def _refresh_bot_info_job(self) -> None:
-        log.info("[cron] refresh:bot_info starting")
-        start_ms = monotonic_ms()
-        snapshot = None
-        duration_ms: int | None = None
-        message: str | None = None
-        retries = 0
-        try:
-            result = await refresh_now(name="bot_info", actor="scheduler")
-            snapshot = get_snapshot("bot_info")
-            duration_ms = result.duration_ms
-            if duration_ms is None:
-                duration_ms = monotonic_ms() - start_ms
-            if snapshot and snapshot.retries is not None:
-                try:
-                    retries = int(snapshot.retries)
-                except (TypeError, ValueError):
-                    retries = 0
-            error_text = None
-            if not result.ok:
-                candidate_error = result.error or getattr(snapshot, "last_error", None)
-                sanitized = _sanitize_error_text(candidate_error)
-                if sanitized:
-                    error_text = sanitized
-            message = _format_bot_info_message(
-                ok=result.ok,
-                duration_ms=duration_ms,
-                retries=retries,
-                error_text=error_text,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            duration_ms = monotonic_ms() - start_ms
-            if snapshot is None:
-                try:
-                    snapshot = get_snapshot("bot_info")
-                except Exception:
-                    snapshot = None
-            if snapshot and snapshot.retries is not None:
-                try:
-                    retries = int(snapshot.retries)
-                except (TypeError, ValueError):
-                    retries = 0
-            error_text = _sanitize_error_text(exc) or exc.__class__.__name__
-            message = _format_bot_info_message(
-                ok=False,
-                duration_ms=duration_ms,
-                retries=retries,
-                error_text=error_text,
-            )
-            log.warning("[cron] refresh:bot_info exception: %s", error_text, exc_info=True)
-        if message is None:
-            duration_ms = monotonic_ms() - start_ms if duration_ms is None else duration_ms
-            message = _format_bot_info_message(
-                ok=False,
-                duration_ms=duration_ms,
-                retries=retries,
-            )
-        await self._publish_bot_info_message(message)
-        log.info("[cron] refresh:bot_info result: %s", message)
-
-    async def _publish_bot_info_message(self, message: str) -> None:
-        config_snapshot = get_config_snapshot()
-        channel_id = resolve_ops_log_channel_id(bot=self.bot, snapshot=config_snapshot)
-        if not channel_id:
-            log.info("[cache] bot_info refresh result (ops channel missing): %s", message)
-            return
-        try:
-            await self.bot.wait_until_ready()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            pass
-        channel = self.bot.get_channel(channel_id)
-        if channel is None:
-            try:
-                channel = await self.bot.fetch_channel(channel_id)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                log.warning(
-                    "[cron] refresh:bot_info channel_fetch_failed: %s",
-                    _sanitize_error_text(exc),
-                )
-                channel = None
-        if channel is None:
-            log.info("[cache] bot_info refresh result (ops channel missing): %s", message)
-            return
-        try:
-            await channel.send(message)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            log.warning(
-                "[cron] refresh:bot_info send_failed: %s",
-                _sanitize_error_text(exc),
-            )
-            log.info("[cache] bot_info refresh result (ops channel missing): %s", message)
-
     async def load_extensions(self) -> None:
         """Load all feature modules into the shared bot instance."""
 
@@ -752,7 +585,6 @@ class Runtime:
         await self.load_extensions()
         rehydrate_tiers(self.bot)
         audit_tiers(self.bot, log)
-        self._ensure_bot_info_refresh_job()
         from shared.sheets.cache_scheduler import schedule_default_jobs
 
         schedule_default_jobs(self)
