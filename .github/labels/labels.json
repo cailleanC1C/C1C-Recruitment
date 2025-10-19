@@ -120,6 +120,11 @@
     "description": "README, guides, runbooks"
   },
   {
+    "name": "feature",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "good first issue",
     "color": "7057ff",
     "description": "Low-risk starter task"
