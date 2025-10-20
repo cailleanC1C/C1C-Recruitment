@@ -7,6 +7,7 @@ performance.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from typing import Dict, Optional, Sequence, Tuple
@@ -238,42 +239,6 @@ def _page_embeds(
     return embeds
 
 
-async def _update_panel(
-    itx: discord.Interaction,
-    embeds: list[discord.Embed],
-    view: discord.ui.View,
-    *,
-    ack: str | None = None,
-) -> None:
-    """
-    Update the existing panel message in-place for a component interaction.
-
-    - Uses defer_update() to avoid spinners and extra posts.
-    - Edits the original message with new embeds/view.
-    - Optionally sends a tiny ephemeral acknowledgement to the clicker.
-    """
-
-    # Component update (no spinner, no new message)
-    try:
-        if not itx.response.is_done():
-            await itx.response.defer_update()
-    except Exception:
-        # If already acknowledged, continue to edit below.
-        pass
-
-    try:
-        await itx.message.edit(embeds=embeds, view=view)
-    except Exception:
-        # As a last resort, ignore edit errors (deleted message, etc.)
-        pass
-
-    if ack:
-        try:
-            await itx.followup.send(ack, ephemeral=True)
-        except Exception:
-            pass
-
-
 class RecruiterPanelView(discord.ui.View):
     """Interactive filter panel for recruiter searches."""
 
@@ -284,6 +249,7 @@ class RecruiterPanelView(discord.ui.View):
         self.cog = cog
         self.author_id = author_id
         self.message: Optional[discord.Message] = None
+        self._update_task: asyncio.Task | None = None
 
         self.cb: Optional[str] = None
         self.hydra: Optional[str] = None
@@ -302,6 +268,67 @@ class RecruiterPanelView(discord.ui.View):
 
         self._build_components()
         self._reset_filters()
+
+    def _cancel_inflight(self) -> None:
+        task = getattr(self, "_update_task", None)
+        if task and not task.done():
+            task.cancel()
+        self._update_task = None
+
+    @staticmethod
+    async def _defer_if_needed(interaction: discord.Interaction) -> None:
+        if interaction.response.is_done():
+            return
+        try:
+            await interaction.response.defer_update()
+        except InteractionResponded:
+            pass
+        except Exception:
+            pass
+
+    async def _rebuild_and_edit(
+        self, itx: discord.Interaction, *, ack: str | None = None
+    ) -> None:
+        """Build current page and edit the original panel message in place."""
+
+        current_task = asyncio.current_task()
+        try:
+            embeds, _ = await self._build_page()  # recruiter is text-only; ignore files
+            if self.message:
+                try:
+                    await self.message.edit(embeds=embeds, view=self)
+                except Exception:
+                    pass
+            if ack:
+                try:
+                    await itx.followup.send(ack, ephemeral=True)
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            try:
+                await itx.followup.send(
+                    "Couldn’t update the panel. Try again.", ephemeral=True
+                )
+            except Exception:
+                pass
+        finally:
+            if current_task and self._update_task is current_task:
+                self._update_task = None
+
+    def _has_any_filter(self) -> bool:
+        return any(
+            [
+                self.cb,
+                self.hydra,
+                self.chimera,
+                self.cvc,
+                self.siege,
+                self.playstyle,
+                self.roster_mode is not None,
+            ]
+        )
 
     def _build_components(self) -> None:
         cb_select = discord.ui.Select(
@@ -553,32 +580,36 @@ class RecruiterPanelView(discord.ui.View):
         return embeds, []
 
     async def _on_cb_select(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.cb = self.cb_select.values[0] if self.cb_select.values else None
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_hydra_select(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.hydra = self.hydra_select.values[0] if self.hydra_select.values else None
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_chimera_select(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.chimera = (
             self.chimera_select.values[0] if self.chimera_select.values else None
         )
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_playstyle_select(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.playstyle = (
             self.playstyle_select.values[0] if self.playstyle_select.values else None
         )
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     @staticmethod
     def _cycle_toggle(current: Optional[str]) -> Optional[str]:
@@ -589,18 +620,21 @@ class RecruiterPanelView(discord.ui.View):
         return None
 
     async def _on_cvc_toggle(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.cvc = self._cycle_toggle(self.cvc)
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_siege_toggle(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self.siege = self._cycle_toggle(self.siege)
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_roster_toggle(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         if self.roster_mode == "open":
             self.roster_mode = "inactives"
         elif self.roster_mode == "inactives":
@@ -610,93 +644,112 @@ class RecruiterPanelView(discord.ui.View):
         else:
             self.roster_mode = "open"
         self._mark_filters_changed()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
+        await self._defer_if_needed(interaction)
         self._reset_filters(for_user=True)
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self, ack="Filters reset ✓")
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(
+            self._rebuild_and_edit(interaction, ack="Filters reset ✓")
+        )
 
     async def _on_search(self, interaction: discord.Interaction) -> None:
-        if not any(
-            [
-                self.cb,
-                self.hydra,
-                self.chimera,
-                self.cvc,
-                self.siege,
-                self.playstyle,
-                self.roster_mode is not None,
-            ]
-        ):
+        if not self._has_any_filter():
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    "Pick at least **one** filter, then try again. 🙂",
+                    "Pick at least one filter, then try again. 🙂",
                     ephemeral=True,
                 )
             else:
                 try:
                     await interaction.followup.send(
-                        "Pick at least **one** filter, then try again. 🙂",
+                        "Pick at least one filter, then try again. 🙂",
                         ephemeral=True,
                     )
                 except Exception:
                     pass
             return
 
-        if not interaction.response.is_done():
-            try:
-                await interaction.response.defer_update()
-            except InteractionResponded:
-                pass
-            except Exception:
-                pass
+        await self._defer_if_needed(interaction)
 
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._run_search(interaction))
+
+    async def _run_search(self, interaction: discord.Interaction) -> None:
         try:
-            rows = recruitment_sheets.fetch_clans(force=False)
-        except Exception as exc:  # pragma: no cover - defensive guard
-            log.exception("failed to fetch clan rows", exc_info=exc)
-            if self.matches:
-                self.results_stale = True
-            self._sync_visuals()
-            self.status_message = (
-                "⚠️ I couldn’t load the clan roster. Try again in a moment."
-            )
-            embeds, _ = await self._build_page()
-            await _update_panel(interaction, embeds, self)
-            return
-
-        matches: list[Sequence[str]] = []
-        for row in rows[1:]:
             try:
-                if not _row_matches(
-                    row,
+                rows = recruitment_sheets.fetch_clans(force=False)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception("failed to fetch clan rows", exc_info=exc)
+                if self.matches:
+                    self.results_stale = True
+                self._sync_visuals()
+                self.status_message = (
+                    "⚠️ I couldn’t load the clan roster. Try again in a moment."
+                )
+                await self._rebuild_and_edit(interaction)
+                return
+
+            matches: list[Sequence[str]] = []
+            for row in rows[1:]:
+                try:
+                    if not _row_matches(
+                        row,
+                        self.cb,
+                        self.hydra,
+                        self.chimera,
+                        self.cvc,
+                        self.siege,
+                        self.playstyle,
+                    ):
+                        continue
+                    spots = _parse_number(
+                        row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
+                    )
+                    inactives = _parse_number(
+                        row[IDX_AF_INACTIVES] if len(row) > IDX_AF_INACTIVES else ""
+                    )
+                    if self.roster_mode == "open" and spots <= 0:
+                        continue
+                    if self.roster_mode == "full" and spots > 0:
+                        continue
+                    if self.roster_mode == "inactives" and inactives <= 0:
+                        continue
+                    matches.append(row)
+                except Exception:
+                    continue
+
+            if not matches:
+                self.matches = []
+                self.results_filters_text = _format_filters_footer(
                     self.cb,
                     self.hydra,
                     self.chimera,
                     self.cvc,
                     self.siege,
                     self.playstyle,
-                ):
-                    continue
-                spots = _parse_number(row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else "")
-                inactives = _parse_number(
-                    row[IDX_AF_INACTIVES] if len(row) > IDX_AF_INACTIVES else ""
+                    self.roster_mode,
                 )
-                if self.roster_mode == "open" and spots <= 0:
-                    continue
-                if self.roster_mode == "full" and spots > 0:
-                    continue
-                if self.roster_mode == "inactives" and inactives <= 0:
-                    continue
-                matches.append(row)
-            except Exception:
-                continue
+                self.total_found = 0
+                self.results_stale = False
+                self.status_message = (
+                    "No matching clans found. Try again with fewer or different filters."
+                )
+                self._sync_visuals()
+                await self._rebuild_and_edit(
+                    interaction, ack="Search results updated ✓"
+                )
+                return
 
-        if not matches:
-            self.matches = []
-            self.results_filters_text = _format_filters_footer(
+            cap = max(1, config.get_search_results_soft_cap(25))
+            total_found = len(matches)
+            if total_found > cap:
+                matches = matches[:cap]
+            cap_note = f"first {cap} of {total_found}" if total_found > cap else None
+
+            filters_text = _format_filters_footer(
                 self.cb,
                 self.hydra,
                 self.chimera,
@@ -705,65 +758,49 @@ class RecruiterPanelView(discord.ui.View):
                 self.playstyle,
                 self.roster_mode,
             )
-            self.total_found = 0
+            if cap_note:
+                filters_text = (
+                    f"{filters_text} • {cap_note}" if filters_text else cap_note
+                )
+
+            self.matches = matches
+            self.results_filters_text = filters_text
+            self.total_found = total_found
+            self.page = 0
             self.results_stale = False
             self.status_message = (
-                "No matching clans found. Try again with fewer or different filters."
+                f"Showing first {len(matches)} of {total_found} clans."
+                if cap_note
+                else f"Found {total_found} matching clans."
             )
             self._sync_visuals()
-            embeds, _ = await self._build_page()
-            await _update_panel(interaction, embeds, self)
-            return
 
-        cap = max(1, config.get_search_results_soft_cap(25))
-        total_found = len(matches)
-        if total_found > cap:
-            matches = matches[:cap]
-        cap_note = f"first {cap} of {total_found}" if total_found > cap else None
-
-        filters_text = _format_filters_footer(
-            self.cb,
-            self.hydra,
-            self.chimera,
-            self.cvc,
-            self.siege,
-            self.playstyle,
-            self.roster_mode,
-        )
-        if cap_note:
-            filters_text = f"{filters_text} • {cap_note}" if filters_text else cap_note
-
-        self.matches = matches
-        self.results_filters_text = filters_text
-        self.total_found = total_found
-        self.page = 0
-        self.results_stale = False
-        self.status_message = (
-            f"Showing first {len(matches)} of {total_found} clans." if cap_note else f"Found {total_found} matching clans."
-        )
-        self._sync_visuals()
-
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self, ack="Search results updated ✓")
+            await self._rebuild_and_edit(interaction, ack="Search results updated ✓")
+        except asyncio.CancelledError:
+            raise
 
     async def _on_prev_page(self, interaction: discord.Interaction) -> None:
         if not self.matches:
+            await self._defer_if_needed(interaction)
             return
+        await self._defer_if_needed(interaction)
         if self.page > 0:
             self.page -= 1
         self._sync_visuals()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_next_page(self, interaction: discord.Interaction) -> None:
         if not self.matches:
+            await self._defer_if_needed(interaction)
             return
+        await self._defer_if_needed(interaction)
         max_page = max(0, math.ceil(len(self.matches) / PAGE_SIZE) - 1)
         if self.page < max_page:
             self.page += 1
         self._sync_visuals()
-        embeds, _ = await self._build_page()
-        await _update_panel(interaction, embeds, self)
+        self._cancel_inflight()
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def on_timeout(self) -> None:
         for child in self.children:
