@@ -852,6 +852,11 @@ class RecruiterPanelCog(commands.Cog):
                 thread = ctx.guild.get_thread(int(fixed_id)) if ctx.guild else None
                 if not thread and ctx.bot:
                     thread = await ctx.bot.fetch_channel(int(fixed_id))
+                if isinstance(thread, discord.Thread) and thread.archived:
+                    try:
+                        await thread.edit(archived=False)
+                    except Exception:
+                        pass
         except Exception:
             thread = None
 
