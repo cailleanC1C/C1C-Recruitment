@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
 import urllib.parse
@@ -24,6 +25,7 @@ _MAX_SIZE = 512
 _MIN_BOX = 0.2
 _MAX_BOX = 0.95
 _TIMEOUT = 8
+_SESSION_KEY = "emoji_pad.session"
 
 try:  # Pillow >= 10
     RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
@@ -31,34 +33,32 @@ except AttributeError:  # pragma: no cover - Pillow < 10
     RESAMPLE_LANCZOS = Image.LANCZOS
 
 
-async def _fetch_emoji_bytes(url: str, max_bytes: int) -> bytes:
-    timeout = ClientTimeout(total=_TIMEOUT)
-    async with ClientSession(timeout=timeout) as session:
-        try:
-            async with session.get(
-                url,
-                allow_redirects=False,
-                headers={"User-Agent": "c1c-matchmaker/emoji-pad"},
-            ) as resp:
-                if resp.status != 200:
-                    raise web.HTTPBadGateway(text="upstream error")
+async def _fetch_emoji_bytes(session: ClientSession, url: str, max_bytes: int) -> bytes:
+    try:
+        async with session.get(
+            url,
+            allow_redirects=False,
+            headers={"User-Agent": "c1c-matchmaker/emoji-pad"},
+        ) as resp:
+            if resp.status != 200:
+                raise web.HTTPBadGateway(text="upstream error")
 
-                content_type = resp.headers.get("Content-Type", "").lower()
-                if "image" not in content_type:
-                    raise web.HTTPUnsupportedMediaType(text="unsupported media type")
+            content_type = resp.headers.get("Content-Type", "").lower()
+            if "image" not in content_type:
+                raise web.HTTPUnsupportedMediaType(text="unsupported media type")
 
-                length = resp.content_length
-                if length and length > max_bytes:
+            length = resp.content_length
+            if length and length > max_bytes:
+                raise web.HTTPRequestEntityTooLarge(text="image too large")
+
+            data = bytearray()
+            async for chunk in resp.content.iter_chunked(65536):
+                data.extend(chunk)
+                if len(data) > max_bytes:
                     raise web.HTTPRequestEntityTooLarge(text="image too large")
-
-                data = bytearray()
-                async for chunk in resp.content.iter_chunked(65536):
-                    data.extend(chunk)
-                    if len(data) > max_bytes:
-                        raise web.HTTPRequestEntityTooLarge(text="image too large")
-                return bytes(data)
-        except asyncio.TimeoutError as exc:
-            raise web.HTTPGatewayTimeout(text="timeout") from exc
+            return bytes(data)
+    except asyncio.TimeoutError as exc:
+        raise web.HTTPGatewayTimeout(text="timeout") from exc
 
 
 def mount_emoji_pad(app: web.Application) -> None:
@@ -66,6 +66,19 @@ def mount_emoji_pad(app: web.Application) -> None:
 
     if app.get("_emoji_pad_mounted"):
         return
+
+    if _SESSION_KEY not in app:
+        timeout = ClientTimeout(total=_TIMEOUT)
+        app[_SESSION_KEY] = ClientSession(timeout=timeout)
+
+        async def _close_session(_app: web.Application) -> None:
+            session = _app.get(_SESSION_KEY)
+            if not session:
+                return
+            with contextlib.suppress(Exception):
+                await session.close()
+
+        app.on_cleanup.append(_close_session)
 
     async def handle(request: web.Request) -> web.StreamResponse:
         source_url = request.query.get("u")
@@ -93,7 +106,8 @@ def mount_emoji_pad(app: web.Application) -> None:
         max_bytes = get_emoji_max_bytes()
 
         try:
-            data = await _fetch_emoji_bytes(source_url, max_bytes)
+            session: ClientSession = request.app[_SESSION_KEY]
+            data = await _fetch_emoji_bytes(session, source_url, max_bytes)
 
             try:
                 image = Image.open(io.BytesIO(data)).convert("RGBA")
