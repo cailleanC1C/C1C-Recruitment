@@ -673,6 +673,14 @@ class Runtime:
         await _load_feature_module(
             "recruitment.search", ("member_panel", "recruiter_panel")
         )
+
+        if features.is_enabled("recruiter_panel"):
+            from recruitment import recruiter_panel
+
+            await recruiter_panel.setup(self.bot)
+            log.info("modules: recruiter_panel enabled")
+        else:
+            log.info("modules: recruiter_panel disabled")
         await _load_feature_module("recruitment.welcome", ("recruitment_welcome",))
         await _load_feature_module("recruitment.reports", ("recruitment_reports",))
         await _load_feature_module(

@@ -25,6 +25,8 @@ def make_embed_for_row_classic(
     row,
     filters_text: str,
     guild: discord.Guild | None = None,
+    *,
+    include_crest: bool = True,
 ) -> discord.Embed:
     """Classic recruiter embed with entry criteria and optional filters footer."""
 
@@ -52,7 +54,8 @@ def make_embed_for_row_classic(
 
     embed = discord.Embed(title=title, description="\n\n".join(sections))
 
-    _set_thumbnail(embed, guild, tag)
+    if include_crest:
+        _set_thumbnail(embed, guild, tag)
 
     embed.set_footer(text=f"Filters used: {filters_text}")
     return embed

@@ -39,6 +39,8 @@ off in production until the panels ship._
 
 ## Recruitment visuals pipeline
 - `recruitment.cards` & `recruitment.views` compose embeds for clan panels.
+- `recruitment.recruiter_panel` binds `!clanmatch` to those cards while staying
+  text-only (no `emoji_pipeline` dependency).
 - `recruitment.emoji_pipeline` resolves guild emoji, falls back when proxies are strict,
   and builds attachment thumbnails when needed.
 - `/emoji-pad` (aiohttp) trims, pads, and caches PNG emoji when `PUBLIC_BASE_URL` or
@@ -74,4 +76,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4)_
+_Doc last updated: 2025-10-24 (v0.9.5)_
