@@ -52,7 +52,7 @@ IDX_AF_INACTIVES = 31
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
 HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
-CHIMERA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
+CHIMERA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare", "UltraNightmare"]
 PLAYSTYLE_CHOICES = ["Stress Free", "Casual", "Semi Competitive", "Competitive"]
 
 TOKEN_MAP = {
@@ -63,6 +63,7 @@ TOKEN_MAP = {
     "NM": "NM",
     "UNM": "UNM",
     "ULTRA-NIGHTMARE": "UNM",
+    "ULTRANIGHTMARE": "UNM",
 }
 
 STYLE_CANON = {
@@ -106,6 +107,13 @@ def _cell_has_diff(cell_text: str, token: str | None) -> bool:
         return True
     if mapped == "BTL" and "BRUTAL" in cell:
         return True
+    if mapped == "UNM":
+        if "ULTRA NIGHTMARE" in cell:
+            return True
+        if "ULTRA-NIGHTMARE" in cell:
+            return True
+        if "ULTRANIGHTMARE" in cell:
+            return True
     return False
 
 
