@@ -645,6 +645,14 @@ class RecruiterPanelView(discord.ui.View):
                     pass
             return
 
+        if not interaction.response.is_done():
+            try:
+                await interaction.response.defer_update()
+            except InteractionResponded:
+                pass
+            except Exception:
+                pass
+
         try:
             rows = recruitment_sheets.fetch_clans(force=False)
         except Exception as exc:  # pragma: no cover - defensive guard
