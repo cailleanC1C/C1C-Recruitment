@@ -107,6 +107,13 @@ def _cell_has_diff(cell_text: str, token: str | None) -> bool:
         return True
     if mapped == "BTL" and "BRUTAL" in cell:
         return True
+    if mapped == "UNM":
+        if "ULTRA NIGHTMARE" in cell:
+            return True
+        if "ULTRA-NIGHTMARE" in cell:
+            return True
+        if "ULTRANIGHTMARE" in cell:
+            return True
     return False
 
 
