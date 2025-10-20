@@ -252,6 +252,7 @@ class RecruiterPanelView(discord.ui.View):
         self.message: Optional[discord.Message] = None
         self._update_task: asyncio.Task | None = None
         self._last_embeds: list[discord.Embed] = []
+        self._busy: bool = False
 
         self.cb: Optional[str] = None
         self.hydra: Optional[str] = None
@@ -277,53 +278,32 @@ class RecruiterPanelView(discord.ui.View):
             task.cancel()
         self._update_task = None
 
-    def _disabled_copy(self) -> "RecruiterPanelView":
-        """Return a shallow copy of this view with all items disabled."""
+    async def _send_busy_response(self, itx: discord.Interaction) -> None:
+        message = "Still working on your last update…"
+        if not itx.response.is_done():
+            with contextlib.suppress(Exception):
+                await itx.response.send_message(message, ephemeral=True)
+        else:
+            with contextlib.suppress(Exception):
+                await itx.followup.send(message, ephemeral=True, wait=False)
 
-        clone = self.__class__(self.cog, self.author_id)
-        clone.cb = self.cb
-        clone.hydra = self.hydra
-        clone.chimera = self.chimera
-        clone.playstyle = self.playstyle
-        clone.cvc = self.cvc
-        clone.siege = self.siege
-        clone.roster_mode = self.roster_mode
-        clone.matches = list(self.matches)
-        clone.results_filters_text = self.results_filters_text
-        clone.total_found = self.total_found
-        clone.page = self.page
-        clone.results_stale = self.results_stale
-        clone.status_message = self.status_message
-        clone._last_embeds = [embed.copy() for embed in self._last_embeds]
-        clone._sync_visuals()
-        for item in clone.children:
-            item.disabled = True
-        return clone
+    async def _ack_interaction(self, itx: discord.Interaction) -> None:
+        if not itx.response.is_done():
+            with contextlib.suppress(Exception):
+                await itx.response.defer(ephemeral=True)
+                await itx.followup.send("Updating the panel…", ephemeral=True, wait=False)
+        else:
+            with contextlib.suppress(Exception):
+                await itx.followup.send("Updating the panel…", ephemeral=True, wait=False)
 
-    async def _ack_with_placeholder(self, itx: discord.Interaction) -> None:
-        """Respond immediately by editing the message with a disabled placeholder view."""
-
-        placeholder_embeds: list[discord.Embed] = []
-        try:
-            if self._last_embeds:
-                embeds_copy = [embed.copy() for embed in self._last_embeds]
-                existing_footer = embeds_copy[-1].footer.text or ""
-                footer_text = (
-                    f"{existing_footer} • Updating…" if existing_footer else "Updating…"
-                )
-                embeds_copy[-1].set_footer(text=footer_text)
-                placeholder_embeds = embeds_copy
-        except Exception:
-            placeholder_embeds = []
-
-        if not placeholder_embeds:
-            placeholder_embeds = [discord.Embed(description="Updating results…")]
-
-        disabled_view = self._disabled_copy()
-        try:
-            await itx.response.edit_message(embeds=placeholder_embeds, view=disabled_view)
-        except InteractionResponded:
-            pass
+    async def _begin_interaction(self, itx: discord.Interaction) -> bool:
+        if self._busy:
+            await self._send_busy_response(itx)
+            return False
+        self._busy = True
+        await self._ack_interaction(itx)
+        self._cancel_inflight()
+        return True
 
     async def _rebuild_and_edit(
         self, itx: discord.Interaction, *, ack_ephemeral: str | None = None
@@ -331,6 +311,13 @@ class RecruiterPanelView(discord.ui.View):
         """Build current page and edit the original panel message in place."""
 
         current_task = asyncio.current_task()
+        previous_embeds: list[discord.Embed] = []
+        if self.message:
+            try:
+                previous_embeds = [embed.copy() for embed in (self.message.embeds or [])]
+            except Exception:
+                previous_embeds = []
+        self._last_embeds = [embed.copy() for embed in previous_embeds]
         try:
             embeds, _ = await self._build_page()  # recruiter is text-only; ignore files
             self._last_embeds = [embed.copy() for embed in embeds]
@@ -343,11 +330,20 @@ class RecruiterPanelView(discord.ui.View):
         except asyncio.CancelledError:
             return
         except Exception:
+            log.exception("failed to rebuild recruiter panel")
             with contextlib.suppress(Exception):
                 await itx.followup.send("Couldn’t update the panel. Try again.", ephemeral=True)
+            if self.message:
+                with contextlib.suppress(Exception):
+                    await self.message.edit(
+                        embeds=previous_embeds or None,
+                        view=self,
+                    )
+            self._last_embeds = [embed.copy() for embed in previous_embeds]
         finally:
             if current_task and self._update_task is current_task:
                 self._update_task = None
+                self._busy = False
 
     def _has_any_filter(self) -> bool:
         return any(
@@ -612,35 +608,35 @@ class RecruiterPanelView(discord.ui.View):
         return embeds, []
 
     async def _on_cb_select(self, interaction: discord.Interaction) -> None:
-        self.cb = self.cb_select.values[0] if self.cb_select.values else None
+        new_value = self.cb_select.values[0] if self.cb_select.values else None
+        if not await self._begin_interaction(interaction):
+            return
+        self.cb = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_hydra_select(self, interaction: discord.Interaction) -> None:
-        self.hydra = self.hydra_select.values[0] if self.hydra_select.values else None
+        new_value = self.hydra_select.values[0] if self.hydra_select.values else None
+        if not await self._begin_interaction(interaction):
+            return
+        self.hydra = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_chimera_select(self, interaction: discord.Interaction) -> None:
-        self.chimera = (
-            self.chimera_select.values[0] if self.chimera_select.values else None
-        )
+        new_value = self.chimera_select.values[0] if self.chimera_select.values else None
+        if not await self._begin_interaction(interaction):
+            return
+        self.chimera = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_playstyle_select(self, interaction: discord.Interaction) -> None:
-        self.playstyle = (
-            self.playstyle_select.values[0] if self.playstyle_select.values else None
-        )
+        new_value = self.playstyle_select.values[0] if self.playstyle_select.values else None
+        if not await self._begin_interaction(interaction):
+            return
+        self.playstyle = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     @staticmethod
@@ -652,46 +648,51 @@ class RecruiterPanelView(discord.ui.View):
         return None
 
     async def _on_cvc_toggle(self, interaction: discord.Interaction) -> None:
-        self.cvc = self._cycle_toggle(self.cvc)
+        new_value = self._cycle_toggle(self.cvc)
+        if not await self._begin_interaction(interaction):
+            return
+        self.cvc = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_siege_toggle(self, interaction: discord.Interaction) -> None:
-        self.siege = self._cycle_toggle(self.siege)
+        new_value = self._cycle_toggle(self.siege)
+        if not await self._begin_interaction(interaction):
+            return
+        self.siege = new_value
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_roster_toggle(self, interaction: discord.Interaction) -> None:
+        next_mode: Optional[str]
         if self.roster_mode == "open":
-            self.roster_mode = "inactives"
+            next_mode = "inactives"
         elif self.roster_mode == "inactives":
-            self.roster_mode = "full"
+            next_mode = "full"
         elif self.roster_mode == "full":
-            self.roster_mode = None
+            next_mode = None
         else:
-            self.roster_mode = "open"
+            next_mode = "open"
+        if not await self._begin_interaction(interaction):
+            return
+        self.roster_mode = next_mode
         self._mark_filters_changed()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
+        if not await self._begin_interaction(interaction):
+            return
         self._reset_filters(for_user=True)
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(
             self._rebuild_and_edit(interaction, ack_ephemeral="Filters reset ✓")
         )
 
     async def _on_search(self, interaction: discord.Interaction) -> None:
+        if not await self._begin_interaction(interaction):
+            return
         if not self._has_any_filter():
-            await self._ack_with_placeholder(interaction)
-            self._cancel_inflight()
-            self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
+            self._update_task = None
+            self._busy = False
             with contextlib.suppress(Exception):
                 await interaction.followup.send(
                     "Pick at least one filter, then try again. 🙂",
@@ -699,11 +700,10 @@ class RecruiterPanelView(discord.ui.View):
                 )
             return
 
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._run_search(interaction))
 
     async def _run_search(self, interaction: discord.Interaction) -> None:
+        current_task = asyncio.current_task()
         try:
             try:
                 rows = recruitment_sheets.fetch_clans(force=False)
@@ -806,32 +806,43 @@ class RecruiterPanelView(discord.ui.View):
             )
         except asyncio.CancelledError:
             raise
+        except Exception:
+            log.exception("failed to refresh recruiter search results")
+            with contextlib.suppress(Exception):
+                await interaction.followup.send(
+                    "Couldn’t update the panel. Try again.",
+                    ephemeral=True,
+                )
+            if self.message:
+                with contextlib.suppress(Exception):
+                    await self.message.edit(embeds=self._last_embeds or None, view=self)
+        finally:
+            if current_task and self._update_task is current_task:
+                self._update_task = None
+                if self._busy:
+                    self._busy = False
 
     async def _on_prev_page(self, interaction: discord.Interaction) -> None:
+        if not await self._begin_interaction(interaction):
+            return
         if not self.matches:
-            await self._ack_with_placeholder(interaction)
-            self._cancel_inflight()
             self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
             return
         if self.page > 0:
             self.page -= 1
         self._sync_visuals()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_next_page(self, interaction: discord.Interaction) -> None:
+        if not await self._begin_interaction(interaction):
+            return
         if not self.matches:
-            await self._ack_with_placeholder(interaction)
-            self._cancel_inflight()
             self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
             return
         max_page = max(0, math.ceil(len(self.matches) / PAGE_SIZE) - 1)
         if self.page < max_page:
             self.page += 1
         self._sync_visuals()
-        await self._ack_with_placeholder(interaction)
-        self._cancel_inflight()
         self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def on_timeout(self) -> None:
