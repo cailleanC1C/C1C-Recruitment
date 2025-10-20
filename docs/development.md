@@ -36,6 +36,11 @@ milestone: Harmonize v1.0
 | Watcher maintainers | [`docs/ops/Watchers.md`](ops/Watchers.md) |
 | Incident responders | [`docs/ops/Troubleshooting.md`](ops/Troubleshooting.md) |
 
+## Feature toggles quick reference
+- `recruiter_panel` — enables the text-only `!clanmatch` recruiter workflow.
+- See [`docs/ops/Config.md`](ops/Config.md#feature-toggles-worksheet) for the
+  worksheet schema and refresh workflow.
+
 ## Lessons learned (see `AUDIT/`)
 - Keep refresh durations under 60 seconds; longer runs risk Render restarts (Audit 2025-09-12).
 - Escalate Sheets outages immediately; prior incidents show data divergence within 15
@@ -45,4 +50,4 @@ milestone: Harmonize v1.0
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4)_
+_Doc last updated: 2025-10-24 (v0.9.5)_
