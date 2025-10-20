@@ -238,6 +238,42 @@ def _page_embeds(
     return embeds
 
 
+async def _update_panel(
+    itx: discord.Interaction,
+    embeds: list[discord.Embed],
+    view: discord.ui.View,
+    *,
+    ack: str | None = None,
+) -> None:
+    """
+    Update the existing panel message in-place for a component interaction.
+
+    - Uses defer_update() to avoid spinners and extra posts.
+    - Edits the original message with new embeds/view.
+    - Optionally sends a tiny ephemeral acknowledgement to the clicker.
+    """
+
+    # Component update (no spinner, no new message)
+    try:
+        if not itx.response.is_done():
+            await itx.response.defer_update()
+    except Exception:
+        # If already acknowledged, continue to edit below.
+        pass
+
+    try:
+        await itx.message.edit(embeds=embeds, view=view)
+    except Exception:
+        # As a last resort, ignore edit errors (deleted message, etc.)
+        pass
+
+    if ack:
+        try:
+            await itx.followup.send(ack, ephemeral=True)
+        except Exception:
+            pass
+
+
 class RecruiterPanelView(discord.ui.View):
     """Interactive filter panel for recruiter searches."""
 
@@ -519,34 +555,30 @@ class RecruiterPanelView(discord.ui.View):
     async def _on_cb_select(self, interaction: discord.Interaction) -> None:
         self.cb = self.cb_select.values[0] if self.cb_select.values else None
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_hydra_select(self, interaction: discord.Interaction) -> None:
         self.hydra = self.hydra_select.values[0] if self.hydra_select.values else None
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_chimera_select(self, interaction: discord.Interaction) -> None:
         self.chimera = (
             self.chimera_select.values[0] if self.chimera_select.values else None
         )
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_playstyle_select(self, interaction: discord.Interaction) -> None:
         self.playstyle = (
             self.playstyle_select.values[0] if self.playstyle_select.values else None
         )
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     @staticmethod
     def _cycle_toggle(current: Optional[str]) -> Optional[str]:
@@ -559,16 +591,14 @@ class RecruiterPanelView(discord.ui.View):
     async def _on_cvc_toggle(self, interaction: discord.Interaction) -> None:
         self.cvc = self._cycle_toggle(self.cvc)
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_siege_toggle(self, interaction: discord.Interaction) -> None:
         self.siege = self._cycle_toggle(self.siege)
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_roster_toggle(self, interaction: discord.Interaction) -> None:
         if self.roster_mode == "open":
@@ -580,19 +610,13 @@ class RecruiterPanelView(discord.ui.View):
         else:
             self.roster_mode = "open"
         self._mark_filters_changed()
-        await interaction.response.defer_update()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer_update()
         self._reset_filters(for_user=True)
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
-        try:
-            await interaction.followup.send("Filters reset ✓", ephemeral=True)
-        except Exception:
-            pass
+        await _update_panel(interaction, embeds, self, ack="Filters reset ✓")
 
     async def _on_search(self, interaction: discord.Interaction) -> None:
         if not any(
@@ -606,13 +630,28 @@ class RecruiterPanelView(discord.ui.View):
                 self.roster_mode is not None,
             ]
         ):
-            await interaction.response.send_message(
-                "Pick at least **one** filter, then try again. 🙂",
-                ephemeral=True,
-            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "Pick at least **one** filter, then try again. 🙂",
+                    ephemeral=True,
+                )
+            else:
+                try:
+                    await interaction.followup.send(
+                        "Pick at least **one** filter, then try again. 🙂",
+                        ephemeral=True,
+                    )
+                except Exception:
+                    pass
             return
 
-        await interaction.response.defer_update()
+        if not interaction.response.is_done():
+            try:
+                await interaction.response.defer_update()
+            except InteractionResponded:
+                pass
+            except Exception:
+                pass
 
         try:
             rows = recruitment_sheets.fetch_clans(force=False)
@@ -625,14 +664,7 @@ class RecruiterPanelView(discord.ui.View):
                 "⚠️ I couldn’t load the clan roster. Try again in a moment."
             )
             embeds, _ = await self._build_page()
-            await interaction.message.edit(embeds=embeds, view=self)
-            try:
-                await interaction.followup.send(
-                    "⚠️ I couldn’t load the clan roster. Try again in a moment.",
-                    ephemeral=True,
-                )
-            except Exception:
-                pass
+            await _update_panel(interaction, embeds, self)
             return
 
         matches: list[Sequence[str]] = []
@@ -680,7 +712,7 @@ class RecruiterPanelView(discord.ui.View):
             )
             self._sync_visuals()
             embeds, _ = await self._build_page()
-            await interaction.message.edit(embeds=embeds, view=self)
+            await _update_panel(interaction, embeds, self)
             return
 
         cap = max(1, config.get_search_results_soft_cap(25))
@@ -712,32 +744,26 @@ class RecruiterPanelView(discord.ui.View):
         self._sync_visuals()
 
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
-        try:
-            await interaction.followup.send("Search results updated ✓", ephemeral=True)
-        except Exception:
-            pass
+        await _update_panel(interaction, embeds, self, ack="Search results updated ✓")
 
     async def _on_prev_page(self, interaction: discord.Interaction) -> None:
         if not self.matches:
             return
-        await interaction.response.defer_update()
         if self.page > 0:
             self.page -= 1
         self._sync_visuals()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def _on_next_page(self, interaction: discord.Interaction) -> None:
         if not self.matches:
             return
-        await interaction.response.defer_update()
         max_page = max(0, math.ceil(len(self.matches) / PAGE_SIZE) - 1)
         if self.page < max_page:
             self.page += 1
         self._sync_visuals()
         embeds, _ = await self._build_page()
-        await interaction.message.edit(embeds=embeds, view=self)
+        await _update_panel(interaction, embeds, self)
 
     async def on_timeout(self) -> None:
         for child in self.children:
