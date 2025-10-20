@@ -238,5 +238,10 @@
     "name": "typecheck",
     "color": "bfdadc",
     "description": "mypy/pyright typing issues"
+  },
+  {
+    "name": "ux",
+    "color": "cccccc",
+    "description": ""
   }
 ]
