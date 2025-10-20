@@ -238,136 +238,16 @@ def _page_embeds(
     return embeds
 
 
-class RecruiterResultsView(discord.ui.View):
-    """Pagination controls for recruiter results."""
-
-    def __init__(
-        self,
-        *,
-        owner_id: int,
-        rows: Sequence[Sequence[str]],
-        filters_text: str,
-        timeout: float = 300,
-    ) -> None:
-        super().__init__(timeout=timeout)
-        self.owner_id = owner_id
-        self.rows = list(rows)
-        self.filters_text = filters_text
-        self.page = 0
-        self.message: Optional[discord.Message] = None
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user and interaction.user.id == self.owner_id:
-            return True
-        try:
-            await interaction.response.send_message(
-                "⚠️ Not your panel. Type **!clanmatch** to summon your own.",
-                ephemeral=True,
-            )
-        except InteractionResponded:
-            try:
-                await interaction.followup.send(
-                    "⚠️ Not your panel. Type **!clanmatch** to summon your own.",
-                    ephemeral=True,
-                )
-            except Exception:  # pragma: no cover - defensive followup
-                pass
-        return False
-
-    def _sync_buttons(self) -> None:
-        max_page = max(0, math.ceil(len(self.rows) / PAGE_SIZE) - 1)
-        for child in self.children:
-            if not isinstance(child, discord.ui.Button):
-                continue
-            if child.custom_id == "rp_prev":
-                child.disabled = self.page <= 0
-            elif child.custom_id == "rp_next":
-                child.disabled = self.page >= max_page
-
-    async def _edit(self, interaction: discord.Interaction) -> None:
-        self._sync_buttons()
-        embeds = _page_embeds(self.rows, self.page, self.filters_text)
-        try:
-            await interaction.response.edit_message(embeds=embeds, view=self)
-        except InteractionResponded:
-            await interaction.followup.edit_message(
-                message_id=interaction.message.id,
-                embeds=embeds,
-                view=self,
-            )
-
-    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary, custom_id="rp_prev")
-    async def prev_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        if self.page > 0:
-            self.page -= 1
-        await self._edit(interaction)
-
-    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.primary, custom_id="rp_next")
-    async def next_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        max_page = max(0, math.ceil(len(self.rows) / PAGE_SIZE) - 1)
-        if self.page < max_page:
-            self.page += 1
-        await self._edit(interaction)
-
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, custom_id="rp_close")
-    async def close(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        if self.message:
-            try:
-                await self.message.delete()
-            except Exception:
-                pass
-        else:
-            try:
-                await interaction.message.delete()
-            except Exception:
-                pass
-
-        for child in self.children:
-            child.disabled = True
-        embeds = _page_embeds(self.rows, self.page, self.filters_text)
-        if embeds:
-            last = embeds[-1]
-            footer_text = last.footer.text or ""
-            last.set_footer(
-                text=f"{footer_text} • Panel closed" if footer_text else "Panel closed"
-            )
-        try:
-            await interaction.response.edit_message(embeds=embeds, view=self)
-        except InteractionResponded:
-            await interaction.followup.edit_message(
-                message_id=interaction.message.id,
-                embeds=embeds,
-                view=self,
-            )
-        self.stop()
-
-    async def on_timeout(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        if self.message:
-            try:
-                embeds = _page_embeds(self.rows, self.page, self.filters_text)
-                if embeds:
-                    last = embeds[-1]
-                    footer_text = last.footer.text or ""
-                    last.set_footer(
-                        text=f"{footer_text} • Expired" if footer_text else "Expired"
-                    )
-                await self.message.edit(embeds=embeds, view=self)
-            except Exception:  # pragma: no cover - best effort
-                pass
-
-
 class RecruiterPanelView(discord.ui.View):
     """Interactive filter panel for recruiter searches."""
+
+    DEFAULT_STATUS = "Pick filters and press **Search Clans** to fetch clans."
 
     def __init__(self, cog: "RecruiterPanelCog", author_id: int) -> None:
         super().__init__(timeout=1800)
         self.cog = cog
         self.author_id = author_id
         self.message: Optional[discord.Message] = None
-        self.results_message: Optional[discord.Message] = None
-        self.results_view: Optional[RecruiterResultsView] = None
 
         self.cb: Optional[str] = None
         self.hydra: Optional[str] = None
@@ -377,8 +257,15 @@ class RecruiterPanelView(discord.ui.View):
         self.siege: Optional[str] = None
         self.roster_mode: Optional[str] = "open"
 
+        self.matches: list[Sequence[str]] = []
+        self.results_filters_text: str = ""
+        self.total_found: int = 0
+        self.page: int = 0
+        self.results_stale: bool = False
+        self.status_message: str = self.DEFAULT_STATUS
+
         self._build_components()
-        self._sync_visuals()
+        self._reset_filters()
 
     def _build_components(self) -> None:
         cb_select = discord.ui.Select(
@@ -473,6 +360,24 @@ class RecruiterPanelView(discord.ui.View):
         search_button.callback = self._on_search
         self.add_item(search_button)
 
+        prev_button = discord.ui.Button(
+            label="◀ Prev Page",
+            style=discord.ButtonStyle.secondary,
+            custom_id="rp_prev",
+        )
+        prev_button.callback = self._on_prev_page
+        self.add_item(prev_button)
+        self.prev_button = prev_button  # type: ignore[attr-defined]
+
+        next_button = discord.ui.Button(
+            label="Next Page ▶",
+            style=discord.ButtonStyle.primary,
+            custom_id="rp_next",
+        )
+        next_button.callback = self._on_next_page
+        self.add_item(next_button)
+        self.next_button = next_button  # type: ignore[attr-defined]
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user and interaction.user.id == self.author_id:
             return True
@@ -536,29 +441,112 @@ class RecruiterPanelView(discord.ui.View):
             self.roster_button.label = "Any Roster"
             self.roster_button.style = discord.ButtonStyle.secondary
 
+        max_page = max(0, math.ceil(len(self.matches) / PAGE_SIZE) - 1)
+        self.prev_button.disabled = not self.matches or self.page <= 0
+        self.next_button.disabled = not self.matches or self.page >= max_page
+
+    def _reset_filters(self, *, for_user: bool = False) -> None:
+        self.cb = self.hydra = self.chimera = self.playstyle = None
+        self.cvc = self.siege = None
+        self.roster_mode = "open"
+        self.matches = []
+        self.results_filters_text = ""
+        self.total_found = 0
+        self.page = 0
+        self.results_stale = False
+        self.status_message = (
+            "Filters reset. Pick filters and press **Search Clans** to fetch clans."
+            if for_user
+            else self.DEFAULT_STATUS
+        )
+        self._sync_visuals()
+
+    def _mark_filters_changed(self) -> None:
+        if self.matches:
+            self.results_stale = True
+            self.status_message = (
+                "Filters changed. Press **Search Clans** to refresh your results."
+            )
+        else:
+            self.status_message = self.DEFAULT_STATUS
+        self.page = 0
+        self._sync_visuals()
+
+    async def _build_page(self) -> Tuple[list[discord.Embed], list[discord.File]]:
+        description_lines = []
+        if self.status_message:
+            description_lines.append(self.status_message)
+        if self.results_stale and self.matches:
+            description_lines.append(
+                "⚠️ The clan list reflects your **last** search. Press **Search Clans** to refresh."
+            )
+        description_lines.append(
+            "Pick any filters (*you can leave some blank*) and click **Search Clans**.\n"
+            "ℹ️ Choose the most important criteria for your recruit — too many filters might narrow things down to zero.\n"
+            "ℹ️ Click **Open Spots Only** to cycle roster filters."
+        )
+        embed = discord.Embed(
+            title="Find a C1C Clan for your recruit",
+            description="\n\n".join(description_lines),
+        )
+        embed.set_footer(text="Only the summoner can use this panel.")
+
+        active_filters = _format_filters_footer(
+            self.cb,
+            self.hydra,
+            self.chimera,
+            self.cvc,
+            self.siege,
+            self.playstyle,
+            self.roster_mode,
+        )
+        if active_filters:
+            embed.add_field(name="Active filters", value=active_filters, inline=False)
+
+        if self.matches and self.total_found > len(self.matches):
+            embed.add_field(
+                name="Results note",
+                value=f"Showing first {len(self.matches)} of {self.total_found} clans.",
+                inline=False,
+            )
+
+        embeds = [embed]
+        if self.matches:
+            filters_text = self.results_filters_text or active_filters
+            embeds.extend(_page_embeds(self.matches, self.page, filters_text or ""))
+        return embeds, []
+
     async def _on_cb_select(self, interaction: discord.Interaction) -> None:
         self.cb = self.cb_select.values[0] if self.cb_select.values else None
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_hydra_select(self, interaction: discord.Interaction) -> None:
         self.hydra = self.hydra_select.values[0] if self.hydra_select.values else None
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_chimera_select(self, interaction: discord.Interaction) -> None:
         self.chimera = (
             self.chimera_select.values[0] if self.chimera_select.values else None
         )
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_playstyle_select(self, interaction: discord.Interaction) -> None:
         self.playstyle = (
             self.playstyle_select.values[0] if self.playstyle_select.values else None
         )
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     @staticmethod
     def _cycle_toggle(current: Optional[str]) -> Optional[str]:
@@ -570,13 +558,17 @@ class RecruiterPanelView(discord.ui.View):
 
     async def _on_cvc_toggle(self, interaction: discord.Interaction) -> None:
         self.cvc = self._cycle_toggle(self.cvc)
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_siege_toggle(self, interaction: discord.Interaction) -> None:
         self.siege = self._cycle_toggle(self.siege)
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_roster_toggle(self, interaction: discord.Interaction) -> None:
         if self.roster_mode == "open":
@@ -587,15 +579,20 @@ class RecruiterPanelView(discord.ui.View):
             self.roster_mode = None
         else:
             self.roster_mode = "open"
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        self._mark_filters_changed()
+        await interaction.response.defer_update()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def _on_reset(self, interaction: discord.Interaction) -> None:
-        self.cb = self.hydra = self.chimera = self.playstyle = None
-        self.cvc = self.siege = None
-        self.roster_mode = "open"
-        self._sync_visuals()
-        await interaction.response.edit_message(view=self)
+        await interaction.response.defer_update()
+        self._reset_filters(for_user=True)
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
+        try:
+            await interaction.followup.send("Filters reset ✓", ephemeral=True)
+        except Exception:
+            pass
 
     async def _on_search(self, interaction: discord.Interaction) -> None:
         if not any(
@@ -615,16 +612,27 @@ class RecruiterPanelView(discord.ui.View):
             )
             return
 
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer_update()
 
         try:
             rows = recruitment_sheets.fetch_clans(force=False)
         except Exception as exc:  # pragma: no cover - defensive guard
             log.exception("failed to fetch clan rows", exc_info=exc)
-            await interaction.followup.send(
-                "⚠️ I couldn’t load the clan roster. Try again in a moment.",
-                ephemeral=True,
+            if self.matches:
+                self.results_stale = True
+            self._sync_visuals()
+            self.status_message = (
+                "⚠️ I couldn’t load the clan roster. Try again in a moment."
             )
+            embeds, _ = await self._build_page()
+            await interaction.message.edit(embeds=embeds, view=self)
+            try:
+                await interaction.followup.send(
+                    "⚠️ I couldn’t load the clan roster. Try again in a moment.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
             return
 
         matches: list[Sequence[str]] = []
@@ -655,17 +663,31 @@ class RecruiterPanelView(discord.ui.View):
                 continue
 
         if not matches:
-            await interaction.followup.send(
-                "No matching clans found. You might have set too many filter criteria — try again with fewer.",
+            self.matches = []
+            self.results_filters_text = _format_filters_footer(
+                self.cb,
+                self.hydra,
+                self.chimera,
+                self.cvc,
+                self.siege,
+                self.playstyle,
+                self.roster_mode,
             )
+            self.total_found = 0
+            self.results_stale = False
+            self.status_message = (
+                "No matching clans found. Try again with fewer or different filters."
+            )
+            self._sync_visuals()
+            embeds, _ = await self._build_page()
+            await interaction.message.edit(embeds=embeds, view=self)
             return
 
         cap = max(1, config.get_search_results_soft_cap(25))
         total_found = len(matches)
-        cap_note = None
         if total_found > cap:
             matches = matches[:cap]
-            cap_note = f"first {cap} of {total_found}"
+        cap_note = f"first {cap} of {total_found}" if total_found > cap else None
 
         filters_text = _format_filters_footer(
             self.cb,
@@ -679,33 +701,43 @@ class RecruiterPanelView(discord.ui.View):
         if cap_note:
             filters_text = f"{filters_text} • {cap_note}" if filters_text else cap_note
 
-        if len(matches) <= PAGE_SIZE:
-            embeds = _page_embeds(matches, 0, filters_text)
-            if self.results_view:
-                self.results_view.stop()
-                self.results_view = None
-            if self.results_message:
-                await self.results_message.edit(embeds=embeds, view=None)
-            else:
-                self.results_message = await interaction.followup.send(embeds=embeds)
-            return
-
-        view = RecruiterResultsView(
-            owner_id=self.author_id,
-            rows=matches,
-            filters_text=filters_text,
-            timeout=300,
+        self.matches = matches
+        self.results_filters_text = filters_text
+        self.total_found = total_found
+        self.page = 0
+        self.results_stale = False
+        self.status_message = (
+            f"Showing first {len(matches)} of {total_found} clans." if cap_note else f"Found {total_found} matching clans."
         )
-        embeds = _page_embeds(matches, 0, filters_text)
-        if self.results_message:
-            await self.results_message.edit(embeds=embeds, view=view)
-        else:
-            self.results_message = await interaction.followup.send(
-                embeds=embeds,
-                view=view,
-            )
-        view.message = self.results_message
-        self.results_view = view
+        self._sync_visuals()
+
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
+        try:
+            await interaction.followup.send("Search results updated ✓", ephemeral=True)
+        except Exception:
+            pass
+
+    async def _on_prev_page(self, interaction: discord.Interaction) -> None:
+        if not self.matches:
+            return
+        await interaction.response.defer_update()
+        if self.page > 0:
+            self.page -= 1
+        self._sync_visuals()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
+
+    async def _on_next_page(self, interaction: discord.Interaction) -> None:
+        if not self.matches:
+            return
+        await interaction.response.defer_update()
+        max_page = max(0, math.ceil(len(self.matches) / PAGE_SIZE) - 1)
+        if self.page < max_page:
+            self.page += 1
+        self._sync_visuals()
+        embeds, _ = await self._build_page()
+        await interaction.message.edit(embeds=embeds, view=self)
 
     async def on_timeout(self) -> None:
         for child in self.children:
@@ -716,7 +748,7 @@ class RecruiterPanelView(discord.ui.View):
                     title="Find a C1C Clan",
                     description="⏳ This panel expired. Type **!clanmatch** to open a fresh one.",
                 )
-                await self.message.edit(embed=expired, view=self)
+                await self.message.edit(embeds=[expired], view=self)
             except Exception:  # pragma: no cover - best effort
                 pass
         if self.message:
@@ -748,37 +780,6 @@ class RecruiterPanelCog(commands.Cog):
     def _panel_for_owner(self, owner_id: int) -> Optional[Tuple[int, int]]:
         return self._owner_panels.get(owner_id)
 
-    async def _resolve_destination(self, ctx: commands.Context) -> discord.abc.MessageableChannel:
-        mode = config.get_panel_thread_mode("same")
-        if mode != "fixed":
-            return ctx.channel
-
-        fixed_id = config.get_panel_fixed_thread_id()
-        if not fixed_id:
-            return ctx.channel
-
-        channel = ctx.bot.get_channel(fixed_id)
-        if channel is None:
-            try:
-                channel = await ctx.bot.fetch_channel(fixed_id)
-            except Exception as exc:
-                log.warning("failed to fetch recruiter panel thread", exc_info=exc)
-                return ctx.channel
-
-        if isinstance(channel, discord.Thread):
-            if channel.archived:
-                try:
-                    await channel.edit(archived=False)
-                except Exception:
-                    pass
-            return channel
-
-        log.warning(
-            "configured PANEL_FIXED_THREAD_ID %s is not a thread; falling back to invoke channel",
-            fixed_id,
-        )
-        return ctx.channel
-
     @commands.command(name="clanmatch")
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def clanmatch(self, ctx: commands.Context, *, extra: Optional[str] = None) -> None:
@@ -805,17 +806,7 @@ class RecruiterPanelCog(commands.Cog):
             return
 
         view = RecruiterPanelView(self, ctx.author.id)
-
-        description = (
-            "Pick any filters (*you can leave some blank*) and click **Search Clans**.\n"
-            "ℹ️ Choose the most important criteria for your recruit — too many filters might narrow things down to zero.\n"
-            "ℹ️ Click **Open Spots Only** to cycle roster filters."
-        )
-        embed = discord.Embed(
-            title="Find a C1C Clan for your recruit",
-            description=description,
-        )
-        embed.set_footer(text="Only the summoner can use this panel.")
+        embeds, _ = await view._build_page()
 
         existing_panel = self._panel_for_owner(ctx.author.id)
         if existing_panel:
@@ -833,7 +824,7 @@ class RecruiterPanelCog(commands.Cog):
                     self.unregister_panel(message_id)
                 else:
                     view.message = message
-                    await message.edit(embed=embed, view=view)
+                    await message.edit(embeds=embeds, view=view)
                     self.register_panel(
                         message_id=message.id,
                         owner_id=ctx.author.id,
@@ -845,13 +836,34 @@ class RecruiterPanelCog(commands.Cog):
                                 f"{ctx.author.mention} your recruiter panel is in {channel.mention}.",
                                 mention_author=False,
                                 allowed_mentions=discord.AllowedMentions(users=[ctx.author]),
+                                suppress_embeds=True,
                             )
                         except Exception:
                             pass
                     return
 
-        destination = await self._resolve_destination(ctx)
-        sent = await destination.send(embed=embed, view=view)
+        thread = None
+        try:
+            from shared import config as _cfg
+
+            mode = getattr(_cfg, "get_panel_thread_mode", lambda: "channel")()
+            fixed_id = getattr(_cfg, "get_panel_fixed_thread_id", lambda: None)()
+            if str(mode).lower() == "fixed" and fixed_id:
+                thread = ctx.guild.get_thread(int(fixed_id)) if ctx.guild else None
+                if not thread and ctx.bot:
+                    thread = await ctx.bot.fetch_channel(int(fixed_id))
+                if isinstance(thread, discord.Thread) and thread.archived:
+                    try:
+                        await thread.edit(archived=False)
+                    except Exception:
+                        pass
+        except Exception:
+            thread = None
+
+        target: discord.abc.MessageableChannel = (
+            thread if (thread and hasattr(thread, "send")) else ctx.channel
+        )
+        sent = await target.send(embeds=embeds, view=view)
         view.message = sent
         self.register_panel(
             message_id=sent.id,
@@ -859,12 +871,13 @@ class RecruiterPanelCog(commands.Cog):
             channel_id=sent.channel.id,
         )
 
-        if destination != ctx.channel:
+        if target is not ctx.channel:
             try:
                 await ctx.reply(
-                    f"{ctx.author.mention} I opened your recruiter panel in {destination.mention}.",
+                    f"{ctx.author.mention} I opened your recruiter panel in {target.mention}.",
                     mention_author=False,
                     allowed_mentions=discord.AllowedMentions(users=[ctx.author]),
+                    suppress_embeds=True,
                 )
             except Exception:  # pragma: no cover - pointer best effort
                 pass
