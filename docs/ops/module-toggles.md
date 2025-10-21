@@ -9,7 +9,7 @@ at startup. Toggle values are case-insensitive; only `TRUE` enables a feature.
 | --- | --- | --- |
 | `member_panel` | `TRUE` | Enables member-facing search flows (future `!clansearch`). |
 | `recruiter_panel` | `TRUE` | Loads the recruiter-only `!clanmatch` panel. |
-| `clan_profile` | `FALSE` | When enabled, registers the `!clan <tag>` command with crest thumbnails via the emoji pipeline. |
+| `clan_profile` | `FALSE` | Enables the public `!clan <tag>` command (in-channel crest card with 💡 reaction flip). |
 | `recruitment_welcome` | `TRUE` | Welcome command and onboarding listeners. |
 | `recruitment_reports` | `TRUE` | Daily recruiter digest embed. |
 
