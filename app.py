@@ -17,6 +17,7 @@ from shared.config import (
     get_config_snapshot,
 )
 from shared import socket_heartbeat as hb
+from shared.coreops.helpers.tiers import tier
 from shared.runtime import Runtime
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
@@ -264,7 +265,12 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         log.exception("failed to send command error to log channel")
 
 
-@bot.command(name="ping", hidden=True)
+@tier("admin")
+@bot.command(
+    name="ping",
+    hidden=True,
+    help="Quick admin check to confirm the bot is responsive.",
+)
 @admin_only()
 async def ping(ctx: commands.Context):
     try:

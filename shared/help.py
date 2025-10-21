@@ -56,6 +56,15 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
+    "ping": _metadata(
+        short="Verifies the bot is awake with a quick pong reaction.",
+        detailed=(
+            "Adds a table-tennis reaction so admins can confirm the bot is online and responsive "
+            "before running deeper diagnostics.\n"
+            "Tip: Fire this right after deployments to make sure the shard is healthy."
+        ),
+        tier="admin",
+    ),
     "env": _metadata(
         short="Shows environment info (prod/test/etc.).",
         detailed=(
@@ -172,6 +181,15 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         detailed=(
             "Forces a refresh for the recruitment infos the `!clanmatch` panel uses, including open spots and clan requirements.\n"
             "Tip: Use right after a clan updates its recruitment data in Sheets."
+        ),
+        tier="staff",
+    ),
+    "clanmatch": _metadata(
+        short="Opens the recruiter clan-search panel.",
+        detailed=(
+            "Launches the text-only recruiter panel used to match recruits with clans. "
+            "Filter by open spots, raid bosses, and playstyle without leaving Discord.\n"
+            "Tip: Run it in recruiter channels so the panel stays private to staff."
         ),
         tier="staff",
     ),
