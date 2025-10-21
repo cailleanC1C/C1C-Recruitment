@@ -1,4 +1,4 @@
-# C1C Recruitment Bot Documentation Overview (v0.9.4)
+# C1C Recruitment Bot Documentation Overview (v0.9.5)
 
 ## Purpose
 This index explains the intent and ownership of every file in the documentation tree.
@@ -35,10 +35,17 @@ It exists so that contributors update the correct references after each developm
 * `README.md` — user-facing overview, installation steps, and configuration guidance for the bot.
 * `CHANGELOG.md` — version history for the project.
 
+## Phase 5 — Recruitment Modules
+
+- **Phase 5 : Recruitment Modules**
+  - Updated: `!clan` — public profile/entry cards with crest and 💡 reaction toggle.
+  - Updated: `!clanmatch` — text-only recruiter panel for mobile use.
+  - Updated: `!rec env` — now lists Feature Toggles under Sheets / Config Keys.
+
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.
 * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
-* Ensure the version shown in this index (currently v0.9.4) matches the bot version in the root `README.md`.
+* Ensure the version shown in this index (currently v0.9.5) matches the bot version in the root `README.md`.
 
 ## Cross-References
 * `docs/ops/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”

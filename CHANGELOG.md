@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.5 — 2025-10-21
+
+### Phase 5 : Recruitment Module Updates
+
+**Added**
+- `!clan` command restored (public). Displays clan profile and entry criteria with crest thumbnail and 💡 reaction toggle.
+- `!clanmatch` command rebuilt as text-only recruiter panel for mobile performance.
+- `!rec env` now shows Feature Toggles under “Sheets / Config Keys”.
+- Feature toggles introduced: `clan_profile`, `recruiter_panel`.
+
+**Fixed**
+- Recruiter panel no longer spawns outside thread or stalls on update.
+- Search updates now confirm refresh instead of sending duplicates.
+
+**Documentation**
+- Updated: all command, ops, and user docs to reflect Phase 5 features.
+
 ## [v0.9.4] — 2025-10-20
 
 ### Added
@@ -149,4 +166,4 @@
 
 ---
 
-_Doc last updated: 2025-10-17 (v0.9.3-phase3b-rc4)_
+_Doc last updated: 2025-10-21 (v0.9.5)_
