@@ -38,6 +38,7 @@ log = logging.getLogger("c1c.runtime")
 
 _ACTIVE_RUNTIME: "Runtime | None" = None
 _PRELOAD_TASK: asyncio.Task[None] | None = None
+_web_app: web.Application | None = None
 
 
 async def _startup_preload(bot: commands.Bot | None = None) -> None:
@@ -384,6 +385,18 @@ class Runtime:
             return
         port = port or get_port()
 
+        global _web_app
+        if _web_app is not None:
+            try:
+                await _web_app.shutdown()
+            except Exception:
+                pass
+            try:
+                await _web_app.cleanup()
+            except Exception:
+                pass
+            _web_app = None
+
         async def root(_: web.Request) -> web.Response:
             payload = {
                 "ok": True,
@@ -412,6 +425,7 @@ class Runtime:
         app.router.add_get("/healthz", healthz)
 
         self._web_app = app
+        _web_app = app
         self._web_runner = web.AppRunner(app)
         await self._web_runner.setup()
         self._web_site = web.TCPSite(self._web_runner, host="0.0.0.0", port=port)
@@ -443,10 +457,13 @@ class Runtime:
         return payload, healthy
 
     async def shutdown_webserver(self) -> None:
-        site, runner = self._web_site, self._web_runner
+        site, runner, app = self._web_site, self._web_runner, self._web_app
         self._web_site = None
         self._web_runner = None
         self._web_app = None
+        global _web_app
+        if _web_app is app:
+            _web_app = None
         if site is not None:
             await site.stop()
         if runner is not None:
