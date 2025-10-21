@@ -53,6 +53,27 @@ Detail: Report bot latency and shard status without hitting the cache.
 Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
 ```
 
+## Recruitment commands — Phase 5 alignment
+
+### !clan `<tag>`
+
+Shows a clan’s profile and entry-criteria card.
+
+- **Access:** Public (no role restrictions)
+- **Behavior:** Posts in-channel. Displays the **Profile** card (with crest), adds 💡 reaction to toggle between Profile and Entry Criteria.
+- **Usage:** `!clan C1CE`
+- **Error Handling:** If tag not found, returns a small red embed.
+- **Feature Toggle:** `clan_profile`
+
+### !clanmatch
+
+Opens the text-only recruiter panel for filtering and matching clans.
+
+- **Access:** Staff / Recruiters
+- **Behavior:** Interactive panel, text-only for speed and mobile usability.
+- **Usage:** `!clanmatch`
+- **Feature Toggle:** `recruiter_panel`
+
 ---
 
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+_Doc last updated: 2025-10-21 (Phase 5 recruitment alignment)_

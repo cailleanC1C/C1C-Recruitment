@@ -89,6 +89,20 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 
 Leave values blank only if a module is disabled via toggles.
 
+#### Feature Toggles
+Lists the current feature toggles loaded from the FeatureToggles sheet.
+
+Example:
+
+```
+Feature Toggles:
+  recruiter_panel = ON
+  member_panel = ON
+  placement_target_select = ON
+  placement_reservations = ON
+  clan_profile = ON
+```
+
 ### Feature toggles worksheet
 
 **Config key**
@@ -100,7 +114,7 @@ Leave values blank only if a module is disabled via toggles.
 **FeatureToggles tab (recruitment Sheet)**
 
 - Headers: `feature_name`, `enabled` (case-insensitive).
-- **Only `TRUE` enables a feature.** Any other value (`FALSE`, numbers, text, blank) disables it.
+- **Only `TRUE` (ON) enables a feature.** Any other value (`FALSE`, numbers, text, blank) disables it.
 - Seed rows:
   ```
   feature_name,enabled
@@ -133,4 +147,4 @@ Leave values blank only if a module is disabled via toggles.
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4 toggles rollout)_
+_Doc last updated: 2025-10-21 (v0.9.5 feature toggles refresh)_
