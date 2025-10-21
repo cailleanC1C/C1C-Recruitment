@@ -120,6 +120,11 @@
     "description": "README, guides, runbooks"
   },
   {
+    "name": "emoji",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "fix",
     "color": "cccccc",
     "description": ""
