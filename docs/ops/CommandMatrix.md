@@ -34,6 +34,7 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 ## User — general members
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
+| `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!rec help [command]` | 🧩 | List accessible commands or expand one with usage and tips. | `!rec help` / `!rec help <command>` |
 | `!rec ping` | ✅ | Report bot latency and shard status without hitting the cache. | `!rec ping` |
 
