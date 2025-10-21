@@ -185,6 +185,11 @@
     "description": "VERY LOW — icebox/backlog"
   },
   {
+    "name": "parity",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "perf",
     "color": "0e8a16",
     "description": "Performance regression or optimization"
