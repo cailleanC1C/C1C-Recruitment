@@ -698,6 +698,14 @@ class Runtime:
             log.info("modules: recruiter_panel enabled")
         else:
             log.info("modules: recruiter_panel disabled")
+
+        if features.is_enabled("clan_profile"):
+            from recruitment import clan_profile
+
+            await clan_profile.setup(self.bot)
+            log.info("modules: clan_profile enabled")
+        else:
+            log.info("modules: clan_profile disabled")
         await _load_feature_module("recruitment.welcome", ("recruitment_welcome",))
         await _load_feature_module("recruitment.reports", ("recruitment_reports",))
         await _load_feature_module(

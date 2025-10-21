@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from typing import Callable, Mapping, Sequence
 
 import discord
 
@@ -267,14 +267,22 @@ class SearchResultFlipView(discord.ui.View):
         filters_text: str,
         guild: discord.Guild | None,
         timeout: float = 900,
+        default_mode: str = "lite",
+        embed_builders: Mapping[str, Callable[[], discord.Embed]] | None = None,
+        not_owner_message: str | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.author_id = author_id
         self.row = row
         self.filters_text = filters_text
         self.guild = guild
-        self.mode = "lite"
+        self.mode = default_mode
         self.message: discord.Message | None = None
+        self._builders = dict(embed_builders or {})
+        self._not_owner_message = (
+            not_owner_message
+            or "⚠️ Not your result. Open your own with **!clansearch**."
+        )
         self._sync_buttons()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -282,13 +290,13 @@ class SearchResultFlipView(discord.ui.View):
             return True
         try:
             await interaction.response.send_message(
-                "⚠️ Not your result. Open your own with **!clansearch**.",
+                self._not_owner_message,
                 ephemeral=True,
             )
         except discord.InteractionResponded:
             try:
                 await interaction.followup.send(
-                    "⚠️ Not your result. Open your own with **!clansearch**.",
+                    self._not_owner_message,
                     ephemeral=True,
                 )
             except Exception:  # pragma: no cover - defensive followup
@@ -313,6 +321,9 @@ class SearchResultFlipView(discord.ui.View):
                 )
 
     def _build_embed(self) -> discord.Embed:
+        builder = self._builders.get(self.mode)
+        if builder is not None:
+            return builder()
         if self.mode == "profile":
             embed = cards.make_embed_for_profile(self.row, self.guild)
             if self.filters_text:
