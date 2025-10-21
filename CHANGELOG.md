@@ -1,6 +1,6 @@
 # Changelog
 
-## [v0.9.4] — 2025-10-22
+## [v0.9.4] — 2025-10-20
 
 ### Added
 - Feature toggles (Config-driven) with strict TRUE-only policy and admin-ping on misconfig.
