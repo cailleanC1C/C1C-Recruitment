@@ -203,6 +203,14 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         tier="staff",
     ),
     # User Commands
+    "clan": _metadata(
+        short="Shows a clan’s profile card by tag.",
+        detailed=(
+            "Fetches the cached clan profile, including crest thumbnail when available, and lets you flip to entry criteria.\n"
+            "Tip: Run `!clan TAG` anywhere — if a recruiter thread is configured, the bot links you to the post."
+        ),
+        tier="user",
+    ),
     "rec help": _metadata(
         short="Shows help for bot commands.",
         detailed=(

@@ -18,6 +18,8 @@ _CONFIG_CACHE_TS: float = 0.0
 
 _CLAN_ROWS: List[List[str]] | None = None
 _CLAN_ROWS_TS: float = 0.0
+_CLAN_TAG_INDEX: Dict[str, List[str]] | None = None
+_CLAN_TAG_INDEX_TS: float = 0.0
 
 _TEMPLATE_ROWS: List[Dict[str, Any]] | None = None
 _TEMPLATE_ROWS_TS: float = 0.0
@@ -104,14 +106,19 @@ def _templates_tab() -> str:
 def fetch_clans(force: bool = False) -> List[List[str]]:
     """Fetch the recruitment clan matrix from Sheets."""
 
-    global _CLAN_ROWS, _CLAN_ROWS_TS
+    global _CLAN_ROWS, _CLAN_ROWS_TS, _CLAN_TAG_INDEX, _CLAN_TAG_INDEX_TS
     now = time.time()
     if not force and _CLAN_ROWS and (now - _CLAN_ROWS_TS) < _CACHE_TTL:
+        if _CLAN_TAG_INDEX is None:
+            _CLAN_TAG_INDEX = _build_tag_index(_CLAN_ROWS)
+            _CLAN_TAG_INDEX_TS = _CLAN_ROWS_TS
         return _CLAN_ROWS
 
     rows = core.fetch_values(_sheet_id(), _clans_tab())
     _CLAN_ROWS = rows
     _CLAN_ROWS_TS = now
+    _CLAN_TAG_INDEX = _build_tag_index(rows)
+    _CLAN_TAG_INDEX_TS = now
     return rows
 
 
@@ -175,3 +182,53 @@ async def _load_templates_async() -> List[Dict[str, Any]]:
 
 cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
 cache.register("templates", _TTL_TEMPLATES_SEC, _load_templates_async)
+
+
+def _normalize_tag(tag: str | None) -> str:
+    text = "" if tag is None else str(tag).strip().upper()
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def _build_tag_index(rows: List[List[str]]) -> Dict[str, List[str]]:
+    index: Dict[str, List[str]] = {}
+    for row in rows:
+        if len(row) < 3:
+            continue
+        normalized = _normalize_tag(row[2])
+        if not normalized:
+            continue
+        index[normalized] = row
+    return index
+
+
+def fetch_clan_tags_index(force: bool = False) -> Dict[str, List[str]]:
+    """Return a cached mapping of ``TAG`` → clan row."""
+
+    global _CLAN_TAG_INDEX, _CLAN_TAG_INDEX_TS
+    now = time.time()
+    if force or _CLAN_TAG_INDEX is None or (now - _CLAN_TAG_INDEX_TS) >= _CACHE_TTL:
+        rows = fetch_clans(force=force)
+        _CLAN_TAG_INDEX = _build_tag_index(rows)
+        _CLAN_TAG_INDEX_TS = time.time()
+    return _CLAN_TAG_INDEX or {}
+
+
+def get_clan_by_tag(tag: str, *, force: bool = False) -> List[str] | None:
+    """Lookup a clan row by tag using the cached index when available."""
+
+    normalized = _normalize_tag(tag)
+    if not normalized:
+        return None
+
+    index = fetch_clan_tags_index(force=force)
+    if index:
+        return index.get(normalized)
+
+    # Index unavailable — fall back to a lightweight scan of cached rows.
+    rows = fetch_clans(force=False)
+    for row in rows:
+        if len(row) < 3:
+            continue
+        if _normalize_tag(row[2]) == normalized:
+            return row
+    return None
