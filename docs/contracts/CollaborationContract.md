@@ -1,0 +1,178 @@
+## 🧭 C1C Bot Collaboration Ground Rules 
+
+These rules define **how planning and implementation are handled** during bot development.
+They apply to **all phases, PRs, and documentation changes**.
+
+---
+
+### 🔹 General Workflow
+
+1. **Planning First, Code Later**
+
+   * No code until I say **“give me code please.”**
+   * Until then, only analyze, plan, or audit.
+
+2. **Information Gaps → Ask, Don’t Assume**
+
+   * If something is missing:
+     → ask for the file, or
+     → propose a **Codex prompt** to read it.
+   * Never invent behavior or structure.
+
+3. **Codex = the Coder**
+
+   * All implementation (new files, fixes, refactors) happens via **Codex PRs**.
+   * ChatGPT only prepares the PR prompt.
+   * No inline pseudo-code or speculative snippets.
+
+4. **Controlled Progression**
+
+   * Move **one Codex prompt at a time.**
+   * Analyze results before the next.
+   * Never batch prompts.
+
+---
+
+### 🔹 Guardrails & Boundaries
+
+* **No hard-coded values.**
+  Guild IDs, channel IDs, Sheet tabs, Sheet IDs — always from ENV or Sheet Config.
+* **Cogs must export:**
+  `async def setup(bot)` only; loader awaits it.
+* **External I/O:**
+  Fail soft, log once, skip, never block boot.
+* **Use public APIs only.**
+  CoreOps → `capabilities()`, `refresh_now()` etc.
+* **Shortcuts = temporary.**
+  Ask first and log cleanup tasks.
+* **No new functionality without agreement.**
+
+---
+
+### 🔹 Documentation Discipline
+
+* **Document changes immediately after implementation.**
+
+  * Make Codex **read** the relevant doc files first.
+  * Add updates in the **existing format** and section.
+  * Follow the structure in the current documentation tree (see `/docs` layout: `adr/`, `ops/`, `contracts/`, `compliance/`).
+  * **Documentation Index (v0.9.4):** This index explains the intent and ownership of every file in the documentation tree. It exists so that contributors update the correct references after each development phase or PR.
+
+    * **`/docs/adr/` — Architectural Decision Records**
+      * Each ADR (`ADR-XXXX`) captures an approved architectural or systemic decision.
+      * `ADR-0000` serves as the template for new records.
+      * File a new ADR for every major design or structural change.
+
+    * **`/docs/compliance/`**
+      * Houses internal compliance and governance policies.
+      * Example: `REPORT_GUARDRAILS.md` details report formatting and safety guardrail standards.
+
+    * **`/docs/contracts/`**
+      * Defines long-term, structural interfaces between components.
+      * `core_infra.md` documents runtime, Sheets access, and cache relationships.
+      * Feature toggle guidance moved into other docs; keep legacy references aligned if `feature_toggles.md` is touched.
+
+    * **`/docs/ops/` — Operational Documentation**
+      * `Architecture.md` — detailed system flow, runtime design, and module topology.
+      * `Config.md` — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
+      * `CommandMatrix.md` — user/admin command catalogue with permissions, feature gates, and descriptions.
+      * `Runbook.md` — operator actions for routine tasks and incident handling.
+      * `Troubleshooting.md` — quick reference for diagnosing common issues.
+      * `Watchers.md` — background jobs covering schedulers, refreshers, and watchdogs.
+      * `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
+      * `development.md` — developer setup notes and contribution workflow guidance.
+      * `commands.md` — supplemental command reference for operational usage.
+
+    * **Root-Level Docs**
+      * `README.md` — user-facing overview, installation steps, and configuration guidance for the bot.
+      * `CHANGELOG.md` — version history for the project.
+
+    * **Maintenance Rules**
+      * Update this index whenever documentation files are added, renamed, or removed.
+      * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
+      * Ensure the version shown in this index (currently v0.9.4) matches the bot version in the root `README.md`.
+
+    * **Cross-References**
+      * `docs/ops/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
+      * No new docs or folders may be added without updating this index.
+* **Architectural Decisions (ADR):**
+  Each significant decision we agree on must be recorded under `docs/adr/` using this template format:
+
+  ```
+  ADR-0000 — Architectural Decision Record Template
+  Date: YYYY-MM-DD
+
+  Context
+  Briefly describe background, constraints, and motivation.
+
+  Decision
+  Record the chosen direction and rationale; list rejected alternatives if relevant.
+
+  Consequences
+  Note trade-offs, follow-ups, and operational impact.
+
+  Status
+  Draft
+  ```
+
+  Number new ADRs sequentially.
+
+---
+
+### 🔹 Codex PR Formatting Rules
+
+All Codex prompts must be in **one fenced code block** for clean copy/paste.
+Append this footer **at the end** of each PR prompt (not as a header):
+
+```markdown
+**Instruction for Codex:**
+At the end of the PR **body**, after all sections, append the following metadata block exactly as shown.  
+Do **not** put it in the title or commit message.  
+Do **not** add any text after it.  
+This block must be the **final lines** of the PR body so the workflow can parse labels and milestone correctly.
+[meta]
+labels: <labels here>
+milestone: Harmonize v1.0
+[/meta]
+```
+
+---
+
+### 🔹 Label Reference (Approved Set)
+
+```
+bug, perf, robustness, security, observability, infra, architecture, devx, docs, lint,
+typecheck, tests, commands, data, config,
+P0, P1, P2, P3, P4,
+severity:critical, severity:high, severity:medium, severity:low,
+bot:reminder, bot:welcomecrew, bot:matchmaker, bot:achievements,
+comp:commands, comp:scheduler, comp:health, comp:config, comp:data-sheets,
+comp:cache, comp:roles, comp:onboarding, comp:placement,
+comp:ocr, comp:shards, comp:ops-contract,
+needs:triage, ready, blocked, help wanted, good first issue
+```
+
+---
+
+### 🔹 Source References
+
+Legacy bot clones for reference:
+
+```
+AUDIT/20251010_src/MM   → Matchmaker legacy clone
+AUDIT/20251010_src/WC   → WelcomeCrew legacy clone
+```
+
+---
+
+### 🔹 Recap — Always Remember
+
+* Don’t code until asked.
+* Don’t guess: ask or read.
+* One PR at a time.
+* No hard-coding or invention.
+* Update docs right after each change.
+* Record every major decision as an ADR.
+* Keep ENV + Sheet config consistent.
+* Stop and ask if unsure.
+
