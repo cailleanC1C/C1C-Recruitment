@@ -43,6 +43,7 @@ __all__ = [
     "get_enable_welcome_watcher",
     "get_enable_promo_watcher",
     "get_enable_notify_fallback",
+    "get_feature_toggles",
     "get_strict_probe",
     "get_search_results_soft_cap",
     "get_clan_tags_cache_ttl_sec",
@@ -508,6 +509,27 @@ def get_enable_promo_watcher() -> bool:
 
 def get_enable_notify_fallback() -> bool:
     return bool(_CONFIG.get("ENABLE_NOTIFY_FALLBACK", True))
+
+
+def get_feature_toggles() -> Dict[str, bool]:
+    """Return the merged feature toggles from the runtime loader."""
+
+    try:
+        from shared import features  # Local import to avoid circular dependency.
+    except Exception:
+        return {}
+
+    values = getattr(features, "_FEATURE_VALUES", None)
+    if isinstance(values, dict):
+        toggles: Dict[str, bool] = {}
+        for key, raw_value in values.items():
+            name = str(key).strip()
+            if not name:
+                continue
+            toggles[name] = bool(raw_value)
+        return toggles
+
+    return {}
 
 
 def get_strict_probe() -> bool:

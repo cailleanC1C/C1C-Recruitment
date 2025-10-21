@@ -26,7 +26,13 @@ from config.runtime import (
     get_watchdog_stall_sec,
 )
 from shared import socket_heartbeat as hb
-from shared.config import get_allowed_guild_ids, get_config_snapshot, reload_config, redact_value
+from shared.config import (
+    get_allowed_guild_ids,
+    get_config_snapshot,
+    get_feature_toggles,
+    reload_config,
+    redact_value,
+)
 from shared.coreops_render import (
     ChecksheetEmbedData,
     ChecksheetSheetEntry,
@@ -2667,6 +2673,17 @@ class CoreOpsCog(commands.Cog):
                     lines.append("")
             while lines and not lines[-1].strip():
                 lines.pop()
+
+        toggles = get_feature_toggles()
+        if lines:
+            lines.append("")
+        lines.append("Feature Toggles:")
+        if toggles:
+            for name in sorted(toggles):
+                value = "ON" if toggles[name] else "OFF"
+                lines.append(f"  {name} = {value}")
+        else:
+            lines.append("  (none)")
 
         meta = _config_meta_from_app()
         source = str(meta.get("source", "runtime"))
