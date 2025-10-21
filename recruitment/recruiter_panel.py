@@ -898,20 +898,11 @@ class RecruiterPanelCog(commands.Cog):
     @tier("staff")
     @commands.command(
         name="clanmatch",
-        help="Open the recruiter panel to search clans (text-only).",
+        help="Launches the text-only recruiter panel used to match recruits with clans.",
     )
     @commands.cooldown(1, 2, commands.BucketType.user)
-    async def clanmatch(self, ctx: commands.Context, *, extra: Optional[str] = None) -> None:
+    async def clanmatch(self, ctx: commands.Context) -> None:
         """Open the recruiter panel to find clans for a recruit."""
-
-        if extra and extra.strip():
-            message = (
-                "❌ `!clanmatch` doesn’t take a clan tag or name.\n"
-                "• Use **`!clan <tag or name>`** to see a specific clan profile (e.g., `!clan C1CE`).\n"
-                "• Or type **`!clanmatch`** by itself to open the filter panel."
-            )
-            await ctx.reply(message, mention_author=False)
-            return
 
         if not isinstance(ctx.author, discord.Member):
             await ctx.reply("⚠️ `!clanmatch` can only be used in a server.")
