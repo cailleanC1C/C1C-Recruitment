@@ -30,7 +30,7 @@ They apply to **all phases, PRs, and documentation changes**.
    * Move **one Codex prompt at a time.**
    * Analyze results before the next.
    * Never batch prompts.
-
+   * update relevant docs with EACH PR so documentaion always stays up to date and fresh.
 ---
 
 ### 🔹 Guardrails & Boundaries
