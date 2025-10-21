@@ -20,6 +20,7 @@ from discord import InteractionResponded
 from recruitment import cards
 from sheets import recruitment as recruitment_sheets
 from shared import config
+from shared.coreops.helpers.tiers import tier
 from shared.coreops_rbac import is_admin_member, is_recruiter
 
 log = logging.getLogger(__name__)
@@ -894,7 +895,11 @@ class RecruiterPanelCog(commands.Cog):
     def _panel_for_owner(self, owner_id: int) -> Optional[Tuple[int, int]]:
         return self._owner_panels.get(owner_id)
 
-    @commands.command(name="clanmatch")
+    @tier("staff")
+    @commands.command(
+        name="clanmatch",
+        help="Open the recruiter panel to search clans (text-only).",
+    )
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def clanmatch(self, ctx: commands.Context, *, extra: Optional[str] = None) -> None:
         """Open the recruiter panel to find clans for a recruit."""
