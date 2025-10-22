@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.6-audit — CoreOps reference audit (no code changes) — 2025-10-22
+
+- Added audit reports under `AUDIT/20251022_COREOPS_AUDIT/`.
+  - Inventory of `shared/*coreops*` files and their in-repo importers
+  - Symbol tables for shared & packaged CoreOps
+  - Proposed actions matrix (keep/migrate/remove) + patch previews (unapplied)
+- No runtime changes.
+
 ## v0.9.5-d — Command registration consolidation (no behavior change) — 2025-10-22
 
 - Move recruiter command registration to `cogs/recruitment_recruiter.py`.
