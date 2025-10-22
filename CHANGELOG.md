@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.5-d — Command registration consolidation (no behavior change) — 2025-10-22
+
+- Move recruiter command registration to `cogs/recruitment_recruiter.py`.
+- Remove legacy in-module registration; preserve existing UX and flags.
+
 ## v0.9.5-a — Structure tidy (no behavior change) — 2025-10-22
 
 * Consolidate CoreOps to `modules/coreops`; remove `shared/coreops`.
