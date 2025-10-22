@@ -1,4 +1,4 @@
-# Architecture — v0.9.5-a
+# Architecture — v0.9.5-d
 
 ## Runtime map
 ```
@@ -45,13 +45,17 @@ off in production until the panels ship._
 
 ## Recruitment visuals pipeline
 - `modules.recruitment.cards` & `modules.recruitment.views` compose embeds for clan panels.
-- `modules.recruitment.views.recruiter_panel` binds `!clanmatch` to those cards while staying
-  text-only (no `emoji_pipeline` dependency).
+- `cogs.recruitment_recruiter.RecruiterPanelCog` registers `!clanmatch` and embeds the
+  recruiter panel view while staying text-only (no `emoji_pipeline` dependency).
 - `modules.recruitment.emoji_pipeline` resolves guild emoji, falls back when proxies are strict,
   and builds attachment thumbnails when needed.
 - `/emoji-pad` (aiohttp) trims, pads, and caches PNG emoji when `PUBLIC_BASE_URL` or
   `RENDER_EXTERNAL_URL` is configured.
 - Sheets cache paths remain unchanged; data still flows through `sheets.recruitment`.
+
+### Command loading
+- All commands register under modules in `cogs/*`. Feature modules supply views, embeds,
+  and services without performing command registration on import.
 
 ## Feature toggles & gating
 - `modules.common.feature_flags.is_enabled(<key>)` runs during module boot; missing worksheets,
@@ -82,4 +86,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.5-a)_
+_Doc last updated: 2025-10-22 (v0.9.5-d)_
