@@ -175,6 +175,11 @@
     "description": "Ruff/formatting cleanups"
   },
   {
+    "name": "monorepo",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "needs:triage",
     "color": "fef2c0",
     "description": "Awaiting label & priority"
@@ -273,6 +278,11 @@
     "name": "tests",
     "color": "a2eeef",
     "description": "Unit/integration/e2e tests"
+  },
+  {
+    "name": "tooling",
+    "color": "cccccc",
+    "description": ""
   },
   {
     "name": "typecheck",
