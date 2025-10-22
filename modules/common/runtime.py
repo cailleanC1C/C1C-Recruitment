@@ -690,14 +690,7 @@ class Runtime:
         await _load_feature_module(
             "modules.recruitment.services.search", ("member_panel", "recruiter_panel")
         )
-
-        if features.is_enabled("recruiter_panel"):
-            from modules.recruitment.views import recruiter_panel
-
-            await recruiter_panel.setup(self.bot)
-            log.info("modules: recruiter_panel enabled")
-        else:
-            log.info("modules: recruiter_panel disabled")
+        await _load_feature_module("cogs.recruitment_recruiter", ("recruiter_panel",))
 
         if features.is_enabled("clan_profile"):
             from modules.recruitment import clan_profile
