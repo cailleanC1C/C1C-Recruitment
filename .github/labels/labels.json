@@ -90,6 +90,11 @@
     "description": "Clan matching, recruiters, moves"
   },
   {
+    "name": "comp:recruitment",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "comp:roles",
     "color": "c27ba0",
     "description": "Role grants, achievements, approvals"
