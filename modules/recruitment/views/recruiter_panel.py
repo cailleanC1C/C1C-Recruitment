@@ -17,10 +17,10 @@ import discord
 from discord.ext import commands
 from discord import InteractionResponded
 
-from recruitment import cards
-from sheets import recruitment as recruitment_sheets
-from shared import config
-from shared.coreops.helpers.tiers import tier
+from .. import cards
+from modules.common import config_access as config
+from shared.sheets import recruitment as recruitment_sheets
+from modules.coreops.helpers import tier
 from shared.coreops_rbac import is_admin_member, is_recruiter
 
 log = logging.getLogger(__name__)
@@ -955,7 +955,7 @@ class RecruiterPanelCog(commands.Cog):
 
         thread = None
         try:
-            from shared import config as _cfg
+            from modules.common import config_access as _cfg
 
             mode = getattr(_cfg, "get_panel_thread_mode", lambda: "channel")()
             fixed_id = getattr(_cfg, "get_panel_fixed_thread_id", lambda: None)()

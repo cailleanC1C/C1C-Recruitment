@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from shared.coreops_rbac import is_lead, is_recruiter
 
-from . import ensure_loaded
+from .. import ensure_loaded
 
 
 def recruiter_only(message: str = "Recruiter access only."):

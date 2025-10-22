@@ -17,8 +17,8 @@ from shared.config import (
     get_config_snapshot,
 )
 from shared import socket_heartbeat as hb
-from shared.coreops.helpers.tiers import tier
-from shared.runtime import Runtime
+from modules.coreops.helpers import tier
+from modules.common.runtime import Runtime
 from shared.coreops_prefix import detect_admin_bang_command
 from shared.coreops_rbac import (
     admin_only,

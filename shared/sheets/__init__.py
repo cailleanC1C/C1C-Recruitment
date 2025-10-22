@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from . import onboarding, recruitment
 from .core import get_service_account_client, open_by_key
 
 __all__ = [
     "get_service_account_client",
     "open_by_key",
+    "onboarding",
+    "recruitment",
 ]

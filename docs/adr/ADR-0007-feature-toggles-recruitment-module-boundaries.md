@@ -24,7 +24,7 @@ registration.
 The bot distinguishes between platform modules (always on) and feature modules
 (toggleable).
 
-- **Platform modules**: `coreops`, `shared.runtime`, `shared.sheets`, `scheduler`,
+- **Platform modules**: `coreops`, `modules.common.runtime`, `shared.sheets`, `scheduler`,
   `cache`, `health`, `rbac`, and logging utilities.
 - **Feature modules**: user-facing cogs, commands, and scheduled posts that interact with
   Discord or Sheets.
@@ -40,17 +40,17 @@ Values are case-insensitive `TRUE`/`FALSE`, `YES`/`NO`, `1`/`0`. A blank cell me
 feature is enabled.
 
 ### 3. Implementation
-A new module `shared/features.py` loads and caches the `FeatureToggles` worksheet. It
+A new module `modules/common/feature_flags.py` loads and caches the `FeatureToggles` worksheet. It
 exposes a helper:
 
 ```python
-from shared.features import is_enabled
+from modules.common.feature_flags import is_enabled
 
 if is_enabled("feature_key"):
     await module.setup(bot)
 ```
 
-`shared/runtime.load_extensions` wraps each recruitment module registration with this
+`modules.common.runtime.load_extensions` wraps each recruitment module registration with this
 check. If the Sheet or worksheet fails to load, all features default to enabled and a
 single warning is logged at startup.
 
@@ -97,5 +97,5 @@ If a row is missing or the worksheet is unreachable:
 
 ## Status
 
-**Draft — pending implementation of `shared/features.py` and loader integration.**
+**Draft — pending implementation of `modules/common/feature_flags.py` and loader integration.**
 

@@ -10,14 +10,14 @@ from typing import Any, Optional
 import discord
 from discord.ext import commands
 
-from shared import runtime as rt
+from modules.common import runtime as rt
 from shared.config import (
     get_enable_welcome_watcher,
     get_welcome_channel_id,
     get_welcome_enabled,
 )
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
-from sheets.onboarding import _resolve_onboarding_and_welcome_tab
+from shared.sheets.onboarding import _resolve_onboarding_and_welcome_tab
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.onboarding.welcome_watcher")

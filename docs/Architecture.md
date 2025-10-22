@@ -1,4 +1,4 @@
-# Architecture — v0.9.4
+# Architecture — v0.9.5
 
 ## Runtime map
 ```
@@ -32,23 +32,24 @@ off in production until the panels ship._
   jobs registered by feature modules.
 
 ## Data paths
-- Reads: commands and watcher listeners use `sheets.recruitment` / `sheets.onboarding`,
-  which delegate to `shared.sheets.core` before hitting Google Sheets caches.
-- Writes: onboarding listeners call `sheets.onboarding` helpers with bounded retries and
+- Reads: commands and watcher listeners use `shared.sheets.recruitment` /
+  `shared.sheets.onboarding`, which delegate to `shared.sheets.core` before
+  hitting Google Sheets caches.
+- Writes: onboarding listeners call `shared.sheets.onboarding` helpers with bounded retries and
   per-tab cache invalidation.
 
 ## Recruitment visuals pipeline
-- `recruitment.cards` & `recruitment.views` compose embeds for clan panels.
-- `recruitment.recruiter_panel` binds `!clanmatch` to those cards while staying
+- `modules.recruitment.cards` & `modules.recruitment.views` compose embeds for clan panels.
+- `modules.recruitment.views.recruiter_panel` binds `!clanmatch` to those cards while staying
   text-only (no `emoji_pipeline` dependency).
-- `recruitment.emoji_pipeline` resolves guild emoji, falls back when proxies are strict,
+- `modules.recruitment.emoji_pipeline` resolves guild emoji, falls back when proxies are strict,
   and builds attachment thumbnails when needed.
 - `/emoji-pad` (aiohttp) trims, pads, and caches PNG emoji when `PUBLIC_BASE_URL` or
   `RENDER_EXTERNAL_URL` is configured.
 - Sheets cache paths remain unchanged; data still flows through `sheets.recruitment`.
 
 ## Feature toggles & gating
-- `shared.features.is_enabled(<key>)` runs during module boot; missing worksheets, headers,
+- `modules.common.feature_flags.is_enabled(<key>)` runs during module boot; missing worksheets,
   or values fail closed and keep the feature offline.
 - Backbone services (cache, scheduler, health server, RBAC) never consult the toggle
   sheet and always load.
@@ -59,8 +60,8 @@ off in production until the panels ship._
   - `recruitment_reports` — daily recruiter digest watcher and manual digest command.
   - `placement_target_select` — placement picker UI inside panels.
   - `placement_reservations` — reservation workflow for recruiter holds.
-- Toggles live in the recruitment Sheet `FeatureToggles` worksheet; only `TRUE`
-  enables a feature. Misconfigurations post a single admin-ping warning to the runtime log
+- Toggles live in the recruitment Sheet `FeatureToggles` worksheet; `TRUE`/`true`/`1`
+  enable a feature, `FALSE`/`false`/`0` disable it. Misconfigurations post a single admin-ping warning to the runtime log
   channel.
 - `ENABLE_WELCOME_LISTENERS` and `ENABLE_PROMO_LISTENERS` environment flags still control
   watcher registration independently of the feature sheet.
@@ -76,4 +77,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-24 (v0.9.5)_
+_Doc last updated: 2025-10-22 (v0.9.5)_

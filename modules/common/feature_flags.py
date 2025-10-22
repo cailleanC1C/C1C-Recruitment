@@ -29,6 +29,9 @@ _GLOBAL_WARNINGS_SENT: set[str] = set()
 _INVALID_WARNINGS_SENT: set[str] = set()
 _MISSING_WARNINGS_SENT: set[str] = set()
 
+_TRUE_VALUES = {"true", "1"}
+_FALSE_VALUES = {"false", "0"}
+
 
 def _normalize_key(value: object) -> str:
     text = str(value or "").strip()
@@ -42,13 +45,22 @@ def _admin_mention() -> str:
     return "@Administrator"
 
 
+def _parse_enabled_value(raw_value: str) -> tuple[bool, bool]:
+    normalized = str(raw_value or "").strip().lower()
+    if normalized in _TRUE_VALUES:
+        return True, True
+    if normalized in _FALSE_VALUES:
+        return False, True
+    return False, False
+
+
 async def _emit_admin_alert(detail: str) -> None:
     """Send a structured warning to the runtime log channel after startup."""
 
     message = f"⚠️ {_admin_mention()} Feature toggle misconfiguration: {detail}".strip()
     try:
         import asyncio
-        from shared import runtime
+        from modules.common import runtime
 
         # Schedule asynchronously to avoid blocking before bot.start()
         asyncio.create_task(runtime.send_log_message(message))
@@ -190,17 +202,15 @@ async def refresh() -> None:
                                 continue
                             normalized_key = _normalize_key(feature_label)
                             enabled_raw = _extract_column(row, "enabled")
-                            enabled_norm = enabled_raw.lower()
-                            is_enabled_flag = enabled_norm == "true"
+                            is_enabled_flag, is_valid_value = _parse_enabled_value(enabled_raw)
                             feature_values[normalized_key] = is_enabled_flag
-                            if not is_enabled_flag:
-                                if enabled_raw:
-                                    notes.append(
-                                        f"{feature_label}: value '{enabled_raw}' treated as disabled"
-                                    )
-                                    await _warn_invalid_value_once(
-                                        normalized_key, feature_label, enabled_raw, tab_name
-                                    )
+                            if not is_valid_value and enabled_raw:
+                                notes.append(
+                                    f"{feature_label}: value '{enabled_raw}' treated as disabled"
+                                )
+                                await _warn_invalid_value_once(
+                                    normalized_key, feature_label, enabled_raw, tab_name
+                                )
                         if not feature_values:
                             notes.append("No feature rows resolved; defaulting to disabled.")
                             disabled = True

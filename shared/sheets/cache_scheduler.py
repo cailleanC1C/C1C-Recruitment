@@ -40,10 +40,10 @@ def _format_exception(exc: BaseException) -> str:
 
 def ensure_cache_registration() -> None:
     if cache.get_bucket("clans") is None or cache.get_bucket("templates") is None:
-        from sheets import recruitment  # noqa: F401  # ensures cache registration
+        from shared.sheets import recruitment  # noqa: F401  # ensures cache registration
 
     if cache.get_bucket("clan_tags") is None:
-        from sheets import onboarding  # noqa: F401  # ensures cache registration
+        from shared.sheets import onboarding  # noqa: F401  # ensures cache registration
  
 
 def _safe_bucket(name: str) -> str:

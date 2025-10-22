@@ -15,9 +15,9 @@ enabled for the deployment.
 
 ## Load order
 1. `shared.config` — env snapshot (IDs, toggles, sheet metadata).
-2. `shared.runtime` — logging, scheduler, watchdog wiring.
+2. `modules.common.runtime` — logging, scheduler, watchdog wiring.
 3. `shared.sheets.core` — Google API client + worksheet cache.
-4. `sheets.recruitment` / `sheets.onboarding` — TTL caches for clan data and templates.
+4. `shared.sheets.recruitment` / `shared.sheets.onboarding` — TTL caches for clan data and templates.
 5. Feature modules — watchers register event hooks and cron jobs based on toggles.
 
 _If steps 1–4 fail, abort boot. If a watcher fails to load, continue without it and emit a
@@ -47,7 +47,7 @@ invalidate only the affected cache bucket. Role gates come from
 - **`bot_info` telemetry refresh** (`cron` every 3 h) — scheduler triggers
   `refresh_now("bot_info", actor="cron")`; completion logs post a success/failure summary
   to the ops channel.
-- **Recruiter digest** — loads only when `shared.features.is_enabled("recruitment_reports")`
+- **Recruiter digest** — loads only when `modules.common.feature_flags.is_enabled("recruitment_reports")`
   evaluates `True`. The digest cron posts nightly summaries; when the toggle is off the
   scheduler skips registration. Welcome and promo watchers remain controlled by their
   `_LISTENERS` environment toggles and ignore feature flags.
@@ -57,7 +57,7 @@ stay active while promo listeners are paused).
 
 ## Caches & invalidation
 - `shared.sheets.core` caches worksheet handles (no TTL).
-- `sheets.recruitment` / `sheets.onboarding` keep TTL caches for values.
+- `shared.sheets.recruitment` / `shared.sheets.onboarding` keep TTL caches for values.
 - `!reload` reloads config, clears TTL caches, and can optionally evict worksheet handles.
 - Cron refreshes clear TTL caches before warming them; manual `!rec refresh` commands share
   the same helpers.
@@ -78,4 +78,4 @@ stay active while promo listeners are paused).
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+_Doc last updated: 2025-10-22 (v0.9.5 modules-first update)_
