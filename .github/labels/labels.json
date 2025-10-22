@@ -145,6 +145,11 @@
     "description": "Low-risk starter task"
   },
   {
+    "name": "guardrails",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "help wanted",
     "color": "008672",
     "description": "Community contributions welcome"
