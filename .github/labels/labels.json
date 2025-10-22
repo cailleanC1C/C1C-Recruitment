@@ -175,6 +175,11 @@
     "description": "Ruff/formatting cleanups"
   },
   {
+    "name": "monorepo",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "needs:triage",
     "color": "fef2c0",
     "description": "Awaiting label & priority"
