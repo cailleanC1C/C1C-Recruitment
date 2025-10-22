@@ -1,10 +1,10 @@
 # Changelog
 
-## v0.9.5-e — Package import fixes (no behavior change) — 2025-10-22
+## v0.9.5-d — Command registration consolidation (no behavior change) — 2025-10-22
 
-- Ensure `modules/placement` and `modules/onboarding` are proper packages.
-- Clean `shared/__init__.py` to remove stale imports; expose only real subpackages.
-- No functional changes.
+- Move recruiter command registration to `cogs/recruitment_recruiter.py`.
+- Remove legacy in-module registration; preserve existing UX and flags.
+- Continue honoring `PANEL_THREAD_MODE`/`PANEL_FIXED_THREAD_ID` when redirecting the panel thread.
 
 ## v0.9.5-a — Structure tidy (no behavior change) — 2025-10-22
 
