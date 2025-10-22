@@ -145,6 +145,11 @@
     "description": "Community contributions welcome"
   },
   {
+    "name": "housekeeping",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "infra",
     "color": "6f42c1",
     "description": "Hosting, deployment, CI/CD, runtime"
