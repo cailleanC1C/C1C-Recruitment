@@ -18,7 +18,7 @@ It exists so that contributors update the correct references after each developm
 ### `/docs/contracts/`
 * Defines long-term, structural interfaces between components.
 * `core_infra.md` documents runtime, Sheets access, and cache relationships.
-* Feature toggle guidance moved into other docs; keep legacy references aligned if `feature_toggles.md` is touched.
+* `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
 
 ### `/docs/ops/` — Operational Documentation
 * `Architecture.md` — detailed system flow, runtime design, and module topology.
@@ -27,7 +27,6 @@ It exists so that contributors update the correct references after each developm
 * `Runbook.md` — operator actions for routine tasks and incident handling.
 * `Troubleshooting.md` — quick reference for diagnosing common issues.
 * `Watchers.md` — background jobs covering schedulers, refreshers, and watchdogs.
-* `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
 * `development.md` — developer setup notes and contribution workflow guidance.
 * `commands.md` — supplemental command reference for operational usage.
 
