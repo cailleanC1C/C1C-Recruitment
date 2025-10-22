@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.5-a — Structure tidy (no behavior change) — 2025-10-22
+
+* Consolidate CoreOps to `modules/coreops`; remove `shared/coreops`.
+* Remove empty `ops/` folder.
+* Add `cogs/recruitment_recruiter.py` for symmetry with member cog.
+* No functional changes.
+
 ## v0.9.5 — Structure normalization (no behavior change) — 2025-10-22
 
 - Refactor: move `recruitment/*` → `modules/recruitment/*`.
@@ -174,4 +181,4 @@
 
 ---
 
-_Doc last updated: 2025-10-21 (v0.9.5)_
+_Doc last updated: 2025-10-22 (v0.9.5-a)_
