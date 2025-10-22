@@ -588,8 +588,8 @@ class Runtime:
         """Load all feature modules into the shared bot instance."""
 
         from modules.coreops import cog as coreops_cog
-        from onboarding import watcher_welcome as onboarding_welcome
-        from onboarding import watcher_promo as onboarding_promo
+        from modules.onboarding import watcher_welcome as onboarding_welcome
+        from modules.onboarding import watcher_promo as onboarding_promo
         from modules.coreops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
@@ -706,10 +706,10 @@ class Runtime:
             "modules.recruitment.reports", ("recruitment_reports",)
         )
         await _load_feature_module(
-            "placement.target_select", ("placement_target_select",)
+            "modules.placement.target_select", ("placement_target_select",)
         )
         await _load_feature_module(
-            "placement.reservations", ("placement_reservations",)
+            "modules.placement.reservations", ("placement_reservations",)
         )
 
         await onboarding_welcome.setup(self.bot)
