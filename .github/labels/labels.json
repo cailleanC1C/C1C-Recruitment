@@ -120,6 +120,11 @@
     "description": "Shard/mercy tracking logic"
   },
   {
+    "name": "comp:shared",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "config",
     "color": "006b75",
     "description": "Env vars, toggles, YAML/JSON config, secrets"
