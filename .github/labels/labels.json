@@ -200,6 +200,11 @@
     "description": "Groomed and ready for pickup"
   },
   {
+    "name": "refactor",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "robustness",
     "color": "0366d6",
     "description": "Resilience: retries, backoff, failure handling"
