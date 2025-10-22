@@ -1,4 +1,4 @@
-# Architecture — v0.9.5-d
+# Architecture — v0.9.5-prep
 
 ## Runtime map
 ```
@@ -17,6 +17,24 @@ Discord Gateway
 - `modules/coreops/` — canonical home for the CoreOps cog, ops command surface,
   helpers, and cron tasks. Legacy `shared/coreops` has been removed.
 - `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core).
+
+## Monorepo workspaces
+- `shared/` — infrastructure plumbing that anchors this bot's runtime
+  (Sheets adapters, cache, HTTP clients). Shared code here is tightly coupled to
+  the recruitment runtime and should not embed feature logic.
+- `modules/` — feature code scoped to this bot (commands, views, services) that
+  can assume the recruitment runtime and environment.
+- `packages/` — reusable feature libraries intended for multiple bots. Install
+  locally with `pip install -e ./packages/<package>` during development. Packages
+  should remain runtime-agnostic and avoid importing from `modules/`.
+
+### CoreOps extraction plan
+1. Mirror existing CoreOps utilities into `packages/c1c-coreops` with test
+   coverage while keeping the bot on the current modules.
+2. Flip imports in `modules/coreops` to consume the packaged helpers once the
+   APIs stabilize.
+3. Deprecate any remaining feature logic living in `shared/` so only
+   infrastructure primitives remain.
 
 _Recruitment Search path (Sheets → Matcher) is integrated backend-only and feature-flagged
 off in production until the panels ship._
@@ -86,4 +104,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.5-d)_
+_Doc last updated: 2025-10-22 (v0.9.5-prep)_

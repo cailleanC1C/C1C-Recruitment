@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.5-prep — Packages workspace scaffold — 2025-10-22
+
+- Add `packages/` folder with `c1c-coreops` skeleton (no code moved, no behavior change).
+- Document monorepo package boundaries and local `-e` install instructions.
+
 ## v0.9.5-d — Command registration consolidation (no behavior change) — 2025-10-22
 
 - Move recruiter command registration to `cogs/recruitment_recruiter.py`.
@@ -187,4 +192,4 @@
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.5-a)_
+_Doc last updated: 2025-10-22 (v0.9.5-prep)_
