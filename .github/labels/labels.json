@@ -55,6 +55,11 @@
     "description": "Env vars, toggles, secrets, YAML/JSON"
   },
   {
+    "name": "comp:coreops",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "comp:data-sheets",
     "color": "168700",
     "description": "Google Sheets schema, reads/writes, adapters"
