@@ -14,7 +14,7 @@ from shared.config import get_config_snapshot
 from shared.coreops_cog import resolve_ops_log_channel_id
 
 from .cache_service import cache
-from .. import runtime as rt
+from modules.common import runtime as rt
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.cache.scheduler")

@@ -35,6 +35,11 @@
     "description": "Broken behavior or incorrect output"
   },
   {
+    "name": "bugfix",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "commands",
     "color": "7057ff",
     "description": "Text/slash command behavior, permissions, UX"
@@ -113,6 +118,11 @@
     "name": "comp:shards",
     "color": "5319e7",
     "description": "Shard/mercy tracking logic"
+  },
+  {
+    "name": "comp:shared",
+    "color": "cccccc",
+    "description": ""
   },
   {
     "name": "config",

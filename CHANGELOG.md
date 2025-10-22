@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.5-e — Package import fixes (no behavior change) — 2025-10-22
+
+- Ensure `modules/placement` and `modules/onboarding` are proper packages.
+- Clean `shared/__init__.py` to remove stale imports; expose only real subpackages.
+- No functional changes.
+
 ## v0.9.5-a — Structure tidy (no behavior change) — 2025-10-22
 
 * Consolidate CoreOps to `modules/coreops`; remove `shared/coreops`.
