@@ -275,6 +275,11 @@
     "description": "Unit/integration/e2e tests"
   },
   {
+    "name": "tooling",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "typecheck",
     "color": "bfdadc",
     "description": "mypy/pyright typing issues"
