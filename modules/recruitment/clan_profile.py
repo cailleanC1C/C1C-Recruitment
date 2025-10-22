@@ -9,8 +9,8 @@ from typing import Dict, List, Optional
 import discord
 from discord.ext import commands
 
-from recruitment import cards, emoji_pipeline
-from sheets import recruitment as recruitment_sheets
+from . import cards, emoji_pipeline
+from shared.sheets import recruitment as recruitment_sheets
 
 _VALID_TAG_CHARS: frozenset[str] = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 _FLIP_EMOJI = "\N{ELECTRIC LIGHT BULB}"  # 💡

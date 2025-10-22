@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import discord
 
-from recruitment import emoji_pipeline
+from . import emoji_pipeline
 
 
 def _set_thumbnail(embed: discord.Embed, guild: discord.Guild | None, tag: str) -> None:

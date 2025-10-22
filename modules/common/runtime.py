@@ -31,8 +31,8 @@ from shared.config import (
     get_refresh_timezone,
     get_strict_emoji_proxy,
 )
-from shared.coreops.helpers.tiers import audit_tiers, rehydrate_tiers
-from .web_routes import mount_emoji_pad
+from modules.coreops.helpers import audit_tiers, rehydrate_tiers
+from shared.web_routes import mount_emoji_pad
 
 log = logging.getLogger("c1c.runtime")
 
@@ -590,11 +590,11 @@ class Runtime:
         from modules.coreops import cog as coreops_cog
         from onboarding import watcher_welcome as onboarding_welcome
         from onboarding import watcher_promo as onboarding_promo
-        from ops import ops as ops_cog
+        from modules.coreops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
 
-        from shared import features
+        from modules.common import feature_flags as features
 
         try:
             await features.refresh()
@@ -688,11 +688,11 @@ class Runtime:
             )
 
         await _load_feature_module(
-            "recruitment.search", ("member_panel", "recruiter_panel")
+            "modules.recruitment.services.search", ("member_panel", "recruiter_panel")
         )
 
         if features.is_enabled("recruiter_panel"):
-            from recruitment import recruiter_panel
+            from modules.recruitment.views import recruiter_panel
 
             await recruiter_panel.setup(self.bot)
             log.info("modules: recruiter_panel enabled")
@@ -700,14 +700,18 @@ class Runtime:
             log.info("modules: recruiter_panel disabled")
 
         if features.is_enabled("clan_profile"):
-            from recruitment import clan_profile
+            from modules.recruitment import clan_profile
 
             await clan_profile.setup(self.bot)
             log.info("modules: clan_profile enabled")
         else:
             log.info("modules: clan_profile disabled")
-        await _load_feature_module("recruitment.welcome", ("recruitment_welcome",))
-        await _load_feature_module("recruitment.reports", ("recruitment_reports",))
+        await _load_feature_module(
+            "modules.recruitment.welcome", ("recruitment_welcome",)
+        )
+        await _load_feature_module(
+            "modules.recruitment.reports", ("recruitment_reports",)
+        )
         await _load_feature_module(
             "placement.target_select", ("placement_target_select",)
         )

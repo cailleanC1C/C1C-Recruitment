@@ -31,7 +31,7 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   embeds without timestamps; version metadata lives solely in the footer.
 
 ### Feature gating at load
-- **Module wiring:** Feature modules call `shared.features.is_enabled(<key>)` during boot.
+- **Module wiring:** Feature modules call `modules.common.feature_flags.is_enabled(<key>)` during boot.
   Disabled toggles block command registration and watcher wiring; the bot logs the skip
   and continues.
 - **Backbone always-on:** Scheduler, cache service, health probes, RBAC helpers, and the
@@ -50,4 +50,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+_Doc last updated: 2025-10-22 (v0.9.5 modules-first update)_

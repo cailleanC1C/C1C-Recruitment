@@ -7,7 +7,7 @@ from typing import Callable, Mapping, Sequence
 
 import discord
 
-from recruitment import cards, emoji_pipeline
+from .. import cards, emoji_pipeline
 
 PAGE_SIZE = 10
 

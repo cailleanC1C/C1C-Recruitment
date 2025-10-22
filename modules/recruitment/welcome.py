@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 from discord.ext import commands
 
-from shared import runtime as rt
+from modules.common import runtime as rt
 # NOTE: Do not import role ID constants from shared.config; not exported here.
-from shared.coreops.helpers.tiers import tier
+from modules.coreops.helpers import tier
 from shared.coreops_rbac import is_staff_member, is_admin_member
-from sheets.recruitment import get_cached_welcome_templates
+from shared.sheets.recruitment import get_cached_welcome_templates
 
 # --- RBAC decorator (staff with fallback) -------------------------------------
 def staff_only():

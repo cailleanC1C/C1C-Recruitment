@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.5 — Structure normalization (no behavior change) — 2025-10-22
+
+- Refactor: move `recruitment/*` → `modules/recruitment/*`.
+- Consolidate common/coreops/sheets to canonical modules; rewrite imports.
+- Add placeholder for member panel wiring in `cogs/recruitment_member.py`.
+- Document optional `MEMBER_PANEL_*` envs (not used yet).
+- Record ADR-0011.
+
 ## v0.9.5 — 2025-10-21
 
 ### Phase 5 : Recruitment Module Updates

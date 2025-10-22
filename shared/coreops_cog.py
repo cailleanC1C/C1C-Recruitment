@@ -61,7 +61,7 @@ from shared.help import (
     build_help_overview_embed,
     lookup_help_metadata,
 )
-from shared.coreops.helpers.tiers import tier
+from modules.coreops.helpers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.sheets.async_core import (
     aget_worksheet,
@@ -99,8 +99,8 @@ _ENV_KEY_HINTS = (
     "PROMO",
 )
 _SHEET_CONFIG_SOURCES: Tuple[Tuple[str, str], ...] = (
-    ("Recruitment", "sheets.recruitment"),
-    ("Onboarding", "sheets.onboarding"),
+    ("Recruitment", "shared.sheets.recruitment"),
+    ("Onboarding", "shared.sheets.onboarding"),
 )
 _sheet_cache_errors_logged: Set[str] = set()
 _sheet_cache_load_errors_logged: Set[str] = set()
