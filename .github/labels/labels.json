@@ -230,6 +230,11 @@
     "description": "Performance regression or optimization"
   },
   {
+    "name": "readiness",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "ready",
     "color": "0e8a16",
     "description": "Groomed and ready for pickup"
