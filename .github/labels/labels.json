@@ -65,6 +65,11 @@
     "description": "Health endpoint, digest, diagnostics"
   },
   {
+    "name": "comp:modules",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "comp:ocr",
     "color": "5319e7",
     "description": "Image parsing pipeline"
