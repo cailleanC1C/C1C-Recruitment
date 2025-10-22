@@ -1,4 +1,4 @@
-# Architecture — v0.9.5
+# Architecture — v0.9.5-a
 
 ## Runtime map
 ```
@@ -12,6 +12,11 @@ Discord Gateway
                   ↳ Google Sheets
   ↳ Health server (aiohttp) — /ready, /healthz
 ```
+
+## Module map
+- `modules/coreops/` — canonical home for the CoreOps cog, ops command surface,
+  helpers, and cron tasks. Legacy `shared/coreops` has been removed.
+- `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core).
 
 _Recruitment Search path (Sheets → Matcher) is integrated backend-only and feature-flagged
 off in production until the panels ship._
@@ -77,4 +82,4 @@ off in production until the panels ship._
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.5)_
+_Doc last updated: 2025-10-22 (v0.9.5-a)_
