@@ -40,6 +40,11 @@
     "description": ""
   },
   {
+    "name": "ci",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "commands",
     "color": "7057ff",
     "description": "Text/slash command behavior, permissions, UX"
