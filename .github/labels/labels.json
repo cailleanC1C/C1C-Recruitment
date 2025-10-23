@@ -40,16 +40,6 @@
     "description": ""
   },
   {
-    "name": "ci",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
-    "name": "commands",
-    "color": "7057ff",
-    "description": "Text/slash command behavior, permissions, UX"
-  },
-  {
     "name": "comp:cache",
     "color": "0e8a16",
     "description": "Caching layers / TTL / cold start"
@@ -170,11 +160,6 @@
     "description": "Community contributions welcome"
   },
   {
-    "name": "housekeeping",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "infra",
     "color": "6f42c1",
     "description": "Hosting, deployment, CI/CD, runtime"
@@ -185,11 +170,6 @@
     "description": "Ruff/formatting cleanups"
   },
   {
-    "name": "monorepo",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "needs:triage",
     "color": "fef2c0",
     "description": "Awaiting label & priority"
@@ -198,11 +178,6 @@
     "name": "observability",
     "color": "1d76db",
     "description": "Logs, metrics, traces, health, diagnostics"
-  },
-  {
-    "name": "ops",
-    "color": "cccccc",
-    "description": ""
   },
   {
     "name": "P0",
@@ -230,29 +205,14 @@
     "description": "VERY LOW — icebox/backlog"
   },
   {
-    "name": "parity",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "perf",
     "color": "0e8a16",
     "description": "Performance regression or optimization"
   },
   {
-    "name": "readiness",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "ready",
     "color": "0e8a16",
     "description": "Groomed and ready for pickup"
-  },
-  {
-    "name": "refactor",
-    "color": "cccccc",
-    "description": ""
   },
   {
     "name": "robustness",
@@ -285,28 +245,13 @@
     "description": "Mirrors P2"
   },
   {
-    "name": "telemetry",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "tests",
     "color": "a2eeef",
     "description": "Unit/integration/e2e tests"
   },
   {
-    "name": "tooling",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "typecheck",
     "color": "bfdadc",
     "description": "mypy/pyright typing issues"
-  },
-  {
-    "name": "ux",
-    "color": "cccccc",
-    "description": ""
   }
 ]
