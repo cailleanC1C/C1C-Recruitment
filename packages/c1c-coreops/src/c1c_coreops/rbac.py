@@ -24,6 +24,23 @@ from shared.config import (
 Memberish = Union[discord.abc.User, discord.Member]
 ContextOrMember = Union[commands.Context, Memberish]
 
+__all__ = [
+    "admin_only",
+    "can_view_admin",
+    "can_view_staff",
+    "get_admin_role_ids",
+    "get_staff_role_ids",
+    "get_recruiter_role_ids",
+    "get_lead_role_ids",
+    "guild_only_denied_msg",
+    "is_admin_member",
+    "is_staff_member",
+    "is_recruiter",
+    "is_lead",
+    "ops_gate",
+    "ops_only",
+]
+
 _DENIAL_LOG_THROTTLE_SEC = 30.0
 _denial_log_cache: Dict[Tuple[Optional[int], str, Optional[int]], float] = {}
 _ADMIN_FALLBACK_LOG_THROTTLE_SEC = 600.0
