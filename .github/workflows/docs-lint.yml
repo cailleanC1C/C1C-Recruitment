@@ -1,4 +1,4 @@
-name: docs-lint
+name: 99-auto-docs-lint
 
 on:
   pull_request:
