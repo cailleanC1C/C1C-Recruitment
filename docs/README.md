@@ -1,51 +1,46 @@
-# Documentation Index
+# C1C Recruitment Bot Documentation Overview (v0.9.5)
 
-This index links every document under `docs/` so contributors can locate the correct
-reference quickly.
+## Purpose
+This index explains the intent and ownership of every file in the documentation tree.
+It exists so that contributors update the correct references after each development phase or PR.
 
-## Root documentation
-- [Architecture Overview](Architecture.md) — system runtime map and module topology.
-- [Development Reference](development.md) — pointer to the canonical ops development guide.
-- [Documentation Index](README.md) — this page.
+## Folder Map
 
-## Meta
-- [_meta/DocStyle.md](./_meta/DocStyle.md) — contract for titles, footers, and docs linting.
+### `/docs/adr/` — Architectural Decision Records
+* Each ADR (`ADR-XXXX`) captures an approved architectural or systemic decision.
+* `ADR-0000` serves as the template for new records.
+* File a new ADR for every major design or structural change.
 
-## Operational guides
-- [ops/Architecture.md](ops/Architecture.md) — CoreOps architecture and feature-gating notes.
-- [ops/CommandMatrix.md](ops/CommandMatrix.md) — tiered command catalogue with short blurbs.
-- [ops/commands.md](ops/commands.md) — detailed command behavior notes per surface.
-- [ops/Config.md](ops/Config.md) — authoritative environment keys and sheet config mapping.
-- [ops/development.md](ops/development.md) — CoreOps development guardrails and runtime caveats.
-- [ops/module-toggles.md](ops/module-toggles.md) — FeatureToggles worksheet reference.
-- [ops/Runbook.md](ops/Runbook.md) — startup, refresh, and incident handling procedures.
-- [ops/Troubleshooting.md](ops/Troubleshooting.md) — quick diagnostics for common failures.
-- [ops/Watchers.md](ops/Watchers.md) — watcher lifecycle, cron cadence, and cache strategy.
+### `/docs/compliance/`
+* Houses internal compliance and governance policies.
+* Example: `REPORT_GUARDRAILS.md` details report formatting and safety guardrail standards.
 
-## Contracts
-- [contracts/CollaborationContract.md](contracts/CollaborationContract.md) — contributor standards and review expectations.
-- [contracts/core_infra.md](contracts/core_infra.md) — runtime, deployment, and watchdog contract for infra.
+### `/docs/guardrails/`
+* `RepositoryGuardrails.md` — canonical guardrails specification covering structure, coding, documentation, and governance rules.
 
-## Compliance
-- [compliance/REPORT_GUARDRAILS.md](compliance/REPORT_GUARDRAILS.md) — reporting format and safety guardrails.
+### `/docs/contracts/`
+* Defines long-term, structural interfaces between components.
+* `core_infra.md` documents runtime, Sheets access, and cache relationships.
+* `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
 
-## Architectural decision records
-- [adr/README.md](adr/README.md) — ADR purpose and local index.
-- [adr/ADR-0000-template.md](adr/ADR-0000-template.md) — template for new architectural decision records.
-- [adr/ADR-0001-sheets-access-layer.md](adr/ADR-0001-sheets-access-layer.md) — adopts the async cached Sheets access layer.
-- [adr/ADR-0002-cache-telemetry-wrapper.md](adr/ADR-0002-cache-telemetry-wrapper.md) — standardizes telemetry via the public cache API.
-- [adr/ADR-0003-coreops-command-contract.md](adr/ADR-0003-coreops-command-contract.md) — unifies the CoreOps command surface and RBAC gates.
-- [adr/ADR-0004-help-system-short-vs-detailed.md](adr/ADR-0004-help-system-short-vs-detailed.md) — defines short vs detailed help embeds.
-- [adr/ADR-0005-reload-vs-refresh.md](adr/ADR-0005-reload-vs-refresh.md) — separates config reloads from cache refresh behavior.
-- [adr/ADR-0006-startup-preloader-bot-info-cron.md](adr/ADR-0006-startup-preloader-bot-info-cron.md) — mandates startup warmers and bot_info cron checks.
-- [adr/ADR-0007-feature-toggles-recruitment-module-boundaries.md](adr/ADR-0007-feature-toggles-recruitment-module-boundaries.md) — scopes recruitment modules behind feature toggles.
-- [adr/ADR-0008-emoji-pipeline-port.md](adr/ADR-0008-emoji-pipeline-port.md) — ports the emoji pipeline for module-first runtime.
-- [adr/ADR-0009-recruiter-panel-text-only.md](adr/ADR-0009-recruiter-panel-text-only.md) — keeps recruiter panels text-only for fast iterations.
-- [adr/ADR-0010-clan-profile-with-emoji.md](adr/ADR-0010-clan-profile-with-emoji.md) — adds crest attachments to public clan cards.
-- [adr/ADR-0011.md](adr/ADR-0011.md) — consolidates recruitment modules and prepares `!clansearch`.
+### `/docs/ops/` — Operational Documentation
+* `Architecture.md` — detailed system flow, runtime design, and module topology.
+* `Config.md` — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
+* `CommandMatrix.md` — user/admin command catalogue with permissions, feature gates, and descriptions.
+* `Runbook.md` — operator actions for routine tasks and incident handling.
+* `Troubleshooting.md` — quick reference for diagnosing common issues.
+* `Watchers.md` — background jobs covering schedulers, refreshers, and watchdogs.
+* `development.md` — developer setup notes and contribution workflow guidance.
+* `commands.md` — supplemental command reference for operational usage.
 
-## How to update docs
-Follow the rules in [contracts/CollaborationContract.md](contracts/CollaborationContract.md) and the
-style guide in [_meta/DocStyle.md](./_meta/DocStyle.md) whenever documentation changes.
+### Root-Level Docs
+* `README.md` — user-facing overview, installation steps, and configuration guidance for the bot.
+* `CHANGELOG.md` — version history for the project.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+## Maintenance Rules
+* Update this index whenever documentation files are added, renamed, or removed.
+* Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
+* Ensure the version shown in this index (currently v0.9.5) matches the bot version in the root `README.md`.
+
+## Cross-References
+* `docs/contracts/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
