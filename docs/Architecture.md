@@ -14,8 +14,9 @@ Discord Gateway
 ```
 
 ## Module map
-- `modules/coreops/` — canonical home for the CoreOps cog, ops command surface,
-  helpers, and cron tasks. Legacy `shared/coreops` has been removed.
+- `modules/coreops/` — command wiring scaffold for the bot; imports stay on the legacy paths until the follow-up PR flips them.
+- `packages/c1c-coreops/` — canonical home for the CoreOps cog, RBAC helpers, embed renderers, and prefix utilities.
+- `shared/coreops_*` — deprecated shims that re-export `c1c_coreops.*` for one release.
 - `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core).
 
 ## Monorepo workspaces
@@ -29,8 +30,7 @@ Discord Gateway
   should remain runtime-agnostic and avoid importing from `modules/`.
 
 ### CoreOps extraction plan
-1. Mirror existing CoreOps utilities into `packages/c1c-coreops` with test
-   coverage while keeping the bot on the current modules.
+1. CoreOps utilities now live in `packages/c1c-coreops` while the bot continues to import the legacy shims.
 2. Flip imports in `modules/coreops` to consume the packaged helpers once the
    APIs stabilize.
 3. Deprecate any remaining feature logic living in `shared/` so only
@@ -92,7 +92,7 @@ off in production until the panels ship._
   channel.
 - `ENABLE_WELCOME_WATCHER` and `ENABLE_PROMO_WATCHER` environment flags still control
   watcher registration independently of the feature sheet (see [`Config.md`](ops/Config.md#environment-keys)).
-- RBAC derives from `shared.coreops_rbac`, mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
+- RBAC derives from `c1c_coreops.rbac` (temporarily re-exported via `shared.coreops_rbac`), mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 
 ## Health & observability
@@ -102,4 +102,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-23 (v0.9.5)
