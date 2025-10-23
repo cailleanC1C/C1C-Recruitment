@@ -140,6 +140,7 @@ milestone: Harmonize v1.0
 ---
 
 ### 🔹 Label Reference (Approved Set)
+DO not use any other labels unless approved by caillean first
 
 ```
 bug, perf, robustness, security, observability, infra, architecture, devx, docs, lint,
