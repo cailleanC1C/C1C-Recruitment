@@ -24,3 +24,12 @@ def test_imports() -> None:
     from c1c_coreops.cog import CoreOpsCog  # noqa: F401
 
     assert hasattr(rbac, "admin_only")
+
+
+def test_render_imports() -> None:
+    _ensure_src_on_path()
+
+    from c1c_coreops import render
+
+    assert hasattr(render, "build_env_embed")
+    assert hasattr(render, "DigestEmbedData")
