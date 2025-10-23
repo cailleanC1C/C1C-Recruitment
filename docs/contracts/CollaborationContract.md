@@ -179,3 +179,70 @@ AUDIT/20251010_src/WC   → WelcomeCrew legacy clone
 * Stop and ask if unsure.
 
 Doc last updated: 2025-10-22 (v0.9.5)
+
+
+### Label Reference (Approved Set)
+
+DO not use any other labels unless approved by caillean first
+
+| Name | Color | Description |
+|---|---|---|
+| architecture | `#5319e7` | Cross-cutting design, interfaces, carve-outs |
+| AUDIT | `#f9d0c4` | Code audit, understanding functionality |
+| blocked | `#b60205` | Blocked by dependency or decision |
+| bot:achievements | `#1d76db` | Achievements/Claims bot |
+| bot:matchmaker | `#1d76db` | Matchmaker bot |
+| bot:reminder | `#1d76db` | Reminder bot |
+| bot:welcomecrew | `#1d76db` | WelcomeCrew bot |
+| bug | `#b60205` | Broken behavior or incorrect output |
+| codex | `#ffffff` |  |
+| comp:cache | `#c5def5` | Caching layers / TTL / cold start |
+| comp:commands | `#c5def5` | Text/slash, permissions, UX |
+| comp:config | `#c5def5` | Env vars, toggles, secrets, YAML/JSON |
+| comp:coreops | `#c5def5` |  |
+| comp:data-sheets | `#c5def5` | Google Sheets schema, reads/writes, adapters |
+| comp:emoji | `#c5def5` |  |
+| comp:health | `#c5def5` | Health endpoint, digest, diagnostics |
+| comp:modules | `#c5def5` |  |
+| comp:ocr | `#c5def5` | Image parsing pipeline |
+| comp:onboarding | `#c5def5` | Tickets, welcome flow, forms |
+| comp:ops | `#cccccc` |  |
+| comp:ops-contract | `#c5def5` | Ops parity: ping/health/digest/reload |
+| comp:placement | `#c5def5` | Clan matching, recruiters, moves |
+| comp:recruitment | `#c5def5` |  |
+| comp:roles | `#c5def5` | Role grants, achievements, approvals |
+| comp:scheduler | `#c5def5` | Jobs, timers, offsets |
+| comp:shards | `#c5def5` | Shard/mercy tracking logic |
+| comp:shared | `#c5def5` |  |
+| config | `#006b75` | Env vars, toggles, YAML/JSON config, secrets |
+| data | `#4e0e7b` | Sheets schema, caching, adapters, migrations |
+| devx | `#c2e0c6` | Developer experience, tooling friction |
+| docs | `#0b75a8` | README, guides, runbooks |
+| duplicate | `#cfd3d7` | This issue or pull request already exists |
+| enhancement | `#a2eeef` | New feature or request |
+| good first issue | `#7057ff` | Low-risk starter task |
+| guardrails | `#e99695` |  |
+| help wanted | `#008672` | Community contributions welcome |
+| infra | `#6f42c1` | Hosting, deployment, CI/CD, runtime |
+| invalid | `#e4e669` | This doesn't seem right |
+| lint | `#000000` | Ruff/formatting cleanups |
+| maintenance | `#000000` | maintenance |
+| needs:triage | `#fef2c0` | Awaiting label & priority |
+| observability | `#1d76db` | Logs, metrics, traces, health, diagnostics |
+| P0 | `#ee0701` | CRITICAL — user-visible breakage / hotfix |
+| P1 | `#d93f0b` | HIGH — core function degraded / urgent |
+| P2 | `#fbca04` | MEDIUM — important, not blocking |
+| P3 | `#cccccc` | LOW — cleanup/polish |
+| P4 | `#e6e6e6` | VERY LOW — icebox/backlog |
+| perf | `#0e8a16` | Performance regression or optimization |
+| ready | `#0e8a16` | Groomed and ready for pickup |
+| robustness | `#0366d6` | Resilience: retries, backoff, failure handling |
+| security | `#e99695` | Vulnerabilities, secrets, permissions/ACL |
+| severity:critical | `#ee0701` | Mirrors P0 |
+| severity:high | `#d93f0b` | Mirrors P1 |
+| severity:low | `#cccccc` | Mirrors P3/P4 |
+| severity:medium | `#fbca04` | Mirrors P2 |
+| telemetry | `#780b1a` |  |
+| tests | `#a2eeef` | Unit/integration/e2e tests |
+| typecheck | `#bfdadc` | mypy/pyright typing issues |
+| wontfix | `#ffffff` | This will not be worked on |
