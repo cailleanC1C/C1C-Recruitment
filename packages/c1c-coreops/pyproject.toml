@@ -1,23 +1,22 @@
 [build-system]
-requires = [
-    "setuptools"
-]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "c1c-coreops"
 version = "0.0.0"
-description = "Shared CoreOps helpers for C1C bots."
+description = "Internal CoreOps helpers for C1C bots."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "C1C CoreOps Team" }
+    { name = "C1C CoreOps Team" },
 ]
 license = { text = "Proprietary" }
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: Other/Proprietary License"
+    "License :: Other/Proprietary License",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = [{ include = "c1c_coreops", from = "src" }]
+include-package-data = false

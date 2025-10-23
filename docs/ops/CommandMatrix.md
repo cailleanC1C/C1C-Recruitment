@@ -7,6 +7,8 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 [`commands.md`](commands.md).
 
 ## Admin — CoreOps & refresh controls
+_Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*` (commands unchanged).
+
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
 | `!config` | ✅ | Admin embed of the live registry with guild names and sheet linkage. | `!config` |
@@ -40,4 +42,4 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 
 > Daily recruiter digest watcher — [gated: `recruitment_reports`]
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-23 (v0.9.5)

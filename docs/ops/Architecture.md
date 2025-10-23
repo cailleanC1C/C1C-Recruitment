@@ -30,6 +30,10 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 - **Telemetry → Embed renderer:** Command responses pull structured telemetry and render
   embeds without timestamps; version metadata lives solely in the footer.
 
+### Module topology
+- CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.
+- `shared/coreops_*` modules are deprecated shims re-exporting the new package for one release.
+
 ### Feature gating at load
 - **Module wiring:** Feature modules call `modules.common.feature_flags.is_enabled(<key>)` during boot.
   Disabled toggles block command registration and watcher wiring; the bot logs the skip
@@ -48,4 +52,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-23 (v0.9.5)

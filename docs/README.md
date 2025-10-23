@@ -33,6 +33,11 @@ It exists so that contributors update the correct references after each developm
 * `development.md` — developer setup notes and contribution workflow guidance.
 * `commands.md` — supplemental command reference for operational usage.
 
+## Code Map
+
+* `packages/c1c-coreops/` — canonical CoreOps implementation (`c1c_coreops.*`).
+  Legacy `shared/coreops_*` modules temporarily re-export these symbols until import rewrites land.
+
 ### Root-Level Docs
 * `README.md` — user-facing overview, installation steps, and configuration guidance for the bot.
 * `CHANGELOG.md` — version history for the project.
