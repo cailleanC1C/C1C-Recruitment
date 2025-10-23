@@ -95,11 +95,6 @@
     "description": "Tickets, welcome flow, forms"
   },
   {
-    "name": "comp:ops",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "comp:ops-contract",
     "color": "c5def5",
     "description": "Ops parity: ping/health/digest/reload"
