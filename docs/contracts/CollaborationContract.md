@@ -9,7 +9,7 @@ They apply to **all phases, PRs, and documentation changes**.
 
 1. **Planning First, Code Later**
 
-   * No code until I say **“give me code please.”**
+   * No code, no PR prompts until I say **“give me code please.”**
    * Until then, only analyze, plan, or audit.
 
 2. **Information Gaps → Ask, Don’t Assume**
