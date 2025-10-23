@@ -6,6 +6,8 @@ from typing import Callable, Collection, Dict, Optional
 
 import discord
 
+__all__ = ["detect_admin_bang_command"]
+
 AdminCheck = Callable[[discord.abc.User | discord.Member], bool]
 _BANG_CMD_RE = re.compile(r"^!\s*([a-zA-Z]+)(?:\s|$)")
 
