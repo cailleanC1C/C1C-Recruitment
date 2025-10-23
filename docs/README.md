@@ -15,6 +15,9 @@ It exists so that contributors update the correct references after each developm
 * Houses internal compliance and governance policies.
 * Example: `REPORT_GUARDRAILS.md` details report formatting and safety guardrail standards.
 
+### `/docs/guardrails/`
+* `RepositoryGuardrails.md` — canonical guardrails specification covering structure, coding, documentation, and governance rules.
+
 ### `/docs/contracts/`
 * Defines long-term, structural interfaces between components.
 * `core_infra.md` documents runtime, Sheets access, and cache relationships.
