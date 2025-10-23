@@ -70,6 +70,7 @@ from shared.sheets.async_core import (
     afetch_records,
 )
 
+from .prefix import detect_admin_bang_command
 from .rbac import (
     admin_only,
     can_view_admin,
@@ -2878,4 +2879,5 @@ __all__ = [
     "_admin_check",
     "_admin_roles_configured",
     "_staff_check",
+    "detect_admin_bang_command",
 ]
