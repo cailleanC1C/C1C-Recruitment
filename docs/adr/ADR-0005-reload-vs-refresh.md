@@ -27,3 +27,5 @@ trace who initiated reloads.
 ## Status
 
 Accepted — 2025-10-20
+
+Doc last updated: 2025-10-22 (v0.9.5)

@@ -1,4 +1,7 @@
-# Configuration Reference — Phase 3 + 3b
+# Configuration Reference
+
+This page is the single source of truth for runtime configuration. Update it alongside
+[`.env.example`](.env.example) so the template stays in parity with production settings.
 
 ## Live `!config` embed example
 ```
@@ -11,71 +14,102 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 ```
 
 - Guild display names replace raw snowflake IDs across the embed.
-- Recruitment and Onboarding Sheet IDs appear in full; click-through URLs remain hidden
-  to avoid clutter.
-- The meta overlay surfaces cache age, next refresh, and actor pulled from the public
-  telemetry snapshot.
-- Date/time fields are removed entirely. Embed footers continue to show
-  `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
-- No new environment or sheet keys were introduced for Phase 3/3b; reuse the existing
-  registry and Config tab structure described below.
-
-> **Note:** Values are pulled live from the runtime cache; embeds no longer carry Discord
-> timestamps.
+- Recruitment and Onboarding Sheet IDs appear in full; click-through URLs remain hidden to avoid clutter.
+- The meta overlay surfaces cache age, next refresh, and actor pulled from the public telemetry snapshot.
+- Date/time fields are removed entirely. Embed footers continue to show `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
 
 ## Environment keys
-| Group | Key | Type | Default | Notes |
-| --- | --- | --- | --- | --- |
-| Core | `DISCORD_TOKEN` | secret | — | Bot token for the Discord application (masked in logs). |
-| Core | `ENV_NAME` | string | `dev` | Environment label (`dev`, `test`, `prod`). |
-| Core | `GUILD_IDS` | csv | — | Comma-separated guild IDs allowed to load the bot. |
-| Core | `TIMEZONE` | string | `UTC` | Olson timezone used for embeds and scheduling. |
-| Core | `REFRESH_TIMES` | csv | — | Optional daily refresh windows (HH:MM, comma separated). |
-| Sheets | `GSPREAD_CREDENTIALS` | secret | — | Base64-encoded service-account JSON. |
-| Sheets | `RECRUITMENT_SHEET_ID` | string | — | Google Sheet ID for recruitment data. |
-| Sheets | `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
-| Roles | `ADMIN_ROLE_IDS` | csv | — | Elevated admin role IDs. |
-| Roles | `STAFF_ROLE_IDS` | csv | — | Staff role IDs (welcome + refresh tools). |
-| Roles | `RECRUITER_ROLE_IDS` | csv | — | Recruiter role IDs (panels, digests). |
-| Roles | `LEAD_ROLE_IDS` | csv | — | Lead role IDs for escalations. |
-| Channels | `RECRUITERS_THREAD_ID` | snowflake | — | Thread receiving recruitment updates. |
-| Channels | `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
-| Channels | `WELCOME_CHANNEL_ID` | snowflake | — | Private welcome ticket channel ID. |
-| Channels | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
-| Channels | `LOG_CHANNEL_ID` | snowflake | — | Primary log channel ID (#bot-production). |
-| Channels | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
-| Channels | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
-| Media | `PUBLIC_BASE_URL` | url | — | External base URL for `/emoji-pad`; falls back to `RENDER_EXTERNAL_URL` when unset. |
-| Media | `RENDER_EXTERNAL_URL` | url | — | Render.com external hostname used when `PUBLIC_BASE_URL` is not provided. |
-| Media | `EMOJI_MAX_BYTES` | int | `2000000` | Maximum emoji payload size accepted by `/emoji-pad`. |
-| Media | `EMOJI_PAD_SIZE` | int | `256` | Square canvas dimension for padded emoji PNGs. |
-| Media | `EMOJI_PAD_BOX` | float | `0.85` | Fraction of the canvas filled by the emoji glyph after padding. |
-| Media | `TAG_BADGE_PX` | int | `128` | Pixel edge length used when generating clan badge attachments. |
-| Media | `TAG_BADGE_BOX` | float | `0.90` | Glyph fill ratio applied during clan badge attachment rendering. |
-| Media | `STRICT_EMOJI_PROXY` | bool | `true` | When truthy (`1`), require padded proxy thumbnails instead of raw CDN URLs. |
-| Toggles | `WELCOME_ENABLED` | bool | `true` | Enables welcome command plus automation. |
-| Toggles | `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to fallback channel when true. |
-| Toggles | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
-| Toggles | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
-| Toggles | _Feature toggles_ | sheet | `FeatureToggles` | Recruitment/placement modules use the `FeatureToggles` worksheet described below. Only `TRUE` enables a feature. |
-| Watchdog | `WATCHDOG_CHECK_SEC` | int | `30` | Interval between watchdog polls. |
-| Watchdog | `WATCHDOG_STALL_SEC` | int | `45` | Connected stall threshold in seconds. |
-| Watchdog | `WATCHDOG_DISCONNECT_GRACE_SEC` | int | `300` | Disconnect grace period before restart. |
-| Cache | `CLAN_TAGS_CACHE_TTL_SEC` | int | `900` | TTL for cached clan tags. |
-| Cleanup | `CLEANUP_AGE_HOURS` | int | `48` | Age threshold for cleanup jobs. |
-
-### Automation listeners & cron jobs
+### Core runtime
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `ENABLE_WELCOME_LISTENERS` | bool | `true` | Event listeners for welcomes. Alias (deprecated): `ENABLE_WELCOME_WATCHER`. |
-| `ENABLE_PROMO_LISTENERS` | bool | `true` | Event listeners for promos. Alias (deprecated): `ENABLE_PROMO_WATCHER`. |
-| `CRON_REFRESH_CLAN_TAGS` | cron | `15m` | Scheduled clan tag refresh job (logged as `[cron]`). |
-| `CRON_REFRESH_SHEETS` | cron | `30m` | Sheets sync cadence (logged as `[cron]`). |
-| `CRON_REFRESH_CACHE` | cron | `60m` | Cache warmers and daily roll-up (logged as `[cron]`). |
+| `DISCORD_TOKEN` | secret | — | Bot token for the Discord application (masked in logs). |
+| `ENV_NAME` | string | `dev` | Environment label (influences watchdog defaults). |
+| `BOT_NAME` | string | `C1C-Recruitment` | Display name surfaced in telemetry. |
+| `BOT_VERSION` | string | `dev` | Version string surfaced in embeds and logs. |
+| `GUILD_IDS` | csv | — | Comma-separated guild IDs allowed to load the bot. |
+| `TIMEZONE` | string | `Europe/Vienna` | Olson timezone used for embeds and scheduling. |
+| `REFRESH_TIMES` | csv | `02:00,10:00,18:00` | Optional daily refresh windows (HH:MM, comma separated). |
+| `PORT` | int | `10000` | Render injects this automatically; local runs fall back to 10000. |
+| `LOG_LEVEL` | string | `INFO` | Python logging level. |
+| `LOG_CHANNEL_ID` | snowflake | — | Primary log channel ID; falls back to the default baked into `shared.config` when unset. |
+
+### Google Sheets access
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `GSPREAD_CREDENTIALS` | secret | — | Base64-encoded service-account JSON. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | secret | — | Legacy alias for `GSPREAD_CREDENTIALS`. |
+| `RECRUITMENT_SHEET_ID` | string | — | Google Sheet ID for recruitment data. |
+| `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
+| `GOOGLE_SHEET_ID` | string | — | Back-compat sheet ID used when dedicated IDs are unset. |
+| `GSHEET_ID` | string | — | Legacy alias checked when the other IDs are blank. |
+| `RECRUITMENT_CONFIG_TAB` | string | `Config` | Worksheet name containing recruitment config. |
+| `ONBOARDING_CONFIG_TAB` | string | `Config` | Worksheet name containing onboarding config. |
+| `WORKSHEET_NAME` | string | `bot_info` | Fallback for the `clans_tab` worksheet when sheet config is missing. |
+| `GSHEETS_RETRY_ATTEMPTS` | int | `5` | Default retry attempts for Sheets API requests. |
+| `GSHEETS_RETRY_BASE` | float | `0.5` | Base delay (seconds) for Sheets exponential backoff. |
+| `GSHEETS_RETRY_FACTOR` | float | `2.0` | Multiplier for Sheets exponential backoff. |
+| `SHEETS_CACHE_TTL_SEC` | int | `900` | TTL for cached worksheet values. |
+| `SHEETS_CONFIG_CACHE_TTL_SEC` | int | matches `SHEETS_CACHE_TTL_SEC` | TTL for cached worksheet metadata; defaults to the value above. |
+
+### Role and channel routing
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `ADMIN_ROLE_IDS` | csv | — | Elevated admin role IDs. |
+| `STAFF_ROLE_IDS` | csv | — | Staff role IDs (welcome + refresh tools). |
+| `RECRUITER_ROLE_IDS` | csv | — | Recruiter role IDs (panels, digests). |
+| `LEAD_ROLE_IDS` | csv | — | Lead role IDs for escalations. |
+| `ADMIN_IDS` | csv | — | Optional list of Discord user IDs treated as admins. |
+| `RECRUITERS_THREAD_ID` | snowflake | — | Thread receiving recruitment updates. |
+| `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
+| `WELCOME_CHANNEL_ID` | snowflake | — | Private welcome ticket channel ID. |
+| `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
+| `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
+| `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
+| `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
+| `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
+
+### Feature toggles and runtime flags
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `WELCOME_ENABLED` | bool | `true` | Master switch for the welcome workflow. |
+| `ENABLE_WELCOME_WATCHER` | bool | `true` | Enables welcome event listeners; disable to keep tickets offline. |
+| `ENABLE_PROMO_WATCHER` | bool | `true` | Enables promo event listeners. |
+| `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to the fallback channel when true. |
+| `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
+| `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
+
+### Watchdog, cache, and cleanup
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `WATCHDOG_CHECK_SEC` | int | `360` prod / `60` non-prod | Derived from `ENV_NAME`; controls watchdog heartbeat cadence. |
+| `WATCHDOG_STALL_SEC` | int | `keepalive*3+30` | Stall threshold derived from the heartbeat cadence. |
+| `WATCHDOG_DISCONNECT_GRACE_SEC` | int | `WATCHDOG_STALL_SEC` | Disconnect grace period; falls back to stall threshold. |
+| `KEEPALIVE_INTERVAL_SEC` | int | — | Legacy alias for `WATCHDOG_CHECK_SEC`; logs a warning when used. |
+| `CLAN_TAGS_CACHE_TTL_SEC` | int | `3600` | TTL for cached clan tags. |
+| `CLEANUP_AGE_HOURS` | int | `72` | Age threshold for cleanup jobs. |
+
+### Media rendering
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `PUBLIC_BASE_URL` | url | — | External base URL for `/emoji-pad`; falls back to `RENDER_EXTERNAL_URL` when unset. |
+| `RENDER_EXTERNAL_URL` | url | — | Render.com external hostname used when `PUBLIC_BASE_URL` is not provided. |
+| `EMOJI_MAX_BYTES` | int | `2000000` | Maximum emoji payload size accepted by `/emoji-pad`. |
+| `EMOJI_PAD_SIZE` | int | `256` | Square canvas dimension for padded emoji PNGs. |
+| `EMOJI_PAD_BOX` | float | `0.85` | Fraction of the canvas filled by the emoji glyph after padding. |
+| `TAG_BADGE_PX` | int | `128` | Pixel edge length used when generating clan badge attachments. |
+| `TAG_BADGE_BOX` | float | `0.90` | Glyph fill ratio applied during clan badge attachment rendering. |
+| `STRICT_EMOJI_PROXY` | bool | `true` | When truthy (`1`), require padded proxy thumbnails instead of raw CDN URLs. |
+
+## Automation listeners & cron jobs
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `ENABLE_WELCOME_WATCHER` | bool | `true` | Event listeners for welcomes. Disable to pause ticket automation. |
+| `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promos. |
+
+> Cron cadences are fixed in code today; update the scheduler directly if the defaults change.
 
 ## Sheet config tabs
-Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and
-**Value** columns.
+Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and **Value** columns.
 
 ### Recruitment sheet keys
 - `CLANS_TAB`
@@ -145,6 +179,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
----
-
-_Doc last updated: 2025-10-21 (v0.9.5 feature toggles refresh)_
+Doc last updated: 2025-10-22 (v0.9.5)

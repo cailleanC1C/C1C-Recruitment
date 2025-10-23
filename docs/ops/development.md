@@ -1,4 +1,4 @@
-# CoreOps Development Notes — Phase 3 + 3b
+# CoreOps Development Notes
 
 ## Telemetry helpers only
 - Import telemetry data via `shared.coreops.cache_public` helpers (`list_buckets`,
@@ -23,6 +23,4 @@
 - `!digest --debug` — confirm public telemetry includes age/next/retries.
 - `!checksheet --debug` — inspect tab headers and template previews post-refresh.
 
----
-
-_Doc last updated: 2025-10-20 (Phase 3 + 3b consolidation)_
+Doc last updated: 2025-10-22 (v0.9.5)

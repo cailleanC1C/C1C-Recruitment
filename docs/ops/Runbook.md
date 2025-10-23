@@ -1,4 +1,4 @@
-# Ops Runbook — Phase 3 + 3b
+# Ops Runbook
 
 This runbook consolidates the CoreOps lifecycle, cache controls, and telemetry surfaces
 introduced in the Phase 3/3b rollout. Use it during startup verification, routine refresh
@@ -58,6 +58,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+Doc last updated: 2025-10-22 (v0.9.5)

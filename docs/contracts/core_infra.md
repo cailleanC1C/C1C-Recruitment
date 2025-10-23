@@ -1,10 +1,11 @@
-# Core Infra Contract — v0.9.4
+# Core Infra Contract
 
 ## Scope
 Infra must provide reliable runtime, deployment, and observability surfaces while the bot guarantees readiness probes, watchdog
 exits, and structured logging consistent with Phase 1 behavior.
 
 ## Inputs (Env / Secrets)
+See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key definitions and defaults.
 - `DISCORD_TOKEN` (required)
 - `ADMIN_ROLE_IDS` (comma/space numeric)
 - `STAFF_ROLE_IDS` (comma/space numeric)
@@ -86,6 +87,4 @@ exits, and structured logging consistent with Phase 1 behavior.
 - Embed footer standardized: `Bot vX.Y.Z · CoreOps vA.B.C` (Discord timestamp replaces
   inline timezone text).
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+Doc last updated: 2025-10-22 (v0.9.5)
