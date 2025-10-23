@@ -5,83 +5,93 @@
     "description": "Cross-cutting design, interfaces, carve-outs"
   },
   {
+    "name": "AUDIT",
+    "color": "f9d0c4",
+    "description": "Code audit, understanding functionality"
+  },
+  {
     "name": "blocked",
     "color": "b60205",
     "description": "Blocked by dependency or decision"
   },
   {
     "name": "bot:achievements",
-    "color": "0052cc",
+    "color": "1d76db",
     "description": "Achievements/Claims bot"
   },
   {
     "name": "bot:matchmaker",
-    "color": "0052cc",
+    "color": "1d76db",
     "description": "Matchmaker bot"
   },
   {
     "name": "bot:reminder",
-    "color": "0052cc",
+    "color": "1d76db",
     "description": "Reminder bot"
   },
   {
     "name": "bot:welcomecrew",
-    "color": "0052cc",
+    "color": "1d76db",
     "description": "WelcomeCrew bot"
   },
   {
     "name": "bug",
-    "color": "d73a4a",
+    "color": "b60205",
     "description": "Broken behavior or incorrect output"
   },
   {
-    "name": "bugfix",
-    "color": "cccccc",
+    "name": "codex",
+    "color": "ffffff",
     "description": ""
   },
   {
     "name": "comp:cache",
-    "color": "0e8a16",
+    "color": "c5def5",
     "description": "Caching layers / TTL / cold start"
   },
   {
     "name": "comp:commands",
-    "color": "7057ff",
+    "color": "c5def5",
     "description": "Text/slash, permissions, UX"
   },
   {
     "name": "comp:config",
-    "color": "006b75",
+    "color": "c5def5",
     "description": "Env vars, toggles, secrets, YAML/JSON"
   },
   {
     "name": "comp:coreops",
-    "color": "cccccc",
+    "color": "c5def5",
     "description": ""
   },
   {
     "name": "comp:data-sheets",
-    "color": "168700",
+    "color": "c5def5",
     "description": "Google Sheets schema, reads/writes, adapters"
   },
   {
+    "name": "comp:emoji",
+    "color": "c5def5",
+    "description": ""
+  },
+  {
     "name": "comp:health",
-    "color": "1d76db",
+    "color": "c5def5",
     "description": "Health endpoint, digest, diagnostics"
   },
   {
     "name": "comp:modules",
-    "color": "cccccc",
+    "color": "c5def5",
     "description": ""
   },
   {
     "name": "comp:ocr",
-    "color": "5319e7",
+    "color": "c5def5",
     "description": "Image parsing pipeline"
   },
   {
     "name": "comp:onboarding",
-    "color": "c27ba0",
+    "color": "c5def5",
     "description": "Tickets, welcome flow, forms"
   },
   {
@@ -91,37 +101,37 @@
   },
   {
     "name": "comp:ops-contract",
-    "color": "6f42c1",
+    "color": "c5def5",
     "description": "Ops parity: ping/health/digest/reload"
   },
   {
     "name": "comp:placement",
-    "color": "c27ba0",
+    "color": "c5def5",
     "description": "Clan matching, recruiters, moves"
   },
   {
     "name": "comp:recruitment",
-    "color": "cccccc",
+    "color": "c5def5",
     "description": ""
   },
   {
     "name": "comp:roles",
-    "color": "c27ba0",
+    "color": "c5def5",
     "description": "Role grants, achievements, approvals"
   },
   {
     "name": "comp:scheduler",
-    "color": "0366d6",
+    "color": "c5def5",
     "description": "Jobs, timers, offsets"
   },
   {
     "name": "comp:shards",
-    "color": "5319e7",
+    "color": "c5def5",
     "description": "Shard/mercy tracking logic"
   },
   {
     "name": "comp:shared",
-    "color": "cccccc",
+    "color": "c5def5",
     "description": ""
   },
   {
@@ -131,7 +141,7 @@
   },
   {
     "name": "data",
-    "color": "168700",
+    "color": "4e0e7b",
     "description": "Sheets schema, caching, adapters, migrations"
   },
   {
@@ -145,9 +155,14 @@
     "description": "README, guides, runbooks"
   },
   {
-    "name": "fix",
-    "color": "cccccc",
-    "description": ""
+    "name": "duplicate",
+    "color": "cfd3d7",
+    "description": "This issue or pull request already exists"
+  },
+  {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "New feature or request"
   },
   {
     "name": "good first issue",
@@ -155,8 +170,8 @@
     "description": "Low-risk starter task"
   },
   {
-    "name": "governance",
-    "color": "cccccc",
+    "name": "guardrails",
+    "color": "e99695",
     "description": ""
   },
   {
@@ -170,9 +185,19 @@
     "description": "Hosting, deployment, CI/CD, runtime"
   },
   {
+    "name": "invalid",
+    "color": "e4e669",
+    "description": "This doesn't seem right"
+  },
+  {
     "name": "lint",
-    "color": "cccccc",
+    "color": "000000",
     "description": "Ruff/formatting cleanups"
+  },
+  {
+    "name": "maintenance",
+    "color": "000000",
+    "description": "maintenance"
   },
   {
     "name": "needs:triage",
@@ -191,12 +216,12 @@
   },
   {
     "name": "P1",
-    "color": "fbca04",
+    "color": "d93f0b",
     "description": "HIGH — core function degraded / urgent"
   },
   {
     "name": "P2",
-    "color": "0e8a16",
+    "color": "fbca04",
     "description": "MEDIUM — important, not blocking"
   },
   {
@@ -226,7 +251,7 @@
   },
   {
     "name": "security",
-    "color": "b60205",
+    "color": "e99695",
     "description": "Vulnerabilities, secrets, permissions/ACL"
   },
   {
@@ -250,6 +275,11 @@
     "description": "Mirrors P2"
   },
   {
+    "name": "telemetry",
+    "color": "780b1a",
+    "description": ""
+  },
+  {
     "name": "tests",
     "color": "a2eeef",
     "description": "Unit/integration/e2e tests"
@@ -258,5 +288,10 @@
     "name": "typecheck",
     "color": "bfdadc",
     "description": "mypy/pyright typing issues"
+  },
+  {
+    "name": "wontfix",
+    "color": "ffffff",
+    "description": "This will not be worked on"
   }
 ]
