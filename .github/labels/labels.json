@@ -42,7 +42,7 @@
   {
     "name": "codex",
     "color": "ffffff",
-    "description": ""
+    "description": "Codex-generated changes, prompts, and PR automation"
   },
   {
     "name": "comp:cache",
@@ -62,7 +62,7 @@
   {
     "name": "comp:coreops",
     "color": "c5def5",
-    "description": ""
+    "description": "Shared CoreOps commands, RBAC, and ops utilities"
   },
   {
     "name": "comp:data-sheets",
@@ -72,7 +72,7 @@
   {
     "name": "comp:emoji",
     "color": "c5def5",
-    "description": ""
+    "description": "Emoji assets, mappings, and usage in messages"
   },
   {
     "name": "comp:health",
@@ -82,7 +82,7 @@
   {
     "name": "comp:modules",
     "color": "c5def5",
-    "description": ""
+    "description": "Module scaffolding, loaders, and boundaries"
   },
   {
     "name": "comp:ocr",
@@ -107,7 +107,7 @@
   {
     "name": "comp:recruitment",
     "color": "c5def5",
-    "description": ""
+    "description": "Recruitment panels, search, and flow orchestration"
   },
   {
     "name": "comp:roles",
@@ -127,7 +127,7 @@
   {
     "name": "comp:shared",
     "color": "c5def5",
-    "description": ""
+    "description": "Shared libraries and utilities used across bots"
   },
   {
     "name": "config",
@@ -167,7 +167,7 @@
   {
     "name": "guardrails",
     "color": "e99695",
-    "description": ""
+    "description": "Contract/compliance checks and safety gates"
   },
   {
     "name": "help wanted",
@@ -187,12 +187,12 @@
   {
     "name": "lint",
     "color": "000000",
-    "description": "Ruff/formatting cleanups"
+    "description": "Style/format fixes (Ruff, etc.); no behavior change"
   },
   {
     "name": "maintenance",
     "color": "000000",
-    "description": "maintenance"
+    "description": "Routine upkeep: deps, version bumps, repo hygiene"
   },
   {
     "name": "needs:triage",
@@ -207,27 +207,27 @@
   {
     "name": "P0",
     "color": "ee0701",
-    "description": "CRITICAL — user-visible breakage / hotfix"
+    "description": "CRITICAL \u2014 user-visible breakage / hotfix"
   },
   {
     "name": "P1",
     "color": "d93f0b",
-    "description": "HIGH — core function degraded / urgent"
+    "description": "HIGH \u2014 core function degraded / urgent"
   },
   {
     "name": "P2",
     "color": "fbca04",
-    "description": "MEDIUM — important, not blocking"
+    "description": "MEDIUM \u2014 important, not blocking"
   },
   {
     "name": "P3",
     "color": "cccccc",
-    "description": "LOW — cleanup/polish"
+    "description": "LOW \u2014 cleanup/polish"
   },
   {
     "name": "P4",
     "color": "e6e6e6",
-    "description": "VERY LOW — icebox/backlog"
+    "description": "VERY LOW \u2014 icebox/backlog"
   },
   {
     "name": "perf",
@@ -272,7 +272,7 @@
   {
     "name": "telemetry",
     "color": "780b1a",
-    "description": ""
+    "description": "Runtime metrics, traces, and event collection"
   },
   {
     "name": "tests",
