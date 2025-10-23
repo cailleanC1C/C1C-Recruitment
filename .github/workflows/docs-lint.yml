@@ -1,0 +1,16 @@
+name: docs-lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '**/.env.example'
+      - '.github/workflows/docs-lint.yml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run docs checker
+        run: python scripts/ci/check_docs.py

@@ -1,4 +1,4 @@
-# ADR-008 — Emoji Pipeline Port
+# ADR-0008 — Emoji Pipeline Port
 
 - **Date:** 2025-10-22
 - **Status:** Draft
@@ -44,3 +44,5 @@ helpers while back-end caches and filters were restored.
 ## Status
 
 **Draft — awaiting command integration in subsequent Phase 5 PRs.**
+
+Doc last updated: 2025-10-22 (v0.9.5)

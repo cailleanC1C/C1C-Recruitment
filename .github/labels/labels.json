@@ -40,6 +40,11 @@
     "description": ""
   },
   {
+    "name": "ci",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "commands",
     "color": "7057ff",
     "description": "Text/slash command behavior, permissions, UX"
@@ -153,6 +158,11 @@
     "name": "good first issue",
     "color": "7057ff",
     "description": "Low-risk starter task"
+  },
+  {
+    "name": "governance",
+    "color": "cccccc",
+    "description": ""
   },
   {
     "name": "help wanted",

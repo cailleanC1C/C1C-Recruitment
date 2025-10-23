@@ -1,4 +1,4 @@
-# Command Matrix — Phase 3 + 3b
+# Command Matrix
 
 Legend: ✅ = active command · 🧩 = shared CoreOps surface (available across tiers)
 
@@ -40,6 +40,4 @@ short descriptions in `!help` and tier-specific listings; detailed blurbs live i
 
 > Daily recruiter digest watcher — [gated: `recruitment_reports`]
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+Doc last updated: 2025-10-22 (v0.9.5)
