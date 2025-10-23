@@ -1,4 +1,4 @@
-# CoreOps Architecture — Phase 3 + 3b
+# CoreOps Architecture
 
 ```
 Discord Cog ─┬─> CoreOps command handlers ──> Cache Service ──> Google Sheets
@@ -48,6 +48,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.5 modules-first update)_
+Doc last updated: 2025-10-22 (v0.9.5)

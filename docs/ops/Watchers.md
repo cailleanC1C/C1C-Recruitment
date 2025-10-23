@@ -1,4 +1,4 @@
-# Watchers & Schedules — Phase 3b
+# Watchers & Schedules
 
 ## Overview
 Watchers coordinate Discord-side automation for recruitment and onboarding. They load
@@ -10,8 +10,8 @@ enabled for the deployment.
   immediately to welcome/promo activity and log using the `[watcher]` prefix.
 - **Cron** → *scheduled job* triggered by the runtime scheduler. Cron runs are logged with
   the `[cron]` prefix (start/result/retry/summary).
-- Legacy environment keys ending in `_WATCHER` still work but are **deprecated**. Prefer
-  the new `*_LISTENERS` and `CRON_*` keys documented in [`Config.md`](Config.md).
+- Environment toggles ending in `_WATCHER` remain canonical; see [`Config.md`](Config.md#environment-keys)
+  for the authoritative list and defaults.
 
 ## Load order
 1. `shared.config` — env snapshot (IDs, toggles, sheet metadata).
@@ -76,6 +76,4 @@ stay active while promo listeners are paused).
 - `LOG_CHANNEL_ID` receives all watcher lifecycle logs (`[watcher]`) plus cron notices
   (`[cron]`).
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.5 modules-first update)_
+Doc last updated: 2025-10-22 (v0.9.5)

@@ -11,3 +11,5 @@ This directory contains the architectural decision records (ADRs) that document 
 - [ADR-0004 — Help System (Short vs Detailed View)](ADR-0004-help-system-short-vs-detailed.md)
 - [ADR-0005 — Reload vs Refresh (Soft Reboot Flag)](ADR-0005-reload-vs-refresh.md)
 - [ADR-0006 — Startup Preloader + `bot_info` Cron](ADR-0006-startup-preloader-bot-info-cron.md)
+
+Doc last updated: 2025-10-22 (v0.9.5)

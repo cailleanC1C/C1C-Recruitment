@@ -1,4 +1,4 @@
-# Module toggles — Phase 5
+# Module Toggles
 
 The FeatureToggles worksheet (see `docs/ops/Config.md`) governs which modules load
 at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a feature.
@@ -21,4 +21,7 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 | `placement_reservations` | `TRUE` | Reservation holds and release workflow. |
 
 Set the desired value in the `FeatureToggles` tab, then run `!rec refresh config`
-to apply it. The runtime logs whether each module was loaded or skipped at boot.
+to apply it. The runtime logs whether each module was loaded or skipped at boot. See
+[`Config.md`](Config.md#feature-toggles-worksheet) for the worksheet contract.
+
+Doc last updated: 2025-10-22 (v0.9.5)

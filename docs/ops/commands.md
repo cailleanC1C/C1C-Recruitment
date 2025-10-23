@@ -1,4 +1,4 @@
-# CoreOps help system — Phase 3 + 3b
+# CoreOps Help System
 
 The help surfaces pull from the command matrix and cache registry to render consistent
 copy across tiers. Use the following behavior notes when validating deploys or triaging
@@ -53,7 +53,7 @@ Detail: Report bot latency and shard status without hitting the cache.
 Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
 ```
 
-## Recruitment commands — Phase 5 alignment
+## Recruitment commands alignment
 
 ### !clan `<tag>`
 
@@ -74,6 +74,4 @@ Opens the text-only recruiter panel for filtering and matching clans.
 - **Usage:** `!clanmatch`
 - **Feature Toggle:** `recruiter_panel`
 
----
-
-_Doc last updated: 2025-10-21 (Phase 5 recruitment alignment)_
+Doc last updated: 2025-10-22 (v0.9.5)

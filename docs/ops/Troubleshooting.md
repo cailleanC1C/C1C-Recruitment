@@ -1,4 +1,4 @@
-# Troubleshooting & Redaction — Phase 3b
+# Troubleshooting & Redaction
 
 ## Quick triage
 - **Cron quiet** → confirm the latest `[cron result]` within the expected interval before
@@ -55,6 +55,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
----
-
-_Doc last updated: 2025-10-22 (v0.9.4 toggles integration)_
+Doc last updated: 2025-10-22 (v0.9.5)
