@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  issues: read
   pull-requests: write
 
 jobs:
@@ -65,16 +66,16 @@ jobs:
           p = Path('docs/contracts/CollaborationContract.md')
           text = p.read_text(encoding='utf-8')
 
-          # Find section start
-          heading_pat = re.compile(r"^##\\s+Label Reference \\(Approved Set\\)\\s*$", re.M)
+          # Find section start (contract uses level-3 '###' and may include an emoji)
+          heading_pat = re.compile(r"^###\\s+.*Label Reference\\s*\\(Approved Set\\)\\s*$", re.M)
           m = heading_pat.search(text)
           if not m:
-            raise SystemExit("Heading '## Label Reference (Approved Set)' not found.")
+            raise SystemExit("Heading '### Label Reference (Approved Set)' not found.")
 
           start = m.end()
 
-          # Find next same-level heading or EOF
-          next_h_pat = re.compile(r"^##\\s+[^\\n]+\\n", re.M)
+          # Find next same-level (###) heading or EOF
+          next_h_pat = re.compile(r"^###\\s+[^\\n]+\\n", re.M)
           next_m = next_h_pat.search(text, start)
           end = next_m.start() if next_m else len(text)
 
