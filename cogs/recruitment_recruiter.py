@@ -14,7 +14,7 @@ from modules.common import config_access as config
 from modules.common import feature_flags
 from modules.coreops.helpers import tier
 from modules.recruitment.views.recruiter_panel import RecruiterPanelView
-from shared.coreops_rbac import is_admin_member, is_recruiter
+from c1c_coreops.rbac import is_admin_member, is_recruiter
 
 
 class RecruiterPanelCog(commands.Cog):

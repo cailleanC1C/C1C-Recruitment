@@ -95,6 +95,11 @@
     "description": "Tickets, welcome flow, forms"
   },
   {
+    "name": "comp:ops",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "comp:ops-contract",
     "color": "c5def5",
     "description": "Ops parity: ping/health/digest/reload"
@@ -195,6 +200,11 @@
     "description": "Routine upkeep: deps, version bumps, repo hygiene"
   },
   {
+    "name": "migration",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "needs:triage",
     "color": "fef2c0",
     "description": "Awaiting label & priority"
@@ -207,27 +217,27 @@
   {
     "name": "P0",
     "color": "ee0701",
-    "description": "CRITICAL \u2014 user-visible breakage / hotfix"
+    "description": "CRITICAL — user-visible breakage / hotfix"
   },
   {
     "name": "P1",
     "color": "d93f0b",
-    "description": "HIGH \u2014 core function degraded / urgent"
+    "description": "HIGH — core function degraded / urgent"
   },
   {
     "name": "P2",
     "color": "fbca04",
-    "description": "MEDIUM \u2014 important, not blocking"
+    "description": "MEDIUM — important, not blocking"
   },
   {
     "name": "P3",
     "color": "cccccc",
-    "description": "LOW \u2014 cleanup/polish"
+    "description": "LOW — cleanup/polish"
   },
   {
     "name": "P4",
     "color": "e6e6e6",
-    "description": "VERY LOW \u2014 icebox/backlog"
+    "description": "VERY LOW — icebox/backlog"
   },
   {
     "name": "perf",

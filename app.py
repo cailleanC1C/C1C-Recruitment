@@ -19,8 +19,8 @@ from shared.config import (
 from shared import socket_heartbeat as hb
 from modules.coreops.helpers import tier
 from modules.common.runtime import Runtime
-from shared.coreops_prefix import detect_admin_bang_command
-from shared.coreops_rbac import (
+from c1c_coreops.prefix import detect_admin_bang_command
+from c1c_coreops.rbac import (
     admin_only,
     get_admin_role_ids,
     get_staff_role_ids,

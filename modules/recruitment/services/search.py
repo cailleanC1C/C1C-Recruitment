@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from discord.ext import commands
 
-from shared.coreops_rbac import is_lead, is_recruiter
+from c1c_coreops.rbac import is_lead, is_recruiter
 
 from .. import ensure_loaded
 

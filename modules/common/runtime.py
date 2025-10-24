@@ -53,7 +53,7 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
         return
 
     from shared.cache import telemetry as cache_telemetry
-    from shared.coreops_render import build_refresh_embed, RefreshEmbedRow
+    from c1c_coreops.render import build_refresh_embed, RefreshEmbedRow
     from shared.redaction import sanitize_embed
 
     bucket_names = cache_telemetry.list_buckets()
