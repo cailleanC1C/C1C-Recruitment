@@ -96,8 +96,8 @@
   },
   {
     "name": "comp:ops",
-    "color": "cccccc",
-    "description": ""
+    "color": "c5def5",
+    "description": "bot specific Ops commands"
   },
   {
     "name": "comp:ops-contract",
@@ -201,8 +201,8 @@
   },
   {
     "name": "migration",
-    "color": "cccccc",
-    "description": ""
+    "color": "000000",
+    "description": "refactoring code"
   },
   {
     "name": "needs:triage",
