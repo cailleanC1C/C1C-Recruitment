@@ -1,0 +1,41 @@
+name: CoreOps alias matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  coreops-alias-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - bot_tag: "rec"
+            tagged: "1"
+            generic: "0"
+          - bot_tag: "ach"
+            tagged: "1"
+            generic: "0"
+          - bot_tag: ""
+            tagged: "0"
+            generic: "0"
+    env:
+      BOT_TAG: ${{ matrix.config.bot_tag }}
+      COREOPS_ENABLE_TAGGED_ALIASES: ${{ matrix.config.tagged }}
+      COREOPS_ENABLE_GENERIC_ALIASES: ${{ matrix.config.generic }}
+      COREOPS_ADMIN_BANG_ALLOWLIST: "env,reload,health,digest,checksheet,config,help,ping,refresh all"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Run CoreOps alias tests
+        run: pytest packages/c1c-coreops/tests -q

@@ -123,9 +123,3 @@ def get_watchdog_disconnect_grace_sec(default: Optional[int] = None) -> int:
     if default is not None:
         return default
     return get_watchdog_stall_sec()
-
-
-def get_command_prefix(default: str = "!") -> str:
-    """Return the fixed bang prefix for command routing."""
-
-    return "!"

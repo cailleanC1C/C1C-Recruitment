@@ -19,6 +19,7 @@ from shared.config import (
 from shared import socket_heartbeat as hb
 from modules.coreops.helpers import tier
 from modules.common.runtime import Runtime
+from c1c_coreops.config import load_coreops_settings
 from c1c_coreops.prefix import detect_admin_bang_command
 from c1c_coreops.rbac import (
     admin_only,
@@ -38,19 +39,12 @@ INTENTS = discord.Intents.default()
 INTENTS.message_content = True
 INTENTS.members = True
 
-COMMAND_PREFIX = "!"
-COREOPS_COMMANDS = {
-    "config",
-    "digest",
-    "env",
-    "health",
-    "help",
-    "ping",
-    "refresh",
-}
+COREOPS_ROOT_COMMAND = "rec"
+COREOPS_SETTINGS = load_coreops_settings()
+ADMIN_BANG_ALLOWLIST = tuple(COREOPS_SETTINGS.admin_bang_allowlist)
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(COMMAND_PREFIX),
+    command_prefix=commands.when_mentioned_or("!"),
     intents=INTENTS,
 )
 bot.remove_command("help")
@@ -224,7 +218,7 @@ async def on_message(message: discord.Message):
     content = (message.content or "").strip()
 
     cmd_name = detect_admin_bang_command(
-        message, commands=COREOPS_COMMANDS, is_admin=_can_dispatch_bare_coreops
+        message, commands=ADMIN_BANG_ALLOWLIST, is_admin=_can_dispatch_bare_coreops
     )
     if cmd_name:
         ctx = await bot.get_context(message)
@@ -238,10 +232,13 @@ async def on_message(message: discord.Message):
                 query = _extract_bang_query(message.content or "")
                 await cog.render_help(ctx, query=query)
             return
-        cmd = bot.get_command(cmd_name)
-        if cmd is not None:
-            ctx.command = cmd
-            ctx.invoked_with = cmd_name
+        command = bot.get_command(cmd_name)
+        if command is None:
+            fallback = f"{COREOPS_ROOT_COMMAND} {cmd_name}"
+            command = bot.get_command(fallback)
+        if command is not None:
+            ctx.command = command
+            ctx.invoked_with = cmd_name.split()[0]
             await bot.invoke(ctx)
         return
 
