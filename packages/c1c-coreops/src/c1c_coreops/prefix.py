@@ -1,6 +1,7 @@
 # shared/coreops_prefix.py
 from __future__ import annotations
 
+import re
 from typing import Callable, Collection, Dict, Optional
 
 import discord
@@ -8,6 +9,7 @@ import discord
 __all__ = ["detect_admin_bang_command"]
 
 AdminCheck = Callable[[discord.abc.User | discord.Member], bool]
+_BANG_CMD_RE = re.compile(r"^!\s*([a-zA-Z]+)(?:\s|$)")
 
 
 def _normalize_commands(commands: Collection[str]) -> Dict[str, str]:
@@ -29,15 +31,8 @@ def detect_admin_bang_command(
     if not normalized or not callable(is_admin) or not is_admin(message.author):
         return None
     raw = (message.content or "").strip()
-    if not raw.startswith("!"):
+    match = _BANG_CMD_RE.match(raw)
+    if not match:
         return None
-    trimmed = raw[1:].strip()
-    if not trimmed:
-        return None
-    lowered = trimmed.lower()
-    for key, original in sorted(
-        normalized.items(), key=lambda item: len(item[0]), reverse=True
-    ):
-        if lowered == key or lowered.startswith(f"{key} "):
-            return original
-    return None
+    cmd = match.group(1).lower()
+    return normalized.get(cmd)

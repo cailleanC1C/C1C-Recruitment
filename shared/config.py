@@ -19,6 +19,7 @@ __all__ = [
     "get_watchdog_check_sec",
     "get_watchdog_stall_sec",
     "get_watchdog_disconnect_grace_sec",
+    "get_command_prefix",
     "get_discord_token",
     "get_allowed_guild_ids",
     "is_guild_allowed",
@@ -243,6 +244,7 @@ def _load_config() -> Dict[str, object]:
     config: Dict[str, object] = {
         "PORT": _runtime.get_port(),
         "BOT_NAME": _runtime.get_bot_name(),
+        "COMMAND_PREFIX": _runtime.get_command_prefix(),
         "DISCORD_TOKEN": os.getenv("DISCORD_TOKEN", ""),
         "ENV_NAME": _runtime.get_env_name(),
         "GUILD_IDS": _int_set(os.getenv("GUILD_IDS")),
@@ -350,6 +352,12 @@ def get_watchdog_disconnect_grace_sec(default: Optional[int] = None) -> int:
     if default is not None:
         return default
     return _runtime.get_watchdog_disconnect_grace_sec(default)
+
+
+def get_command_prefix(default: str = "!") -> str:
+    return "!"
+
+
 def get_discord_token() -> str:
     token = _CONFIG.get("DISCORD_TOKEN", "")
     return str(token)
