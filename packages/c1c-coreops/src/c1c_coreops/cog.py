@@ -71,6 +71,7 @@ from shared.sheets.async_core import (
 )
 
 from .prefix import detect_admin_bang_command
+from .tags import lifecycle_tag
 from .rbac import (
     admin_only,
     can_view_admin,
@@ -1037,7 +1038,7 @@ class CoreOpsCog(commands.Cog):
             reload_config()
         except Exception as exc:  # pragma: no cover - defensive guard
             msg, extra = sanitize_log(
-                "config reload failed",
+                f"{lifecycle_tag()} config reload failed",
                 extra={
                     "actor": actor,
                     "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -1055,7 +1056,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.send(str(sanitize_text(message)))
 
         log_msg, extra = sanitize_log(
-            "config reload completed",
+            f"{lifecycle_tag()} config reload completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -1123,7 +1124,7 @@ class CoreOpsCog(commands.Cog):
         )
 
         log_msg, extra = sanitize_log(
-            "cache refresh completed",
+            f"{lifecycle_tag()} cache refresh completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -2206,7 +2207,7 @@ class CoreOpsCog(commands.Cog):
         )
 
         log_msg, extra = sanitize_log(
-            "cache refresh completed",
+            f"{lifecycle_tag()} cache refresh completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,

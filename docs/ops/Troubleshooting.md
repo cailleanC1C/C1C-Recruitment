@@ -7,7 +7,7 @@
 - **Watcher quiet** → check toggles in `!rec config` and verify `/healthz` for stale
   timestamps.
 - **Cache stale** → run `!rec refresh all`; if it fails, capture the `[cron result]` and
-  `[watcher]` lines around the attempt.
+  `[watcher|lifecycle]` lines around the attempt (dropping to `[lifecycle]` next release).
 - **Sheets error** → switch to manual spreadsheet updates and note the outage window.
 
 ### Quick fixes
@@ -46,7 +46,8 @@ when adjusting cadences or toggles.
 
 ## Log taxonomy
 - `[cron]` — scheduled jobs (start/result/retry/summary, duration, error).
-- `[watcher]` — watcher lifecycle notices and failure reports.
+- `[lifecycle]` — watcher lifecycle notices and failure reports (logged as
+  `[watcher|lifecycle]` during the dual-tag release).
 - `[refresh]` — manual cache warmers (bucket, trigger, duration, result, error).
 - `[command]` — RBAC checks and command outcomes.
 

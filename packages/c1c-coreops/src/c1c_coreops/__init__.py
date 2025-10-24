@@ -4,15 +4,17 @@ from . import cog as _cog
 from . import prefix as _prefix
 from . import rbac as _rbac
 from . import render as _render
+from . import tags as _tags
 
 from .cog import *  # noqa: F401,F403
 from .prefix import *  # noqa: F401,F403
 from .rbac import *  # noqa: F401,F403
 from .render import *  # noqa: F401,F403
+from .tags import *  # noqa: F401,F403
 
 __all__: list[str] = []
 _seen: set[str] = set()
-for _module in (_cog, _rbac, _render, _prefix):
+for _module in (_cog, _rbac, _render, _prefix, _tags):
     names = getattr(_module, "__all__", None)
     if names is None:
         names = [name for name in vars(_module) if not name.startswith("_")]

@@ -8,6 +8,8 @@ enabled for the deployment.
 ## Terminology (important)
 - **Watcher** → *event-driven listener* registered on the Discord gateway. These respond
   immediately to welcome/promo activity and log using the `[watcher]` prefix.
+- **Lifecycle** → CoreOps runtime notices (startup, reload, manual refresh). They emit
+  `[watcher|lifecycle]` for this release and will drop back to `[lifecycle]` next cycle.
 - **Cron** → *scheduled job* triggered by the runtime scheduler. Cron runs are logged with
   the `[cron]` prefix (start/result/retry/summary).
 - Environment toggles ending in `_WATCHER` remain canonical; see [`Config.md`](Config.md#environment-keys)
@@ -73,7 +75,7 @@ stay active while promo listeners are paused).
 - Write failure → log structured error (ticket, tab, row, reason) and enqueue bounded
   retry.
 - `/healthz` reports watcher toggle state, last cron run, and watchdog timers.
-- `LOG_CHANNEL_ID` receives all watcher lifecycle logs (`[watcher]`) plus cron notices
-  (`[cron]`).
+- `LOG_CHANNEL_ID` receives all lifecycle notices (`[watcher|lifecycle]`, dropping to
+  `[lifecycle]` next release) plus cron notices (`[cron]`).
 
 Doc last updated: 2025-10-24 (v0.9.5)
