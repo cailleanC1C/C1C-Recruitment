@@ -155,6 +155,29 @@ _GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
 )
 
 
+def _canonical_cmd_key(cmd: commands.Command[Any, Any, Any]) -> str:
+    """Return a normalized command key for allowlist lookups."""
+
+    name = getattr(cmd, "qualified_name", None) or getattr(cmd, "name", "")
+    if not isinstance(name, str):
+        return ""
+    return name.strip().lower()
+
+
+_ADMIN_BANG_ALLOWLIST: Set[str] = {
+    key.strip().lower()
+    for key in os.getenv("COREOPS_ADMIN_BANG_ALLOWLIST", "").split(",")
+    if key.strip()
+}
+
+
+def _is_bang_eligible(cmd: commands.Command[Any, Any, Any]) -> bool:
+    """Return True if the command is eligible for bare bang usage."""
+
+    key = _canonical_cmd_key(cmd)
+    return bool(key) and key in _ADMIN_BANG_ALLOWLIST
+
+
 def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
     """Return True only if the command is RBAC-gated to admins."""
 
@@ -947,9 +970,11 @@ class CoreOpsCog(commands.Cog):
         if not self._settings.enable_generic_aliases:
             retained: list[commands.Command[Any, Any, Any]] = []
             for command in commands_list:
-                if command.qualified_name in _GENERIC_ALIAS_COMMANDS and not _is_admin_command(
-                    command
-                ):
+                if command.qualified_name in _GENERIC_ALIAS_COMMANDS:
+                    if _is_admin_command(command) and _is_bang_eligible(command):
+                        retained.append(command)
+                        continue
+
                     removed_generics.append(command.qualified_name)
                     continue
                 retained.append(command)
