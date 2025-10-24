@@ -95,6 +95,8 @@ _GENERIC_ALIAS_ROOTS: Tuple[str, ...] = (
     "checksheet",
     "reload",
     "refresh",
+    "help",
+    "ping",
 )
 _HELP_PREFIX = "!"
 
