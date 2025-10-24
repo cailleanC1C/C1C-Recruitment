@@ -1,4 +1,4 @@
-name: audit-coreops
+name: 14-auto-audit-coreops
 
 on:
   workflow_dispatch:
