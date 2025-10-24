@@ -8,30 +8,47 @@ It exists so that contributors update the correct references after each developm
 
 ### `/docs/adr/` — Architectural Decision Records
 * Each ADR (`ADR-XXXX`) captures an approved architectural or systemic decision.
-* `ADR-0000` serves as the template for new records.
+* [`ADR-0000`](adr/ADR-0000-template.md) serves as the template for new records.
+* [`ADR-0001`](adr/ADR-0001-sheets-access-layer.md) — Sheets access layer contract.
+* [`ADR-0002`](adr/ADR-0002-cache-telemetry-wrapper.md) — Cache telemetry wrapper.
+* [`ADR-0003`](adr/ADR-0003-coreops-command-contract.md) — CoreOps command contract.
+* [`ADR-0004`](adr/ADR-0004-help-system-short-vs-detailed.md) — Help system short vs detailed output.
+* [`ADR-0005`](adr/ADR-0005-reload-vs-refresh.md) — Reload vs refresh behaviour.
+* [`ADR-0006`](adr/ADR-0006-startup-preloader-bot-info-cron.md) — Startup preloader bot info cron.
+* [`ADR-0007`](adr/ADR-0007-feature-toggles-recruitment-module-boundaries.md) — Feature toggles and module boundaries.
+* [`ADR-0008`](adr/ADR-0008-emoji-pipeline-port.md) — Emoji pipeline port.
+* [`ADR-0009`](adr/ADR-0009-recruiter-panel-text-only.md) — Recruiter panel text-only.
+* [`ADR-0010`](adr/ADR-0010-clan-profile-with-emoji.md) — Clan profile emoji policy.
+* [`ADR-0011`](adr/ADR-0011.md) — Member search indexing.
+* [`ADR-0012`](adr/ADR-0012-coreops-package.md) — CoreOps package structure.
+* [`ADR README`](adr/README.md) — Index for Architectural Decision Records.
 * File a new ADR for every major design or structural change.
 
 ### `/docs/compliance/`
 * Houses internal compliance and governance policies.
-* Example: `REPORT_GUARDRAILS.md` details report formatting and safety guardrail standards.
+* Example: [`REPORT_GUARDRAILS.md`](compliance/REPORT_GUARDRAILS.md) details report formatting and safety guardrail standards.
+
+### `/docs/_meta/`
+* [`DocStyle.md`](_meta/DocStyle.md) — documentation formatting conventions.
 
 ### `/docs/guardrails/`
-* `RepositoryGuardrails.md` — canonical guardrails specification covering structure, coding, documentation, and governance rules.
+* [`RepositoryGuardrails.md`](guardrails/RepositoryGuardrails.md) — canonical guardrails specification covering structure, coding, documentation, and governance rules.
 
 ### `/docs/contracts/`
 * Defines long-term, structural interfaces between components.
-* `core_infra.md` documents runtime, Sheets access, and cache relationships.
-* `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
+* [`core_infra.md`](contracts/core_infra.md) documents runtime, Sheets access, and cache relationships.
+* [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
 ### `/docs/ops/` — Operational Documentation
-* `Architecture.md` — detailed system flow, runtime design, and module topology.
-* `Config.md` — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
-* `CommandMatrix.md` — user/admin command catalogue with permissions, feature gates, and descriptions.
-* `Runbook.md` — operator actions for routine tasks and incident handling.
-* `Troubleshooting.md` — quick reference for diagnosing common issues.
-* `Watchers.md` — background jobs covering schedulers, refreshers, and watchdogs.
-* `development.md` — developer setup notes and contribution workflow guidance.
-* `commands.md` — supplemental command reference for operational usage.
+* [`Architecture.md`](ops/Architecture.md) — detailed system flow, runtime design, and module topology.
+* [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
+* [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
+* [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
+* [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
+* [`Watchers.md`](ops/Watchers.md) — background jobs covering schedulers, refreshers, and watchdogs.
+* [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
+* [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
+* [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
 
 ## Code Map
 
@@ -39,8 +56,9 @@ It exists so that contributors update the correct references after each developm
   Legacy `shared/coreops_*` modules temporarily re-export these symbols until import rewrites land.
 
 ### Root-Level Docs
-* `README.md` — user-facing overview, installation steps, and configuration guidance for the bot.
-* `CHANGELOG.md` — version history for the project.
+* [`Architecture.md`](Architecture.md) — high-level architecture overview and runtime map.
+* [`README.md`](../README.md) — user-facing overview, installation steps, and configuration guidance for the bot.
+* [`CHANGELOG.md`](../CHANGELOG.md) — version history for the project.
 
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.
@@ -48,4 +66,6 @@ It exists so that contributors update the correct references after each developm
 * Ensure the version shown in this index (currently v0.9.5) matches the bot version in the root `README.md`.
 
 ## Cross-References
-* `docs/contracts/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
+* [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
+
+Doc last updated: 2025-10-24 (v0.9.5)

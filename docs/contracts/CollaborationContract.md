@@ -246,3 +246,5 @@ DO not use any other labels unless approved by caillean first
 | tests | `#a2eeef` | Unit/integration/e2e tests |
 | typecheck | `#bfdadc` | mypy/pyright typing issues |
 | wontfix | `#ffffff` | This will not be worked on |
+
+Doc last updated: 2025-10-24 (v0.9.5)

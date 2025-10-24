@@ -52,9 +52,9 @@ Compliance script must check: structure (S), code (C), docs (D), governance (G) 
 
 ---
 
-Doc last updated: 2025-10-23 (v0.9.x)
-
 [meta]
 labels: docs, governance, guardrails, ready
 milestone: Harmonize v1.0
 [/meta]
+
+Doc last updated: 2025-10-24 (v0.9.5)
