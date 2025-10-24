@@ -19,6 +19,11 @@ from shared.config import (
 from shared import socket_heartbeat as hb
 from modules.coreops.helpers import tier
 from modules.common.runtime import Runtime
+from c1c_coreops.config import (
+    build_command_variants,
+    load_coreops_settings,
+    normalize_command_text,
+)
 from c1c_coreops.prefix import detect_admin_bang_command
 from c1c_coreops.rbac import (
     admin_only,
@@ -38,19 +43,15 @@ INTENTS = discord.Intents.default()
 INTENTS.message_content = True
 INTENTS.members = True
 
-COMMAND_PREFIX = "!"
-COREOPS_COMMANDS = {
-    "config",
-    "digest",
-    "env",
-    "health",
-    "help",
-    "ping",
-    "refresh",
+BANG_PREFIX = "!"
+COREOPS_SETTINGS = load_coreops_settings()
+COREOPS_COMMANDS = tuple(COREOPS_SETTINGS.admin_bang_base_commands)
+COREOPS_ADMIN_ALLOWLIST = {
+    normalize_command_text(item) for item in COREOPS_SETTINGS.admin_bang_allowlist
 }
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(COMMAND_PREFIX),
+    command_prefix=commands.when_mentioned_or(BANG_PREFIX),
     intents=INTENTS,
 )
 bot.remove_command("help")
@@ -76,6 +77,21 @@ def _extract_bang_query(content: str) -> str | None:
         return None
     remainder = parts[1].strip()
     return remainder if remainder else None
+
+
+def _normalize_admin_invocation(base: str, remainder: str | None) -> str:
+    parts = [base]
+    if remainder:
+        parts.append(remainder)
+    return normalize_command_text(" ".join(parts))
+
+
+def _resolve_coreops_command(lookup: str) -> commands.Command | None:
+    for candidate in build_command_variants(COREOPS_SETTINGS, lookup):
+        command = bot.get_command(candidate)
+        if command is not None:
+            return command
+    return None
 
 
 async def _enforce_guild_allow_list(
@@ -127,9 +143,10 @@ async def _enforce_guild_allow_list(
 async def on_ready():
     hb.note_ready()
     log.info(
-        'Bot ready as %s | env=%s | prefixes=["!", "@mention"]',
+        'Bot ready as %s | env=%s | prefixes=["%s", "@mention"]',
         bot.user,
         get_env_name(),
+        BANG_PREFIX,
     )
     log.info(
         "CoreOps RBAC: admin_role_ids=%s staff_role_ids=%s",
@@ -227,21 +244,30 @@ async def on_message(message: discord.Message):
         message, commands=COREOPS_COMMANDS, is_admin=_can_dispatch_bare_coreops
     )
     if cmd_name:
+        remainder = _extract_bang_query(message.content or "")
+        normalized = _normalize_admin_invocation(cmd_name, remainder)
+        base_name = normalize_command_text(cmd_name)
+        if (
+            normalized not in COREOPS_ADMIN_ALLOWLIST
+            and base_name not in COREOPS_ADMIN_ALLOWLIST
+        ):
+            return
+
         ctx = await bot.get_context(message)
-        if cmd_name == "help":
+        if base_name == "help":
             cog = bot.get_cog("CoreOpsCog")
             if cog is not None and hasattr(cog, "render_help"):
                 rec_help_command = bot.get_command("rec help")
                 if rec_help_command is not None:
                     ctx.command = rec_help_command
                     ctx.invoked_with = "help"
-                query = _extract_bang_query(message.content or "")
-                await cog.render_help(ctx, query=query)
+                await cog.render_help(ctx, query=remainder)
             return
-        cmd = bot.get_command(cmd_name)
-        if cmd is not None:
-            ctx.command = cmd
-            ctx.invoked_with = cmd_name
+
+        command = _resolve_coreops_command(normalized)
+        if command is not None:
+            ctx.command = command
+            ctx.invoked_with = command.qualified_name
             await bot.invoke(ctx)
         return
 

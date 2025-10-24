@@ -23,4 +23,9 @@
 - `!digest --debug` — confirm public telemetry includes age/next/retries.
 - `!checksheet --debug` — inspect tab headers and template previews post-refresh.
 
+## Command routing
+- CoreOps reads `BOT_TAG`, `COREOPS_ENABLE_{TAGGED,GENERIC}_ALIASES`, and
+  `COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and
+  blocked in CI.
+
 Doc last updated: 2025-10-22 (v0.9.5)
