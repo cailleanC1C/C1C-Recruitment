@@ -155,6 +155,24 @@ _GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
 )
 
 
+def _canonical_cmd_key(cmd: commands.Command[Any, Any, Any]) -> str:
+    """Return a normalized command key for allowlist lookups."""
+
+    name = getattr(cmd, "qualified_name", None) or getattr(cmd, "name", "")
+    if not isinstance(name, str):
+        return ""
+    return name.strip().lower()
+
+
+def _is_bang_eligible(
+    cmd: commands.Command[Any, Any, Any], allowlist: Set[str]
+) -> bool:
+    """Return True if the command is eligible for bare bang usage."""
+
+    key = _canonical_cmd_key(cmd)
+    return bool(key) and key in allowlist
+
+
 def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
     """Return True only if the command is RBAC-gated to admins."""
 
@@ -164,6 +182,10 @@ def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
     if getattr(callback, "__admin_only__", False):
         return True
     if extras.get("coreops_category") == "admin":
+        return True
+    if extras.get("tier") == "admin":
+        return True
+    if getattr(cmd, "_tier", None) == "admin":
         return True
 
     try:
@@ -915,6 +937,9 @@ class CoreOpsCog(commands.Cog):
         self.bot = bot
         self._id_resolver = _IdResolver()
         self._settings: CoreOpsSettings = load_coreops_settings()
+        self._admin_bang_allowlist: Set[str] = {
+            entry.strip().lower() for entry in self._settings.admin_bang_allowlist
+        }
         self._removed_generic_commands: tuple[str, ...] = tuple()
         self._tagged_aliases: tuple[str, ...] = tuple()
         self._apply_tagged_alias_metadata()
@@ -947,9 +972,13 @@ class CoreOpsCog(commands.Cog):
         if not self._settings.enable_generic_aliases:
             retained: list[commands.Command[Any, Any, Any]] = []
             for command in commands_list:
-                if command.qualified_name in _GENERIC_ALIAS_COMMANDS and not _is_admin_command(
-                    command
-                ):
+                if command.qualified_name in _GENERIC_ALIAS_COMMANDS:
+                    if _is_admin_command(command) and _is_bang_eligible(
+                        command, self._admin_bang_allowlist
+                    ):
+                        retained.append(command)
+                        continue
+
                     removed_generics.append(command.qualified_name)
                     continue
                 retained.append(command)
