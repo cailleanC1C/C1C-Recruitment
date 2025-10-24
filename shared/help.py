@@ -1,7 +1,9 @@
 # shared/help.py
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 import discord
@@ -274,6 +276,8 @@ def build_help_overview_embed(
     bot_name: str,
     bot_description: str,
 ) -> discord.Embed:
+    debug_admin_lines: list[str] | None = [] if os.getenv("HELP_DEBUG") == "1" else None
+
     embed = discord.Embed(
         title=f"{bot_name} · help",
         colour=discord.Color.blurple(),
@@ -286,11 +290,20 @@ def build_help_overview_embed(
         if not commands:
             continue
         lines = [_format_summary_line(prefix, command) for command in commands]
+        if (
+            debug_admin_lines is not None
+            and isinstance(section.label, str)
+            and section.label.lower() == "admin"
+        ):
+            debug_admin_lines = list(lines)
         value = _format_section_value(section.blurb, lines)
         embed.add_field(name=section.label, value=value, inline=False)
 
     footer_text = build_coreops_footer(bot_version=bot_version)
     embed.set_footer(text=footer_text)
+
+    if debug_admin_lines is not None:
+        _write_help_debug_admin_lines(debug_admin_lines)
     return embed
 
 
@@ -370,3 +383,39 @@ def _join_and_truncate(lines: Sequence[str], limit: int = 900) -> str:
         total += addition
 
     return "\n".join(collected) if collected else "—"
+
+
+def _write_help_debug_admin_lines(lines: Sequence[str]) -> None:
+    if os.getenv("HELP_DEBUG") != "1":
+        return
+
+    try:
+        path = _help_debug_path(".runtime_help_admin_lines.txt")
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            for line in lines:
+                handle.write(f"{line.rstrip()}\n")
+    except Exception:
+        # Debug helper — swallow errors to avoid affecting runtime behavior.
+        pass
+
+
+def _help_debug_path(filename: str) -> Path | None:
+    root = os.getenv("HELP_DEBUG_DIR")
+    if root:
+        try:
+            base = Path(root)
+        except Exception:
+            base = None
+        else:
+            if base.name != "AUDIT":
+                base = base / "AUDIT"
+            return base / filename
+
+    try:
+        base = Path.cwd() / "AUDIT"
+    except Exception:
+        return None
+    return base / filename

@@ -12,6 +12,7 @@ import sys
 import time
 from importlib import import_module
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import discord
@@ -900,6 +901,7 @@ class CoreOpsCog(commands.Cog):
 
     async def cog_load(self) -> None:
         self._log_coreops_settings()
+        self._emit_help_registry_debug_snapshot()
 
     def _apply_tagged_alias_metadata(self) -> None:
         command = getattr(self, "rec", None)
@@ -936,6 +938,73 @@ class CoreOpsCog(commands.Cog):
         else:
             self._removed_generic_commands = tuple()
         setattr(self, "__cog_commands__", tuple(commands_list))
+
+    def _emit_help_registry_debug_snapshot(self) -> None:
+        if os.getenv("HELP_DEBUG") != "1":
+            return
+
+        try:
+            path = self._resolve_help_debug_path(".runtime_help_registry.json")
+            if path is None:
+                return
+
+            commands_iter = sorted(
+                (
+                    command
+                    for command in self.bot.walk_commands()
+                    if getattr(command, "cog", None) is self
+                ),
+                key=lambda command: command.qualified_name,
+            )
+
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as handle:
+                for command in commands_iter:
+                    aliases = sorted(
+                        alias.strip() for alias in command.aliases if alias and alias.strip()
+                    )
+                    module_name = getattr(getattr(command, "callback", None), "__module__", "")
+                    record = {
+                        "name": command.qualified_name,
+                        "category": _get_tier(command),
+                        "aliases": aliases,
+                        "rbac": self._infer_command_rbac(command),
+                        "module": module_name,
+                    }
+                    handle.write(json.dumps(record, sort_keys=True))
+                    handle.write("\n")
+        except Exception:  # pragma: no cover - debug helper
+            logger.exception("failed to write help registry debug snapshot", exc_info=True)
+
+    def _resolve_help_debug_path(self, filename: str) -> Path | None:
+        root = os.getenv("HELP_DEBUG_DIR")
+        if root:
+            try:
+                base = Path(root)
+            except Exception:
+                base = None
+            else:
+                if base.name != "AUDIT":
+                    base = base / "AUDIT"
+                return base / filename
+
+        try:
+            base = Path.cwd() / "AUDIT"
+        except Exception:
+            return None
+        return base / filename
+
+    def _infer_command_rbac(self, command: commands.Command[Any, Any, Any]) -> str:
+        for check in getattr(command, "checks", []):
+            qualname = getattr(check, "__qualname__", "") or ""
+            name = getattr(check, "__name__", "") or ""
+            module = getattr(check, "__module__", "") or ""
+            descriptor = "".join([module, "::", qualname or name])
+            if "admin_only" in descriptor:
+                return "admin_only"
+            if "ops_only" in descriptor:
+                return "ops_only"
+        return "none"
 
     def _log_coreops_settings(self) -> None:
         description = self._settings.describe()
