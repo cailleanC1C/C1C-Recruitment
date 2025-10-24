@@ -10,11 +10,15 @@ workflows, and post-change validation.
 2. **Warm-up:** The preloader calls `refresh_now(name, actor="startup")` for every
    registered cache bucket (Sheets, templates, bot_info, digest payloads, etc.).
 3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
-   completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
-   result.
+ completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
+  result.
 4. **Action:** If any bucket fails to warm, rerun `!rec refresh all` after the bot is
-   online. Escalate to platform on-call if two consecutive startups fail for the same
-   bucket.
+  online. Escalate to platform on-call if two consecutive startups fail for the same
+  bucket.
+
+> **Lifecycle tag:** CoreOps lifecycle notices (startup, reload, manual refresh) emit
+> `[watcher|lifecycle]` this release. Update dashboards to accept `[lifecycle]` ahead of
+> the next release when the dual tag flips off.
 
 ## Refresh vs reload controls
 | Control | What it does | When to use | Logging & guardrails |

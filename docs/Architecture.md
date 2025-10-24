@@ -6,6 +6,7 @@ Discord Gateway
   ↳ Event handlers (commands, listeners, lifecycle)
       ↳ CoreOps cog & command matrix (tier gated)
       ↳ Watcher listeners (welcome, promo) [watcher]
+      ↳ Lifecycle notices (startup, reload, refresh) [watcher|lifecycle]
           ↳ Runtime scheduler (refresh windows, retries) [cron]
           ↳ Sheets adapters (recruitment, onboarding)
               ↳ shared.sheets.core (Google API client, cache)
@@ -43,6 +44,8 @@ off in production until the panels ship._
 - Solid nodes = active in production.
 - Dashed nodes = integrated but disabled in production (feature-flagged).
 - `[watcher]` marks event-driven listeners tied to Discord webhooks.
+- `[lifecycle]` marks CoreOps lifecycle notices (startup, reload, manual refresh). For
+  one release the bot emits `[watcher|lifecycle]` to avoid breaking filters.
 - `[cron]` marks scheduled jobs emitted by the runtime scheduler.
 - Grey callouts describe shared helpers used by multiple features.
 
@@ -97,7 +100,7 @@ off in production until the panels ship._
 
 ## Health & observability
 - `/healthz` aggregates watchdog state, last refresh timestamps, and cache health.
-- Structured logs emit `[ops]`, `[cron]`, `[watcher]`, `[refresh]`, and `[command]` tags
+- Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags
   with context for quick filtering in Discord.
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.

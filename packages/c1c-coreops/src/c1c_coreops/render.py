@@ -11,6 +11,7 @@ import discord
 
 from shared.help import COREOPS_VERSION, build_coreops_footer
 from shared.utils import humanize_duration
+from .tags import lifecycle_tag
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))
@@ -144,11 +145,12 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
     if tip_text:
         embed.add_field(name="​", value=tip_text, inline=False)
 
-    footer_text = (
-        f"Bot v{_sanitize_inline(data.bot_version)} · "
-        f"CoreOps v{_sanitize_inline(data.coreops_version)}"
-    )
-    embed.set_footer(text=footer_text)
+    footer_parts = [
+        lifecycle_tag(),
+        f"Bot v{_sanitize_inline(data.bot_version)}",
+        f"CoreOps v{_sanitize_inline(data.coreops_version)}",
+    ]
+    embed.set_footer(text=" · ".join(part for part in footer_parts if part))
     return embed
 
 
@@ -336,8 +338,12 @@ def build_config_embed(
     ops_value = _format_ops_channel(ops_info)
     embed.add_field(name="Ops Channel", value=ops_value, inline=False)
 
-    footer_text = f"Bot v{_sanitize_inline(bot_version)} · CoreOps v{_sanitize_inline(coreops_version)}"
-    embed.set_footer(text=footer_text)
+    footer_parts = [
+        lifecycle_tag(),
+        f"Bot v{_sanitize_inline(bot_version)}",
+        f"CoreOps v{_sanitize_inline(coreops_version)}",
+    ]
+    embed.set_footer(text=" · ".join(part for part in footer_parts if part))
     return embed
 
 
@@ -503,8 +509,12 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
                 debug_lines.append(f"discovered: {joined_tabs_value}")
             embed.add_field(name="Debug preview", value="\n".join(debug_lines), inline=False)
 
-    footer_text = f"Bot v{_sanitize_inline(data.bot_version)} · CoreOps v{_sanitize_inline(data.coreops_version)}"
-    embed.set_footer(text=footer_text)
+    footer_parts = [
+        lifecycle_tag(),
+        f"Bot v{_sanitize_inline(data.bot_version)}",
+        f"CoreOps v{_sanitize_inline(data.coreops_version)}",
+    ]
+    embed.set_footer(text=" · ".join(part for part in footer_parts if part))
     return embed
 
 def build_health_embed(
@@ -613,12 +623,11 @@ def build_refresh_embed(
         table = "no buckets"
 
     embed.add_field(name="Buckets", value=f"```{table}```", inline=False)
-    footer_text = (
-        f"Bot v{bot_version} · CoreOps v{coreops_version} · total: {total_ms} ms"
-        if bot_version and coreops_version
-        else f"total: {total_ms} ms"
-    )
-    embed.set_footer(text=footer_text)
+    footer_parts = [lifecycle_tag()]
+    if bot_version and coreops_version:
+        footer_parts.extend([f"Bot v{bot_version}", f"CoreOps v{coreops_version}"])
+    footer_parts.append(f"total: {total_ms} ms")
+    embed.set_footer(text=" · ".join(part for part in footer_parts if part))
     return embed
 
 
