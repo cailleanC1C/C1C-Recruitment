@@ -19,6 +19,9 @@ Discord Gateway
 - `shared/coreops_*` — deprecated shims that re-export `c1c_coreops.*` for one release.
 - `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core).
 
+CoreOps code exists **only** in `packages/c1c-coreops`. The `audit-coreops` workflow
+fails CI if any legacy imports, shims, or duplicate symbols live elsewhere.
+
 ## Monorepo workspaces
 - `shared/` — infrastructure plumbing that anchors this bot's runtime
   (Sheets adapters, cache, HTTP clients). Shared code here is tightly coupled to

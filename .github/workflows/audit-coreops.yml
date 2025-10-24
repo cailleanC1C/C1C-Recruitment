@@ -1,0 +1,23 @@
+name: audit-coreops
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        run: python -m pip install --upgrade pip
+      - name: Run CoreOps packaging audit
+        run: python scripts/audit_coreops_packaging.py
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coreops-packaging-audit
+          path: AUDIT/CoreOps-Packaging-Audit.md
