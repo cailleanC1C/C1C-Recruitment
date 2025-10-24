@@ -70,6 +70,7 @@ from shared.sheets.async_core import (
     afetch_records,
 )
 
+from .config import CoreOpsSettings, load_coreops_settings
 from .prefix import detect_admin_bang_command
 from .tags import lifecycle_tag
 from .rbac import (
@@ -140,6 +141,18 @@ _TELEMETRY_FALLBACK_KEYS: Tuple[str, ...] = (
     "last_latency_ms",
 )
 _telemetry_missing_fields_logged: Set[str] = set()
+
+_GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
+    "checksheet",
+    "config",
+    "digest",
+    "env",
+    "health",
+    "refresh",
+    "refresh all",
+    "refresh clansinfo",
+    "reload",
+)
 
 
 @dataclass(frozen=True)
@@ -879,6 +892,62 @@ class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._id_resolver = _IdResolver()
+        self._settings: CoreOpsSettings = load_coreops_settings()
+        self._removed_generic_commands: tuple[str, ...] = tuple()
+        self._tagged_aliases: tuple[str, ...] = tuple()
+        self._apply_tagged_alias_metadata()
+        self._apply_generic_alias_policy()
+
+    async def cog_load(self) -> None:
+        self._log_coreops_settings()
+
+    def _apply_tagged_alias_metadata(self) -> None:
+        command = getattr(self, "rec", None)
+        if not isinstance(command, commands.Group):
+            self._tagged_aliases = tuple()
+            return
+        aliases: list[str] = []
+        tag = self._settings.bot_tag
+        if self._settings.enable_tagged_aliases and tag and tag != command.name:
+            aliases.append(tag)
+        setattr(command, "aliases", aliases)
+        setattr(command, "_coreops_aliases", tuple(aliases))
+        self._tagged_aliases = tuple(aliases)
+
+    def _apply_generic_alias_policy(self) -> None:
+        commands_sequence = getattr(self, "__cog_commands__", None)
+        if not isinstance(commands_sequence, (list, tuple)):
+            return
+
+        commands_list = list(commands_sequence)
+
+        removed_generics: list[str] = []
+        if not self._settings.enable_generic_aliases:
+            retained: list[commands.Command[Any, Any, Any]] = []
+            for command in commands_list:
+                if command.qualified_name in _GENERIC_ALIAS_COMMANDS:
+                    removed_generics.append(command.qualified_name)
+                    continue
+                retained.append(command)
+            commands_list = retained
+
+        if removed_generics:
+            self._removed_generic_commands = tuple(sorted({*removed_generics}))
+        else:
+            self._removed_generic_commands = tuple()
+        setattr(self, "__cog_commands__", tuple(commands_list))
+
+    def _log_coreops_settings(self) -> None:
+        description = self._settings.describe()
+        if self._removed_generic_commands:
+            description["generic_aliases_removed"] = list(self._removed_generic_commands)
+        if self._tagged_aliases:
+            description["tagged_aliases"] = list(self._tagged_aliases)
+        msg, extra = sanitize_log(
+            "coreops settings resolved",
+            extra={"settings": description},
+        )
+        logger.info(msg, extra=extra)
 
     @commands.group(name="rec", invoke_without_command=True)
     @guild_only_denied_msg()
@@ -2563,7 +2632,7 @@ class CoreOpsCog(commands.Cog):
         return f"{key} = {value}"
 
     def _format_core_identity(self, entries: Dict[str, _EnvEntry]) -> List[str]:
-        keys = ("BOT_NAME", "BOT_VERSION", "COMMAND_PREFIX", "ENV_NAME")
+        keys = ("BOT_NAME", "BOT_VERSION", "ENV_NAME")
         return [self._format_simple_line(key, entries.get(key)) for key in keys]
 
     def _format_guild_channels(self, entries: Dict[str, _EnvEntry]) -> List[str]:

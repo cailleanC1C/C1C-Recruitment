@@ -19,9 +19,50 @@ jobs:
         run: python -m pip install --upgrade pip
       - name: Run CoreOps packaging audit
         run: python scripts/audit_coreops_packaging.py
+      - name: Run Command Prefix audit
+        run: python scripts/audit_command_prefix_usage.py
       - name: Upload audit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coreops-packaging-audit
           path: AUDIT/CoreOps-Packaging-Audit.md
+      - name: Upload command prefix audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coreops-command-prefix-audit
+          path: AUDIT/CommandPrefix-Audit.md
+
+  coreops-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - bot_tag: "rec"
+            tagged: "1"
+            generic: "0"
+          - bot_tag: "ach"
+            tagged: "1"
+            generic: "0"
+          - bot_tag: ""
+            tagged: "0"
+            generic: "0"
+    env:
+      COREOPS_ADMIN_BANG_ALLOWLIST: "env,reload,health,digest,checksheet,config,help,ping,refresh all"
+      BOT_TAG: ${{ matrix.config.bot_tag }}
+      COREOPS_ENABLE_TAGGED_ALIASES: ${{ matrix.config.tagged }}
+      COREOPS_ENABLE_GENERIC_ALIASES: ${{ matrix.config.generic }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run CoreOps tests
+        run: pytest packages/c1c-coreops/tests -q

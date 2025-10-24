@@ -244,7 +244,6 @@ def _load_config() -> Dict[str, object]:
     config: Dict[str, object] = {
         "PORT": _runtime.get_port(),
         "BOT_NAME": _runtime.get_bot_name(),
-        "COMMAND_PREFIX": _runtime.get_command_prefix(),
         "DISCORD_TOKEN": os.getenv("DISCORD_TOKEN", ""),
         "ENV_NAME": _runtime.get_env_name(),
         "GUILD_IDS": _int_set(os.getenv("GUILD_IDS")),
