@@ -155,6 +155,30 @@ _GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
 )
 
 
+def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
+    """Return True when the command is restricted to admins."""
+
+    try:
+        if _get_tier(cmd) == "admin":
+            return True
+    except Exception:
+        pass
+
+    callback = getattr(cmd, "callback", None)
+    if callback is not None and getattr(callback, "__admin_only__", False):
+        return True
+
+    extras = getattr(cmd, "extras", None)
+    if isinstance(extras, Mapping) and extras.get("coreops_category") == "admin":
+        return True
+
+    metadata = lookup_help_metadata(cmd.qualified_name) or lookup_help_metadata(cmd.name)
+    if metadata is not None and getattr(metadata, "tier", None) == "admin":
+        return True
+
+    return False
+
+
 @dataclass(frozen=True)
 class _ChecksheetSheetTarget:
     label: str
@@ -925,7 +949,9 @@ class CoreOpsCog(commands.Cog):
         if not self._settings.enable_generic_aliases:
             retained: list[commands.Command[Any, Any, Any]] = []
             for command in commands_list:
-                if command.qualified_name in _GENERIC_ALIAS_COMMANDS:
+                if command.qualified_name in _GENERIC_ALIAS_COMMANDS and not _is_admin_command(
+                    command
+                ):
                     removed_generics.append(command.qualified_name)
                     continue
                 retained.append(command)
