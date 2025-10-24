@@ -1,3 +1,13 @@
-# DEPRECATED: moved to packages/c1c-coreops/src/c1c_coreops/cog.py
-# This shim will be removed after one release. Update imports to c1c_coreops.cog.
+"""Legacy shim forwarding CoreOps exports to the new package."""
+
+import logging as _logging
+
+_once = getattr(_logging, "_c1c_coreops_shim_once", set())
+if __name__ not in _once:
+    _logging.getLogger("c1c.migration").warning(
+        f"[deprecate] {__name__} → c1c_coreops.{__name__.split('.')[-1]} (will be removed next release)"
+    )
+    _once.add(__name__)
+    setattr(_logging, "_c1c_coreops_shim_once", _once)
+
 from c1c_coreops.cog import *  # noqa: F401,F403

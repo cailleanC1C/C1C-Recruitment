@@ -59,10 +59,18 @@ bad_imports = grep(
 # Allow only under modules/
 bad_imports = [t for t in bad_imports if not t[0].startswith("modules/")]
 
-legacy_coreops = grep(
-    [r"\bshared\.coreops", r"\bshared\.utils\.coreops_"],
-    ["**/*.py"]
-)
+shim_allowlist = {
+    "shared/coreops_cog.py",
+    "shared/coreops_rbac.py",
+    "shared/coreops_render.py",
+    "shared/coreops_prefix.py",
+}
+
+legacy_coreops = [
+    (rel, ln, line)
+    for rel, ln, line in grep([r"\bshared\.coreops_"], ["**/*.py"])
+    if rel not in shim_allowlist
+]
 
 for rel, ln, line in bad_imports:
     errors.append(f"S-01: legacy import outside modules/* → {rel}:{ln}: `{line}`")

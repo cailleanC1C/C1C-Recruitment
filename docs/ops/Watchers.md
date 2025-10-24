@@ -34,7 +34,7 @@ single structured log._
 Watchers read clan tags, templates, and ticket rows via the Sheets adapters listed above.
 Writes go back to `WelcomeTickets` / `PromoTickets` using bounded retry helpers that
 invalidate only the affected cache bucket. Role gates come from
-`shared.coreops_rbac` (`ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`, `RECRUITER_ROLE_IDS`,
+`c1c_coreops.rbac` (`ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`, `RECRUITER_ROLE_IDS`,
 `LEAD_ROLE_IDS`).
 
 ## Current Cron Jobs (scheduled)
@@ -76,4 +76,4 @@ stay active while promo listeners are paused).
 - `LOG_CHANNEL_ID` receives all watcher lifecycle logs (`[watcher]`) plus cron notices
   (`[cron]`).
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-24 (v0.9.5)

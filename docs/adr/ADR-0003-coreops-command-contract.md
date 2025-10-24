@@ -15,7 +15,7 @@ environment.
   `!rec config`, `!rec digest`, `!rec health`, `!rec refresh <bucket>`, `!rec refresh all`,
   `!rec reload`, and `!checksheet`.
 - Cogs expose only `async def setup(bot)` and register commands through the shared loader.
-- RBAC is enforced with decorators from `shared.coreops_rbac`, ensuring tier checks occur
+- RBAC is enforced with decorators from `c1c_coreops.rbac`, ensuring tier checks occur
   before cache access.
 - Command handlers must call public cache helpers for telemetry and refresh work; private
   service members remain off-limits.
@@ -39,4 +39,4 @@ environment.
 
 Accepted — 2025-10-20
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-24 (v0.9.5)

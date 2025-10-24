@@ -92,7 +92,7 @@ off in production until the panels ship._
   channel.
 - `ENABLE_WELCOME_WATCHER` and `ENABLE_PROMO_WATCHER` environment flags still control
   watcher registration independently of the feature sheet (see [`Config.md`](ops/Config.md#environment-keys)).
-- RBAC derives from `c1c_coreops.rbac` (temporarily re-exported via `shared.coreops_rbac`), mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
+- RBAC derives from `c1c_coreops.rbac` (temporarily re-exported via the `shared/coreops_rbac.py` shim), mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 
 ## Health & observability
@@ -102,4 +102,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-23 (v0.9.5)
+Doc last updated: 2025-10-24 (v0.9.5)

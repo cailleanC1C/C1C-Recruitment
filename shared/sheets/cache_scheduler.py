@@ -11,7 +11,7 @@ from modules.coreops.cronlog import cron_task
 from shared.cache import telemetry as cache_telemetry
 from shared.cache.telemetry import RefreshResult
 from shared.config import get_config_snapshot
-from shared.coreops_cog import resolve_ops_log_channel_id
+from c1c_coreops.cog import resolve_ops_log_channel_id
 
 from .cache_service import cache
 from modules.common import runtime as rt
