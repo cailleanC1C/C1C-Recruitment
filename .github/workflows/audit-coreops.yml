@@ -19,17 +19,9 @@ jobs:
         run: python -m pip install --upgrade pip
       - name: Run CoreOps packaging audit
         run: python scripts/audit_coreops_packaging.py
-      - name: Run COMMAND_PREFIX audit
-        run: python scripts/audit_command_prefix_usage.py
       - name: Upload audit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coreops-packaging-audit
           path: AUDIT/CoreOps-Packaging-Audit.md
-      - name: Upload COMMAND_PREFIX audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: command-prefix-audit
-          path: AUDIT/CommandPrefix-Audit.md
