@@ -164,39 +164,18 @@ def _canonical_cmd_key(cmd: commands.Command[Any, Any, Any]) -> str:
     return name.strip().lower()
 
 
-def _is_bang_eligible(
-    cmd: commands.Command[Any, Any, Any], allowlist: Set[str]
-) -> bool:
+_ADMIN_BANG_ALLOWLIST: Set[str] = {
+    key.strip().lower()
+    for key in os.getenv("COREOPS_ADMIN_BANG_ALLOWLIST", "").split(",")
+    if key.strip()
+}
+
+
+def _is_bang_eligible(cmd: commands.Command[Any, Any, Any]) -> bool:
     """Return True if the command is eligible for bare bang usage."""
 
     key = _canonical_cmd_key(cmd)
-    return bool(key) and key in allowlist
-
-
-def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
-    """Return True only if the command is RBAC-gated to admins."""
-
-    callback = getattr(cmd, "callback", None)
-    extras = getattr(cmd, "extras", {}) or {}
-
-    if getattr(callback, "__admin_only__", False):
-        return True
-    if extras.get("coreops_category") == "admin":
-        return True
-    if extras.get("tier") == "admin":
-        return True
-    if getattr(cmd, "_tier", None) == "admin":
-        return True
-
-    try:
-        from .rbac import get_tier
-
-        if get_tier(cmd) == "admin":
-            return True
-    except Exception:
-        pass
-
-    return False
+    return bool(key) and key in _ADMIN_BANG_ALLOWLIST
 
 
 @dataclass(frozen=True)
@@ -973,9 +952,7 @@ class CoreOpsCog(commands.Cog):
             retained: list[commands.Command[Any, Any, Any]] = []
             for command in commands_list:
                 if command.qualified_name in _GENERIC_ALIAS_COMMANDS:
-                    if _is_admin_command(command) and _is_bang_eligible(
-                        command, self._admin_bang_allowlist
-                    ):
+                    if _is_bang_eligible(command):
                         retained.append(command)
                         continue
 
