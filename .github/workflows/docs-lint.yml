@@ -12,5 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run docs checker
-        run: python scripts/ci/check_docs.py
+      - name: Run docs checker (capture output)
+        run: |
+          python scripts/ci/check_docs.py | tee docs_lint.out
+        shell: bash
+
+      - name: Annotate failures directly in PR
+        if: always()
+        run: |
+          python scripts/ci/emit_annotations.py --kind docs --input docs_lint.out
+        shell: bash

@@ -14,5 +14,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run guardrails checker
-        run: python scripts/ci/guardrails_check.py
+      - name: Run guardrails checker (capture output)
+        run: |
+          python scripts/ci/guardrails_check.py | tee guardrails.out
+        shell: bash
+
+      - name: Annotate failures directly in PR
+        if: always()
+        run: |
+          python scripts/ci/emit_annotations.py --kind guardrails --input guardrails.out
+        shell: bash
