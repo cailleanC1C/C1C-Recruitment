@@ -77,16 +77,20 @@ def test_multi_bot_alias_behavior(monkeypatch: pytest.MonkeyPatch) -> None:
         await bot.add_cog(CoreOpsCog(bot))
 
         try:
-            assert bot.get_command("env") is None
+            env_command = bot.get_command("env")
+            assert env_command is not None
             rec_env = bot.get_command("rec env")
             assert rec_env is not None
 
             non_admin_ctx = DummyContext(author=DummyMember(administrator=False))
             with pytest.raises(commands.CheckFailure):
                 await _run_checks(rec_env, non_admin_ctx)
+            with pytest.raises(commands.CheckFailure):
+                await _run_checks(env_command, non_admin_ctx)
 
             admin_ctx = DummyContext(author=DummyMember(administrator=True))
             await _run_checks(rec_env, admin_ctx)
+            await _run_checks(env_command, admin_ctx)
 
             settings = load_coreops_settings()
             variants = build_command_variants(settings, "env")
@@ -108,8 +112,18 @@ def test_generic_alias_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
         await bot.add_cog(CoreOpsCog(bot))
 
         try:
-            assert bot.get_command("rec digest") is not None
-            assert bot.get_command("digest") is None
+            rec_digest = bot.get_command("rec digest")
+            assert rec_digest is not None
+            digest = bot.get_command("digest")
+            assert digest is not None
+
+            non_admin_ctx = DummyContext(author=DummyMember(administrator=False))
+            with pytest.raises(commands.CheckFailure):
+                await _run_checks(digest, non_admin_ctx)
+
+            admin_ctx = DummyContext(author=DummyMember(administrator=True))
+            await _run_checks(rec_digest, admin_ctx)
+            await _run_checks(digest, admin_ctx)
         finally:
             await bot.close()
 

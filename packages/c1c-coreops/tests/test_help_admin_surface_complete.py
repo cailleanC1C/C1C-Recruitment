@@ -75,7 +75,7 @@ def _extract_fields(embed: discord.Embed) -> Mapping[str, str]:
 def test_admin_help_lists_bare_and_tagged(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOT_TAG", "rec")
     monkeypatch.setenv("COREOPS_ENABLE_TAGGED_ALIASES", "1")
-    monkeypatch.setenv("COREOPS_ENABLE_GENERIC_ALIASES", "1")
+    monkeypatch.setenv("COREOPS_ENABLE_GENERIC_ALIASES", "0")
 
     async def runner() -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
