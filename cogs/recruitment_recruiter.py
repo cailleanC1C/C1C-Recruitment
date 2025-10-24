@@ -4,6 +4,7 @@ All recruiter-facing commands register here so modules remain side-effect free.
 """
 from __future__ import annotations
 
+import logging
 from typing import Dict, Optional, Tuple
 
 import discord
@@ -15,6 +16,8 @@ from modules.common import feature_flags
 from modules.coreops.helpers import tier
 from modules.recruitment.views.recruiter_panel import RecruiterPanelView
 from c1c_coreops.rbac import is_admin_member, is_recruiter
+
+log = logging.getLogger(__name__)
 
 
 class RecruiterPanelCog(commands.Cog):
@@ -44,7 +47,7 @@ class RecruiterPanelCog(commands.Cog):
 
     async def _resolve_recruiter_panel_channel(
         self, ctx: commands.Context
-    ) -> tuple[discord.abc.MessageableChannel, bool]:
+    ) -> tuple[discord.abc.MessageableChannel | None, bool]:
         """Locate the configured recruiter thread if available."""
 
         mode = str(config.get_panel_thread_mode("channel")).strip().lower()
@@ -61,6 +64,29 @@ class RecruiterPanelCog(commands.Cog):
             thread = ctx.guild.get_thread(thread_id)
             if isinstance(thread, discord.Thread):
                 channel = thread
+            if channel is None:
+                try:
+                    fetched = await ctx.guild.fetch_channel(thread_id)
+                except discord.NotFound:
+                    log.error("[clanmatch] thread not found: %s", thread_id)
+                    return None, False
+                except discord.Forbidden:
+                    log.exception(
+                        "[clanmatch] thread fetch forbidden: guild=%s thread_id=%s",
+                        ctx.guild.id,
+                        thread_id,
+                    )
+                    return None, False
+                except discord.HTTPException:
+                    log.exception(
+                        "[clanmatch] thread fetch HTTP failure: guild=%s thread_id=%s",
+                        ctx.guild.id,
+                        thread_id,
+                    )
+                    return None, False
+                else:
+                    if isinstance(fetched, discord.abc.Messageable):
+                        channel = fetched  # type: ignore[assignment]
 
         if channel is None and self.bot:
             cached = self.bot.get_channel(thread_id)
@@ -70,23 +96,54 @@ class RecruiterPanelCog(commands.Cog):
         if channel is None and self.bot:
             try:
                 fetched = await self.bot.fetch_channel(thread_id)
-            except Exception:
-                fetched = None
-            if isinstance(fetched, discord.abc.Messageable):
-                channel = fetched  # type: ignore[assignment]
+            except discord.NotFound:
+                log.error("[clanmatch] thread not found (bot-level): %s", thread_id)
+                return None, False
+            except discord.Forbidden:
+                log.exception(
+                    "[clanmatch] bot fetch forbidden for thread_id=%s", thread_id
+                )
+                return None, False
+            except discord.HTTPException:
+                log.exception(
+                    "[clanmatch] bot fetch HTTP failure for thread_id=%s", thread_id
+                )
+                return None, False
+            else:
+                if isinstance(fetched, discord.abc.Messageable):
+                    channel = fetched  # type: ignore[assignment]
 
         if channel is None:
-            return ctx.channel, False
+            return None, False
 
         guild = getattr(channel, "guild", None)
         if guild and ctx.guild and guild.id != ctx.guild.id:
-            return ctx.channel, False
+            log.error(
+                "[clanmatch] thread resolve guild mismatch: expected=%s actual=%s thread_id=%s",
+                ctx.guild.id,
+                guild.id,
+                thread_id,
+            )
+            return None, False
 
         if isinstance(channel, discord.Thread) and channel.archived:
             try:
                 await channel.edit(archived=False)
-            except Exception:
-                pass
+            except discord.Forbidden:
+                log.exception(
+                    "[clanmatch] failed to unarchive thread_id=%s", thread_id
+                )
+            except discord.HTTPException:
+                log.exception(
+                    "[clanmatch] HTTP failure unarchiving thread_id=%s", thread_id
+                )
+
+        log.info(
+            "[clanmatch] target resolve ok: guild=%s thread_id=%s type=%s",
+            getattr(guild, "id", None),
+            thread_id,
+            type(channel).__name__,
+        )
 
         return channel, True
 
@@ -149,7 +206,42 @@ class RecruiterPanelCog(commands.Cog):
                     return
 
         target, redirected = await self._resolve_recruiter_panel_channel(ctx)
-        sent = await target.send(embeds=embeds, view=view)
+        if target is None:
+            await ctx.reply(
+                "⚠️ I couldn't open the recruiter panel. Please contact an admin.",
+                mention_author=False,
+            )
+            return
+
+        log.info(
+            "[clanmatch] sending panel: channel_id=%s redirected=%s",
+            getattr(target, "id", None),
+            redirected,
+        )
+
+        try:
+            sent = await target.send(embeds=embeds, view=view)
+        except discord.Forbidden:
+            log.exception(
+                "[clanmatch] send forbidden: thread_id=%s",
+                getattr(target, "id", None),
+            )
+            await ctx.reply(
+                "⚠️ I couldn't open the recruiter panel due to missing permissions.",
+                mention_author=False,
+            )
+            return
+        except discord.HTTPException:
+            log.exception(
+                "[clanmatch] send HTTP failure: thread_id=%s",
+                getattr(target, "id", None),
+            )
+            await ctx.reply(
+                "⚠️ I couldn't open the recruiter panel. Please try again later.",
+                mention_author=False,
+            )
+            return
+
         view.message = sent
         self.register_panel(
             message_id=sent.id,
