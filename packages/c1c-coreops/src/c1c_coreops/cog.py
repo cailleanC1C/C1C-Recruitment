@@ -916,6 +916,9 @@ class CoreOpsCog(commands.Cog):
         self.bot = bot
         self._id_resolver = _IdResolver()
         self._settings: CoreOpsSettings = load_coreops_settings()
+        self._admin_bang_allowlist: Set[str] = {
+            entry.strip().lower() for entry in self._settings.admin_bang_allowlist
+        }
         self._removed_generic_commands: tuple[str, ...] = tuple()
         self._tagged_aliases: tuple[str, ...] = tuple()
         self._apply_tagged_alias_metadata()
