@@ -19,7 +19,6 @@ from discord.ext import commands
 
 from config.runtime import (
     get_bot_name,
-    get_command_prefix,
     get_env_name,
     get_watchdog_check_sec,
     get_watchdog_disconnect_grace_sec,
@@ -70,6 +69,7 @@ from shared.sheets.async_core import (
     afetch_records,
 )
 
+from .config import CoreOpsSettings, load_coreops_settings
 from .prefix import detect_admin_bang_command
 from .tags import lifecycle_tag
 from .rbac import (
@@ -85,6 +85,20 @@ from .rbac import (
 UTC = dt.timezone.utc
 
 logger = logging.getLogger(__name__)
+
+_CORE_COMMAND_ROOT = "rec"
+_GENERIC_ALIAS_ROOTS: Tuple[str, ...] = (
+    "config",
+    "digest",
+    "env",
+    "health",
+    "checksheet",
+    "reload",
+    "refresh",
+    "help",
+    "ping",
+)
+_HELP_PREFIX = "!"
 
 _NAME_CACHE_TTL_SEC = 600.0
 _ID_PATTERN = re.compile(r"\d{5,}")
@@ -879,6 +893,57 @@ class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._id_resolver = _IdResolver()
+        self._settings: CoreOpsSettings = load_coreops_settings()
+        self._admin_bang_allowlist: Tuple[str, ...] = (
+            tuple(self._settings.admin_bang_allowlist)
+        )
+        self._apply_tagged_aliases()
+        if not self._settings.enable_generic_aliases:
+            self._prune_generic_commands()
+        logger.info("coreops startup", extra={"aliases": self._settings.describe()})
+
+    async def cog_load(self) -> None:
+        if self._settings.enable_generic_aliases:
+            return
+        for name in _GENERIC_ALIAS_ROOTS:
+            if self.bot.get_command(name) is not None:
+                self.bot.remove_command(name)
+
+    def _apply_tagged_aliases(self) -> None:
+        command = getattr(self, _CORE_COMMAND_ROOT, None)
+        if command is None or not hasattr(command, "aliases"):
+            return
+        aliases = list(getattr(command, "aliases", ()) or [])
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for alias in aliases:
+            text = alias.strip()
+            if not text:
+                continue
+            lowered = text.lower()
+            if lowered in seen or text == command.name:
+                continue
+            seen.add(lowered)
+            cleaned.append(text)
+
+        if self._settings.enable_tagged_aliases and self._settings.bot_tag:
+            tag = self._settings.bot_tag.strip()
+            if tag and tag.lower() not in seen and tag != command.name:
+                cleaned.append(tag)
+
+        command.aliases = tuple(cleaned)
+
+    def _prune_generic_commands(self) -> None:
+        commands_list = getattr(self, "__cog_commands__", None)
+        if not commands_list:
+            return
+        filtered = [
+            command
+            for command in commands_list
+            if not (command.parent is None and command.name in _GENERIC_ALIAS_ROOTS)
+        ]
+        if len(filtered) != len(commands_list):
+            self.__cog_commands__ = tuple(filtered)
 
     @commands.group(name="rec", invoke_without_command=True)
     @guild_only_denied_msg()
@@ -1895,7 +1960,7 @@ class CoreOpsCog(commands.Cog):
     async def _render_help(
         self, ctx: commands.Context, *, query: str | None
     ) -> None:
-        prefix = get_command_prefix()
+        prefix = _HELP_PREFIX
         bot_version = os.getenv("BOT_VERSION", "dev")
         bot_name = get_bot_name()
         lookup = query.strip() if isinstance(query, str) else ""
@@ -2563,7 +2628,7 @@ class CoreOpsCog(commands.Cog):
         return f"{key} = {value}"
 
     def _format_core_identity(self, entries: Dict[str, _EnvEntry]) -> List[str]:
-        keys = ("BOT_NAME", "BOT_VERSION", "COMMAND_PREFIX", "ENV_NAME")
+        keys = ("BOT_NAME", "BOT_VERSION", "ENV_NAME")
         return [self._format_simple_line(key, entries.get(key)) for key in keys]
 
     def _format_guild_channels(self, entries: Dict[str, _EnvEntry]) -> List[str]:
