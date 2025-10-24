@@ -21,6 +21,7 @@ from modules.coreops.helpers import tier
 from modules.common.runtime import Runtime
 from c1c_coreops.config import (
     build_command_variants,
+    build_lookup_sequence,
     load_coreops_settings,
     normalize_command_text,
 )
@@ -264,11 +265,13 @@ async def on_message(message: discord.Message):
                 await cog.render_help(ctx, query=remainder)
             return
 
-        command = _resolve_coreops_command(normalized)
-        if command is not None:
-            ctx.command = command
-            ctx.invoked_with = command.qualified_name
-            await bot.invoke(ctx)
+        for lookup in build_lookup_sequence(cmd_name, remainder):
+            command = _resolve_coreops_command(lookup)
+            if command is not None:
+                ctx.command = command
+                ctx.invoked_with = command.qualified_name
+                await bot.invoke(ctx)
+                return
         return
 
     await bot.process_commands(message)

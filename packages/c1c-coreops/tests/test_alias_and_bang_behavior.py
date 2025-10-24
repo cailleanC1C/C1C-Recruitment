@@ -26,7 +26,11 @@ def _ensure_src_on_path() -> None:
 _ensure_src_on_path()
 
 from c1c_coreops.cog import CoreOpsCog
-from c1c_coreops.config import build_command_variants, load_coreops_settings
+from c1c_coreops.config import (
+    build_command_variants,
+    build_lookup_sequence,
+    load_coreops_settings,
+)
 
 
 class DummyMember:
@@ -147,3 +151,15 @@ def test_reload_requires_admin(monkeypatch: pytest.MonkeyPatch) -> None:
             await bot.close()
 
     asyncio.run(runner())
+
+
+def test_build_lookup_sequence_prioritizes_base() -> None:
+    candidates = build_lookup_sequence("digest", "--debug")
+    assert candidates[0] == "digest"
+    assert "digest --debug" in candidates
+
+
+def test_build_lookup_sequence_includes_multi_word_command() -> None:
+    candidates = build_lookup_sequence("refresh", "all")
+    assert candidates[0] == "refresh"
+    assert candidates[1] == "refresh all"

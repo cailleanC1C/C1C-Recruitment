@@ -10,6 +10,7 @@ __all__ = [
     "DEFAULT_ADMIN_BANG_ALLOWLIST",
     "CoreOpsSettings",
     "build_command_variants",
+    "build_lookup_sequence",
     "load_coreops_settings",
     "normalize_command_text",
 ]
@@ -93,6 +94,22 @@ def build_command_variants(
         variants.append(legacy)
 
     return tuple(variants)
+
+
+def build_lookup_sequence(base: str, remainder: str | None) -> tuple[str, ...]:
+    """Return lookup candidates for resolving a CoreOps admin command."""
+
+    base_name = normalize_command_text(base)
+    candidates: list[str] = []
+    if base_name:
+        candidates.append(base_name)
+
+    if remainder:
+        full = normalize_command_text(f"{base} {remainder}")
+        if full and full not in candidates:
+            candidates.append(full)
+
+    return tuple(candidates)
 
 
 def _coerce_bool(raw: str | None, *, default: bool) -> bool:
