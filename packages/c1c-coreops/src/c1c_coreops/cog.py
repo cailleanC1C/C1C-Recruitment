@@ -156,25 +156,23 @@ _GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
 
 
 def _is_admin_command(cmd: commands.Command[Any, Any, Any]) -> bool:
-    """Return True when the command is restricted to admins."""
+    """Return True only if the command is RBAC-gated to admins."""
+
+    callback = getattr(cmd, "callback", None)
+    extras = getattr(cmd, "extras", {}) or {}
+
+    if getattr(callback, "__admin_only__", False):
+        return True
+    if extras.get("coreops_category") == "admin":
+        return True
 
     try:
-        if _get_tier(cmd) == "admin":
+        from .rbac import get_tier
+
+        if get_tier(cmd) == "admin":
             return True
     except Exception:
         pass
-
-    callback = getattr(cmd, "callback", None)
-    if callback is not None and getattr(callback, "__admin_only__", False):
-        return True
-
-    extras = getattr(cmd, "extras", None)
-    if isinstance(extras, Mapping) and extras.get("coreops_category") == "admin":
-        return True
-
-    metadata = lookup_help_metadata(cmd.qualified_name) or lookup_help_metadata(cmd.name)
-    if metadata is not None and getattr(metadata, "tier", None) == "admin":
-        return True
 
     return False
 
