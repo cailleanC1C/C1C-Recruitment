@@ -310,6 +310,17 @@ async def send_log_message(message: str) -> None:
     await runtime.send_log_message(message)
 
 
+async def recreate_http_app() -> None:
+    """Restart the aiohttp application when an active runtime is available."""
+
+    runtime = get_active_runtime()
+    if runtime is None:
+        log.debug("recreate_http_app skipped: no active runtime")
+        return
+    await runtime.shutdown_webserver()
+    await runtime.start_webserver()
+
+
 def monotonic_ms() -> int:
     """Return a monotonic millisecond timestamp for lightweight timing."""
 

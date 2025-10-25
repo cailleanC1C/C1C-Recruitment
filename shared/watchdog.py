@@ -26,7 +26,7 @@ ProbeFn = Callable[[], Awaitable[float]]
 StateProbe = Callable[[], GatewaySnapshot]
 LatencyProbe = Callable[[], Optional[float]]
 
-log = logging.getLogger("watchdog")
+log = logging.getLogger("system.watchdog")
 _LAST_HEALTHY_INFO_EMIT = 0.0
 _HEALTHY_INFO_COOLDOWN = 600.0
 

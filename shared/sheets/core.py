@@ -122,6 +122,30 @@ def fetch_values(sheet_id: str, worksheet: str):
     return _retry_with_backoff(ws.get_all_values)
 
 
+def sheets_read(sheet_id: str, a1_range: str):
+    """Read a specific ``a1_range`` from ``sheet_id`` with retry semantics."""
+
+    workbook = open_by_key(sheet_id)
+    worksheet = None
+    cell_range = a1_range
+    if "!" in a1_range:
+        worksheet_name, cell_range = a1_range.split("!", 1)
+        worksheet_name = worksheet_name.strip()
+        if worksheet_name:
+            worksheet = _retry_with_backoff(workbook.worksheet, worksheet_name)
+        else:
+            worksheet = getattr(workbook, "sheet1", None)
+    else:
+        worksheet = getattr(workbook, "sheet1", None)
+
+    if worksheet is None:
+        worksheet = _retry_with_backoff(workbook.get_worksheet, 0)
+
+    if not cell_range:
+        return _retry_with_backoff(worksheet.get_all_values)
+    return _retry_with_backoff(worksheet.get, cell_range)
+
+
 def call_with_backoff(func: Callable[..., _WorksheetT], *args: Any, **kwargs: Any) -> _WorksheetT:
     """Expose the retry helper for modules performing write operations."""
 
