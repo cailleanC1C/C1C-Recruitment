@@ -27,6 +27,29 @@ StateProbe = Callable[[], GatewaySnapshot]
 LatencyProbe = Callable[[], Optional[float]]
 
 log = logging.getLogger("watchdog")
+_LAST_HEALTHY_INFO_EMIT = 0.0
+_HEALTHY_INFO_COOLDOWN = 600.0
+
+
+def _log_healthy(age: float, latency: Optional[float], *, since_ok: float, stall: int) -> None:
+    """Emit the healthy watchdog message at INFO with basic rate limiting."""
+
+    global _LAST_HEALTHY_INFO_EMIT
+    now = time.time()
+    if now - _LAST_HEALTHY_INFO_EMIT < _HEALTHY_INFO_COOLDOWN:
+        return
+
+    log_args = {
+        "age": f"{age:.1f}",
+        "stall": stall,
+        "since_ok": since_ok,
+        "latency": latency,
+    }
+    log.info(
+        "[watchdog] heartbeat old but latency healthy (age=%(age)s, latency=%(latency)s) — skipping restart",
+        log_args,
+    )
+    _LAST_HEALTHY_INFO_EMIT = now
 
 
 async def run(
@@ -95,11 +118,7 @@ async def run(
                         sys.stderr.flush()
                         os._exit(1)
                     else:
-                        log.warning(
-                            "[watchdog] heartbeat old but latency healthy "
-                            "(age=%(age)s, latency=%(latency)s) — skipping restart",
-                            log_args,
-                        )
+                        _log_healthy(age, latency, since_ok=since_ok, stall=stall_after_sec)
             else:
                 down_for = disconnect_age if disconnect_age is not None else age
                 if down_for > disconnect_limit:

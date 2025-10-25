@@ -59,6 +59,22 @@ async def create_app(*, runtime: "Runtime | None" = None) -> web.Application:
         handler.setFormatter(JsonFormatter(static=static_fields))
         root_logger.addHandler(handler)
 
+    access_logger = logging.getLogger("aiohttp.access")
+    access_logger.propagate = False
+    access_logger.handlers.clear()
+    access_handler = logging.StreamHandler()
+    access_handler.setFormatter(
+        JsonFormatter(
+            static={
+                "env": static_fields["env"],
+                "bot": static_fields["bot"],
+                "logger": "aiohttp.access",
+            }
+        )
+    )
+    access_logger.addHandler(access_handler)
+    access_logger.setLevel(logging.INFO)
+
     healthmod.set_component("runtime", True)
 
     @web.middleware
@@ -71,10 +87,14 @@ async def create_app(*, runtime: "Runtime | None" = None) -> web.Application:
         try:
             response = await handler(request)
             status = getattr(response, "status", status)
+            try:
+                response.headers["X-Trace-Id"] = trace
+            except Exception:  # pragma: no cover - defensive guard
+                pass
             return response
         finally:
             duration_ms = int((time.perf_counter() - started) * 1000)
-            logging.getLogger("access").info(
+            access_logger.info(
                 "http_request",
                 extra={
                     "trace": trace,
