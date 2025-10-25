@@ -32,9 +32,15 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   delivery, and template/watchers hygiene tasks.
 - **Telemetry → Embed renderer:** Command responses pull structured telemetry and render
   embeds without timestamps; version metadata lives solely in the footer.
-- **Runtime HTTP interface:** `/` returns the full status payload, `/ready` answers with
-  `{ "ok": true }`, and `/health` + `/healthz` remain the long-form liveness endpoints
-  with watchdog metadata.
+- **Runtime HTTP interface:** `/` returns the status payload and echoes the request
+  trace id, `/ready` exposes the readiness gate with component details, `/health`
+  combines the watchdog metrics with the component map, and `/healthz` remains the
+  bare liveness probe.
+- **Logging & observability:** All runtime logs emit JSON with
+  `ts`,`level`,`logger`,`msg`,`trace`,`env`,`bot` plus contextual extras. HTTP
+  access logs add `path`,`method`,`status`, and latency (`ms`).
+- **Request tracing:** Every web request receives a UUIDv4 trace id that flows
+  through the log context and `/` response for quick correlation.
 
 ### Module topology
 - CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.
@@ -58,4 +64,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
