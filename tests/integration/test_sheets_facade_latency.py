@@ -46,12 +46,19 @@ def test_event_loop_remains_responsive_during_slow_fetch(monkeypatch):
         # Run tiny_task concurrently while facade does blocking work in a thread.
         tiny = asyncio.create_task(tiny_task())
         rows = await sheets.fetch_clans(force=False)
+        loop_completed_prior_to_join = tiny.done()
+        event_seen_prior_to_join = loop_tick_happened.is_set()
         await tiny
         t1 = time.monotonic()
 
         assert rows and isinstance(rows, list)
         # The tiny task should have completed before the slow fetch finished
-        assert loop_tick_happened.is_set(), "Event loop was blocked by Sheets fetch"
+        assert (
+            loop_completed_prior_to_join
+        ), "Event loop was blocked by Sheets fetch (tiny task stuck pending)"
+        assert (
+            event_seen_prior_to_join
+        ), "Event loop was blocked by Sheets fetch (no loop ticks observed)"
         assert (t1 - t0) >= 0.19, "Facade returned too quickly; slow path not exercised"
 
     asyncio.run(runner())
