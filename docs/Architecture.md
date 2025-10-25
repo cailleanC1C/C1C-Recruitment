@@ -23,6 +23,9 @@ Discord Gateway
 CoreOps code exists **only** in `packages/c1c-coreops`. The `audit-coreops` workflow
 fails CI if any legacy imports, shims, or duplicate symbols live elsewhere.
 
+## Configuration & Startup
+Config validation is performed during bot startup (e.g., in `setup()`), not at package import, so libraries remain importable in build pipelines.
+
 ## Monorepo workspaces
 - `shared/` — infrastructure plumbing that anchors this bot's runtime
   (Sheets adapters, cache, HTTP clients). Shared code here is tightly coupled to

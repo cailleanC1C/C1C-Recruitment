@@ -1,32 +1,44 @@
 """CoreOps helpers packaged for internal reuse."""
 
-from . import cog as _cog
-from . import config as _config
-from . import prefix as _prefix
-from . import rbac as _rbac
-from . import render as _render
-from . import tags as _tags
+from __future__ import annotations
 
-from .cog import *  # noqa: F401,F403
-from .config import *  # noqa: F401,F403
-from .prefix import *  # noqa: F401,F403
-from .rbac import *  # noqa: F401,F403
-from .render import *  # noqa: F401,F403
-from .tags import *  # noqa: F401,F403
+import importlib
+from types import ModuleType
+from typing import Dict, Iterable
 
-__all__: list[str] = []
-_seen: set[str] = set()
-for _module in (_cog, _config, _rbac, _render, _prefix, _tags):
-    names = getattr(_module, "__all__", None)
-    if names is None:
-        names = [name for name in vars(_module) if not name.startswith("_")]
-    for name in names:
-        if name in _seen:
-            continue
-        _seen.add(name)
-        __all__.append(name)
+__all__ = ("cog", "config", "prefix", "rbac", "render", "tags")
 
-__all__ = tuple(__all__)
+__version__ = "0.0.0"
+# Note: Do not import submodules with runtime side effects here.
+# CoreOps must be importable without environment variables present.
+
+# Re-export table generated from in-repo usages of ``from c1c_coreops import ...``.
+# No current symbols require re-exporting beyond the modules in ``__all__``.
+__exports__: Dict[str, str] = {}
+
+
+def __getattr__(name: str) -> ModuleType | object:
+    """Lazily import submodules and selected symbols on attribute access."""
+
+    if name in __all__:
+        module = importlib.import_module(f".{name}", __name__)
+        globals()[name] = module
+        return module
+
+    owner = __exports__.get(name)
+    if owner:
+        module = importlib.import_module(f".{owner}", __name__)
+        obj = getattr(module, name)
+        globals()[name] = obj
+        return obj
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> Iterable[str]:
+    """Return available attributes for auto-completion tools."""
+
+    return sorted({*globals().keys(), *__all__, *__exports__.keys()})
+
 
 __docformat__ = "restructuredtext"
-
