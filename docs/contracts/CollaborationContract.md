@@ -145,44 +145,6 @@ milestone: Harmonize v1.0
 DO not use any other labels unless approved by caillean first
 
 ```
-bug, perf, robustness, security, observability, infra, architecture, devx, docs, lint,
-typecheck, tests, commands, data, config,
-P0, P1, P2, P3, P4,
-severity:critical, severity:high, severity:medium, severity:low,
-bot:reminder, bot:welcomecrew, bot:matchmaker, bot:achievements,
-comp:commands, comp:scheduler, comp:health, comp:config, comp:data-sheets,
-comp:cache, comp:roles, comp:onboarding, comp:placement,
-comp:ocr, comp:shards, comp:ops-contract,
-needs:triage, ready, blocked, help wanted, good first issue
-```
-
----
-
-### 🔹 Source References
-
-Legacy bot clones for reference:
-
-```
-AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/MM   → Matchmaker legacy clone
-AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew legacy clone
-```
-
----
-
-### 🔹 Recap — Always Remember
-
-* Don’t code until asked.
-* Don’t guess: ask or read.
-* One PR at a time.
-* No hard-coding or invention.
-* Update docs right after each change.
-* Record every major decision as an ADR.
-* Keep ENV + Sheet config consistent.
-* Stop and ask if unsure.
-
-Doc last updated: 2025-10-22 (v0.9.5)
-
-
 ### Label Reference (Approved Set)
 
 DO not use any other labels unless approved by caillean first
@@ -248,5 +210,30 @@ DO not use any other labels unless approved by caillean first
 | tests | `#a2eeef` | Unit/integration/e2e tests |
 | typecheck | `#bfdadc` | mypy/pyright typing issues |
 | wontfix | `#ffffff` | This will not be worked on |
+```
 
-Doc last updated: 2025-10-27 (v0.9.7)
+---
+
+### 🔹 Source References
+
+Legacy bot clones for reference:
+
+```
+AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/MM   → Matchmaker legacy clone
+AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew legacy clone
+```
+
+---
+
+### 🔹 Recap — Always Remember
+
+* Don’t code until asked.
+* Don’t guess: ask or read.
+* One PR at a time.
+* No hard-coding or invention.
+* Update docs right after each change.
+* Record every major decision as an ADR.
+* Keep ENV + Sheet config consistent.
+* Stop and ask if unsure.
+
+Doc last updated: 2025-10-25 (v0.9.5)
