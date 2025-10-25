@@ -6,4 +6,6 @@ edit entries when responding to incidents; append new notes instead.
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.4)_
+- 2025-10-25 — [Phase 5: Clansearch port status](20251025_PHASE5/CLANSEARCH_port_status.md)
+
+_Doc last updated: 2025-10-25 (v0.9.5)_
