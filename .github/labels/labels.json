@@ -40,6 +40,11 @@
     "description": "Broken behavior or incorrect output"
   },
   {
+    "name": "cleanup",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "codex",
     "color": "ffffff",
     "description": "Codex-generated changes, prompts, and PR automation"
