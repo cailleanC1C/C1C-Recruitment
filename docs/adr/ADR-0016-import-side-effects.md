@@ -22,3 +22,6 @@ Docker build succeeds (import `c1c_coreops` OK) with no env provided.
 Runtime boot still fails fast when required env is missing (because `shared.config` is imported during startup).
 
 Test suite passes in CI.
+
+
+Doc last updated: 2025-10-25 (v0.9.5)
