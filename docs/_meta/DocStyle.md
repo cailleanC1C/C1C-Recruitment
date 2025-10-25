@@ -19,7 +19,7 @@ This guide defines the documentation rules enforced by `scripts/ci/check_docs.py
 - When adding a new document, update the index in the same change.
 
 ## Automation
-- Run `python scripts/ci/check_docs.py` (or `make docs-check`) before opening a PR.
+- Run `python scripts/ci/check_docs.py` (or `make -f scripts/ci/Makefile docs-check`) before opening a PR.
 - The checker validates title rules, footers, index coverage, ENV parity, and in-doc links.
 
 Doc last updated: 2025-10-22 (v0.9.5)
