@@ -19,6 +19,15 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 - Date/time fields are removed entirely. Embed footers continue to show `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
 
 ## Environment keys
+
+> The keys below are authoritative. `.env.example` mirrors this list; CI enforces parity.
+
+**Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
+
+**Optional (warn once when unset):** `ONBOARDING_SHEET_ID`, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+
+Missing any **Required** key causes the bot to exit with an error at startup. If `LOG_CHANNEL_ID` is empty, Discord channel logging is disabled and a one-time startup warning is emitted.
+
 ### Core runtime
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |

@@ -31,7 +31,12 @@ def test_log_channel_disabled_when_env_missing(caplog):
     module_name = "shared.config"
     original_value = os.environ.get("LOG_CHANNEL_ID")
 
-    with temp_env(LOG_CHANNEL_ID=None):
+    with temp_env(
+        LOG_CHANNEL_ID=None,
+        DISCORD_TOKEN="token",
+        GSPREAD_CREDENTIALS="{}",
+        RECRUITMENT_SHEET_ID="sheet",
+    ):
         if module_name in sys.modules:
             del sys.modules[module_name]
         cfg = importlib.import_module(module_name)

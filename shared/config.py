@@ -65,6 +65,47 @@ __all__ = [
 
 log = logging.getLogger("c1c.config")
 
+# ===== Config Schema (authoritative) =====
+_REQUIRED_ENV = (
+    "DISCORD_TOKEN",
+    "GSPREAD_CREDENTIALS",
+    "RECRUITMENT_SHEET_ID",
+)
+
+_OPTIONAL_ENV = (
+    "ONBOARDING_SHEET_ID",
+    "ENV_NAME",
+    "BOT_NAME",
+    "PUBLIC_BASE_URL",
+    "RENDER_EXTERNAL_URL",
+    "LOG_CHANNEL_ID",
+    "WATCHDOG_CHECK_SEC",
+    "WATCHDOG_STALL_SEC",
+    "WATCHDOG_DISCONNECT_GRACE_SEC",
+)
+
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or str(value).strip() == "":
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _warn_if_missing(name: str) -> None:
+    if os.getenv(name) in (None, ""):
+        log.warning(
+            "Optional env %s is not set; related features may be disabled.",
+            name,
+        )
+
+
+for _name in _REQUIRED_ENV:
+    _require_env(_name)
+
+for _name in _OPTIONAL_ENV:
+    _warn_if_missing(_name)
+
 _SECRET_VALUE = "set"
 _MISSING_VALUE = "—"
 _INT_RE = re.compile(r"\d+")
@@ -237,6 +278,7 @@ def _load_config() -> Dict[str, object]:
     stall = _runtime.get_watchdog_stall_sec()
     grace = _runtime.get_watchdog_disconnect_grace_sec(stall)
 
+    # LOG_CHANNEL_ID handling (PR1: disabled if empty; warn once; keep behavior)
     log_channel = _first_int(os.getenv("LOG_CHANNEL_ID"))
     global _log_channel_warning_emitted
     if log_channel is None and not _log_channel_warning_emitted:
