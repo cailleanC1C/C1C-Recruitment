@@ -5,6 +5,10 @@
 ### Changed
 - Refactor: Introduced internal `c1c_coreops` package; legacy `shared/coreops_*` now deprecated shims. No behavior changes.
 
+### Fixed
+- Recruiter panel no longer overflows Discord’s 5-row limit; pagination returned to the standalone results message with explicit row placement.
+- `!clanmatch` now edits a single results message in the recruiter thread without emitting ephemeral status pings.
+
 ## v0.9.5 — 2025-10-22
 
 - Added audit reports under `AUDIT/20251022_COREOPS_AUDIT/`.

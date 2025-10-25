@@ -4,6 +4,7 @@ All recruiter-facing commands register here so modules remain side-effect free.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Dict, Optional, Tuple
 
@@ -27,6 +28,7 @@ class RecruiterPanelCog(commands.Cog):
         self.bot = bot
         self._panel_owners: Dict[int, int] = {}
         self._owner_panels: Dict[int, Tuple[int, int]] = {}
+        self._results_messages: Dict[int, Tuple[int, int]] = {}
 
     def register_panel(self, *, message_id: int, owner_id: int, channel_id: int) -> None:
         self._panel_owners[message_id] = owner_id
@@ -39,11 +41,71 @@ class RecruiterPanelCog(commands.Cog):
             if existing and existing[1] == message_id:
                 self._owner_panels.pop(owner_id, None)
 
+    def register_results_message(
+        self, owner_id: int, *, channel_id: int, message_id: int
+    ) -> None:
+        self._results_messages[owner_id] = (channel_id, message_id)
+
+    def unregister_results_message(self, owner_id: int) -> None:
+        self._results_messages.pop(owner_id, None)
+
+    def _results_for_owner(self, owner_id: int) -> Optional[Tuple[int, int]]:
+        return self._results_messages.get(owner_id)
+
     def _owner_for(self, message_id: int) -> Optional[int]:
         return self._panel_owners.get(message_id)
 
     def _panel_for_owner(self, owner_id: int) -> Optional[Tuple[int, int]]:
         return self._owner_panels.get(owner_id)
+
+    async def _hydrate_results_message(
+        self, owner_id: int, view: "RecruiterPanelView"
+    ) -> None:
+        info = self._results_for_owner(owner_id)
+        if not info:
+            return
+
+        channel_id, message_id = info
+
+        channel = self.bot.get_channel(channel_id) if self.bot else None
+        if channel is None and self.bot:
+            with contextlib.suppress(Exception):
+                channel = await self.bot.fetch_channel(channel_id)
+
+        if not isinstance(channel, discord.abc.Messageable):
+            self.unregister_results_message(owner_id)
+            return
+
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            self.unregister_results_message(owner_id)
+            return
+        except discord.HTTPException:
+            log.exception(
+                "[clanmatch] failed to fetch results message: channel_id=%s message_id=%s",
+                channel_id,
+                message_id,
+            )
+            return
+
+        view.results_message = message
+        view.results_view = None
+        view._last_results_had_pager = bool(message.components)
+        try:
+            view._last_results_embeds = [
+                embed.copy() for embed in (message.embeds or [])
+            ]
+        except Exception:
+            view._last_results_embeds = []
+        view._last_results_content = message.content
+        with contextlib.suppress(Exception):
+            await message.edit(view=None)
+        self.register_results_message(
+            owner_id=owner_id,
+            channel_id=message.channel.id,
+            message_id=message.id,
+        )
 
     async def _resolve_recruiter_panel_channel(
         self, ctx: commands.Context
@@ -168,8 +230,10 @@ class RecruiterPanelCog(commands.Cog):
             return
 
         view = RecruiterPanelView(self, ctx.author.id)
-        embeds, _ = await view._build_page()
-        view._last_embeds = [embed.copy() for embed in embeds]
+        panel_embeds, results_embeds = await view._build_page()
+        view._last_panel_embeds = [embed.copy() for embed in panel_embeds]
+        view._last_results_embeds = [embed.copy() for embed in results_embeds]
+        view._last_results_content = None
 
         existing_panel = self._panel_for_owner(ctx.author.id)
         if existing_panel:
@@ -187,12 +251,13 @@ class RecruiterPanelCog(commands.Cog):
                     self.unregister_panel(message_id)
                 else:
                     view.message = message
-                    await message.edit(embeds=embeds, view=view)
+                    await message.edit(embeds=panel_embeds, view=view)
                     self.register_panel(
                         message_id=message.id,
                         owner_id=ctx.author.id,
                         channel_id=channel.id,
                     )
+                    await self._hydrate_results_message(ctx.author.id, view)
                     if channel != ctx.channel:
                         try:
                             await ctx.reply(
@@ -220,7 +285,7 @@ class RecruiterPanelCog(commands.Cog):
         )
 
         try:
-            sent = await target.send(embeds=embeds, view=view)
+            sent = await target.send(embeds=panel_embeds, view=view)
         except discord.Forbidden:
             log.exception(
                 "[clanmatch] send forbidden: thread_id=%s",
@@ -248,6 +313,8 @@ class RecruiterPanelCog(commands.Cog):
             owner_id=ctx.author.id,
             channel_id=sent.channel.id,
         )
+
+        await self._hydrate_results_message(ctx.author.id, view)
 
         if redirected and target is not ctx.channel:
             try:

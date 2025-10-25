@@ -21,5 +21,6 @@ This directory contains the architectural decision records (ADRs) that document 
 - [ADR-0014 — Async Sheets Facade for Event-Loop Safety](ADR-0014-async-sheets-facade.md)
 - [ADR-0015 — Config Hygiene & Secrets Handling](ADR-0015-config-hygiene-and-secrets.md)
 - [ADR-0016 — Import-Time Side Effects Removal](ADR-0016-import-side-effects.md)
+- [ADR-0017 — Reservations & Placement Schema](ADR-0017-Reservations-Placement-Schema.md)
 
 Doc last updated: 2025-10-26 (v0.9.6)
