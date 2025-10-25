@@ -116,4 +116,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)

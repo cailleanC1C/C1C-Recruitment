@@ -78,4 +78,4 @@ stay active while promo listeners are paused).
 - `LOG_CHANNEL_ID` receives all lifecycle notices (`[watcher|lifecycle]`, dropping to
   `[lifecycle]` next release) plus cron notices (`[cron]`).
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)

@@ -198,4 +198,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)

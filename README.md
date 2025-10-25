@@ -20,4 +20,4 @@ The bot pulls live data from the cluster sheets so info stays current.
 
 ---
 
-_Doc last updated: 2025-10-27 (v0.9.7)_
+_Doc last updated: 2025-10-25 (v0.9.5)_

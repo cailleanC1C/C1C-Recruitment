@@ -72,4 +72,4 @@ flowchart TD
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)

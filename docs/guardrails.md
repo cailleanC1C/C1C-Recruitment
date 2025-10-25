@@ -16,4 +16,4 @@ This document consolidates the guardrail expectations enforced by CI.
 - CI posts a **Guardrails Summary** comment on every PR covering config/docs parity
   drift and Discord token leak scans. Address listed issues before requesting review.
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)
