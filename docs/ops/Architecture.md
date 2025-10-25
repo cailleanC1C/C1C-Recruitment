@@ -38,9 +38,11 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   bare liveness probe.
 - **Logging & observability:** All runtime logs emit JSON with
   `ts`,`level`,`logger`,`msg`,`trace`,`env`,`bot` plus contextual extras. HTTP
-  access logs add `path`,`method`,`status`, and latency (`ms`).
+  access logs are emitted under the canonical `aiohttp.access` logger with
+  `path`,`method`,`status`, and latency (`ms`).
 - **Request tracing:** Every web request receives a UUIDv4 trace id that flows
-  through the log context and `/` response for quick correlation.
+  through the log context, `/` response payload, and the `X-Trace-Id` response
+  header for quick correlation.
 
 ### Module topology
 - CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.

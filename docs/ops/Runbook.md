@@ -27,12 +27,14 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
   `env`, and `bot` plus any contextual extras. Example:
 
   ```json
-  {"ts":"2025-10-26T04:12:32.104Z","level":"INFO","logger":"access","msg":"http_request","trace":"0a6c...","env":"prod","bot":"c1c","path":"/ready","method":"GET","status":200,"ms":4}
+  {"ts":"2025-10-26T04:12:32.104Z","level":"INFO","logger":"aiohttp.access","msg":"http_request","trace":"0a6c...","env":"prod","bot":"c1c","path":"/ready","method":"GET","status":200,"ms":4}
   ```
-- Filter structured logs with your aggregator using `logger:"access"` for request
-  summaries or `trace:<uuid>` to follow a specific request across service logs.
-- The root request handler also echoes the active `trace` in the JSON payload for quick
-  copy/paste when correlating downstream telemetry.
+- Filter structured logs with your aggregator using `logger:"aiohttp.access"` for
+  request summaries or `trace:<uuid>` to follow a specific request across service logs.
+- The runtime echoes the active `trace` in both the JSON payload and the `X-Trace-Id`
+  response header for quick copy/paste when correlating downstream telemetry.
+- Healthy watchdog messages (heartbeat old but latency healthy) now log at INFO and are
+  rate-limited; WARN/ERROR entries remain reserved for actionable states.
 
 ## Readiness vs Liveness
 - `/ready` now reflects required components (`runtime`, `discord`). It returns
