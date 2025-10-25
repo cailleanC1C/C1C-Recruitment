@@ -1,0 +1,95 @@
+# Guardrails Compliance Report
+
+- Findings: 87 error(s)
+
+## Errors
+
+- S-01: legacy import outside modules/* → cogs/recruitment_recruiter.py:16: `from modules.recruitment.views.recruiter_panel import RecruiterPanelView`
+- S-01: legacy import outside modules/* → shared/help.py:141: `"Tip: Use with care — affects all modules, not just recruitment."`
+- S-05: coreops must not live under shared/* → app.py:22: `from shared.coreops_prefix import detect_admin_bang_command`
+- S-05: coreops must not live under shared/* → app.py:23: `from shared.coreops_rbac import (`
+- S-05: coreops must not live under shared/* → cogs/recruitment_recruiter.py:17: `from shared.coreops_rbac import is_admin_member, is_recruiter`
+- S-05: coreops must not live under shared/* → modules/coreops/cog.py:7: `from shared.coreops_cog import CoreOpsCog`
+- S-05: coreops must not live under shared/* → modules/recruitment/welcome.py:8: `from shared.coreops_rbac import is_staff_member, is_admin_member`
+- S-05: coreops must not live under shared/* → modules/recruitment/services/search.py:7: `from shared.coreops_rbac import is_lead, is_recruiter`
+- S-05: coreops must not live under shared/* → modules/common/runtime.py:56: `from shared.coreops_render import build_refresh_embed, RefreshEmbedRow`
+- S-05: coreops must not live under shared/* → shared/coreops_cog.py:36: `from shared.coreops_render import (`
+- S-05: coreops must not live under shared/* → shared/sheets/cache_scheduler.py:14: `from shared.coreops_cog import resolve_ops_log_channel_id`
+- S-03: command decorator outside cogs/* → app.py:269: `@bot.command(`
+- S-03: command decorator outside cogs/* → modules/recruitment/clan_profile.py:61: `@commands.command(`
+- S-03: command decorator outside cogs/* → modules/recruitment/welcome.py:41: `@commands.command(name="welcome", usage="[clan] @mention")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/welcome.py:303: `@commands.command(name="welcome")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/welcome.py:407: `@commands.command(name="welcome-refresh")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/welcome.py:419: `@commands.command(name="welcome-on")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/welcome.py:428: `@commands.command(name="welcome-off")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/welcome.py:437: `@commands.command(name="welcome-status")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:1566: `@bot.command(name="help")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:1709: `@bot.command(name="clanmatch")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:1799: `@bot.command()`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:1807: `@bot.command(name="clansearch")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:1936: `@bot.command(name="clan")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:2045: `@bot.command(name="ping")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:2054: `@bot.command(name="health", aliases=["status"])`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/MM/bot_clanmatch_prefix.py:2083: `@bot.command(name="reload")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:237: `@bot.command(name="help")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1022: `@bot.command(name="env_check")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1098: `@bot.command(name="ping")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1107: `@bot.command(name="sheetstatus")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1132: `@bot.command(name="backfill_tickets")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1190: `@bot.command(name="backfill_stop")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1198: `@bot.command(name="backfill_details")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1205: `@bot.command(name="clan_tags_debug")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1216: `@bot.command(name="dedupe_sheet")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1234: `@bot.command(name="reload")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1242: `@bot.command(name="health")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1253: `@bot.command(name="checksheet")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1272: `@bot.command(name="reboot")`
+- S-03: command decorator outside cogs/* → AUDIT/20251010_src/WC/bot_welcomecrew.py:1278: `@bot.command(name="watch_status")`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:1143: `@commands.command(name="health", hidden=True)`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:1694: `@commands.command(name="checksheet", hidden=True)`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:1815: `@commands.command(name="digest", hidden=True)`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:1866: `@commands.command(name="env", hidden=True)`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:2091: `@commands.command(name="config", hidden=True)`
+- S-03: command decorator outside cogs/* → shared/coreops_cog.py:2111: `@commands.command(name="reload", hidden=True)`
+- D-02: missing or malformed footer → docs/README.md
+- D-01: 'Phase' in title → docs/development.md
+- D-02: missing or malformed footer → docs/development.md
+- D-02: missing or malformed footer → docs/Architecture.md
+- D-01: 'Phase' in title → docs/ops/commands.md
+- D-02: missing or malformed footer → docs/ops/commands.md
+- D-01: 'Phase' in title → docs/ops/Config.md
+- D-02: missing or malformed footer → docs/ops/Config.md
+- D-01: 'Phase' in title → docs/ops/module-toggles.md
+- D-02: missing or malformed footer → docs/ops/module-toggles.md
+- D-01: 'Phase' in title → docs/ops/Troubleshooting.md
+- D-02: missing or malformed footer → docs/ops/Troubleshooting.md
+- D-01: 'Phase' in title → docs/ops/development.md
+- D-02: missing or malformed footer → docs/ops/development.md
+- D-01: 'Phase' in title → docs/ops/Runbook.md
+- D-02: missing or malformed footer → docs/ops/Runbook.md
+- D-01: 'Phase' in title → docs/ops/CommandMatrix.md
+- D-02: missing or malformed footer → docs/ops/CommandMatrix.md
+- D-01: 'Phase' in title → docs/ops/Architecture.md
+- D-02: missing or malformed footer → docs/ops/Architecture.md
+- D-01: 'Phase' in title → docs/ops/Watchers.md
+- D-02: missing or malformed footer → docs/ops/Watchers.md
+- D-02: missing or malformed footer → docs/adr/ADR-0000-template.md
+- D-02: missing or malformed footer → docs/adr/ADR-0004-help-system-short-vs-detailed.md
+- D-02: missing or malformed footer → docs/adr/ADR-0009-recruiter-panel-text-only.md
+- D-02: missing or malformed footer → docs/adr/ADR-0005-reload-vs-refresh.md
+- D-02: missing or malformed footer → docs/adr/ADR-0001-sheets-access-layer.md
+- D-02: missing or malformed footer → docs/adr/ADR-0010-clan-profile-with-emoji.md
+- D-02: missing or malformed footer → docs/adr/README.md
+- D-02: missing or malformed footer → docs/adr/ADR-0008-emoji-pipeline-port.md
+- D-02: missing or malformed footer → docs/adr/ADR-0011.md
+- D-02: missing or malformed footer → docs/adr/ADR-0007-feature-toggles-recruitment-module-boundaries.md
+- D-02: missing or malformed footer → docs/adr/ADR-0003-coreops-command-contract.md
+- D-02: missing or malformed footer → docs/adr/ADR-0002-cache-telemetry-wrapper.md
+- D-02: missing or malformed footer → docs/adr/ADR-0006-startup-preloader-bot-info-cron.md
+- D-02: missing or malformed footer → docs/contracts/core_infra.md
+- D-02: missing or malformed footer → docs/contracts/CollaborationContract.md
+- D-02: missing or malformed footer → docs/compliance/REPORT_GUARDRAILS.md
+- D-03: keys in Config.md missing in .env.example → ['ADMIN_ROLE_IDS', 'CLANLIST_TAB', 'CLANS_TAB', 'CLAN_TAGS_CACHE_TTL_SEC', 'CLEANUP_AGE_HOURS', 'CRON_REFRESH_CACHE', 'CRON_REFRESH_CLAN_TAGS', 'CRON_REFRESH_SHEETS', 'DISCORD_TOKEN', 'EMOJI_MAX_BYTES', 'EMOJI_PAD_BOX', 'EMOJI_PAD_SIZE', 'ENABLE_NOTIFY_FALLBACK', 'ENABLE_PROMO_LISTENERS', 'ENABLE_PROMO_WATCHER', 'ENABLE_WELCOME_LISTENERS', 'ENABLE_WELCOME_WATCHER', 'ENV_NAME', 'FALSE', 'FEATURE_TOGGLES_TAB', 'GSPREAD_CREDENTIALS', 'GUILD_IDS', 'LEAD_ROLE_IDS', 'LOG_CHANNEL_ID', 'NOTIFY_CHANNEL_ID', 'NOTIFY_PING_ROLE_ID', 'ONBOARDING_SHEET_ID', 'PROMO_CHANNEL_ID', 'PROMO_TICKETS_TAB', 'PUBLIC_BASE_URL', 'RECRUITER_ROLE_IDS', 'RECRUITMENT_SHEET_ID', 'REFRESH_TIMES', 'RENDER_EXTERNAL_URL', 'SEARCH_RESULTS_SOFT_CAP', 'STAFF_ROLE_IDS', 'STRICT_EMOJI_PROXY', 'STRICT_PROBE', 'TAG_BADGE_BOX', 'TAG_BADGE_PX', 'TIMEZONE', 'TRUE', 'UTC', 'WATCHDOG_CHECK_SEC', 'WATCHDOG_DISCONNECT_GRACE_SEC', 'WATCHDOG_STALL_SEC', 'WELCOME_CHANNEL_ID', 'WELCOME_ENABLED', 'WELCOME_GENERAL_CHANNEL_ID', 'WELCOME_TEMPLATES_TAB', 'WELCOME_TICKETS_TAB']
+- D-03: keys in .env.example not documented in Config.md → ['MEMBER_PANEL_ALLOW_ROLES', 'MEMBER_PANEL_THREAD_ID']
+
+Doc last updated: 2025-10-23 (v0.9.5)
