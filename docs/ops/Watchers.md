@@ -12,24 +12,24 @@ enabled for the deployment.
   `[watcher|lifecycle]` for this release and will drop back to `[lifecycle]` next cycle.
 - **Cron** → *scheduled job* triggered by the runtime scheduler. Cron runs are logged with
   the `[cron]` prefix (start/result/retry/summary).
-- Environment toggles ending in `_WATCHER` remain canonical; see [`Config.md`](Config.md#environment-keys)
-  for the authoritative list and defaults.
+- Environment toggles `ENABLE_WELCOME_HOOK` and `ENABLE_PROMO_WATCHER` remain canonical;
+  see [`Config.md`](Config.md#environment-keys) for the authoritative list and defaults.
 
 ## Load order
 1. `shared.config` — env snapshot (IDs, toggles, sheet metadata).
 2. `modules.common.runtime` — logging, scheduler, watchdog wiring.
 3. `shared.sheets.core` — Google API client + worksheet cache.
-4. `shared.sheets.recruitment` / `shared.sheets.onboarding` — TTL caches for clan data and templates.
+4. `shared.sheets.recruitment` / `shared.sheets.onboarding` — TTL caches for clan data and templates exposed through the async facade.
 5. Feature modules — watchers register event hooks and cron jobs based on toggles.
 
 _If steps 1–4 fail, abort boot. If a watcher fails to load, continue without it and emit a
 single structured log._
 
 ## Current Watchers (event listeners)
-- **Welcome listeners** (`ENABLE_WELCOME_LISTENERS`) — greet new members, open tickets, and
+- **Welcome listeners** (`ENABLE_WELCOME_HOOK`) — greet new members, open tickets, and
   sync sheet rows. They now resolve channel, thread, and role targets from the shared
   config registry — no hard-coded IDs remain.
-- **Promo listeners** (`ENABLE_PROMO_LISTENERS`) — track promo requests, tag recruiters, and
+- **Promo listeners** (`ENABLE_PROMO_WATCHER`) — track promo requests, tag recruiters, and
   update onboarding tabs. Targets load from the same registry to maintain parity between
   environments.
 
@@ -52,7 +52,7 @@ invalidate only the affected cache bucket. Role gates come from
 - **Recruiter digest** — loads only when `modules.common.feature_flags.is_enabled("recruitment_reports")`
   evaluates `True`. The digest cron posts nightly summaries; when the toggle is off the
   scheduler skips registration. Welcome and promo watchers remain controlled by their
-  `_LISTENERS` environment toggles and ignore feature flags.
+  `ENABLE_WELCOME_HOOK` / `ENABLE_PROMO_WATCHER` environment toggles and ignore feature flags.
 
 Cron jobs run even if corresponding listeners are disabled (for example, refresh cycles can
 stay active while promo listeners are paused).
@@ -78,4 +78,4 @@ stay active while promo listeners are paused).
 - `LOG_CHANNEL_ID` receives all lifecycle notices (`[watcher|lifecycle]`, dropping to
   `[lifecycle]` next release) plus cron notices (`[cron]`).
 
-Doc last updated: 2025-10-24 (v0.9.5)
+Doc last updated: 2025-10-27 (v0.9.7)
