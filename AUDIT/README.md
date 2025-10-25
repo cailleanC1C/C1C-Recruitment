@@ -1,12 +1,29 @@
 # AUDIT Quick Reference
 
-This folder stores daily lookup notes, incident timelines, and verification snapshots.
-Use it to trace historical behavior or pull prior lessons learned into new docs. Do not
-edit entries when responding to incidents; append new notes instead.
+The `AUDIT/` workspace now follows topical buckets to keep long-running artifacts easy to
+find:
 
----
+| Folder | When to use it |
+| --- | --- |
+| [`governance/`](governance/) | Shared policies, templates, and structural decisions. |
+| [`legacy/`](legacy/) | Frozen code exports and historical lookups kept for reference. |
+| [`guardrails/`](guardrails/) | Compliance runs and automated guardrail outputs grouped by scope. |
+| [`diagnostics/`](diagnostics/) | Point-in-time investigations for incidents or bug hunts. |
+| [`phase-audits/`](phase-audits/) | Multi-phase audit engagements with summaries, artifacts, and dated working notes. |
 
-- 2025-10-25 — [Phase 5: Clansearch member runtime diagnostics](diagnostics/clansearch-panel/2025-10-25_clansearch_member_runtime_diagnostics.md)
-- 2025-10-25 — [Phase 5: Clansearch port status](20251025_PHASE5/CLANSEARCH_port_status.md)
+## Navigation Tips
+- Each topical slug includes an `index.md` for quick orientation and linkouts.
+- Dated files use the `YYYY-MM-DD_` prefix so timelines remain sortable inside a slug.
+- Append new findings under the relevant topic instead of creating new top-level folders.
+- End every Markdown artifact with the guardrail footer (`Doc last updated: … (v0.9.5)`) so
+  the watchdog stays satisfied.
 
-_Doc last updated: 2025-10-25 (v0.9.5)_
+## Recent Highlights
+- WelcomeCrew modernization notes, artifacts, and summaries live under
+  [`phase-audits/welcomecrew-modernization/`](phase-audits/welcomecrew-modernization/).
+- Command prefix and CoreOps guardrail runs are captured under
+  [`guardrails/`](guardrails/).
+- Legacy bot code exports remain available under
+  [`legacy/clanmatch-welcomecrew/`](legacy/clanmatch-welcomecrew/).
+
+Doc last updated: 2025-10-25 (v0.9.5)
