@@ -144,7 +144,6 @@ milestone: Harmonize v1.0
 ### 🔹 Label Reference (Approved Set)
 DO not use any other labels unless approved by caillean first
 
-```
 | Name | Color | Description |
 |---|---|---|
 | architecture | `#5319e7` | Cross-cutting design, interfaces, carve-outs |
@@ -206,7 +205,6 @@ DO not use any other labels unless approved by caillean first
 | tests | `#a2eeef` | Unit/integration/e2e tests |
 | typecheck | `#bfdadc` | mypy/pyright typing issues |
 | wontfix | `#ffffff` | This will not be worked on |
-```
 
 ---
 
