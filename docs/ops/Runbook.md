@@ -54,6 +54,11 @@ Both controls record the invoking actor, even when triggered via admin bang alia
 Manual refreshes never force a restart; even repeated failures leave the bot online while
 logging the error for follow-up.
 
+### `!reload --reboot`
+- Restarts both the Discord modules and the aiohttp runtime after reloading configuration.
+- Flushes cached Sheets connections so the next command run observes fresh credentials and tabs.
+- Emits the log line `Runtime rebooted via !reload --reboot` once the restart sequence completes.
+
 ## Digest & health telemetry
 When operators run `!rec digest` or `!rec health`, the embeds render the following fields
 from the public telemetry API:

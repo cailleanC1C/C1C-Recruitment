@@ -70,6 +70,10 @@ async def fetch_values(*args: Any, **kwargs: Any) -> Any:
     return await _to_thread(_core_sync.fetch_values, *args, **kwargs)
 
 
+async def sheets_read(*args: Any, **kwargs: Any) -> Any:
+    return await _to_thread(_core_sync.sheets_read, *args, **kwargs)
+
+
 async def call_with_backoff(*args: Any, **kwargs: Any) -> Any:
     return await _to_thread(_core_sync.call_with_backoff, *args, **kwargs)
 
@@ -86,5 +90,6 @@ __all__ = [
     "get_worksheet",
     "fetch_records",
     "fetch_values",
+    "sheets_read",
     "call_with_backoff",
 ]

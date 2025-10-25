@@ -18,6 +18,12 @@
 - Local development mirrors this behavior: the `.cache/` folder is not used, and no JSON
   snapshots persist across runs.
 
+## Sheets access
+- Async code must go through `shared.sheets.async_facade`; the synchronous helpers now
+  exist solely for cache warmers and CLI scripts.
+- Legacy retry wrappers (`_legacy_fetch`, `retry_safe_read`) were removed in the audit
+  cleanup; any remaining imports should be replaced with the async facade.
+
 ## Testing commands
 - `!rec refresh all` — verify cache warmers and actor logging.
 - `!digest --debug` — confirm public telemetry includes age/next/retries.
@@ -28,4 +34,4 @@
   `COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and
   blocked in CI.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
