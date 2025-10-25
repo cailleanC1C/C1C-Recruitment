@@ -22,8 +22,13 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0011`](adr/ADR-0011.md) — Member search indexing.
 * [`ADR-0012`](adr/ADR-0012-coreops-package.md) — CoreOps package structure.
 * [`ADR-0013`](adr/ADR-0013-config-io-hardening.md) — Config & I/O hardening (log channel, emoji proxy, recruiter Sheets, readiness route).
+* [`ADR-0014`](adr/ADR-0014.md) — Reservations & Placement Schema.
 * [`ADR README`](adr/README.md) — Index for Architectural Decision Records.
 * File a new ADR for every major design or structural change.
+
+### `/docs/epic/` — Feature Epics
+* Stores phase-level epic specifications ready for CoreOps implementation.
+* [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — Welcome & Placement v2 thread-first onboarding flow.
 
 ### `/docs/compliance/`
 * Houses internal compliance and governance policies.
