@@ -21,6 +21,7 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0010`](adr/ADR-0010-clan-profile-with-emoji.md) — Clan profile emoji policy.
 * [`ADR-0011`](adr/ADR-0011.md) — Member search indexing.
 * [`ADR-0012`](adr/ADR-0012-coreops-package.md) — CoreOps package structure.
+* [`ADR-0013`](adr/ADR-0013-config-io-hardening.md) — Config & I/O hardening (log channel, emoji proxy, recruiter Sheets, readiness route).
 * [`ADR README`](adr/README.md) — Index for Architectural Decision Records.
 * File a new ADR for every major design or structural change.
 
@@ -68,4 +69,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-10-24 (v0.9.5)
+Doc last updated: 2025-10-25 (v0.9.5)

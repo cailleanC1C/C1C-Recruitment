@@ -406,6 +406,9 @@ class Runtime:
             }
             return web.json_response(payload)
 
+        async def ready(_: web.Request) -> web.Response:
+            return web.json_response({"ok": True})
+
         async def health(_: web.Request) -> web.Response:
             payload, healthy = await self._health_payload()
             payload["endpoint"] = "health"
@@ -421,6 +424,7 @@ class Runtime:
         strict_proxy_flag = "1" if get_strict_emoji_proxy() else "0"
         log.info("web: /emoji-pad mounted (STRICT_EMOJI_PROXY=%s)", strict_proxy_flag)
         app.router.add_get("/", root)
+        app.router.add_get("/ready", ready)
         app.router.add_get("/health", health)
         app.router.add_get("/healthz", healthz)
 

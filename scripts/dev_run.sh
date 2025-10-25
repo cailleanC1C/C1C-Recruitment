@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export $(grep -v '^#' .env 2>/dev/null | xargs) || true
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
+fi
 python app.py
