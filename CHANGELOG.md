@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.9.5 — 2025-10-23
 
 ### Changed
 - Refactor: Introduced internal `c1c_coreops` package; legacy `shared/coreops_*` now deprecated shims. No behavior changes.
