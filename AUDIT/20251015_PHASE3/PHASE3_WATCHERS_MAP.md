@@ -11,7 +11,7 @@ This note maps the Welcome/Promo watcher touch points in the live C1C runtime ve
 - Because `ensure_loaded` is still a no-op placeholder, no watcher event listeners are registered yet—the Phase 3 work will need to import and bind the legacy handlers at this point.
 
 ### Configuration toggles & log channel sourcing
-- `shared.config` hydrates `WELCOME_ENABLED`, `ENABLE_WELCOME_WATCHER`, `ENABLE_PROMO_WATCHER`, `ENABLE_NOTIFY_FALLBACK`, and `LOG_CHANNEL_ID` from the environment snapshot. These values are available to the watcher modules through the accessor helpers the modules import.【F:shared/config.py†L200-L346】
+- `shared.config` hydrates `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`, `ENABLE_NOTIFY_FALLBACK`, and `LOG_CHANNEL_ID` from the environment snapshot. These values are available to the watcher modules through the accessor helpers the modules import.【F:shared/config.py†L200-L346】
 - Runtime helpers use the same log channel ID when emitting scheduler or watchdog notifications (`Runtime.send_log_message`), so the watcher toggle announcements stay consistent with other bot diagnostics.【F:shared/runtime.py†L200-L333】【F:onboarding/watcher_welcome.py†L20-L47】
 
 ### Role gates
