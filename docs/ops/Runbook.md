@@ -4,6 +4,8 @@ This runbook consolidates the CoreOps lifecycle, cache controls, and telemetry s
 introduced in the Phase 3/3b rollout. Use it during startup verification, routine refresh
 workflows, and post-change validation.
 
+Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
+
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.

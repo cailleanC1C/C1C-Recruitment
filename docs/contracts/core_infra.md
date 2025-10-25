@@ -74,7 +74,8 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
 - Logs heartbeat/watchdog decisions and command errors.
 
 ## CI/CD
-- GitHub Actions workflow: queued, latest-wins lane with cancel (`wait_render.js`).
+- GitHub Actions workflow serializes deploy runs per branch via concurrency queueing; runs are never cancelled preemptively.
+- Each run gathers its changed files, compares against newer commits on the branch, and skips automatically only when a newer push touched at least one of the same files (same-file supersession). Otherwise runs execute in order: queue → supersession check → deploy.
 - Render deploy via hook; container builds with Dockerfile; Python 3.12.
 
 ## SLO-ish Expectations
