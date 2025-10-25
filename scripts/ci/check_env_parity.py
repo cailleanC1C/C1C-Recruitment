@@ -48,7 +48,8 @@ def env_keys_from_docs(path: pathlib.Path) -> list[str]:
 
 
 def check_discord_token_leak(repo_root: pathlib.Path) -> list[str]:
-    pattern = re.compile(r"[MN][A-Za-z\d_-]{23}\.[\w-]{6}\.[\w-]{27}")
+    # Allow any base64-url character for the user-id segment; tokens can begin with digits.
+    pattern = re.compile(r"[A-Za-z\d_-]{23,28}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27}")
     offenders: list[str] = []
     for path in repo_root.rglob("*"):
         if path.is_dir():
