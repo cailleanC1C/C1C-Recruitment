@@ -51,6 +51,9 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | `SHEETS_CACHE_TTL_SEC` | int | `900` | TTL for cached worksheet values. |
 | `SHEETS_CONFIG_CACHE_TTL_SEC` | int | matches `SHEETS_CACHE_TTL_SEC` | TTL for cached worksheet metadata; defaults to the value above. |
 
+Async handlers must import Sheets helpers from `shared.sheets.async_facade`; the
+sync modules remain available for non-async scripts and cache warmers.
+
 ### Role and channel routing
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |

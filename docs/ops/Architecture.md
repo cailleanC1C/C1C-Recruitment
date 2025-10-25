@@ -23,8 +23,9 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   `refresh_now`). Private module attributes remain internal to the service.
 - **Google Sheets:** Recruitment and onboarding tabs are accessed asynchronously via the
   cached adapters. Preloader warms their handles and key buckets on startup.
-- **Sheets access:** Async command handlers delegate Google Sheets calls to worker
-  threads via `asyncio.to_thread`, keeping the event loop unblocked even on cache misses.
+- **Sheets access:** Async command handlers import `shared.sheets.async_facade`, which
+  routes synchronous helpers through `asyncio.to_thread` so the event loop stays
+  unblocked even on cache misses.
 - **Preloader:** Runs automatically during boot, logging `[refresh] startup` entries for
   each bucket.
 - **Scheduler:** Handles cron work including the 3-hour `bot_info` refresh, digest

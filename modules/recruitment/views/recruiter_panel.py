@@ -18,7 +18,7 @@ from discord import InteractionResponded
 
 from .. import cards
 from modules.common import config_access as config
-from shared.sheets import recruitment as recruitment_sheets
+from shared.sheets import async_facade as sheets
 
 if TYPE_CHECKING:
     from cogs.recruitment_recruiter import RecruiterPanelCog
@@ -715,10 +715,7 @@ class RecruiterPanelView(discord.ui.View):
         current_task = asyncio.current_task()
         try:
             try:
-                rows = await asyncio.to_thread(
-                    recruitment_sheets.fetch_clans,
-                    force=False,
-                )
+                rows = await sheets.fetch_clans(force=False)
             except Exception as exc:  # pragma: no cover - defensive guard
                 log.exception("failed to fetch clan rows", exc_info=exc)
                 if self.matches:

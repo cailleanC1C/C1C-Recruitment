@@ -34,7 +34,7 @@ def _sample_rows() -> list[list[str]]:
     return [header, row]
 
 
-def test_recruiter_search_uses_to_thread(monkeypatch):
+def test_recruiter_search_uses_async_facade(monkeypatch):
     async def runner() -> None:
         monkeypatch.setattr(panel.RecruiterPanelView, "_build_components", lambda self: None)
         monkeypatch.setattr(panel.RecruiterPanelView, "_sync_visuals", lambda self: None)
@@ -42,22 +42,18 @@ def test_recruiter_search_uses_to_thread(monkeypatch):
         view = panel.RecruiterPanelView(DummyCog(), author_id=1)
         interaction = DummyInteraction()
 
-        captured = {"called": False, "fn": None}
+        captured = {"called": False, "force": None}
 
-        async def fake_to_thread(fn, *args, **kwargs):
+        async def fake_fetch(*, force: bool = False):
             captured["called"] = True
-            captured["fn"] = fn
-            return _sample_rows()
-
-        def fake_fetch(force: bool = False):
+            captured["force"] = force
             return _sample_rows()
 
         async def fake_rebuild(self, interaction, *, ack_ephemeral=None):
             self._busy = False
             return None
 
-        monkeypatch.setattr(panel.asyncio, "to_thread", fake_to_thread)
-        monkeypatch.setattr(panel.recruitment_sheets, "fetch_clans", fake_fetch)
+        monkeypatch.setattr(panel.sheets, "fetch_clans", fake_fetch)
         monkeypatch.setattr(
             panel.RecruiterPanelView, "_rebuild_and_edit", fake_rebuild, raising=False
         )
@@ -65,6 +61,6 @@ def test_recruiter_search_uses_to_thread(monkeypatch):
         await view._run_search(interaction)
 
         assert captured["called"] is True
-        assert captured["fn"] is fake_fetch
+        assert captured["force"] is False
 
     asyncio.run(runner())

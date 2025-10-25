@@ -6,7 +6,7 @@ from modules.common import runtime as rt
 # NOTE: Do not import role ID constants from shared.config; not exported here.
 from modules.coreops.helpers import tier
 from c1c_coreops.rbac import is_staff_member, is_admin_member
-from shared.sheets.recruitment import get_cached_welcome_templates
+from shared.sheets import async_facade as sheets
 
 # --- RBAC decorator (staff with fallback) -------------------------------------
 def staff_only():
@@ -45,7 +45,7 @@ class WelcomeBridge(commands.Cog):
         Post a templated welcome. Template rows are read from the cached 'templates' bucket.
         Usage: !welcome [clan] @mention
         """
-        templates = get_cached_welcome_templates()
+        templates = await sheets.get_cached_welcome_templates()
         if not templates:
             await ctx.send("⚠️ No welcome templates found. Try again after the next refresh.")
             return
