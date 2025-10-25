@@ -145,10 +145,6 @@ milestone: Harmonize v1.0
 DO not use any other labels unless approved by caillean first
 
 ```
-### Label Reference (Approved Set)
-
-DO not use any other labels unless approved by caillean first
-
 | Name | Color | Description |
 |---|---|---|
 | architecture | `#5319e7` | Cross-cutting design, interfaces, carve-outs |
