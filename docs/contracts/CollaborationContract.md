@@ -71,7 +71,7 @@ They apply to **all phases, PRs, and documentation changes**.
     * **`/docs/contracts/`**
       * Defines long-term, structural interfaces between components.
       * `core_infra.md` documents runtime, Sheets access, and cache relationships.
-      * Feature toggle guidance moved into other docs; keep legacy references aligned if `feature_toggles.md` is touched.
+      * Feature toggle guidance moved into other docs; keep legacy references aligned if `ops/module-toggles.md` is touched.
 
     * **`/docs/ops/` — Operational Documentation**
       * `Architecture.md` — detailed system flow, runtime design, and module topology.
@@ -80,7 +80,7 @@ They apply to **all phases, PRs, and documentation changes**.
       * `Runbook.md` — operator actions for routine tasks and incident handling.
       * `Troubleshooting.md` — quick reference for diagnosing common issues.
       * `Watchers.md` — background jobs covering schedulers, refreshers, and watchdogs.
-      * `CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
+      * `contracts/CollaborationContract.md` — contributor standards, PR review flow, and Codex formatting instructions.
       * `development.md` — developer setup notes and contribution workflow guidance.
       * `commands.md` — supplemental command reference for operational usage.
 
@@ -94,7 +94,7 @@ They apply to **all phases, PRs, and documentation changes**.
       * Ensure the version shown in this index (currently v0.9.4) matches the bot version in the root `README.md`.
 
     * **Cross-References**
-      * `docs/ops/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
+      * `docs/contracts/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
       * No new docs or folders may be added without updating this index.
 * **Architectural Decisions (ADR):**
   Each significant decision we agree on must be recorded under `docs/adr/` using this template format:
@@ -180,7 +180,7 @@ AUDIT/20251010_src/WC   → WelcomeCrew legacy clone
 * Keep ENV + Sheet config consistent.
 * Stop and ask if unsure.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-27 (v0.9.7)
 
 
 ### Label Reference (Approved Set)
