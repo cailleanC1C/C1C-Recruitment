@@ -327,8 +327,8 @@ class MemberPanelController:
                     else ""
                 )
                 inactives = parse_inactives_num(
-                    row[search_helpers.IDX_AF_INACTIVES]
-                    if len(row) > search_helpers.IDX_AF_INACTIVES
+                    row[search_helpers.IDX_AG_INACTIVES]
+                    if len(row) > search_helpers.IDX_AG_INACTIVES
                     else ""
                 )
                 if filters.roster_mode == "open" and spots <= 0:

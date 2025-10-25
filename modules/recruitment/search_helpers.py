@@ -25,7 +25,8 @@ COL_S_CVC = 18
 COL_T_SIEGE = 19
 COL_U_STYLE = 20
 
-IDX_AF_INACTIVES = 31
+IDX_AB = 27
+IDX_AG_INACTIVES = 32
 
 TOKEN_MAP = {
     "EASY": "ESY",
@@ -156,7 +157,7 @@ def row_matches(
 ) -> bool:
     """Return ``True`` if ``row`` satisfies the requested filters."""
 
-    if len(row) <= IDX_AF_INACTIVES:
+    if len(row) <= IDX_AB:
         return False
     if _is_header_row(row):
         return False

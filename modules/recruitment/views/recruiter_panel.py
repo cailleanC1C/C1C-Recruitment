@@ -56,7 +56,7 @@ IDX_AB = 27
 IDX_AC_RESERVED = 28
 IDX_AD_COMMENTS = 29
 IDX_AE_REQUIREMENTS = 30
-IDX_AF_INACTIVES = 31
+IDX_AG_INACTIVES = 32
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
 HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
@@ -807,7 +807,7 @@ class RecruiterPanelView(discord.ui.View):
                         row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
                     )
                     inactives = parse_inactives_num(
-                        row[IDX_AF_INACTIVES] if len(row) > IDX_AF_INACTIVES else ""
+                        row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
                     )
                     if self.roster_mode == "open" and spots <= 0:
                         continue

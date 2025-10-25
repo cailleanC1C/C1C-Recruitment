@@ -102,7 +102,7 @@ def make_row(
     playstyle="Competitive",
     inactives="0",
 ):
-    row = [""] * 32
+    row = [""] * (search_helpers.IDX_AG_INACTIVES + 1)
     row[0] = "1"
     row[1] = name
     row[2] = tag
@@ -114,7 +114,7 @@ def make_row(
     row[search_helpers.COL_S_CVC] = cvc
     row[search_helpers.COL_T_SIEGE] = siege
     row[search_helpers.COL_U_STYLE] = playstyle
-    row[search_helpers.IDX_AF_INACTIVES] = inactives
+    row[search_helpers.IDX_AG_INACTIVES] = inactives
     return row
 
 
