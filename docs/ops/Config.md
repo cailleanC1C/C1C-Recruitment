@@ -31,7 +31,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | `REFRESH_TIMES` | csv | `02:00,10:00,18:00` | Optional daily refresh windows (HH:MM, comma separated). |
 | `PORT` | int | `10000` | Render injects this automatically; local runs fall back to 10000. |
 | `LOG_LEVEL` | string | `INFO` | Python logging level. |
-| `LOG_CHANNEL_ID` | snowflake | — | Primary log channel ID; falls back to the default baked into `shared.config` when unset. |
+| `LOG_CHANNEL_ID` | snowflake | — | Required for Discord channel logging. If unset or empty, logging to Discord is disabled and a one-time startup warning is emitted. No implicit defaults. |
 
 ### Google Sheets access
 | Key | Type | Default | Notes |
@@ -99,6 +99,10 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 | `TAG_BADGE_PX` | int | `128` | Pixel edge length used when generating clan badge attachments. |
 | `TAG_BADGE_BOX` | float | `0.90` | Glyph fill ratio applied during clan badge attachment rendering. |
 | `STRICT_EMOJI_PROXY` | bool | `true` | When truthy (`1`), require padded proxy thumbnails instead of raw CDN URLs. |
+
+> Local development runner (`scripts/dev_run.sh`) now sources `.env` with `set -a; source ./.env`, preserving quoted and space-containing values verbatim.
+>
+> The `/emoji-pad` proxy enforces HTTPS-only source URLs. Any HTTP attempt returns `400 invalid source host`.
 
 ## Automation listeners & cron jobs
 | Key | Type | Default | Notes |
@@ -179,4 +183,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-25 (v0.9.5)

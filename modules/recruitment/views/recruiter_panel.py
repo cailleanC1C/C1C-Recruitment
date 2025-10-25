@@ -715,7 +715,10 @@ class RecruiterPanelView(discord.ui.View):
         current_task = asyncio.current_task()
         try:
             try:
-                rows = recruitment_sheets.fetch_clans(force=False)
+                rows = await asyncio.to_thread(
+                    recruitment_sheets.fetch_clans,
+                    force=False,
+                )
             except Exception as exc:  # pragma: no cover - defensive guard
                 log.exception("failed to fetch clan rows", exc_info=exc)
                 if self.matches:

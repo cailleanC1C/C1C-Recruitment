@@ -86,7 +86,7 @@ def mount_emoji_pad(app: web.Application) -> None:
             raise web.HTTPBadRequest(text="missing u")
 
         parsed = urllib.parse.urlparse(source_url)
-        if parsed.scheme not in {"https", "http"} or parsed.hostname not in _ALLOWED_HOSTS:
+        if parsed.scheme != "https" or parsed.hostname not in _ALLOWED_HOSTS:
             raise web.HTTPBadRequest(text="invalid source host")
 
         size_raw = request.query.get("s")

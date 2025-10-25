@@ -23,12 +23,17 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   `refresh_now`). Private module attributes remain internal to the service.
 - **Google Sheets:** Recruitment and onboarding tabs are accessed asynchronously via the
   cached adapters. Preloader warms their handles and key buckets on startup.
+- **Sheets access:** Async command handlers delegate Google Sheets calls to worker
+  threads via `asyncio.to_thread`, keeping the event loop unblocked even on cache misses.
 - **Preloader:** Runs automatically during boot, logging `[refresh] startup` entries for
   each bucket.
 - **Scheduler:** Handles cron work including the 3-hour `bot_info` refresh, digest
   delivery, and template/watchers hygiene tasks.
 - **Telemetry → Embed renderer:** Command responses pull structured telemetry and render
   embeds without timestamps; version metadata lives solely in the footer.
+- **Runtime HTTP interface:** `/` returns the full status payload, `/ready` answers with
+  `{ "ok": true }`, and `/health` + `/healthz` remain the long-form liveness endpoints
+  with watchdog metadata.
 
 ### Module topology
 - CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.
@@ -52,4 +57,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
-Doc last updated: 2025-10-23 (v0.9.5)
+Doc last updated: 2025-10-25 (v0.9.5)

@@ -67,8 +67,9 @@ log = logging.getLogger("c1c.config")
 
 _SECRET_VALUE = "set"
 _MISSING_VALUE = "—"
-_DEFAULT_LOG_CHANNEL_ID = 1415330837968191629  # #bot-production
 _INT_RE = re.compile(r"\d+")
+
+_log_channel_warning_emitted = False
 
 _CONFIG: Dict[str, object] = {}
 
@@ -236,8 +237,11 @@ def _load_config() -> Dict[str, object]:
     stall = _runtime.get_watchdog_stall_sec()
     grace = _runtime.get_watchdog_disconnect_grace_sec(stall)
 
-    log_channel_env = _first_int(os.getenv("LOG_CHANNEL_ID"))
-    log_channel = log_channel_env or _DEFAULT_LOG_CHANNEL_ID
+    log_channel = _first_int(os.getenv("LOG_CHANNEL_ID"))
+    global _log_channel_warning_emitted
+    if log_channel is None and not _log_channel_warning_emitted:
+        log.warning("Log channel disabled; set LOG_CHANNEL_ID to enable Discord log posting.")
+        _log_channel_warning_emitted = True
 
     refresh_default = ("02:00", "10:00", "18:00")
 
@@ -260,7 +264,7 @@ def _load_config() -> Dict[str, object]:
         "WELCOME_GENERAL_CHANNEL_ID": _first_int(os.getenv("WELCOME_GENERAL_CHANNEL_ID")),
         "WELCOME_CHANNEL_ID": _first_int(os.getenv("WELCOME_CHANNEL_ID")),
         "PROMO_CHANNEL_ID": _first_int(os.getenv("PROMO_CHANNEL_ID")),
-        "LOG_CHANNEL_ID": int(log_channel),
+        "LOG_CHANNEL_ID": log_channel,
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
         "WELCOME_ENABLED": _env_bool("WELCOME_ENABLED", True),
@@ -406,8 +410,8 @@ def _optional_id(key: str) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
-def get_log_channel_id() -> int:
-    return _coerce_int(_CONFIG.get("LOG_CHANNEL_ID"), _DEFAULT_LOG_CHANNEL_ID)
+def get_log_channel_id() -> Optional[int]:
+    return _optional_id("LOG_CHANNEL_ID")
 
 
 def get_notify_channel_id() -> Optional[int]:
