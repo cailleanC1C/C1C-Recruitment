@@ -150,6 +150,11 @@
     "description": "Developer experience, tooling friction"
   },
   {
+    "name": "doc",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "docs",
     "color": "0b75a8",
     "description": "README, guides, runbooks"
