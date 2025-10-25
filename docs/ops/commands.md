@@ -71,6 +71,7 @@ Opens the text-only recruiter panel for filtering and matching clans.
 
 - **Access:** Staff / Recruiters
 - **Behavior:** Interactive panel, text-only for speed and mobile usability.
+- **Layout:** Panel controls stay within Discord’s 5-row limit (4 selects + 1 button row); pagination buttons live on the separate results message.
 - **Usage:** `!clanmatch`
 - **Feature Toggle:** `recruiter_panel`
 
