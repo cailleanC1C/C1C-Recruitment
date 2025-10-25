@@ -14,7 +14,7 @@ from discord.ext import commands
 
 from modules.common import config_access as config
 from modules.common import feature_flags
-from modules.coreops.helpers import tier
+from c1c_coreops.helpers import tier
 from modules.recruitment.views.recruiter_panel import RecruiterPanelView
 from c1c_coreops.rbac import is_admin_member, is_recruiter
 

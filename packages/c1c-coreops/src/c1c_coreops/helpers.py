@@ -1,18 +1,14 @@
-"""
-Tier tagging for commands that survives discord.py command cloning.
+"""Utilities for tagging CoreOps commands with visibility tiers."""
 
-We store the tier in three places:
-1) cmd.extras["tier"]           — preserved by discord.py copy()
-2) cmd._tier                    — convenient attribute for current object
-3) _TIER_REGISTRY[qualified]    — fallback registry, rehydrated after cogs load
-"""
+from __future__ import annotations
 
 from typing import Callable, Dict
 
 # Qualified name -> tier (e.g., "rec help", "health")
 _TIER_REGISTRY: Dict[str, str] = {}
 
-def _set_tier(cmd, level: str):
+
+def _set_tier(cmd, level: str) -> None:
     # Extras is stable across Command.copy() since discord.py 2.x.
     try:
         extras = getattr(cmd, "extras", None)
@@ -31,6 +27,7 @@ def _set_tier(cmd, level: str):
     if isinstance(qn, str):
         _TIER_REGISTRY[qn] = level
 
+
 def tier(level: str) -> Callable:
     """Decorator: attach a visibility tier ('user' | 'staff' | 'admin') to a command."""
 
@@ -40,11 +37,13 @@ def tier(level: str) -> Callable:
 
     return wrapper
 
+
 def rehydrate_tiers(bot) -> None:
     """
     Reapply tiers to commands after cogs/extensions load.
     Useful because Command.copy() can drop ad-hoc attributes.
     """
+
     for cmd in bot.walk_commands():
         # Prefer extras if already present
         level = None

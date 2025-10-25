@@ -33,7 +33,7 @@ from shared.config import (
     get_strict_emoji_proxy,
 )
 from shared.logging.structured import JsonFormatter, get_trace_id, set_trace_id
-from modules.coreops.helpers import audit_tiers, rehydrate_tiers
+from c1c_coreops.helpers import audit_tiers, rehydrate_tiers
 from shared.web_routes import mount_emoji_pad
 
 log = logging.getLogger("c1c.runtime")
@@ -701,10 +701,10 @@ class Runtime:
     async def load_extensions(self) -> None:
         """Load all feature modules into the shared bot instance."""
 
-        from modules.coreops import cog as coreops_cog
+        from c1c_coreops import cog as coreops_cog
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
-        from modules.coreops import ops as ops_cog
+        from c1c_coreops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
 

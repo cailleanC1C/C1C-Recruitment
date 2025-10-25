@@ -59,7 +59,7 @@ It exists so that contributors update the correct references after each developm
 ## Code Map
 
 * `packages/c1c-coreops/` — canonical CoreOps implementation (`c1c_coreops.*`).
-  Legacy `shared/coreops_*` modules temporarily re-export these symbols until import rewrites land.
+  Legacy `shared/coreops_*` modules have been removed; import directly from `c1c_coreops`.
 
 ### Root-Level Docs
 * [`Architecture.md`](Architecture.md) — high-level architecture overview and runtime map.

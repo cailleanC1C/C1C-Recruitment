@@ -6,7 +6,19 @@ import importlib
 from types import ModuleType
 from typing import Dict, Iterable
 
-__all__ = ("cog", "config", "prefix", "rbac", "render", "tags")
+__all__ = (
+    "cog",
+    "config",
+    "prefix",
+    "rbac",
+    "render",
+    "tags",
+    "helpers",
+    "cronlog",
+    "cron_summary",
+    "commands",
+    "ops",
+)
 
 __version__ = "0.0.0"
 # Note: Do not import submodules with runtime side effects here.

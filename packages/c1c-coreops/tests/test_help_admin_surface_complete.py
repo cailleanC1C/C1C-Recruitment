@@ -26,7 +26,7 @@ def _ensure_src_on_path() -> None:
 _ensure_src_on_path()
 
 from c1c_coreops.cog import CoreOpsCog
-from modules.coreops.helpers import tier
+from c1c_coreops.helpers import tier
 
 
 class DummyMember:
