@@ -122,8 +122,8 @@ sync modules remain available for non-async scripts and cache warmers.
 | `ENABLE_WELCOME_HOOK` | bool | `true` | Event listeners for welcomes. Disable to pause ticket automation. |
 | `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promos. |
 
-> `ENABLE_WELCOME_HOOK` replaces the legacy `_WATCHER` name. The runtime still accepts
-> the previous key for backward compatibility but new deployments should migrate.
+> `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
+> `ENABLE_WELCOME_WATCHER` entries from deployment environments.
 
 > Cron cadences are fixed in code today; update the scheduler directly if the defaults change.
 
@@ -198,4 +198,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-25 (v0.9.5)

@@ -1,4 +1,4 @@
-# C1C Recruitment Bot Documentation Overview (v0.9.5)
+# C1C Recruitment Bot Documentation Overview (v0.9.7)
 
 ## Purpose
 This index explains the intent and ownership of every file in the documentation tree.
@@ -19,10 +19,13 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0008`](adr/ADR-0008-emoji-pipeline-port.md) — Emoji pipeline port.
 * [`ADR-0009`](adr/ADR-0009-recruiter-panel-text-only.md) — Recruiter panel text-only.
 * [`ADR-0010`](adr/ADR-0010-clan-profile-with-emoji.md) — Clan profile emoji policy.
-* [`ADR-0011`](adr/ADR-0011.md) — Member search indexing.
+* [`ADR-0011`](adr/ADR-0011-Normalize-to-Modules-First.md) — Member search indexing.
 * [`ADR-0012`](adr/ADR-0012-coreops-package.md) — CoreOps package structure.
 * [`ADR-0013`](adr/ADR-0013-config-io-hardening.md) — Config & I/O hardening (log channel, emoji proxy, recruiter Sheets, readiness route).
-* [`ADR-0014`](adr/ADR-0014.md) — Reservations & Placement Schema.
+* [`ADR-0014`](adr/ADR-0014-async-sheets-facade.md) — Async Sheets facade contract.
+* [`ADR-0015`](adr/ADR-0015-config-hygiene-and-secrets.md) — Config hygiene & secrets governance.
+* [`ADR-0016`](adr/ADR-0016-import-side-effects.md) — Import-time side effects removal.
+* [`ADR-0017`](adr/ADR-0017-Reservations-Placement-Schema.md) — Reservations & placement schema.
 * [`ADR README`](adr/README.md) — Index for Architectural Decision Records.
 * File a new ADR for every major design or structural change.
 
@@ -69,7 +72,7 @@ It exists so that contributors update the correct references after each developm
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.
 * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
-* Ensure the version shown in this index (currently v0.9.5) matches the bot version in the root `README.md`.
+* Ensure the version shown in this index (currently v0.9.7) matches the bot version in the root `README.md`.
 
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”

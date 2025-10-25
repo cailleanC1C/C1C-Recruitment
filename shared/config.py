@@ -325,10 +325,7 @@ def _load_config() -> Dict[str, object]:
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
         "WELCOME_ENABLED": _env_bool("WELCOME_ENABLED", True),
-        "ENABLE_WELCOME_HOOK": _env_bool(
-            "ENABLE_WELCOME_HOOK",
-            _env_bool("ENABLE_WELCOME_WATCHER", True),
-        ),
+        "ENABLE_WELCOME_HOOK": _env_bool("ENABLE_WELCOME_HOOK", True),
         "ENABLE_PROMO_WATCHER": _env_bool("ENABLE_PROMO_WATCHER", True),
         "ENABLE_NOTIFY_FALLBACK": _env_bool("ENABLE_NOTIFY_FALLBACK", True),
         "STRICT_PROBE": _env_bool("STRICT_PROBE", False),
@@ -351,6 +348,11 @@ def _load_config() -> Dict[str, object]:
         "TAG_BADGE_BOX": _float_env("TAG_BADGE_BOX", 0.90, min_value=0.2, max_value=0.95),
         "STRICT_EMOJI_PROXY": _env_bool("STRICT_EMOJI_PROXY", True),
     }
+
+    if os.getenv("ENABLE_WELCOME_WATCHER") not in (None, ""):
+        log.warning(
+            "Legacy ENABLE_WELCOME_WATCHER detected; set ENABLE_WELCOME_HOOK and remove the old key."
+        )
 
     return config
 
@@ -573,14 +575,8 @@ def get_welcome_enabled() -> bool:
 def get_enable_welcome_hook() -> bool:
     value = _CONFIG.get("ENABLE_WELCOME_HOOK")
     if value is None:
-        value = _CONFIG.get("ENABLE_WELCOME_WATCHER", True)
+        return True
     return bool(value)
-
-
-def get_enable_welcome_watcher() -> bool:
-    """Backward-compatible alias for the renamed welcome toggle."""
-
-    return get_enable_welcome_hook()
 
 
 def get_enable_promo_watcher() -> bool:

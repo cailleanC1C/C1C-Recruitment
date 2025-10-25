@@ -24,4 +24,4 @@ Set the desired value in the `FeatureToggles` tab, then run `!rec refresh config
 to apply it. The runtime logs whether each module was loaded or skipped at boot. See
 [`Config.md`](Config.md#feature-toggles-worksheet) for the worksheet contract.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-25 (v0.9.5)

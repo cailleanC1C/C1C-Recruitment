@@ -1,19 +1,20 @@
 # CoreOps Architecture
 
-```
-Discord Cog ─┬─> CoreOps command handlers ──> Cache Service ──> Google Sheets
-             │                               │                    (Recruitment &
-             │                               │                     Onboarding)
-             │                               │
-             └─> Telemetry bus ──> Embed Renderer ──> Discord embeds
-
-Preloader ──> Cache Service.refresh_now(name, actor="startup")
-             │
-             └─> Scheduler ──> bot_info refresh (every 3 h)
-
-User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embed Renderer
-                                        │
-                                        └─> Public telemetry helpers only
+```mermaid
+flowchart TD
+    Discord[Discord Gateway] -->|events| CoreOps[CoreOps command handlers]
+    CoreOps -->|commands| CacheSvc[Cache Service]
+    CacheSvc --> Sheets[(Google Sheets)]
+    CoreOps --> Telemetry[Telemetry bus]
+    Telemetry --> Renderer[Embed renderer]
+    Renderer -->|embeds| Discord
+    Preloader[Startup preloader] -->|warm buckets| CacheSvc
+    Scheduler[Runtime scheduler] -->|cron refresh| CacheSvc
+    Scheduler --> Digest[Recruiter digest jobs]
+    User[Member/Admin requests] --> CoreOps
+    Http[aiohttp runtime] --> Ready[/ready endpoint/]
+    Http --> Health[/health & healthz/]
+    CoreOps -->|health hooks| Http
 ```
 
 ### Flow notes
@@ -71,4 +72,4 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   - `placement_target_select` — placement targeting picker inside panels.
   - `placement_reservations` — reservation holds and release workflow.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-25 (v0.9.5)
