@@ -55,7 +55,7 @@ from shared.help import (
     build_help_overview_embed,
     lookup_help_metadata,
 )
-from modules.coreops.helpers import tier
+from .helpers import tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.sheets.async_core import (
     aget_worksheet,
@@ -3012,6 +3012,12 @@ class CoreOpsCog(commands.Cog):
         raise error
 
 
+async def setup(bot: commands.Bot) -> None:
+    """discord.py extension hook to register the CoreOps cog."""
+
+    await bot.add_cog(CoreOpsCog(bot))
+
+
 __all__ = [
     "UTC",
     "CoreOpsCog",
@@ -3019,4 +3025,5 @@ __all__ = [
     "_admin_roles_configured",
     "_staff_check",
     "detect_admin_bang_command",
+    "setup",
 ]

@@ -1,3 +1,5 @@
+"""Instrumentation helpers for CoreOps scheduled jobs."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +8,6 @@ import functools
 import logging
 import traceback
 from typing import Any, Awaitable, Callable, Dict, Optional
-
 
 log = logging.getLogger("c1c.cron")
 TAG = "[cron]"

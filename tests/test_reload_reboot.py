@@ -1,6 +1,6 @@
 import asyncio
 
-from modules.coreops.commands import reload
+from c1c_coreops.commands import reload
 
 
 def test_reboot_triggers_runtime_restart(monkeypatch):

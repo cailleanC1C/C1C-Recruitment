@@ -4,7 +4,7 @@ from discord.ext import commands
 
 from modules.common import runtime as rt
 # NOTE: Do not import role ID constants from shared.config; not exported here.
-from modules.coreops.helpers import tier
+from c1c_coreops.helpers import tier
 from c1c_coreops.rbac import is_staff_member, is_admin_member
 from shared.sheets import async_facade as sheets
 

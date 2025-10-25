@@ -18,7 +18,7 @@ from shared.config import (
 )
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
-from modules.coreops.helpers import tier
+from c1c_coreops.helpers import tier
 from modules.common.runtime import Runtime
 from c1c_coreops.config import (
     build_command_variants,
@@ -33,7 +33,7 @@ from c1c_coreops.rbac import (
     get_staff_role_ids,
     is_admin_member,
 )
-from modules.coreops.cron_summary import emit_daily_summary
+from c1c_coreops.cron_summary import emit_daily_summary
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),

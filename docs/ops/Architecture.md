@@ -51,7 +51,7 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 
 ### Module topology
 - CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.
-- `shared/coreops_*` modules are deprecated shims re-exporting the new package for one release.
+- CoreOps helpers ship only in the `c1c_coreops` package; no shared shims remain.
 
 ### Feature gating at load
 - **Module wiring:** Feature modules call `modules.common.feature_flags.is_enabled(<key>)` during boot.

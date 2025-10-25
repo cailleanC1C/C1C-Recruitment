@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from modules.coreops.cronlog import cron_task
+from c1c_coreops.cronlog import cron_task
 
 from shared.cache import telemetry as cache_telemetry
 from shared.cache.telemetry import RefreshResult
