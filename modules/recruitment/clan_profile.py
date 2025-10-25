@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands
 
 from . import cards, emoji_pipeline
-from shared.sheets import recruitment as recruitment_sheets
+from shared.sheets import async_facade as sheets
 
 _VALID_TAG_CHARS: frozenset[str] = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 _FLIP_EMOJI = "\N{ELECTRIC LIGHT BULB}"  # 💡
@@ -71,7 +71,7 @@ class ClanProfileCog(commands.Cog):
             await ctx.reply(embed=_error_embed(tag or "?"), mention_author=False)
             return
 
-        row = recruitment_sheets.get_clan_by_tag(normalized)
+        row = await sheets.get_clan_by_tag(normalized)
         if row is None:
             await ctx.reply(embed=_error_embed(normalized), mention_author=False)
             return
