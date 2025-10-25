@@ -11,6 +11,7 @@ Avoid importing runtime-bound modules from package `__init__`. Move `shared.conf
 - Docker build can import packages without secrets.
 - Strict validation remains enforced at runtime boot; misconfigurations still fail fast.
 - Clear boundary: libraries remain import-safe; apps validate on start.
+- Selected top-level re-exports are preserved via lazy ``__getattr__`` proxies; no eager imports occur.
 
 ## Status
 Accepted
