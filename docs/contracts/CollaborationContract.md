@@ -161,8 +161,8 @@ needs:triage, ready, blocked, help wanted, good first issue
 Legacy bot clones for reference:
 
 ```
-AUDIT/20251010_src/MM   → Matchmaker legacy clone
-AUDIT/20251010_src/WC   → WelcomeCrew legacy clone
+AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/MM   → Matchmaker legacy clone
+AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew legacy clone
 ```
 
 ---
