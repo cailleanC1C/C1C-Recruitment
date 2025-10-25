@@ -17,6 +17,12 @@ import discord
 from discord import InteractionResponded
 
 from .. import cards
+from ..search_helpers import (
+    format_filters_footer as _format_filters_footer,
+    parse_inactives_num,
+    parse_spots_num,
+    row_matches as _row_matches,
+)
 from modules.common import config_access as config
 from shared.sheets import async_facade as sheets
 from .results_pager import ResultsPagerView
@@ -50,7 +56,7 @@ IDX_AB = 27
 IDX_AC_RESERVED = 28
 IDX_AD_COMMENTS = 29
 IDX_AE_REQUIREMENTS = 30
-IDX_AF_INACTIVES = 31
+IDX_AG_INACTIVES = 32
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
 HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
@@ -158,72 +164,6 @@ def _playstyle_ok(cell_text: str, wanted: Optional[str]) -> bool:
     if not canon:
         return True
     return canon in _split_styles(cell_text)
-
-
-def _parse_number(cell_text: str) -> int:
-    import re
-
-    match = re.search(r"\d+", cell_text or "")
-    return int(match.group()) if match else 0
-
-
-def _row_matches(
-    row: Sequence[str],
-    cb: Optional[str],
-    hydra: Optional[str],
-    chimera: Optional[str],
-    cvc: Optional[str],
-    siege: Optional[str],
-    playstyle: Optional[str],
-) -> bool:
-    if len(row) <= IDX_AB:
-        return False
-    if _is_header_row(row):
-        return False
-    if not (row[COL_B_CLAN] or "").strip():
-        return False
-    return (
-        _cell_has_diff(row[COL_P_CB], cb)
-        and _cell_has_diff(row[COL_Q_HYDRA], hydra)
-        and _cell_has_diff(row[COL_R_CHIMERA], chimera)
-        and _cell_equals_flag(row[COL_S_CVC], cvc)
-        and _cell_equals_flag(row[COL_T_SIEGE], siege)
-        and _playstyle_ok(row[COL_U_STYLE], playstyle)
-    )
-
-
-def _format_filters_footer(
-    cb: Optional[str],
-    hydra: Optional[str],
-    chimera: Optional[str],
-    cvc: Optional[str],
-    siege: Optional[str],
-    playstyle: Optional[str],
-    roster_mode: Optional[str],
-) -> str:
-    parts: list[str] = []
-    if cb:
-        parts.append(f"CB: {cb}")
-    if hydra:
-        parts.append(f"Hydra: {hydra}")
-    if chimera:
-        parts.append(f"Chimera: {chimera}")
-    if cvc is not None:
-        parts.append(f"CvC: {'Yes' if cvc == '1' else 'No'}")
-    if siege is not None:
-        parts.append(f"Siege: {'Yes' if siege == '1' else 'No'}")
-    if playstyle:
-        parts.append(f"Playstyle: {playstyle}")
-
-    roster_label = "All"
-    if roster_mode == "open":
-        roster_label = "Open only"
-    elif roster_mode == "inactives":
-        roster_label = "Inactives only"
-    elif roster_mode == "full":
-        roster_label = "Full only"
-    parts.append(f"Roster: {roster_label}")
-    return " • ".join(parts)
 
 
 def _page_embeds(
@@ -863,11 +803,11 @@ class RecruiterPanelView(discord.ui.View):
                         self.playstyle,
                     ):
                         continue
-                    spots = _parse_number(
+                    spots = parse_spots_num(
                         row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
                     )
-                    inactives = _parse_number(
-                        row[IDX_AF_INACTIVES] if len(row) > IDX_AF_INACTIVES else ""
+                    inactives = parse_inactives_num(
+                        row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
                     )
                     if self.roster_mode == "open" and spots <= 0:
                         continue

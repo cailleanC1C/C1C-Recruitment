@@ -9,7 +9,7 @@ import discord
 
 from .. import cards, emoji_pipeline
 
-PAGE_SIZE = 10
+PAGE_SIZE = 5
 
 
 class MemberSearchPagedView(discord.ui.View):
@@ -90,7 +90,10 @@ class MemberSearchPagedView(discord.ui.View):
             else:
                 embed.set_footer(text="")
             return embed
-        return cards.make_embed_for_row_lite(row, self.filters_text, self.guild)
+        embed = cards.make_embed_for_row_lite(row, self.filters_text, self.guild)
+        if self.filters_text:
+            embed.set_footer(text=f"Filters used: {self.filters_text}")
+        return embed
 
     async def _build_page(self) -> tuple[list[discord.Embed], list[discord.File]]:
         start = self.page * PAGE_SIZE
@@ -130,6 +133,11 @@ class MemberSearchPagedView(discord.ui.View):
 
         return embeds, files
 
+    async def build_outputs(self) -> tuple[list[discord.Embed], list[discord.File]]:
+        """Public helper returning the embeds/files for the current state."""
+
+        return await self._build_page()
+
     async def _edit(self, interaction: discord.Interaction) -> None:
         try:
             await interaction.response.defer()
@@ -139,14 +147,19 @@ class MemberSearchPagedView(discord.ui.View):
         self._sync_buttons()
         embeds, files = await self._build_page()
 
-        sent = await interaction.followup.send(embeds=embeds, files=files, view=self)
+        message = interaction.message or self.message
+        if message is None:
+            sent = await interaction.followup.send(embeds=embeds, files=files, view=self)
+            self.message = sent
+            return
 
-        if self.message is not None:
-            try:
-                await self.message.delete()
-            except Exception:  # pragma: no cover - cleanup best effort
-                pass
-        self.message = sent
+        try:
+            await message.edit(embeds=embeds, attachments=files, view=self)
+        except Exception:
+            sent = await interaction.followup.send(embeds=embeds, files=files, view=self)
+            self.message = sent
+        else:
+            self.message = message
 
     @discord.ui.button(
         emoji="📇",

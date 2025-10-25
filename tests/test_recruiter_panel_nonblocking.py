@@ -25,12 +25,12 @@ class DummyInteraction:
 
 
 def _sample_rows() -> list[list[str]]:
-    header = ["header"] * (panel.IDX_AF_INACTIVES + 1)
-    row = [""] * (panel.IDX_AF_INACTIVES + 1)
+    header = ["header"] * (panel.IDX_AG_INACTIVES + 1)
+    row = [""] * (panel.IDX_AG_INACTIVES + 1)
     row[panel.COL_B_CLAN] = "Clan"
     row[panel.COL_C_TAG] = "#TAG"
     row[panel.COL_E_SPOTS] = "5"
-    row[panel.IDX_AF_INACTIVES] = "1"
+    row[panel.IDX_AG_INACTIVES] = "1"
     return [header, row]
 
 

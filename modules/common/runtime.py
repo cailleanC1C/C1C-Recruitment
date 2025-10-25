@@ -804,6 +804,7 @@ class Runtime:
         await _load_feature_module(
             "modules.recruitment.services.search", ("member_panel", "recruiter_panel")
         )
+        await _load_feature_module("cogs.recruitment_member", ("member_panel",))
         await _load_feature_module("cogs.recruitment_recruiter", ("recruiter_panel",))
 
         if features.is_enabled("clan_profile"):
