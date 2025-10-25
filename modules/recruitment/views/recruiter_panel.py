@@ -266,6 +266,7 @@ class RecruiterPanelView(discord.ui.View):
         self._last_panel_embeds: list[discord.Embed] = []
         self._last_results_embeds: list[discord.Embed] = []
         self._last_results_content: str | None = None
+        self._last_results_had_pager: bool = False
         self._busy: bool = False
 
         self.cb: Optional[str] = None
@@ -293,22 +294,14 @@ class RecruiterPanelView(discord.ui.View):
         self._update_task = None
 
     async def _send_busy_response(self, itx: discord.Interaction) -> None:
-        message = "Still working on your last update…"
         if not itx.response.is_done():
             with contextlib.suppress(Exception):
-                await itx.response.send_message(message, ephemeral=True)
-        else:
-            with contextlib.suppress(Exception):
-                await itx.followup.send(message, ephemeral=True, wait=False)
+                await itx.response.defer()
 
     async def _ack_interaction(self, itx: discord.Interaction) -> None:
         if not itx.response.is_done():
             with contextlib.suppress(Exception):
-                await itx.response.defer(ephemeral=True)
-                await itx.followup.send("Updating the panel…", ephemeral=True, wait=False)
-        else:
-            with contextlib.suppress(Exception):
-                await itx.followup.send("Updating the panel…", ephemeral=True, wait=False)
+                await itx.response.defer()
 
     async def _begin_interaction(self, itx: discord.Interaction) -> bool:
         if self._busy:
@@ -319,15 +312,14 @@ class RecruiterPanelView(discord.ui.View):
         self._cancel_inflight()
         return True
 
-    async def _rebuild_and_edit(
-        self, itx: discord.Interaction, *, ack_ephemeral: str | None = None
-    ) -> None:
+    async def _rebuild_and_edit(self, itx: discord.Interaction) -> None:
         """Build current page and edit the original panel message in place."""
 
         current_task = asyncio.current_task()
         previous_panel_embeds: list[discord.Embed] = []
         previous_results_embeds: list[discord.Embed] = []
         previous_results_content: str | None = None
+        previous_results_had_pager = self._last_results_had_pager
         if self.message:
             try:
                 previous_panel_embeds = [
@@ -350,19 +342,17 @@ class RecruiterPanelView(discord.ui.View):
             panel_embeds, results_embeds = await self._build_page()
             self._last_panel_embeds = [embed.copy() for embed in panel_embeds]
             self._last_results_embeds = [embed.copy() for embed in results_embeds]
+            self._last_results_had_pager = bool(results_embeds)
             if self.message:
                 with contextlib.suppress(Exception):
                     await self.message.edit(embeds=panel_embeds or None, view=self)
             await self._publish_results(results_embeds)
-            if ack_ephemeral:
-                with contextlib.suppress(Exception):
-                    await itx.followup.send(ack_ephemeral, ephemeral=True)
         except asyncio.CancelledError:
             return
         except Exception:
             log.exception("failed to rebuild recruiter panel")
-            with contextlib.suppress(Exception):
-                await itx.followup.send("Couldn’t update the panel. Try again.", ephemeral=True)
+            self.status_message = "⚠️ Couldn’t update the panel. Try again."
+            self._sync_visuals()
             if self.message:
                 with contextlib.suppress(Exception):
                     await self.message.edit(
@@ -373,6 +363,7 @@ class RecruiterPanelView(discord.ui.View):
             self._last_panel_embeds = [embed.copy() for embed in previous_panel_embeds]
             self._last_results_embeds = [embed.copy() for embed in previous_results_embeds]
             self._last_results_content = previous_results_content
+            self._last_results_had_pager = previous_results_had_pager
         finally:
             if current_task and self._update_task is current_task:
                 self._update_task = None
@@ -589,49 +580,57 @@ class RecruiterPanelView(discord.ui.View):
         if not isinstance(channel, discord.abc.Messageable):
             return
 
-        results_content: str | None = None
+        self._last_results_had_pager = bool(embeds)
+        view: ResultsPagerView | None = None
+        payload_embeds: list[discord.Embed]
 
-        if not embeds:
-            results_content = (
-                "No matching clans found. Try again with fewer or different filters."
-            )
-            if self.results_message:
-                with contextlib.suppress(Exception):
-                    await self.results_message.edit(
-                        content=results_content,
-                        embeds=[],
-                        view=None,
-                    )
+        if embeds:
+            view = self._ensure_results_view()
+            view.sync_state()
+            payload_embeds = embeds
+        else:
+            payload_embeds = [
+                discord.Embed(
+                    title="No matching clans found",
+                    description="Try relaxing or adjusting your filters, then search again.",
+                )
+            ]
             self.results_view = None
-            self._last_results_content = results_content
-            return
 
-        view = self._ensure_results_view()
-        view.sync_state()
+        if self.results_message and self.results_message.channel.id != channel.id:
+            self.results_message = None
 
+        message: discord.Message | None = None
         if self.results_message:
             try:
-                await self.results_message.edit(content=None, embeds=embeds, view=view)
-            except discord.NotFound:
-                self.results_message = None
-                self.cog.unregister_results_message(self.author_id)
-            else:
-                view.bind_to(self.results_message)
-                self.cog.register_results_message(
-                    owner_id=self.author_id,
-                    channel_id=self.results_message.channel.id,
-                    message_id=self.results_message.id,
+                await self.results_message.edit(
+                    content=None,
+                    embeds=payload_embeds,
+                    view=view,
                 )
-                self._last_results_content = results_content
-                return
+            except discord.NotFound:
+                self.cog.unregister_results_message(self.author_id)
+                self.results_message = None
+            else:
+                message = self.results_message
 
-        sent = await channel.send(embeds=embeds, view=view)
-        self.results_message = sent
-        view.bind_to(sent)
+        if message is None:
+            sent = await channel.send(embeds=payload_embeds, view=view)
+            message = sent
+            self.results_message = sent
+
+        if view:
+            view.bind_to(message)
+            self.results_view = view
+        else:
+            self.results_view = None
+
         self.cog.register_results_message(
-            owner_id=self.author_id, channel_id=sent.channel.id, message_id=sent.id
+            owner_id=self.author_id,
+            channel_id=message.channel.id,
+            message_id=message.id,
         )
-        self._last_results_content = results_content
+        self._last_results_content = None
 
     async def _restore_results(
         self,
@@ -646,12 +645,15 @@ class RecruiterPanelView(discord.ui.View):
                 await self.results_message.edit(view=None)
             self.results_view = None
             self._last_results_content = content
+            self._last_results_had_pager = False
             return
 
         view: ResultsPagerView | None = None
-        if embeds:
+        if embeds and self._last_results_had_pager:
             view = self._ensure_results_view()
             view.sync_state()
+        elif not embeds:
+            self.results_view = None
 
         try:
             await self.results_message.edit(
@@ -664,10 +666,12 @@ class RecruiterPanelView(discord.ui.View):
             self.results_view = None
             self.cog.unregister_results_message(self.author_id)
             self._last_results_content = None
+            self._last_results_had_pager = False
         else:
             if view and self.results_message:
                 view.bind_to(self.results_message)
             self._last_results_content = content
+            self._last_results_had_pager = bool(embeds)
 
     def _reset_filters(self, *, for_user: bool = False) -> None:
         self.cb = self.hydra = self.chimera = self.playstyle = None
@@ -817,21 +821,15 @@ class RecruiterPanelView(discord.ui.View):
         if not await self._begin_interaction(interaction):
             return
         self._reset_filters(for_user=True)
-        self._update_task = asyncio.create_task(
-            self._rebuild_and_edit(interaction, ack_ephemeral="Filters reset ✓")
-        )
+        self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
 
     async def _on_search(self, interaction: discord.Interaction) -> None:
         if not await self._begin_interaction(interaction):
             return
         if not self._has_any_filter():
-            self._update_task = None
-            self._busy = False
-            with contextlib.suppress(Exception):
-                await interaction.followup.send(
-                    "Pick at least one filter, then try again. 🙂",
-                    ephemeral=True,
-                )
+            self.status_message = "Pick at least one filter, then try again. 🙂"
+            self._sync_visuals()
+            self._update_task = asyncio.create_task(self._rebuild_and_edit(interaction))
             return
 
         self._update_task = asyncio.create_task(self._run_search(interaction))
@@ -894,13 +892,9 @@ class RecruiterPanelView(discord.ui.View):
                 )
                 self.total_found = 0
                 self.results_stale = False
-                self.status_message = (
-                    "No matching clans found. Try again with fewer or different filters."
-                )
+                self.status_message = "No matching clans found. Try relaxing your filters."
                 self._sync_visuals()
-                await self._rebuild_and_edit(
-                    interaction, ack_ephemeral="Search results updated ✓"
-                )
+                await self._rebuild_and_edit(interaction)
                 return
 
             cap = max(1, config.get_search_results_soft_cap(25))
@@ -935,18 +929,13 @@ class RecruiterPanelView(discord.ui.View):
             )
             self._sync_visuals()
 
-            await self._rebuild_and_edit(
-                interaction, ack_ephemeral="Search results updated ✓"
-            )
+            await self._rebuild_and_edit(interaction)
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("failed to refresh recruiter search results")
-            with contextlib.suppress(Exception):
-                await interaction.followup.send(
-                    "Couldn’t update the panel. Try again.",
-                    ephemeral=True,
-                )
+            self.status_message = "⚠️ Couldn’t update the panel. Try again."
+            self._sync_visuals()
             if self.message:
                 with contextlib.suppress(Exception):
                     await self.message.edit(

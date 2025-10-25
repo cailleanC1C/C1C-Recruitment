@@ -91,6 +91,7 @@ class RecruiterPanelCog(commands.Cog):
 
         view.results_message = message
         view.results_view = None
+        view._last_results_had_pager = bool(message.components)
         try:
             view._last_results_embeds = [
                 embed.copy() for embed in (message.embeds or [])
@@ -100,6 +101,11 @@ class RecruiterPanelCog(commands.Cog):
         view._last_results_content = message.content
         with contextlib.suppress(Exception):
             await message.edit(view=None)
+        self.register_results_message(
+            owner_id=owner_id,
+            channel_id=message.channel.id,
+            message_id=message.id,
+        )
 
     async def _resolve_recruiter_panel_channel(
         self, ctx: commands.Context
