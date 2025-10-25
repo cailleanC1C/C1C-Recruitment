@@ -21,3 +21,6 @@ Accepted
 - Boot without one required key → process exits with clear error.
 - Boot with all required keys but without `LOG_CHANNEL_ID` → warning once; bot runs.
 - CI parity check fails if docs and `.env.example` diverge; leak scan fails on Discord token patterns.
+
+
+Doc last updated: 2025-10-25 (v0.9.5)
