@@ -40,7 +40,7 @@ __all__ = [
     "get_recruiter_role_ids",
     "get_lead_role_ids",
     "get_welcome_enabled",
-    "get_enable_welcome_watcher",
+    "get_enable_welcome_hook",
     "get_enable_promo_watcher",
     "get_enable_notify_fallback",
     "get_feature_toggles",
@@ -104,7 +104,8 @@ for _name in _REQUIRED_ENV:
     _require_env(_name)
 
 for _name in _OPTIONAL_ENV:
-    _warn_if_missing(_name)
+    if _name != "LOG_CHANNEL_ID":
+        _warn_if_missing(_name)
 
 _SECRET_VALUE = "set"
 _MISSING_VALUE = "—"
@@ -113,6 +114,7 @@ _INT_RE = re.compile(r"\d+")
 _log_channel_warning_emitted = False
 
 _CONFIG: Dict[str, object] = {}
+LOG_CHANNEL_ID: Optional[int] | None = None
 
 _SECRET_KEYS = {
     "DISCORD_TOKEN",
@@ -174,6 +176,23 @@ def _first_int(raw: str | None) -> Optional[int]:
         except (TypeError, ValueError):
             continue
     return None
+
+
+def _refresh_log_channel() -> Optional[int]:
+    """Refresh the cached log channel identifier and emit warnings once."""
+
+    global LOG_CHANNEL_ID, _log_channel_warning_emitted
+
+    LOG_CHANNEL_ID = _first_int(os.getenv("LOG_CHANNEL_ID"))
+    if LOG_CHANNEL_ID is None:
+        if not _log_channel_warning_emitted:
+            log.warning(
+                "Log channel disabled; set LOG_CHANNEL_ID to enable Discord log posting."
+            )
+            _log_channel_warning_emitted = True
+    else:
+        _log_channel_warning_emitted = False
+    return LOG_CHANNEL_ID
 
 
 def _int_set(raw: str | None) -> Set[int]:
@@ -279,11 +298,7 @@ def _load_config() -> Dict[str, object]:
     grace = _runtime.get_watchdog_disconnect_grace_sec(stall)
 
     # LOG_CHANNEL_ID handling (PR1: disabled if empty; warn once; keep behavior)
-    log_channel = _first_int(os.getenv("LOG_CHANNEL_ID"))
-    global _log_channel_warning_emitted
-    if log_channel is None and not _log_channel_warning_emitted:
-        log.warning("Log channel disabled; set LOG_CHANNEL_ID to enable Discord log posting.")
-        _log_channel_warning_emitted = True
+    log_channel = _refresh_log_channel()
 
     refresh_default = ("02:00", "10:00", "18:00")
 
@@ -310,7 +325,10 @@ def _load_config() -> Dict[str, object]:
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
         "WELCOME_ENABLED": _env_bool("WELCOME_ENABLED", True),
-        "ENABLE_WELCOME_WATCHER": _env_bool("ENABLE_WELCOME_WATCHER", True),
+        "ENABLE_WELCOME_HOOK": _env_bool(
+            "ENABLE_WELCOME_HOOK",
+            _env_bool("ENABLE_WELCOME_WATCHER", True),
+        ),
         "ENABLE_PROMO_WATCHER": _env_bool("ENABLE_PROMO_WATCHER", True),
         "ENABLE_NOTIFY_FALLBACK": _env_bool("ENABLE_NOTIFY_FALLBACK", True),
         "STRICT_PROBE": _env_bool("STRICT_PROBE", False),
@@ -340,8 +358,16 @@ def _load_config() -> Dict[str, object]:
 def reload_config() -> Dict[str, object]:
     """Reload configuration from environment and return a snapshot."""
 
-    global _CONFIG
+    for _name in _REQUIRED_ENV:
+        _require_env(_name)
+
+    for _name in _OPTIONAL_ENV:
+        if _name != "LOG_CHANNEL_ID":
+            _warn_if_missing(_name)
+
     snapshot = _load_config()
+
+    global _CONFIG
     _CONFIG = snapshot
     _log_snapshot(snapshot)
     return dict(_CONFIG)
@@ -544,8 +570,17 @@ def get_welcome_enabled() -> bool:
     return bool(_CONFIG.get("WELCOME_ENABLED", True))
 
 
+def get_enable_welcome_hook() -> bool:
+    value = _CONFIG.get("ENABLE_WELCOME_HOOK")
+    if value is None:
+        value = _CONFIG.get("ENABLE_WELCOME_WATCHER", True)
+    return bool(value)
+
+
 def get_enable_welcome_watcher() -> bool:
-    return bool(_CONFIG.get("ENABLE_WELCOME_WATCHER", True))
+    """Backward-compatible alias for the renamed welcome toggle."""
+
+    return get_enable_welcome_hook()
 
 
 def get_enable_promo_watcher() -> bool:
