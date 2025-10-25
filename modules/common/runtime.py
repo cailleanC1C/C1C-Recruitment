@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from discord.ext import commands
 
+from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from shared import watchdog as watchdog_loop
 from shared.config import (
@@ -31,6 +32,7 @@ from shared.config import (
     get_refresh_timezone,
     get_strict_emoji_proxy,
 )
+from shared.logging.structured import JsonFormatter, get_trace_id, set_trace_id
 from modules.coreops.helpers import audit_tiers, rehydrate_tiers
 from shared.web_routes import mount_emoji_pad
 
@@ -39,6 +41,112 @@ log = logging.getLogger("c1c.runtime")
 _ACTIVE_RUNTIME: "Runtime | None" = None
 _PRELOAD_TASK: asyncio.Task[None] | None = None
 _web_app: web.Application | None = None
+
+
+async def create_app(*, runtime: "Runtime | None" = None) -> web.Application:
+    """Create and configure the aiohttp application used by the runtime."""
+
+    static_fields = {"env": get_env_name(), "bot": get_bot_name()}
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    has_stream_handler = False
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setFormatter(JsonFormatter(static=static_fields))
+            has_stream_handler = True
+    if not has_stream_handler:
+        handler = logging.StreamHandler()
+        handler.setFormatter(JsonFormatter(static=static_fields))
+        root_logger.addHandler(handler)
+
+    healthmod.set_component("runtime", True)
+
+    @web.middleware
+    async def tracing_middleware(
+        request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
+    ) -> web.StreamResponse:
+        trace = set_trace_id()
+        started = time.perf_counter()
+        status = 500
+        try:
+            response = await handler(request)
+            status = getattr(response, "status", status)
+            return response
+        finally:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            logging.getLogger("access").info(
+                "http_request",
+                extra={
+                    "trace": trace,
+                    "path": request.path,
+                    "method": request.method,
+                    "status": status,
+                    "ms": duration_ms,
+                },
+            )
+
+    app = web.Application(middlewares=[tracing_middleware])
+
+    mount_emoji_pad(app)
+    strict_proxy_flag = "1" if get_strict_emoji_proxy() else "0"
+    log.info("web: /emoji-pad mounted (STRICT_EMOJI_PROXY=%s)", strict_proxy_flag)
+
+    async def root(_: web.Request) -> web.Response:
+        payload = {
+            "ok": True,
+            "bot": get_bot_name(),
+            "env": get_env_name(),
+            "version": os.getenv("BOT_VERSION", "dev"),
+            "trace": get_trace_id(),
+        }
+        return web.json_response(payload)
+
+    async def ready(_: web.Request) -> web.Response:
+        components = healthmod.components_snapshot()
+        ok = healthmod.overall_ready()
+        return web.json_response({"ok": ok, "components": components})
+
+    async def _health_payload() -> tuple[dict[str, Any], bool]:
+        if runtime is None:
+            payload = {
+                "ok": True,
+                "bot": get_bot_name(),
+                "env": get_env_name(),
+                "version": os.getenv("BOT_VERSION", "dev"),
+            }
+            return payload, True
+        return await runtime._health_payload()
+
+    async def health(_: web.Request) -> web.Response:
+        base_payload, healthy = await _health_payload()
+        components = healthmod.components_snapshot()
+        components_ok = all(item.get("ok", False) for item in components.values())
+        ready_ok = healthmod.overall_ready()
+        payload = dict(base_payload)
+        payload.update(
+            {
+                "ok": bool(healthy and components_ok),
+                "components": components,
+                "ready": ready_ok,
+                "endpoint": "health",
+            }
+        )
+        status = 200 if payload["ok"] else 503
+        return web.json_response(payload, status=status)
+
+    async def healthz(_: web.Request) -> web.Response:
+        payload, healthy = await _health_payload()
+        payload = dict(payload)
+        payload["endpoint"] = "healthz"
+        status = 200 if healthy else 503
+        return web.json_response(payload, status=status)
+
+    app.router.add_get("/", root)
+    app.router.add_get("/ready", ready)
+    app.router.add_get("/health", health)
+    app.router.add_get("/healthz", healthz)
+
+    return app
 
 
 async def _startup_preload(bot: commands.Bot | None = None) -> None:
@@ -397,36 +505,7 @@ class Runtime:
                 pass
             _web_app = None
 
-        async def root(_: web.Request) -> web.Response:
-            payload = {
-                "ok": True,
-                "bot": get_bot_name(),
-                "env": get_env_name(),
-                "version": os.getenv("BOT_VERSION", "dev"),
-            }
-            return web.json_response(payload)
-
-        async def ready(_: web.Request) -> web.Response:
-            return web.json_response({"ok": True})
-
-        async def health(_: web.Request) -> web.Response:
-            payload, healthy = await self._health_payload()
-            payload["endpoint"] = "health"
-            return web.json_response(payload, status=200 if healthy else 503)
-
-        async def healthz(_: web.Request) -> web.Response:
-            payload, healthy = await self._health_payload()
-            payload["endpoint"] = "healthz"
-            return web.json_response(payload, status=200 if healthy else 503)
-
-        app = web.Application()
-        mount_emoji_pad(app)
-        strict_proxy_flag = "1" if get_strict_emoji_proxy() else "0"
-        log.info("web: /emoji-pad mounted (STRICT_EMOJI_PROXY=%s)", strict_proxy_flag)
-        app.router.add_get("/", root)
-        app.router.add_get("/ready", ready)
-        app.router.add_get("/health", health)
-        app.router.add_get("/healthz", healthz)
+        app = await create_app(runtime=self)
 
         self._web_app = app
         _web_app = app

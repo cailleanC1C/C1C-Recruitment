@@ -4,6 +4,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from modules.common import runtime as rt
+from shared import health as healthmod
 
 
 class DummyBot:
@@ -57,17 +58,30 @@ def test_health_endpoints_exist_and_return_json(monkeypatch):
 
             async with TestServer(app) as server:
                 async with TestClient(server) as client:
+                    healthmod.set_component("discord", False)
+
                     resp = await client.get("/")
                     assert resp.status == 200
                     data = await resp.json()
                     assert data.get("ok") is True
                     assert "bot" in data and "env" in data and "version" in data
+                    assert "trace" in data and data["trace"]
 
-                    for path in ("/health", "/healthz", "/ready"):
-                        resp = await client.get(path)
-                        assert resp.status == 200
-                        payload = await resp.json()
-                        assert payload.get("ok") is True
+                    resp = await client.get("/health")
+                    assert resp.status == 503
+                    health_payload = await resp.json()
+                    assert health_payload.get("endpoint") == "health"
+                    assert "components" in health_payload
+
+                    resp = await client.get("/healthz")
+                    assert resp.status == 200
+                    healthz_payload = await resp.json()
+                    assert healthz_payload.get("endpoint") == "healthz"
+
+                    resp = await client.get("/ready")
+                    assert resp.status == 200
+                    ready_payload = await resp.json()
+                    assert ready_payload.get("ok") is False
         finally:
             await runtime.shutdown_webserver()
 

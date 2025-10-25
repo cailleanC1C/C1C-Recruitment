@@ -16,6 +16,7 @@ from shared.config import (
     is_guild_allowed,
     get_config_snapshot,
 )
+from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from modules.coreops.helpers import tier
 from modules.common.runtime import Runtime
@@ -143,6 +144,7 @@ async def _enforce_guild_allow_list(
 @bot.event
 async def on_ready():
     hb.note_ready()
+    healthmod.set_component("discord", True)
     log.info(
         'Bot ready as %s | env=%s | prefixes=["%s", "@mention"]',
         bot.user,
@@ -218,6 +220,7 @@ except Exception:
 @bot.event
 async def on_disconnect():
     hb.note_disconnected()
+    healthmod.set_component("discord", False)
 
 
 @bot.event

@@ -22,6 +22,26 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 > `[watcher|lifecycle]` this release. Update dashboards to accept `[lifecycle]` ahead of
 > the next release when the dual tag flips off.
 
+## Interpreting logs
+- Runtime logs are JSON. Each entry includes `ts`, `level`, `logger`, `msg`, `trace`,
+  `env`, and `bot` plus any contextual extras. Example:
+
+  ```json
+  {"ts":"2025-10-26T04:12:32.104Z","level":"INFO","logger":"access","msg":"http_request","trace":"0a6c...","env":"prod","bot":"c1c","path":"/ready","method":"GET","status":200,"ms":4}
+  ```
+- Filter structured logs with your aggregator using `logger:"access"` for request
+  summaries or `trace:<uuid>` to follow a specific request across service logs.
+- The root request handler also echoes the active `trace` in the JSON payload for quick
+  copy/paste when correlating downstream telemetry.
+
+## Readiness vs Liveness
+- `/ready` now reflects required components (`runtime`, `discord`). It returns
+  `{"ok": false}` until Discord connectivity triggers `health.set_component("discord", True)`.
+- `/health` returns the watchdog metrics plus a `components` map of `{name: {ok, ts}}`.
+  A non-200 indicates either the watchdog stalled or a component flipped `ok=False`.
+- `/healthz` remains the simple liveness check (`200` while the process and watchdog are
+  healthy).
+
 ## Refresh vs reload controls
 | Control | What it does | When to use | Logging & guardrails |
 | --- | --- | --- | --- |
@@ -64,4 +84,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
