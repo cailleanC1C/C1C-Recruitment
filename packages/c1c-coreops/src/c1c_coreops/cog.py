@@ -13,6 +13,7 @@ import time
 from importlib import import_module
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from types import ModuleType
 
 import discord
 from discord.ext import commands
@@ -26,13 +27,6 @@ from config.runtime import (
     get_watchdog_stall_sec,
 )
 from shared import socket_heartbeat as hb
-from shared.config import (
-    get_allowed_guild_ids,
-    get_config_snapshot,
-    get_feature_toggles,
-    reload_config,
-    redact_value,
-)
 from .render import (
     ChecksheetEmbedData,
     ChecksheetSheetEntry,
@@ -153,6 +147,50 @@ _GENERIC_ALIAS_COMMANDS: Tuple[str, ...] = (
     "refresh clansinfo",
     "reload",
 )
+
+
+_CONFIG_MODULE: ModuleType | None = None
+
+
+def _ensure_config_module() -> ModuleType:
+    """Import and cache the shared config module when needed."""
+
+    global _CONFIG_MODULE
+    if _CONFIG_MODULE is None:
+        from shared import config as _config  # noqa: WPS433 (runtime import)
+
+        _CONFIG_MODULE = _config
+    return _CONFIG_MODULE
+
+
+def get_allowed_guild_ids() -> Sequence[int]:
+    """Return guild IDs allowed to use CoreOps commands."""
+
+    return _ensure_config_module().get_allowed_guild_ids()
+
+
+def get_config_snapshot() -> Mapping[str, object]:
+    """Return a mapping of configuration values."""
+
+    return _ensure_config_module().get_config_snapshot()
+
+
+def get_feature_toggles() -> Mapping[str, object]:
+    """Return the configured feature toggles."""
+
+    return _ensure_config_module().get_feature_toggles()
+
+
+def reload_config() -> None:
+    """Reload configuration from the environment and Sheets."""
+
+    _ensure_config_module().reload_config()
+
+
+def redact_value(key: str, value: object) -> str:
+    """Redact sensitive values for display."""
+
+    return _ensure_config_module().redact_value(key, value)
 
 
 def _canonical_cmd_key(cmd: commands.Command[Any, Any, Any]) -> str:
@@ -913,6 +951,7 @@ class _IdResolver:
 
 class CoreOpsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
+        _ensure_config_module()
         self.bot = bot
         self._id_resolver = _IdResolver()
         self._settings: CoreOpsSettings = load_coreops_settings()
