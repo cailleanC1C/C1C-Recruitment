@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import inspect
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
@@ -21,7 +22,9 @@ from .shared import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.async_facade import fetch_clans_async
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("c1c.recruitment.member")
+
+NONE = discord.AllowedMentions.none()
 
 MAX_VISIBLE_ROWS = 5
 
@@ -167,6 +170,12 @@ class MemberPanelController:
             extra_note=cap_note,
         )
 
+        view = MemberSearchPagedView(
+            author_id=int(author_id),
+            rows=visible_rows,
+            filters_text=filters_text,
+            guild=guild,
+        )
         if not visible_rows:
             embed = discord.Embed(
                 title="No matching clans found.",
@@ -181,18 +190,12 @@ class MemberPanelController:
                 content=None,
                 embeds=[embed],
                 files=[],
-                view=None,
+                view=view,
                 interaction=interaction,
                 ctx=ctx,
             )
             return
 
-        view = MemberSearchPagedView(
-            author_id=int(author_id),
-            rows=visible_rows,
-            filters_text=filters_text,
-            guild=guild,
-        )
         embeds, files = await view.build_outputs()
 
         await self._send_or_edit(
@@ -252,6 +255,14 @@ class MemberPanelController:
         ctx: commands.Context | None,
     ) -> None:
         attachments = list(files)
+        embed_list = list(embeds)
+
+        def close_attachments() -> None:
+            for file in attachments:
+                try:
+                    file.close()
+                except Exception:
+                    pass
 
         if existing is None:
             if interaction is not None and not interaction.response.is_done():
@@ -263,6 +274,7 @@ class MemberPanelController:
                 if ctx is not None:
                     reply_fn = getattr(ctx, "reply", None)
                     if reply_fn is not None:
+
                         async def _reply_wrapper(*args, **kwargs):
                             kwargs.setdefault("mention_author", False)
                             return await reply_fn(*args, **kwargs)
@@ -271,28 +283,167 @@ class MemberPanelController:
                 if send is None:
                     send = getattr(channel, "send", None)
             if send is None:
+                close_attachments()
                 return
-            sent = await send(content=content, embeds=list(embeds), files=attachments, view=view)
+            try:
+                sent = await send(
+                    content=content,
+                    embeds=embed_list,
+                    files=attachments,
+                    view=view,
+                    allowed_mentions=NONE,
+                )
+            except discord.Forbidden as exc:
+                close_attachments()
+                await self._handle_forbidden(key, ctx, interaction, channel, exc)
+                return
+            except discord.HTTPException:
+                close_attachments()
+                log.exception(
+                    "member clansearch send/edit failed",
+                    extra=self._log_extra(ctx, interaction, key),
+                )
+                return
+            close_attachments()
             if hasattr(sent, "id"):
-                ACTIVE_PANELS[key] = getattr(sent, "id")
+                self._register_panel_key(
+                    key,
+                    getattr(sent, "id"),
+                    ctx=ctx,
+                    interaction=interaction,
+                )
                 if isinstance(view, MemberSearchPagedView):
                     view.message = sent  # type: ignore[assignment]
             return
 
         try:
-            await existing.edit(
-                content=content,
-                embeds=list(embeds),
-                attachments=attachments,
-                view=view,
-            )
+            params = inspect.signature(existing.edit).parameters
+        except (TypeError, ValueError):
+            params = {}
+        edit_kwargs = {
+            "content": content,
+            "embeds": embed_list,
+            "attachments": attachments,
+            "view": view,
+        }
+        if "allowed_mentions" in params:
+            edit_kwargs["allowed_mentions"] = NONE
+
+        try:
+            await existing.edit(**edit_kwargs)
+        except discord.Forbidden as exc:
+            close_attachments()
+            await self._handle_forbidden(key, ctx, interaction, channel, exc)
+            return
         except discord.HTTPException:
-            log.exception("member clansearch failed to edit results message", extra={"key": key})
+            close_attachments()
+            log.exception(
+                "member clansearch send/edit failed",
+                extra=self._log_extra(ctx, interaction, key),
+            )
             return
         else:
-            ACTIVE_PANELS[key] = existing.id
+            close_attachments()
+            self._register_panel_key(
+                key,
+                existing.id,
+                ctx=ctx,
+                interaction=interaction,
+            )
             if isinstance(view, MemberSearchPagedView):
                 view.message = existing
+
+    def _log_extra(
+        self,
+        ctx: commands.Context | None,
+        interaction: discord.Interaction | None,
+        key: tuple[int, int, int],
+    ) -> dict[str, object]:
+        guild_id, channel_id, user_id = key
+        extra: dict[str, object] = {
+            "guild": guild_id,
+            "channel": channel_id,
+            "user": user_id,
+        }
+        if ctx is not None:
+            extra.update(
+                {
+                    "ctx_guild": ctx.guild.id if ctx.guild else None,
+                    "ctx_channel": getattr(ctx.channel, "id", None),
+                    "ctx_user": getattr(ctx.author, "id", None),
+                }
+            )
+        if interaction is not None:
+            extra.update(
+                {
+                    "interaction_guild": interaction.guild_id,
+                    "interaction_channel": interaction.channel_id,
+                    "interaction_user": getattr(interaction.user, "id", None),
+                }
+            )
+        return extra
+
+    async def _handle_forbidden(
+        self,
+        key: tuple[int, int, int],
+        ctx: commands.Context | None,
+        interaction: discord.Interaction | None,
+        channel,
+        exc: discord.Forbidden,
+    ) -> None:
+        ACTIVE_PANELS.pop(key, None)
+        log.warning(
+            "member clansearch send/edit forbidden",
+            extra={
+                **self._log_extra(ctx, interaction, key),
+                "exception": repr(exc),
+            },
+        )
+        text = (
+            "I can’t post the search panel here (missing permissions like **Embed Links** or "
+            "**Use External Emojis**). Ask staff to adjust channel perms, or try in #bot-test."
+        )
+
+        sender = None
+        if ctx is not None and getattr(ctx.channel, "send", None) is not None:
+            sender = ctx.channel.send
+        elif interaction is not None:
+            if not interaction.response.is_done():
+                sender = interaction.response.send_message
+            else:
+                sender = interaction.followup.send
+        elif getattr(channel, "send", None) is not None:
+            sender = channel.send
+
+        if sender is None:
+            return
+
+        try:
+            await sender(text, allowed_mentions=NONE)
+        except Exception:
+            return
+
+    def _register_panel_key(
+        self,
+        key: tuple[int, int, int],
+        message_id: int,
+        *,
+        ctx: commands.Context | None,
+        interaction: discord.Interaction | None,
+    ) -> None:
+        ACTIVE_PANELS[key] = message_id
+        guild_id, channel_id, user_id = key
+        log.debug(
+            "member clansearch panel registered",
+            extra={
+                "guild": guild_id,
+                "channel": channel_id,
+                "user": user_id,
+                "message": message_id,
+                "ctx_user": getattr(ctx.author, "id", None) if ctx else None,
+                "interaction_user": getattr(getattr(interaction, "user", None), "id", None),
+            },
+        )
 
     async def _load_rows(self) -> list[Sequence[str]]:
         try:
