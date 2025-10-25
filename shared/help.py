@@ -211,6 +211,14 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="user",
     ),
+    "clansearch": _metadata(
+        short="Opens the member clan search panel.",
+        detailed=(
+            "Launches the prefix-only member search. Results refresh in-place as filters change so the channel isn’t spammed.\n"
+            "Tip: Start with `!clansearch` and fine-tune the roster/playstyle filters to narrow the list."
+        ),
+        tier="user",
+    ),
     "rec help": _metadata(
         short="Shows help for bot commands.",
         detailed=(

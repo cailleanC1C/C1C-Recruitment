@@ -7,7 +7,7 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 
 | Toggle | Default | Notes |
 | --- | --- | --- |
-| `member_panel` | `TRUE` | Enables member-facing search flows (future `!clansearch`). |
+| `member_panel` | `TRUE` | Enables prefix `!clansearch` for members (single-message results updated in-place). |
 | `recruiter_panel` | `ON` | Enables the text-only recruiter panel (`!clanmatch`). |
 | `clan_profile` | `ON` | Enables the public `!clan` command with crest and 💡 reaction toggle. |
 | `recruitment_welcome` | `TRUE` | Welcome command and onboarding listeners. |

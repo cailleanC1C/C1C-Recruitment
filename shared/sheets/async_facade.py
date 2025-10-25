@@ -29,6 +29,12 @@ async def fetch_clans(*args: Any, **kwargs: Any) -> Any:
     return await _to_thread(_recruitment_sync.fetch_clans, *args, **kwargs)
 
 
+async def fetch_clans_async(*args: Any, **kwargs: Any) -> Any:
+    """Compatibility alias for :func:`fetch_clans`."""
+
+    return await fetch_clans(*args, **kwargs)
+
+
 async def fetch_templates(*args: Any, **kwargs: Any) -> Any:
     return await _to_thread(_recruitment_sync.fetch_templates, *args, **kwargs)
 
@@ -80,6 +86,7 @@ async def call_with_backoff(*args: Any, **kwargs: Any) -> Any:
 
 __all__ = [
     "fetch_clans",
+    "fetch_clans_async",
     "fetch_templates",
     "fetch_clan_rows",
     "fetch_welcome_templates",
