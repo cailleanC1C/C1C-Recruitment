@@ -17,6 +17,8 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 ```
 
 ### Flow notes
+- **Diagram legend:** CoreOps command handlers (purple) orchestrate Shared services (blue),
+  which expose async facades to feature modules (green).
 - **Discord Cog → CoreOps:** All commands funnel through the shared CoreOps cog. RBAC
   decisions happen before touching cache APIs.
 - **Cache service:** Every cache interaction uses the public API (`get_snapshot`,
@@ -26,6 +28,8 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
 - **Sheets access:** Async command handlers import `shared.sheets.async_facade`, which
   routes synchronous helpers through `asyncio.to_thread` so the event loop stays
   unblocked even on cache misses.
+- **Health system:** `shared.health` tracks component readiness; the runtime flips
+  statuses for `/ready` and `/health` whenever Discord or the HTTP server changes state.
 - **Preloader:** Runs automatically during boot, logging `[refresh] startup` entries for
   each bucket.
 - **Scheduler:** Handles cron work including the 3-hour `bot_info` refresh, digest
@@ -36,7 +40,8 @@ User (any tier) ──> Discord Cog ──> CoreOps telemetry fetch ──> Embe
   trace id, `/ready` exposes the readiness gate with component details, `/health`
   combines the watchdog metrics with the component map, and `/healthz` remains the
   bare liveness probe.
-- **Logging & observability:** All runtime logs emit JSON with
+- **Logging & observability:** All runtime logs emit JSON via
+  `shared.logging.structured.JsonFormatter` with
   `ts`,`level`,`logger`,`msg`,`trace`,`env`,`bot` plus contextual extras. HTTP
   access logs are emitted under the canonical `aiohttp.access` logger with
   `path`,`method`,`status`, and latency (`ms`).

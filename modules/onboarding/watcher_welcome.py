@@ -12,7 +12,7 @@ from discord.ext import commands
 
 from modules.common import runtime as rt
 from shared.config import (
-    get_enable_welcome_watcher,
+    get_enable_welcome_hook,
     get_welcome_channel_id,
     get_welcome_enabled,
 )
@@ -156,7 +156,7 @@ async def setup(bot: commands.Bot) -> None:
     if not get_welcome_enabled():
         _announce(bot, "📴 Welcome watcher disabled: WELCOME_ENABLED is false.")
         return
-    if not get_enable_welcome_watcher():
+    if not get_enable_welcome_hook():
         _announce(bot, "📴 Welcome watcher disabled via config toggle.")
         return
 

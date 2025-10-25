@@ -74,9 +74,15 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
 - Logs heartbeat/watchdog decisions and command errors.
 
 ## CI/CD
-- GitHub Actions workflow serializes deploy runs per branch via concurrency queueing; runs are never cancelled preemptively.
-- Each run gathers its changed files, compares against newer commits on the branch, and skips automatically only when a newer push touched at least one of the same files (same-file supersession). Otherwise runs execute in order: queue → supersession check → deploy.
+- GitHub Actions deploys queue sequentially; only one run per branch can execute at a time.
+- When a newer push touches at least one of the same files, the older queued run is cancelled before build.
 - Render deploy via hook; container builds with Dockerfile; Python 3.12.
+- Example workflow log:
+  ```
+  2025-10-24T18:12:04Z queued → waiting for prior run
+  2025-10-24T18:13:19Z cancelled → superseded by commit touching shared file
+  2025-10-24T18:14:02Z started → latest commit entering deploy
+  ```
 
 ## SLO-ish Expectations
 - Ready within ~10s after container up.
@@ -88,4 +94,4 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
 - Embed footer standardized: `Bot vX.Y.Z · CoreOps vA.B.C` (Discord timestamp replaces
   inline timezone text).
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
