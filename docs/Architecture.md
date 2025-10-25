@@ -1,24 +1,29 @@
 # Architecture Overview
 
 ## Runtime map
-```
-Discord Gateway
-  ↳ Event handlers (commands, listeners, lifecycle)
-      ↳ CoreOps cog & command matrix (tier gated)
-      ↳ Watcher listeners (welcome, promo) [watcher]
-      ↳ Lifecycle notices (startup, reload, refresh) [watcher|lifecycle]
-          ↳ Runtime scheduler (refresh windows, retries) [cron]
-          ↳ Sheets adapters (recruitment, onboarding)
-              ↳ shared.sheets.core (Google API client, cache)
-                  ↳ Google Sheets
-  ↳ Health server (aiohttp) — /ready, /healthz
+```mermaid
+flowchart TD
+    Gateway[Discord Gateway] --> Handlers[Commands & listeners]
+    Handlers --> CoreOpsCog[CoreOps cog & command matrix]
+    Handlers --> Watchers[Welcome & promo hooks]
+    Handlers --> Lifecycle[Lifecycle notices]
+    Lifecycle --> Scheduler[Runtime scheduler]
+    Scheduler --> SheetsAdapters[Sheets adapters]
+    SheetsAdapters --> Sheets[(Google Sheets)]
+    Watchers --> SheetsAdapters
+    CoreOpsCog --> SheetsAdapters
+    Scheduler --> HealthLogs[Digest & refresh logs]
+    Http[aiohttp health server] --> ReadyEndpoint[/ready/]
+    Http --> HealthEndpoint[/health & healthz/]
+    CoreOpsCog --> Http
 ```
 
 ## Module map
 - CoreOps extensions load directly from `c1c_coreops`.
 - `packages/c1c-coreops/` — canonical home for the CoreOps cog, RBAC helpers, embed renderers, and prefix utilities.
 - CoreOps helpers live exclusively under `c1c_coreops.*`.
-- `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core).
+- `shared.sheets.*` — Sheets adapters (recruitment, onboarding, cache core) with async
+  facades for event-loop safety.
 
 CoreOps code exists **only** in `packages/c1c-coreops`. The `audit-coreops` workflow
 fails CI if any legacy imports, shims, or duplicate symbols live elsewhere.
@@ -99,8 +104,8 @@ off in production until the panels ship._
 - Toggles live in the recruitment Sheet `FeatureToggles` worksheet; `TRUE`/`true`/`1`
   enable a feature, `FALSE`/`false`/`0` disable it. Misconfigurations post a single admin-ping warning to the runtime log
   channel.
-- `ENABLE_WELCOME_HOOK` and `ENABLE_PROMO_WATCHER` environment flags still control
-  watcher registration independently of the feature sheet (see [`Config.md`](ops/Config.md#environment-keys)).
+- `ENABLE_WELCOME_HOOK` and `ENABLE_PROMO_WATCHER` environment flags control watcher
+  registration independently of the feature sheet (see [`Config.md`](ops/Config.md#environment-keys)).
 - RBAC derives from `c1c_coreops.rbac`, mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 
@@ -111,4 +116,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.7)

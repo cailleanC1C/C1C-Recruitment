@@ -123,6 +123,8 @@ They apply to **all phases, PRs, and documentation changes**.
 ### 🔹 Codex PR Formatting Rules
 
 All Codex prompts must be in **one fenced code block** for clean copy/paste.
+CI posts a Guardrails Summary comment with config/docs parity and leak-scan status on
+every PR—review it and note remediation in the PR body before appending the metadata block.
 Append this footer **at the end** of each PR prompt (not as a header):
 
 ```markdown
@@ -247,4 +249,4 @@ DO not use any other labels unless approved by caillean first
 | typecheck | `#bfdadc` | mypy/pyright typing issues |
 | wontfix | `#ffffff` | This will not be worked on |
 
-Doc last updated: 2025-10-24 (v0.9.5)
+Doc last updated: 2025-10-27 (v0.9.7)

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import re
 import sys
@@ -82,7 +83,44 @@ def check_discord_token_leak(repo_root: pathlib.Path) -> list[str]:
     return offenders
 
 
-def main() -> None:
+def build_summary(
+    *,
+    missing_in_docs: list[str],
+    missing_in_example: list[str],
+    offenders: list[str],
+) -> list[str]:
+    summary: list[str] = ["# Guardrails Summary", ""]
+
+    if missing_in_docs:
+        summary.append(
+            "- ❌ **Config parity:** Keys missing in docs → ``"
+            + ", ".join(missing_in_docs)
+            + "``"
+        )
+    elif missing_in_example:
+        summary.append(
+            "- ❌ **Config parity:** Keys missing in .env.example → ``"
+            + ", ".join(missing_in_example)
+            + "``"
+        )
+    else:
+        summary.append("- ✅ **Config parity:** docs and .env template aligned")
+
+    if offenders:
+        summary.append("- ❌ **Secret scan:** potential Discord tokens in:")
+        for offender in offenders:
+            summary.append(f"  - `{offender}`")
+    else:
+        summary.append("- ✅ **Secret scan:** no Discord token patterns detected")
+
+    return summary
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--summary", type=pathlib.Path, help="Path to write summary markdown")
+    args = parser.parse_args(argv)
+
     example_keys = env_keys_from_example(ENV_EXAMPLE)
     doc_keys = env_keys_from_docs(CONFIG_MD)
 
@@ -114,6 +152,14 @@ def main() -> None:
         for offender in offenders:
             print(" -", offender)
         exit_code = 1
+
+    if args.summary:
+        summary_lines = build_summary(
+            missing_in_docs=missing_in_docs,
+            missing_in_example=missing_in_example,
+            offenders=offenders,
+        )
+        args.summary.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
 
     sys.exit(exit_code)
 
