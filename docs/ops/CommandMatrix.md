@@ -36,7 +36,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
-| `!clansearch` | 🧩 | Member clan search with in-place updates (single results message). [gated: `member_panel`] | `!clansearch` |
+| `!clansearch` | 🧩 | Member clan search with legacy filters + pager (new message per change). [gated: `member_panel`] | `!clansearch` |
 | `!rec help [command]` | 🧩 | List accessible commands or expand one with usage and tips. | `!rec help` / `!rec help <command>` |
 | `!rec ping` | ✅ | Report bot latency and shard status without hitting the cache. | `!rec ping` |
 
