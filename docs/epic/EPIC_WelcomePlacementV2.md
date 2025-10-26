@@ -29,8 +29,8 @@ All operations are Config-driven, RBAC-checked, and log-visible.
 ## 3 · Channels  
 | Channel | Usage |
 | --- | --- |
-| `WELCOME_CHANNEL_ID` | new members |
-| `PROMO_CHANNEL_ID` | external recruits |
+| `WELCOME_CHANNEL_ID` | external recruits |
+| `PROMO_CHANNEL_ID` | members |
 
 Threads: `####-username` (Ticket Tool default).  
 Bot joins automatically if parent matches either channel.
@@ -65,7 +65,7 @@ Missing Config → log channel warning + safe disable.
 3. **Reservation flow** (`placement_reservations`)  
    - Clan dropdown populated from **Onboarding → ClanList (column B)**.  
    - Date/time input uses the same picker logic as the Ticket Tool **Close** flow.  
-   - On submit: add or update reservation row, then recompute E & AC immediately.
+   - On submit: add or update reservation row, then recompute AF & AI immediately.
 
 4. **Thread close**  
    Legacy close watcher behavior remains untouched.  
@@ -80,7 +80,7 @@ Missing Config → log channel warning + safe disable.
 
 6. **Refresh & restart**  
    - On boot → rebuild timers from `Reservations`.  
-   - Every **3 hours** (existing cron) → batch recompute E & AC for all clans.  
+   - Every **3 hours** (existing cron) → batch recompute AF & AI for all clans.  
    - `!rec refresh clansinfo` / `!rec refresh all` → manual trigger.  
 
 ---
@@ -92,10 +92,10 @@ Data starts at **row 4** (rows 1–3 = header).
 
 | Col | Meaning | Maintained by | Notes |
 | --- | --- | --- | --- |
-| E | Open spots (corrected) | Bot | `E = max(0, AG − active_res)` |
-| AF | Inactives | Manual | untouched |
-| AC | Reservation display | Bot | `N → @user1, @user2` |
-| AG | Manual open spots | Manual | source value |
+| AF | Open spots (corrected) | Bot | `E = max(0, AG − active_res)` |
+| AG | Inactives | Manual | untouched |
+| AI | Reservation display | Bot | `N → @user1, @user2` |
+| E | Manual open spots | Manual | source value |
 
 **Important:** `clan_tag` values in Reservations are validated against **Onboarding → ClanList (column B)**, not CLANS_TAB.
 
@@ -132,8 +132,8 @@ Data starts at **row 4** (rows 1–3 = header).
 2. Group active reservations by `clan_tag`.  
 3. For each clan:  
    - `count = len(active)`  
-   - `E = max(0, AG − count)`  
-   - `AC = "{count} → " + ", ".join(usernames)`  
+   - `AF = max(0, AG − count)`  
+   - `AI = "{count} → " + ", ".join(usernames)`  
 4. Batch-update rows (row ≥ 4).  
 
 Triggered by reservation events, 3 h cron, or manual refresh commands.
@@ -167,7 +167,7 @@ Triggered by reservation events, 3 h cron, or manual refresh commands.
 
 ## 11 · Acceptance
 1. Recruiters can reserve / cancel / renew spots.  
-2. E & AC recompute automatically and via cron/commands.  
+2. AF & AI recompute automatically and via cron/commands.  
 3. Reservation data survives restarts.  
 4. Logging visible in log channel.  
 5. RBAC enforced; help auto-lists new actions.  
@@ -186,7 +186,7 @@ Follow existing repo layout exactly.
 - `modules/recruitment/views/summary_embed.py` — dialog summary embed  
 - `modules/recruitment/services/reservations_store.py` — Reservations tab I/O  
 - `modules/recruitment/services/clans_tab.py` — CLANS_TAB recompute (row 4 offset)  
-- `docs/adr/ADR-0014.md` — architecture rationale  
+- `docs/adr/ADR-0017.md` — architecture rationale  
 - Updated FeatureToggles / Config tab templates  
 - Updated Command Matrix entries for RBAC  
 
