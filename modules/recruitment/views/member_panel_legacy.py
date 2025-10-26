@@ -13,6 +13,7 @@ from discord.ext import commands
 from .. import search as roster_search
 from ..search_helpers import format_filters_footer
 from .filters_member import MemberFiltersView
+from .interaction_utils import defer_once
 from .shared_member import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.recruitment import RecruitmentClanRecord
@@ -131,10 +132,7 @@ class MemberPanelControllerLegacy:
             await self._send_need_filter(interaction)
             return
 
-        try:
-            await interaction.response.defer(thinking=True)
-        except InteractionResponded:
-            pass
+        await defer_once(interaction, thinking=True)
 
         rows = await self._load_rows()
         matches = self._filter_rows(rows, state)
@@ -317,8 +315,7 @@ class MemberPanelControllerLegacy:
                     existing_message = None
                     continue
                 try:
-                    edited = await interaction.followup.edit_message(
-                        message_id=existing_id,
+                    edited = await existing_message.edit(
                         content=None,
                         embeds=safe_embeds,
                         attachments=attachments,
@@ -327,6 +324,7 @@ class MemberPanelControllerLegacy:
                     )
                 except discord.NotFound:
                     ACTIVE_RESULTS.pop(key, None)
+                    _rewind_files(attachments)
                     existing_message = None
                     continue
                 except discord.Forbidden as exc:
@@ -340,7 +338,9 @@ class MemberPanelControllerLegacy:
                     return
                 else:
                     _close_files(attachments)
-                    target_message = edited if isinstance(edited, discord.Message) else existing_message
+                    target_message = (
+                        edited if isinstance(edited, discord.Message) else existing_message
+                    )
                     try:
                         message_id = int(getattr(target_message, "id", None))
                     except (TypeError, ValueError):
@@ -354,6 +354,7 @@ class MemberPanelControllerLegacy:
                             view.bind_message(existing_message)
                         except Exception:
                             pass
+                    await _acknowledge_refresh(interaction)
                     return
 
             try:
@@ -471,6 +472,29 @@ def _close_files(files: Iterable[discord.File]) -> None:
             file.close()
         except Exception:
             pass
+
+
+def _rewind_files(files: Iterable[discord.File]) -> None:
+    for file in files:
+        try:
+            file.reset(seek=0)
+        except Exception:
+            try:
+                if hasattr(file, "fp") and hasattr(file.fp, "seek"):
+                    file.fp.seek(0)
+            except Exception:
+                pass
+
+
+async def _acknowledge_refresh(interaction: discord.Interaction) -> None:
+    try:
+        await interaction.followup.send(
+            "Search results updated.",
+            ephemeral=True,
+            allowed_mentions=ALLOWED_MENTIONS,
+        )
+    except Exception:
+        pass
 
 
 __all__ = [
