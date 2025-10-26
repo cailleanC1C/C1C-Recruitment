@@ -311,8 +311,14 @@ class MemberPanelControllerLegacy:
 
         while True:
             if existing_message is not None:
+                existing_id = getattr(existing_message, "id", None)
+                if existing_id is None:
+                    ACTIVE_RESULTS.pop(key, None)
+                    existing_message = None
+                    continue
                 try:
-                    await existing_message.edit(
+                    edited = await interaction.followup.edit_message(
+                        message_id=existing_id,
                         content=None,
                         embeds=safe_embeds,
                         attachments=attachments,
@@ -334,13 +340,20 @@ class MemberPanelControllerLegacy:
                     return
                 else:
                     _close_files(attachments)
+                    target_message = edited if isinstance(edited, discord.Message) else existing_message
                     try:
-                        message_id = int(existing_message.id)
-                    except (TypeError, ValueError, AttributeError):
-                        pass
-                    else:
+                        message_id = int(getattr(target_message, "id", None))
+                    except (TypeError, ValueError):
+                        message_id = None
+                    if message_id is not None:
                         ACTIVE_RESULTS[key] = message_id
-                    view.bind_message(existing_message)
+                    if isinstance(target_message, discord.Message):
+                        view.bind_message(target_message)
+                    else:
+                        try:
+                            view.bind_message(existing_message)
+                        except Exception:
+                            pass
                     return
 
             try:
