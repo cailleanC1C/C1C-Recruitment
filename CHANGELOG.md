@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.5 — 2025-10-26
+
+### Fixed
+- Guardrails: removed the legacy `shared.help` re-export shim so the CoreOps packaging audit no longer flags shim bridges.
+
 ## v0.9.5 — 2025-10-23
 
 ### Changed
