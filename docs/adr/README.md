@@ -25,4 +25,4 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0016](ADR-0016-import-side-effects.md) | Import-time side effects removal | Accepted |
 | [ADR-0017](ADR-0017-Reservations-Placement-Schema.md) | Reservations & placement schema | — |
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-25 (v0.9.5)
