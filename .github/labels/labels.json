@@ -170,6 +170,11 @@
     "description": "New feature or request"
   },
   {
+    "name": "fix",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "good first issue",
     "color": "7057ff",
     "description": "Low-risk starter task"
