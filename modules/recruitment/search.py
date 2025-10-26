@@ -6,6 +6,7 @@ import logging
 from typing import Iterable, Sequence
 
 from shared.sheets import async_facade as sheets
+from shared.sheets import recruitment as sheet_recruitment
 from shared.sheets.recruitment import RecruitmentClanRecord
 
 from . import search_helpers
@@ -36,39 +37,60 @@ async def fetch_roster_records(*, force: bool = False) -> list[RecruitmentClanRe
 
 def _ensure_record(
     entry: RecruitmentClanRecord | Sequence[str],
-) -> RecruitmentClanRecord:
+    *,
+    header_map: dict[str, int] | None,
+) -> tuple[RecruitmentClanRecord, dict[str, int] | None]:
     if isinstance(entry, RecruitmentClanRecord):
-        return entry
+        if not entry.roster.strip():
+            raise ValueError("blank roster cell")
+        return entry, header_map
 
-    row = tuple(str(cell or "") for cell in entry)
-    roster_cell = (
-        row[search_helpers.COL_E_SPOTS]
-        if len(row) > search_helpers.COL_E_SPOTS
-        else ""
-    )
-    open_spots = parse_spots_num(roster_cell)
-    inactives = parse_inactives_num(
-        row[search_helpers.IDX_AG_INACTIVES]
-        if len(row) > search_helpers.IDX_AG_INACTIVES
-        else ""
-    )
-    reserved = parse_spots_num(row[28] if len(row) > 28 else "")
-    return RecruitmentClanRecord(
+    try:
+        mapping = header_map or sheet_recruitment.get_clan_header_map()
+    except Exception:
+        mapping = header_map or {}
+
+    def _cell(idx: int | None) -> str:
+        if idx is None or idx < 0:
+            return ""
+        if idx >= len(entry):
+            return ""
+        value = entry[idx]
+        return "" if value is None else str(value)
+
+    row = tuple("" if cell is None else str(cell) for cell in entry)
+    roster_idx = mapping.get("roster", search_helpers.COL_E_SPOTS)
+    roster_cell = _cell(roster_idx).strip()
+    if not roster_cell:
+        raise ValueError("blank roster cell")
+
+    open_idx = mapping.get("open_spots", search_helpers.COL_E_SPOTS)
+    inactives_idx = mapping.get("inactives", search_helpers.IDX_AG_INACTIVES)
+    reserved_idx = mapping.get("reserved", 28)
+
+    open_spots = parse_spots_num(_cell(open_idx))
+    inactives = parse_inactives_num(_cell(inactives_idx))
+    reserved = parse_spots_num(_cell(reserved_idx))
+
+    record = RecruitmentClanRecord(
         row=row,
         open_spots=open_spots,
         inactives=inactives,
         reserved=reserved,
-        roster=str(roster_cell).strip(),
+        roster=roster_cell,
     )
+    return record, mapping
 
 
 def normalize_records(
     records: Sequence[RecruitmentClanRecord | Sequence[str]],
 ) -> list[RecruitmentClanRecord]:
     normalized: list[RecruitmentClanRecord] = []
+    header_map: dict[str, int] | None = None
     for entry in records or []:
         try:
-            normalized.append(_ensure_record(entry))
+            record, header_map = _ensure_record(entry, header_map=header_map)
+            normalized.append(record)
         except Exception:
             continue
     return normalized
