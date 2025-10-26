@@ -4,6 +4,7 @@ import pathlib
 import re
 import sys
 import time
+from typing import List, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs" / "guardrails" / "RepositoryGuardrails.md"
