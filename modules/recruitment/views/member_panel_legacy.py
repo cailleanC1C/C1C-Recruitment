@@ -18,7 +18,7 @@ from ..search_helpers import (
     parse_spots_num,
     row_matches,
 )
-from .filters_member import MemberFiltersRow
+from .filters_member import MemberFiltersView
 from .shared_member import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.async_facade import fetch_clans_async
@@ -27,15 +27,14 @@ log = logging.getLogger("c1c.recruitment.member.legacy")
 
 ALLOWED_MENTIONS = discord.AllowedMentions.none()
 
+PANEL_KEY_VARIANT = "search"
 
-def _build_empty_embed(filters_text: str | None = None) -> discord.Embed:
-    embed = discord.Embed(
-        title="No matching clans found.",
-        description="Try adjusting your filters and search again.",
-    )
-    if filters_text:
-        embed.set_footer(text=f"Filters used: {filters_text}")
-    return embed
+# Track active panel message per user (legacy behavior)
+ACTIVE_PANELS: dict[tuple[int, str], int] = {}
+
+_EMPTY_RESULTS_TEXT = (
+    "No matching clans found. You might have set too many filter criteria — try again with fewer."
+)
 
 
 @dataclass
@@ -50,8 +49,6 @@ class MemberPanelState:
     siege: str | None = None
     playstyle: str | None = None
     roster_mode: str | None = "open"
-    mode: str = "lite"
-    page: int = 0
 
     def copy(self) -> "MemberPanelState":
         return replace(self)
@@ -59,113 +56,99 @@ class MemberPanelState:
     def with_updates(self, **changes) -> "MemberPanelState":
         return replace(self, **changes)
 
-
-class MemberPanelLegacyView(MemberFiltersRow, MemberSearchPagedView):
-    """Composite view combining legacy filters with the results pager."""
-
-    def __init__(
-        self,
-        *,
-        controller: "MemberPanelControllerLegacy",
-        state: MemberPanelState,
-        rows: Sequence,
-        filters_text: str,
-        guild: discord.Guild | None,
-        empty_embed: discord.Embed | None,
-    ) -> None:
-        self.state = state.copy()
-        self.controller = controller
-        MemberSearchPagedView.__init__(
-            self,
-            author_id=state.author_id,
-            rows=rows,
-            filters_text=filters_text,
-            guild=guild,
-            timeout=900,
-            mode=state.mode,
-            page=state.page,
-            empty_embed=empty_embed,
-        )
-        MemberFiltersRow.__init__(self, controller=controller, state=self.state)
-        self._sync_buttons()
-        self._sync_filter_labels()
-
-    async def build_outputs(self) -> tuple[list[discord.Embed], list[discord.File]]:
-        return await MemberSearchPagedView.build_outputs(self)
+    def any_filters(self) -> bool:
+        return any(
+            value is not None and str(value).strip()
+            for value in (
+                self.cb,
+                self.hydra,
+                self.chimera,
+                self.cvc,
+                self.siege,
+                self.playstyle,
+            )
+        ) or self.roster_mode is not None
 
 
 class MemberPanelControllerLegacy:
-    """Restore the legacy new-message-per-change member clan search."""
+    """Restore the legacy new-message-per-search member clan search."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._panel_states: dict[int, MemberPanelState] = {}
 
     async def open(self, ctx: commands.Context) -> None:
         channel = getattr(ctx, "channel", None)
-        if channel is None:
-            return
-
         author = getattr(ctx, "author", None)
-        if author is None:
+        if channel is None or author is None:
             return
 
-        state = MemberPanelState(author_id=getattr(author, "id"))
+        author_id = getattr(author, "id", None)
+        if author_id is None:
+            return
 
-        await self._send_panel(
-            state=state,
-            channel=channel,
-            guild=getattr(ctx, "guild", None),
-            ctx=ctx,
-        )
+        key = (int(author_id), PANEL_KEY_VARIANT)
+        embed = self._build_intro_embed(author)
 
-    async def refresh_from_filters(
-        self, interaction: discord.Interaction, state: MemberPanelState
-    ) -> None:
-        try:
-            await self._send_panel(state=state, interaction=interaction)
-        except Exception as exc:  # pragma: no cover - defensive guard
-            log.exception("member panel filter refresh failed", exc_info=exc)
+        existing_id = ACTIVE_PANELS.get(key)
+        if existing_id:
             try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "❌ Sorry — I couldn't refresh those results.",
-                        ephemeral=True,
-                    )
-                else:
-                    await interaction.followup.send(
-                        "❌ Sorry — I couldn't refresh those results.",
-                        ephemeral=True,
-                    )
+                message = await channel.fetch_message(existing_id)
             except Exception:
-                pass
+                ACTIVE_PANELS.pop(key, None)
+            else:
+                state = self._panel_states.get(existing_id, MemberPanelState(author_id=author_id)).copy()
+                view = MemberFiltersView(controller=self, state=state)
+                view.bind_to_message(message)
+                self._panel_states[message.id] = state
+                try:
+                    await message.edit(embed=embed, view=view)
+                except discord.HTTPException:
+                    log.exception("member panel reuse failed", extra={"message_id": message.id})
+                return
 
-    async def _send_panel(
-        self,
-        *,
-        state: MemberPanelState,
-        channel: discord.abc.Messageable | None = None,
-        guild: discord.Guild | None = None,
-        ctx: commands.Context | None = None,
-        interaction: discord.Interaction | None = None,
-    ) -> None:
-        if interaction is not None:
-            if channel is None:
-                channel = interaction.channel
-            if guild is None:
-                guild = interaction.guild
+        state = MemberPanelState(author_id=author_id)
+        view = MemberFiltersView(controller=self, state=state)
 
-        if channel is None:
+        try:
+            sent = await ctx.reply(embed=embed, view=view, mention_author=False)
+        except discord.Forbidden as exc:
+            log.warning("member panel send forbidden", exc_info=exc)
+            await self._send_permission_fallback(ctx)
             return
+        except discord.HTTPException as exc:
+            log.exception("member panel send failed", exc_info=exc)
+            return
+
+        if isinstance(sent, discord.Message):
+            view.bind_to_message(sent)
+            self._panel_states[sent.id] = state
+            ACTIVE_PANELS[key] = sent.id
+
+    async def on_search(
+        self,
+        interaction: discord.Interaction,
+        view: MemberFiltersView,
+    ) -> None:
+        state = view.state
+        if not state.any_filters():
+            await self._send_need_filter(interaction)
+            return
+
+        try:
+            await interaction.response.defer(thinking=True)
+        except InteractionResponded:
+            pass
 
         rows = await self._load_rows()
         matches = self._filter_rows(rows, state)
 
         total_found = len(matches)
-        cap = max(1, shared_config.get_search_results_soft_cap(25))
+        soft_cap = max(1, shared_config.get_search_results_soft_cap(25))
         cap_note = None
-        if total_found > cap:
-            matches = matches[:cap]
-            cap_note = f"first {cap} of {total_found}"
+        if total_found > soft_cap:
+            matches = matches[:soft_cap]
+            cap_note = f"first {soft_cap} of {total_found}"
 
         filters_text = format_filters_footer(
             state.cb,
@@ -178,52 +161,64 @@ class MemberPanelControllerLegacy:
             extra_note=cap_note,
         )
 
-        empty_embed = _build_empty_embed(filters_text)
+        empty_embed = discord.Embed(description=_EMPTY_RESULTS_TEXT)
+        if filters_text:
+            empty_embed.set_footer(text=f"Filters used: {filters_text}")
 
-        view = MemberPanelLegacyView(
-            controller=self,
-            state=state,
+        results_view = MemberSearchPagedView(
+            author_id=state.author_id,
             rows=matches,
             filters_text=filters_text,
-            guild=guild,
+            guild=interaction.guild,
+            timeout=900,
+            mode="lite",
+            page=0,
             empty_embed=empty_embed,
         )
+        results_view.state = state.copy()
 
-        embeds, files = await view.build_outputs()
+        embeds, files = await results_view.build_outputs()
         if not embeds:
             embeds = [empty_embed]
 
-        send_kwargs = {
-            "embeds": embeds,
-            "files": files,
-            "view": view,
-            "allowed_mentions": ALLOWED_MENTIONS,
-        }
-
         try:
-            if interaction is not None:
-                if not interaction.response.is_done():
-                    try:
-                        await interaction.response.defer()
-                    except InteractionResponded:
-                        pass
-                sent = await interaction.followup.send(**send_kwargs)
-            else:
-                send = getattr(channel, "send", None)
-                if send is None:
-                    return
-                sent = await send(**send_kwargs)
-        except discord.Forbidden as exc:
-            log.warning("member panel send forbidden", exc_info=exc)
-            return
+            sent = await interaction.followup.send(
+                embeds=embeds,
+                files=files,
+                view=results_view,
+                allowed_mentions=ALLOWED_MENTIONS,
+            )
         except discord.HTTPException as exc:
-            log.exception("member panel send failed", exc_info=exc)
-            return
+            log.exception("member results send failed", exc_info=exc)
+            sent = None
         finally:
             _close_files(files)
 
         if isinstance(sent, discord.Message):
-            view.bind_message(sent)
+            results_view.bind_message(sent)
+
+    async def on_reset(self, interaction: discord.Interaction, view: MemberFiltersView) -> None:
+        new_state = MemberPanelState(author_id=view.state.author_id)
+        view.set_state(new_state)
+        panel_id = view.panel_message_id
+        if panel_id is not None:
+            self._panel_states[panel_id] = new_state
+        try:
+            await interaction.response.edit_message(view=view)
+        except InteractionResponded:
+            try:
+                if interaction.message is not None:
+                    await interaction.followup.edit_message(
+                        message_id=interaction.message.id,
+                        view=view,
+                    )
+            except Exception:
+                pass
+
+    def update_panel_state(self, message_id: int | None, state: MemberPanelState) -> None:
+        if message_id is None:
+            return
+        self._panel_states[message_id] = state
 
     async def _load_rows(self) -> Sequence[Sequence[str]]:
         try:
@@ -268,6 +263,39 @@ class MemberPanelControllerLegacy:
 
         return matches
 
+    async def _send_permission_fallback(self, ctx: commands.Context) -> None:
+        message = (
+            "⚠️ I need the **Embed Links** permission in this channel to show the clan search panel."
+        )
+        try:
+            await ctx.send(message)
+        except Exception:
+            pass
+
+    async def _send_need_filter(self, interaction: discord.Interaction) -> None:
+        note = "Pick at least **one** filter, then try again. 🙂"
+        try:
+            await interaction.response.send_message(note, ephemeral=True)
+        except InteractionResponded:
+            try:
+                await interaction.followup.send(note, ephemeral=True)
+            except Exception:
+                pass
+
+    def _build_intro_embed(self, author) -> discord.Embed:
+        mention = getattr(author, "mention", None) or "member"
+        description = (
+            f"Hi {mention}!\n\n"
+            "Pick any filters *(you can leave some blank)* and click **Search Clans** "
+            "to see Entry Criteria and open spots."
+        )
+        embed = discord.Embed(
+            title="Search for a C1C Clan",
+            description=description,
+        )
+        embed.set_footer(text="Only the summoner can use this panel.")
+        return embed
+
 
 def _close_files(files: Iterable[discord.File]) -> None:
     for file in files:
@@ -278,7 +306,7 @@ def _close_files(files: Iterable[discord.File]) -> None:
 
 
 __all__ = [
+    "ACTIVE_PANELS",
     "MemberPanelControllerLegacy",
     "MemberPanelState",
 ]
-
