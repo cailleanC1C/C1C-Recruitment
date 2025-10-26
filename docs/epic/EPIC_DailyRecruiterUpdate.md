@@ -1,4 +1,4 @@
-# EPIC — Phase 6: Daily Recruiter Update (Reporting v1)
+# EPIC — Daily Recruiter Update (Reporting v1)
 
 ## 0) Purpose
 Define, end-to-end, the **Daily Recruiter Update** feature: one scheduled post and one manual command that read from existing recruitment caches and publish a concise daily status to a configured destination. This EPIC is the single source of truth for scope, UX, config, RBAC, failure modes, testing, rollout, and documentation. No coding until this EPIC is approved.
@@ -210,7 +210,7 @@ All success/failure lines go to `LOG_CHANNEL_ID` (and stdout). No extra debug sp
 
 ---
 
-## 20) Future Work (Phase 7+)
+## 20) Future Work (Next Phases)
 None planned. TXT export/logging extras are out of scope.
 
 Doc last updated: 2025-10-26 (v0.9.6)

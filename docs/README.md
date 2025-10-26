@@ -33,7 +33,8 @@ It exists so that contributors update the correct references after each developm
 ### `/docs/epic/` — Feature Epics
 * Stores phase-level epic specifications ready for CoreOps implementation.
 * [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — Welcome & Placement v2 thread-first onboarding flow.
-* [`EPIC_Phase6_DailyRecruiterUpdate.md`](epic/EPIC_Phase6_DailyRecruiterUpdate.md) — Daily recruiter update reporting pipeline (Phase 6).
+* [`EPIC_DailyRecruiterUpdate.md`](epic/EPIC_DailyRecruiterUpdate.md) — Daily recruiter update reporting pipeline.
+* [`Epic README`](epic/README.md) — Index for feature epic specifications.
 
 ### `/docs/compliance/`
 * Houses internal compliance and governance policies.
