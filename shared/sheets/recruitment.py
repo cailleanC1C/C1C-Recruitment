@@ -50,7 +50,7 @@ class RecruitmentClanRecord:
 
 DEFAULT_ROSTER_INDEX = 4
 # Fallback indices for legacy rows when header resolution is unavailable.
-FALLBACK_OPEN_SPOTS_INDEX = DEFAULT_ROSTER_INDEX
+FALLBACK_OPEN_SPOTS_INDEX = 31  # Column AF
 FALLBACK_INACTIVES_INDEX = 32  # Column AG
 FALLBACK_RESERVED_INDEX = 34  # Column AI
 
@@ -326,7 +326,7 @@ def _sanitize_clan_rows(
         return str(value).strip().upper() if value is not None else ""
 
     cleaned: List[List[str]] = []
-    roster_idx = roster_index if roster_index is not None else _DEFAULT_ROSTER_INDEX
+    roster_idx = roster_index if roster_index is not None else DEFAULT_ROSTER_INDEX
 
     for row in raw_rows[3:]:  # Sheet headers occupy rows 1–3.
         if not row:
