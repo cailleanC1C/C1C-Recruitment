@@ -167,27 +167,29 @@ def _playstyle_ok(cell_text: str, wanted: Optional[str]) -> bool:
 
 
 def _page_embeds(
-    rows: Sequence[Sequence[str]],
-    page_index: int,
+    page_rows: Sequence[Sequence[str]],
     filters_text: str,
+    showing_now: int,
+    total_available: int,
+    page_index: int,
+    page_count: int,
 ) -> list[discord.Embed]:
-    start = page_index * PAGE_SIZE
-    end = min(len(rows), start + PAGE_SIZE)
-    embeds = [
+    if not page_rows:
+        return []
+
+    filters_display = (filters_text or "").strip() or "None"
+    footer_payload = (
+        f"{filters_display} • {showing_now}/{total_available} • Page {page_index + 1}/{page_count}"
+    )
+
+    return [
         cards.make_embed_for_row_classic(
             row,
-            filters_text,
+            footer_payload,
             include_crest=False,
         )
-        for row in rows[start:end]
+        for row in page_rows
     ]
-    if embeds:
-        total_pages = max(1, math.ceil(len(rows) / PAGE_SIZE))
-        page_info = f"Page {page_index + 1}/{total_pages} • {len(rows)} total"
-        last = embeds[-1]
-        footer_text = last.footer.text or ""
-        last.set_footer(text=f"{footer_text} • {page_info}" if footer_text else page_info)
-    return embeds
 
 
 class RecruiterPanelView(discord.ui.View):
@@ -208,6 +210,7 @@ class RecruiterPanelView(discord.ui.View):
         self._last_results_content: str | None = None
         self._last_results_had_pager: bool = False
         self._busy: bool = False
+        self.has_searched: bool = False
 
         self.cb: Optional[str] = None
         self.hydra: Optional[str] = None
@@ -219,6 +222,7 @@ class RecruiterPanelView(discord.ui.View):
 
         self.matches: list[Sequence[str]] = []
         self.results_filters_text: str = ""
+        self.results_note: str | None = None
         self.total_found: int = 0
         self.page: int = 0
         self.results_stale: bool = False
@@ -286,7 +290,8 @@ class RecruiterPanelView(discord.ui.View):
             if self.message:
                 with contextlib.suppress(Exception):
                     await self.message.edit(embeds=panel_embeds or None, view=self)
-            await self._publish_results(results_embeds)
+            if self.has_searched or self.results_message:
+                await self._publish_results(results_embeds)
         except asyncio.CancelledError:
             return
         except Exception:
@@ -520,6 +525,18 @@ class RecruiterPanelView(discord.ui.View):
         if not isinstance(channel, discord.abc.Messageable):
             return
 
+        if not embeds and not self.has_searched:
+            if self.results_message:
+                with contextlib.suppress(Exception):
+                    await self.results_message.delete()
+                self.cog.unregister_results_message(self.author_id)
+            self.results_message = None
+            self.results_view = None
+            self._last_results_embeds = []
+            self._last_results_content = None
+            self._last_results_had_pager = False
+            return
+
         self._last_results_had_pager = bool(embeds)
         view: ResultsPagerView | None = None
         payload_embeds: list[discord.Embed]
@@ -619,9 +636,11 @@ class RecruiterPanelView(discord.ui.View):
         self.roster_mode = "open"
         self.matches = []
         self.results_filters_text = ""
+        self.results_note = None
         self.total_found = 0
         self.page = 0
         self.results_stale = False
+        self.has_searched = False
         self.status_message = (
             "Filters reset. Pick filters and press **Search Clans** to fetch clans."
             if for_user
@@ -671,18 +690,34 @@ class RecruiterPanelView(discord.ui.View):
         if active_filters:
             embed.add_field(name="Active filters", value=active_filters, inline=False)
 
-        if self.matches and self.total_found > len(self.matches):
+        if self.results_note:
             embed.add_field(
                 name="Results note",
-                value=f"Showing first {len(self.matches)} of {self.total_found} clans.",
+                value=self.results_note,
                 inline=False,
             )
 
         panel_embeds = [embed]
         results_embeds: list[discord.Embed] = []
-        if self.matches:
-            filters_text = self.results_filters_text or active_filters
-            results_embeds = _page_embeds(self.matches, self.page, filters_text or "")
+        if self.matches and self.has_searched:
+            total_available = len(self.matches)
+            page_count = max(1, math.ceil(total_available / PAGE_SIZE))
+            if self.page >= page_count:
+                self.page = page_count - 1
+            page_index = max(0, self.page)
+            start = page_index * PAGE_SIZE
+            end = min(total_available, start + PAGE_SIZE)
+            showing_now = end - start
+            filters_text = self.results_filters_text or active_filters or ""
+            page_rows = self.matches[start:end]
+            results_embeds = _page_embeds(
+                page_rows,
+                filters_text,
+                showing_now,
+                total_available,
+                page_index,
+                page_count,
+            )
         return panel_embeds, results_embeds
 
     async def _on_cb_select(self, interaction: discord.Interaction) -> None:
@@ -790,8 +825,10 @@ class RecruiterPanelView(discord.ui.View):
                 await self._rebuild_and_edit(interaction)
                 return
 
-            matches: list[Sequence[str]] = []
-            for row in rows[1:]:
+            self.has_searched = True
+
+            filtered_rows: list[Sequence[str]] = []
+            for row in rows:
                 try:
                     if not _row_matches(
                         row,
@@ -803,11 +840,15 @@ class RecruiterPanelView(discord.ui.View):
                         self.playstyle,
                     ):
                         continue
-                    spots = parse_spots_num(
-                        row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
+                    spots = int(
+                        parse_spots_num(
+                            row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
+                        )
                     )
-                    inactives = parse_inactives_num(
-                        row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
+                    inactives = int(
+                        parse_inactives_num(
+                            row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
+                        )
                     )
                     if self.roster_mode == "open" and spots <= 0:
                         continue
@@ -815,35 +856,11 @@ class RecruiterPanelView(discord.ui.View):
                         continue
                     if self.roster_mode == "inactives" and inactives <= 0:
                         continue
-                    matches.append(row)
+                    filtered_rows.append(row)
                 except Exception:
                     continue
 
-            if not matches:
-                self.matches = []
-                self.results_filters_text = _format_filters_footer(
-                    self.cb,
-                    self.hydra,
-                    self.chimera,
-                    self.cvc,
-                    self.siege,
-                    self.playstyle,
-                    self.roster_mode,
-                )
-                self.total_found = 0
-                self.results_stale = False
-                self.status_message = "No matching clans found. Try relaxing your filters."
-                self._sync_visuals()
-                await self._rebuild_and_edit(interaction)
-                return
-
-            cap = max(1, config.get_search_results_soft_cap(25))
-            total_found = len(matches)
-            if total_found > cap:
-                matches = matches[:cap]
-            cap_note = f"first {cap} of {total_found}" if total_found > cap else None
-
-            filters_text = _format_filters_footer(
+            filters_summary = _format_filters_footer(
                 self.cb,
                 self.hydra,
                 self.chimera,
@@ -852,21 +869,47 @@ class RecruiterPanelView(discord.ui.View):
                 self.playstyle,
                 self.roster_mode,
             )
-            if cap_note:
-                filters_text = (
-                    f"{filters_text} • {cap_note}" if filters_text else cap_note
+
+            if not filtered_rows:
+                self.matches = []
+                self.results_filters_text = filters_summary
+                self.results_note = None
+                self.total_found = 0
+                self.results_stale = False
+                self.status_message = "No matching clans found. Try relaxing your filters."
+                self._sync_visuals()
+                await self._rebuild_and_edit(interaction)
+                return
+
+            soft_cap = max(PAGE_SIZE, config.get_search_results_soft_cap(25))
+            total_found = len(filtered_rows)
+            limited_rows = filtered_rows[:soft_cap]
+            shown_count = len(limited_rows)
+            cap_note = None
+            if total_found > shown_count:
+                cap_note = (
+                    f"Soft cap active: showing {shown_count} of {total_found} clans."
                 )
 
-            self.matches = matches
-            self.results_filters_text = filters_text
+            self.matches = limited_rows
+            self.results_filters_text = filters_summary
+            self.results_note = cap_note
             self.total_found = total_found
             self.page = 0
             self.results_stale = False
-            self.status_message = (
-                f"Showing first {len(matches)} of {total_found} clans."
-                if cap_note
-                else f"Found {total_found} matching clans."
-            )
+            per_page = max(1, min(PAGE_SIZE, shown_count))
+            if cap_note:
+                self.status_message = (
+                    f"{cap_note} Use the pager below to review {per_page} at a time."
+                )
+            else:
+                if total_found == 1:
+                    message = "Found 1 matching clan."
+                else:
+                    message = f"Found {total_found} matching clans."
+                if shown_count > PAGE_SIZE:
+                    message += f" Showing {per_page} per page."
+                self.status_message = message
             self._sync_visuals()
 
             await self._rebuild_and_edit(interaction)

@@ -103,6 +103,28 @@ def _templates_tab() -> str:
     return _config_lookup("welcome_templates_tab", "WelcomeTemplates") or "WelcomeTemplates"
 
 
+def _sanitize_clan_rows(raw_rows: List[List[str]]) -> List[List[str]]:
+    """Drop header rows and blank entries from ``raw_rows``."""
+
+    def _norm(value: Any) -> str:
+        return str(value).strip().upper() if value is not None else ""
+
+    cleaned: List[List[str]] = []
+    for row in raw_rows[3:]:  # Sheet headers occupy rows 1–3.
+        if not row:
+            continue
+        name = _norm(row[1] if len(row) > 1 else "")
+        tag = _norm(row[2] if len(row) > 2 else "")
+        if not name and not tag:
+            continue
+        if name in {"CLAN", "CLAN NAME", "CLANS"}:
+            continue
+        if tag in {"TAG", "CLAN TAG", "CLAN"}:
+            continue
+        cleaned.append(row)
+    return cleaned
+
+
 def fetch_clans(force: bool = False) -> List[List[str]]:
     """Fetch the recruitment clan matrix from Sheets."""
 
@@ -115,11 +137,12 @@ def fetch_clans(force: bool = False) -> List[List[str]]:
         return _CLAN_ROWS
 
     rows = core.fetch_values(_sheet_id(), _clans_tab())
-    _CLAN_ROWS = rows
+    sanitized = _sanitize_clan_rows(rows)
+    _CLAN_ROWS = sanitized
     _CLAN_ROWS_TS = now
-    _CLAN_TAG_INDEX = _build_tag_index(rows)
+    _CLAN_TAG_INDEX = _build_tag_index(sanitized)
     _CLAN_TAG_INDEX_TS = now
-    return rows
+    return sanitized
 
 
 def fetch_templates(force: bool = False) -> List[Dict[str, Any]]:
@@ -170,7 +193,8 @@ async def _load_clans_async() -> List[List[str]]:
     _ensure_service_account_credentials()
     sheet_id = _sheet_id()
     tab = _clans_tab()
-    return await afetch_values(sheet_id, tab)
+    rows = await afetch_values(sheet_id, tab)
+    return _sanitize_clan_rows(rows)
 
 
 async def _load_templates_async() -> List[Dict[str, Any]]:
