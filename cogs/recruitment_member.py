@@ -1,16 +1,16 @@
-"""Prefix command wiring for member-facing clan search."""
+"""Prefix command wiring for the restored legacy member clan search."""
 
 from __future__ import annotations
 
 from discord.ext import commands
 
-from modules.recruitment.views.member_panel import MemberPanelController
+from modules.recruitment.views.member_panel_legacy import MemberPanelControllerLegacy
 
 
 class RecruitmentMember(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.ctrl = MemberPanelController(bot)
+        self.ctrl = MemberPanelControllerLegacy(bot)
 
     @commands.cooldown(1, 2, commands.BucketType.user)
     @commands.command(name="clansearch")
@@ -21,12 +21,14 @@ class RecruitmentMember(commands.Cog):
 
         if extra and extra.strip():
             await ctx.reply(
-                "This one takes no arguments — just `!clansearch`.",
+                "❌ `!clansearch` doesn’t take a clan tag or name.\n"
+                "• Use **`!clan <tag or name>`** to see a specific clan profile (e.g., `!clan C1CE`).\n"
+                "• Or type **`!clansearch`** by itself to open the filter panel.",
                 mention_author=False,
             )
             return
 
-        await self.ctrl.open_or_reuse(ctx)
+        await self.ctrl.open(ctx)
 
 
 async def setup(bot: commands.Bot) -> None:
