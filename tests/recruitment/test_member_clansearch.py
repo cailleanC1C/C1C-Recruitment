@@ -17,8 +17,8 @@ sys.modules.setdefault("c1c_coreops.helpers", _coreops_helpers)
 
 from cogs.recruitment_member import RecruitmentMember
 from modules.recruitment import search_helpers
-from modules.recruitment.views import member_panel_legacy
-from modules.recruitment.views.member_panel_legacy import ACTIVE_PANELS
+from modules.recruitment.views import member_panel, member_panel_legacy
+from modules.recruitment.views.member_panel import MemberPanelController, MemberSearchFilters
 
 
 class FakeMessage:
@@ -194,7 +194,24 @@ def reset_panels(monkeypatch):
     )
 
 
-def test_opens_panel_with_four_selects_and_button_row(monkeypatch):
+def test_rejects_extra_args(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        cog = RecruitmentMember(bot)
+        ctx = FakeContext(bot)
+
+        await RecruitmentMember.clansearch.callback(cog, ctx, extra="something")
+
+        assert ctx.replies
+        reply_text = (ctx.replies[0].content or "").lower()
+        assert "take a clan tag" in reply_text
+        assert "doesn" in reply_text
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_first_invocation_creates_message(monkeypatch):
     async def _run():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         cog = RecruitmentMember(bot)
@@ -205,9 +222,20 @@ def test_opens_panel_with_four_selects_and_button_row(monkeypatch):
         async def fake_fetch(**_):
             return rows
 
+        monkeypatch.setattr(member_panel, "fetch_clans_async", fake_fetch)
+        monkeypatch.setattr(member_panel_legacy, "fetch_clans_async", fake_fetch)
+
+        original_add_item = member_panel.discord.ui.view._ViewWeights.add_item
+
+        def _relaxed_add_item(self, item):
+            if item.row is not None and self.weights[item.row] + item.width > 5:
+                item.row = None
+            return original_add_item(self, item)
+
         monkeypatch.setattr(
-            "modules.recruitment.views.member_panel_legacy.fetch_clans_async",
-            fake_fetch,
+            member_panel.discord.ui.view._ViewWeights,
+            "add_item",
+            _relaxed_add_item,
         )
 
         await RecruitmentMember.clansearch.callback(cog, ctx)
@@ -322,3 +350,28 @@ def test_zero_state_results_attach_pager_with_disabled_nav(monkeypatch):
         await bot.close()
 
     asyncio.run(_run())
+
+
+def test_filter_rows_skips_blank_roster_entries():
+    controller = MemberPanelController(object())
+    blank_roster = make_row("Clan X", tag="C1X", spots=0)
+    blank_roster[search_helpers.COL_E_SPOTS] = "   "
+
+    matches = controller._filter_rows(
+        [blank_roster], MemberSearchFilters(roster_mode=None)
+    )
+
+    assert matches == []
+
+
+def test_filter_rows_requires_positive_inactives():
+    controller = MemberPanelController(object())
+    positive = make_row("Clan Active", tag="C1A", spots=0, inactives="3")
+    zero = make_row("Clan Zero", tag="C1Z", spots=0, inactives="0")
+
+    matches = controller._filter_rows(
+        [positive, zero], MemberSearchFilters(roster_mode="inactives")
+    )
+
+    assert matches == [positive]
+

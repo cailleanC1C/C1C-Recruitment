@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 __all__ = [
     "parse_spots_num",
@@ -129,9 +129,21 @@ def _playstyle_ok(cell_text: str, wanted: Optional[str]) -> bool:
     return canon in _split_styles(cell_text)
 
 
-def _parse_number(text: str) -> int:
-    match = re.search(r"\d+", text or "")
-    return int(match.group()) if match else 0
+def _parse_number(value: Any) -> int:
+    """Normalize ``value`` into an integer, falling back to ``0`` on failure."""
+
+    if value is None:
+        return 0
+    text = str(value).strip()
+    if not text:
+        return 0
+    match = re.search(r"-?\d+", text)
+    if not match:
+        return 0
+    try:
+        return int(match.group())
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return 0
 
 
 def parse_spots_num(cell_text: str) -> int:
@@ -162,6 +174,9 @@ def row_matches(
     if _is_header_row(row):
         return False
     if not (row[COL_B_CLAN] or "").strip():
+        return False
+    roster_cell = row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
+    if not str(roster_cell or "").strip():
         return False
     return (
         _cell_has_diff(row[COL_P_CB], cb)
