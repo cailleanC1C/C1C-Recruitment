@@ -29,6 +29,16 @@ NONE = discord.AllowedMentions.none()
 MAX_VISIBLE_ROWS = 5
 
 
+def _build_empty_embed(filters_text: str | None = None) -> discord.Embed:
+    embed = discord.Embed(
+        title="No matching clans found.",
+        description="Try adjusting your filters and search again.",
+    )
+    if filters_text:
+        embed.set_footer(text=f"Filters used: {filters_text}")
+    return embed
+
+
 @dataclass
 class MemberSearchFilters:
     """Snapshot of all clan-search filters selected by the member."""
@@ -175,14 +185,10 @@ class MemberPanelController:
             rows=visible_rows,
             filters_text=filters_text,
             guild=guild,
+            has_results=bool(visible_rows),
         )
         if not visible_rows:
-            embed = discord.Embed(
-                title="No matching clans found.",
-                description="Try adjusting your filters and search again.",
-            )
-            if filters_text:
-                embed.set_footer(text=f"Filters used: {filters_text}")
+            embed = _build_empty_embed(filters_text)
             await self._send_or_edit(
                 channel,
                 key,
@@ -255,7 +261,9 @@ class MemberPanelController:
         ctx: commands.Context | None,
     ) -> None:
         attachments = list(files)
-        embed_list = list(embeds)
+        embed_list = list(embeds) if embeds is not None else []
+        filters_text = getattr(view, "filters_text", None)
+        safe_embeds = embed_list if embed_list else [_build_empty_embed(filters_text)]
 
         def close_attachments() -> None:
             for file in attachments:
@@ -288,7 +296,7 @@ class MemberPanelController:
             try:
                 sent = await send(
                     content=content,
-                    embeds=embed_list,
+                    embeds=safe_embeds,
                     files=attachments,
                     view=view,
                     allowed_mentions=NONE,
@@ -322,7 +330,7 @@ class MemberPanelController:
             params = {}
         edit_kwargs = {
             "content": content,
-            "embeds": embed_list,
+            "embeds": safe_embeds,
             "attachments": attachments,
             "view": view,
         }

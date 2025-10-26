@@ -23,12 +23,14 @@ class MemberSearchPagedView(discord.ui.View):
         filters_text: str,
         guild: discord.Guild | None,
         timeout: float = 900,
+        has_results: bool | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.author_id = author_id
         self.rows = list(rows)
         self.filters_text = filters_text
         self.guild = guild
+        self.has_results = bool(self.rows) if has_results is None else bool(has_results)
         self.page = 0
         self.mode = "lite"
         self.message: discord.Message | None = None
@@ -58,27 +60,30 @@ class MemberSearchPagedView(discord.ui.View):
             if not isinstance(child, discord.ui.Button):
                 continue
             if child.custom_id == "ms_lite":
+                child.disabled = not self.has_results
                 child.style = (
                     discord.ButtonStyle.primary
                     if self.mode == "lite"
                     else discord.ButtonStyle.secondary
                 )
             elif child.custom_id == "ms_entry":
+                child.disabled = not self.has_results
                 child.style = (
                     discord.ButtonStyle.primary
                     if self.mode == "entry"
                     else discord.ButtonStyle.secondary
                 )
             elif child.custom_id == "ms_profile":
+                child.disabled = not self.has_results
                 child.style = (
                     discord.ButtonStyle.primary
                     if self.mode == "profile"
                     else discord.ButtonStyle.secondary
                 )
             elif child.custom_id == "ms_prev":
-                child.disabled = self.page <= 0
+                child.disabled = not self.has_results or self.page <= 0
             elif child.custom_id == "ms_next":
-                child.disabled = self.page >= max_page
+                child.disabled = not self.has_results or self.page >= max_page
 
     def _make_embed(self, row) -> discord.Embed:
         if self.mode == "entry":
@@ -102,6 +107,11 @@ class MemberSearchPagedView(discord.ui.View):
 
         embeds: list[discord.Embed] = []
         files: list[discord.File] = []
+
+        if not self.rows:
+            from .member_panel import _build_empty_embed
+
+            return [_build_empty_embed(self.filters_text)], []
 
         for row in self.rows[start:end]:
             embed = self._make_embed(row)
