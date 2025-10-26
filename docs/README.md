@@ -26,12 +26,14 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0015`](adr/ADR-0015-config-hygiene-and-secrets.md) — Config hygiene & secrets governance.
 * [`ADR-0016`](adr/ADR-0016-import-side-effects.md) — Import-time side effects removal.
 * [`ADR-0017`](adr/ADR-0017-Reservations-Placement-Schema.md) — Reservations & placement schema.
+* [`ADR-0018`](adr/ADR-0018_DailyRecruiterUpdate.md) — Daily recruiter update v1 (UTC schedule, sheet-driven report).
 * [`ADR README`](adr/README.md) — Index for Architectural Decision Records.
 * File a new ADR for every major design or structural change.
 
 ### `/docs/epic/` — Feature Epics
 * Stores phase-level epic specifications ready for CoreOps implementation.
 * [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — Welcome & Placement v2 thread-first onboarding flow.
+* [`EPIC_Phase6_DailyRecruiterUpdate.md`](epic/EPIC_Phase6_DailyRecruiterUpdate.md) — Daily recruiter update reporting pipeline (Phase 6).
 
 ### `/docs/compliance/`
 * Houses internal compliance and governance policies.
