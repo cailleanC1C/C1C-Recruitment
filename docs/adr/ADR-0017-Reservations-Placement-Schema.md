@@ -10,7 +10,7 @@
 ## 1 · Context
 Legacy WelcomeCrew embedded placement data directly into Sheets and parsed thread names for clan tags.
 That design lacked persistence, data validation, and failed guardrails.
-Phase 7 introduces a durable reservation model tied to Config-driven tabs and validated clan tags from the **Onboarding → ClanList (column B)** sheet.
+Phase 7 introduces a durable reservation model tied to Config-driven tabs and validated clan tags from the **Onboarding → ClanList (column AF)** sheet.
 
 ---
 
@@ -22,8 +22,8 @@ Two coordinated Sheets layers:
 | Operational | `CLANS_TAB` (`bot_info`) | Displays live recruiter panel data |
 | Transactional | `Reservations` | Stores reservation lifecycle |
 
-Formulae: `E = max(0, AG − active_res)` and `AC = "N → @user1, @user2"`.
-Only E & AC are bot-written; AF and AG remain manual.
+Formulae: `AF = max(0, AG − active_res)` and `AC = "N → @user1, @user2"`.
+Only AF & AC are bot-written; E and AG remain manual.
 All reads start at row 4 (headers = 1–3).
 Every `clan_tag` must exist in **ClanList (B)**.
 
@@ -34,10 +34,10 @@ Every `clan_tag` must exist in **ClanList (B)**.
 ### CLANS_TAB (`bot_info`)
 | Col | Meaning | Maintained by | Notes |
 | --- | --- | --- | --- |
-| E | Open spots corrected | Bot | computed |
-| AF | Inactives | Manual | untouched |
-| AC | Reservations display | Bot | computed |
-| AG | Manual open spots | Manual | base value |
+| AF | Open spots corrected | Bot | computed |
+| AG | Inactives | Manual | untouched |
+| AI | Reservations display | Bot | computed |
+| E | Manual open spots | Manual | base value |
 | — | — | — | **Lookup:** `clan_tag` validated via Onboarding → ClanList (B)** |
 
 ### Reservations
@@ -83,7 +83,6 @@ Every `clan_tag` must exist in **ClanList (B)**.
 ---
 
 ## 7 · References
-- Audit: `AUDIT/20251025_welcomecrew_audit/Report.md`
 - Epic: `docs/epic/EPIC_WelcomePlacementV2.md`
 - Sheets: `Config`, `FeatureToggles`, `bot_info`, `Onboarding → ClanList (B)`, `Reservations`
 
