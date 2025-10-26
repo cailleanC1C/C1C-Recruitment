@@ -15,8 +15,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run guardrails checker (capture output)
+        id: guardrails
+        continue-on-error: true
         run: |
-          python scripts/ci/guardrails_check.py | tee guardrails.out
+          set -o pipefail
+          python scripts/ci/guardrails_check.py --summary guardrails-summary.md 2>&1 | tee guardrails.out
         shell: bash
 
       - name: Annotate failures directly in PR
@@ -24,3 +27,48 @@ jobs:
         run: |
           python scripts/ci/emit_annotations.py --kind guardrails --input guardrails.out
         shell: bash
+
+      - name: Post guardrails summary comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- guardrails-auto-summary -->';
+            let body = marker + '\n';
+            try {
+              body += fs.readFileSync('guardrails-summary.md', 'utf8').trim() + '\n';
+            } catch (error) {
+              body += 'Guardrails summary unavailable.\n';
+            }
+            body += marker;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail on guardrails issues
+        if: steps.guardrails.outcome == 'failure'
+        run: exit 1

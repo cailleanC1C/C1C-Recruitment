@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-import os, re, sys, time, pathlib, json
+import argparse
+import pathlib
+import re
+import sys
+import time
 from typing import List, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -7,10 +11,6 @@ DOC = ROOT / "docs" / "guardrails" / "RepositoryGuardrails.md"
 AUDIT_DIR = ROOT / f"AUDIT/{time.strftime('%Y%m%d')}_GUARDRAILS"
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT = AUDIT_DIR / "report.md"
-
-errors: List[str] = []
-notes: List[str] = []
-
 
 def _echo_violation(rule_id, message, file_path=None, line_no=None):
     """
@@ -76,111 +76,165 @@ def grep(patterns: List[str], in_paths: List[str]) -> List[Tuple[str, int, str]]
 def section(title: str) -> str:
     return f"\n## {title}\n"
 
-# 1) Structure checks
-bad_imports = grep(
-    [
-        r"(?<!modules\.)recruitment\.(?=[A-Za-z_])",
-        r"(?<!modules\.)onboarding\.(?=[A-Za-z_])",
-        r"(?<!modules\.)placement\.(?=[A-Za-z_])",
-    ],
-    ["**/*.py"],
-)
-# Allow only under modules/
-bad_imports = [t for t in bad_imports if not t[0].startswith("modules/")]
+def run_checks() -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    notes: list[str] = []
 
-legacy_coreops = [
-    (rel, ln, line)
-    for rel, ln, line in grep([r"\bshared\.coreops_"], ["**/*.py"])
-]
-
-for rel, ln, line in bad_imports:
-    _echo_violation("S-01", "legacy import outside modules/*", rel, ln)
-    errors.append(f"S-01: legacy import outside modules/* → {rel}:{ln}: `{line}`")
-
-for rel, ln, line in legacy_coreops:
-    _echo_violation("S-05", "coreops must not live under shared/*", rel, ln)
-    errors.append(f"S-05: coreops must not live under shared/* → {rel}:{ln}: `{line}`")
-
-# Ensure packages exist
-for pkg in ["modules/recruitment", "modules/placement", "modules/onboarding", "shared/sheets"]:
-    if not file_exists(f"{pkg}/__init__.py"):
-        _echo_violation("S-08", "missing __init__.py", f"{pkg}/__init__.py")
-        errors.append(f"S-08: missing __init__.py in {pkg}")
-
-# 2) Coding checks
-decorators_outside_cogs = grep(
-    [r"@(?:commands\.command|bot\.command|tree\.command|app_commands\.command)"],
-    ["**/*.py"],
-)
-allowed_command_paths = (
-    "cogs/",
-    "packages/c1c-coreops/",
-    "tests/",
-)
-decorators_outside_cogs = [
-    t
-    for t in decorators_outside_cogs
-    if not any(t[0].startswith(prefix) for prefix in allowed_command_paths)
-]
-for rel, ln, line in decorators_outside_cogs:
-    _echo_violation("S-03", "command decorator outside cogs/*", rel, ln)
-    errors.append(f"S-03: command decorator outside cogs/* → {rel}:{ln}: `{line}`")
-
-# 3) Docs checks
-docs = [p for p in ROOT.glob("docs/**/*.md") if p.is_file()]
-for md in docs:
-    if has_phase_title(md):
-        rel_md = str(md.relative_to(ROOT))
-        _echo_violation("D-01", "'Phase' in title", rel_md)
-        errors.append(f"D-01: 'Phase' in title → {rel_md}")
-    if not footer_ok(md):
-        rel_md = str(md.relative_to(ROOT))
-        _echo_violation("D-02", "missing or malformed footer", rel_md)
-        errors.append(f"D-02: missing or malformed footer → {rel_md}")
-
-# 4) ENV parity (SSoT)
-config_md = ROOT / "docs" / "ops" / "Config.md"
-env_candidates = [
-    ROOT / ".env.example",
-    ROOT / "docs" / "ops" / ".env.example",
-]
-env_example = next((candidate for candidate in env_candidates if candidate.exists()), None)
-if config_md.exists() and env_example is not None:
-    md_txt = config_md.read_text(encoding="utf-8", errors="ignore")
-    keys_in_md = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", md_txt))
-    env_txt = env_example.read_text(encoding="utf-8", errors="ignore")
-    keys_in_env = set(re.findall(r"^([A-Z][A-Z0-9_]+)=", env_txt, flags=re.MULTILINE))
-    missing_in_env = sorted(k for k in keys_in_md if k not in keys_in_env)
-    extra_in_env = sorted(k for k in keys_in_env if k not in keys_in_md)
-    if missing_in_env:
-        _echo_violation(
-            "D-03",
-            "keys in Config.md missing in .env.example",
-            str(env_example.relative_to(ROOT)),
-        )
-        errors.append(f"D-03: keys in Config.md missing in .env.example → {missing_in_env}")
-    if extra_in_env:
-        _echo_violation(
-            "D-03",
-            "keys in .env.example not documented in Config.md",
-            str(config_md.relative_to(ROOT)),
-        )
-        errors.append(f"D-03: keys in .env.example not documented in Config.md → {extra_in_env}")
-else:
-    searched = ", ".join(str(path.relative_to(ROOT)) for path in env_candidates)
-    notes.append(
-        "ENV parity skipped: docs/ops/Config.md or .env.example missing "
-        f"(looked for: {searched})"
+    # 1) Structure checks
+    bad_imports = grep(
+        [
+            r"(?<!modules\.)recruitment\.(?=[A-Za-z_])",
+            r"(?<!modules\.)onboarding\.(?=[A-Za-z_])",
+            r"(?<!modules\.)placement\.(?=[A-Za-z_])",
+        ],
+        ["**/*.py"],
     )
+    bad_imports = [t for t in bad_imports if not t[0].startswith("modules/")]
 
-# Write report
-out = ["# Guardrails Compliance Report", "", f"- Findings: {len(errors)} error(s)"]
-if notes:
-    out.append(f"- Notes: {len(notes)}")
-    for n in notes: out.append(f"  - {n}")
-out.append(section("Errors"))
-out.extend([f"- {e}" for e in errors] or ["- None"])
+    legacy_coreops = [
+        (rel, ln, line)
+        for rel, ln, line in grep([r"\bshared\.coreops_"], ["**/*.py"])
+    ]
 
-REPORT.write_text("\n".join(out) + "\n", encoding="utf-8")
-print(f"Wrote {REPORT}")
-sys.exit(1 if errors else 0)
+    for rel, ln, line in bad_imports:
+        _echo_violation("S-01", "legacy import outside modules/*", rel, ln)
+        errors.append(f"S-01: legacy import outside modules/* → {rel}:{ln}: `{line}`")
+
+    for rel, ln, line in legacy_coreops:
+        _echo_violation("S-05", "coreops must not live under shared/*", rel, ln)
+        errors.append(f"S-05: coreops must not live under shared/* → {rel}:{ln}: `{line}`")
+
+    for pkg in [
+        "modules/recruitment",
+        "modules/placement",
+        "modules/onboarding",
+        "shared/sheets",
+    ]:
+        if not file_exists(f"{pkg}/__init__.py"):
+            _echo_violation("S-08", "missing __init__.py", f"{pkg}/__init__.py")
+            errors.append(f"S-08: missing __init__.py in {pkg}")
+
+    # 2) Coding checks
+    decorators_outside_cogs = grep(
+        [r"@(?:commands\.command|bot\.command|tree\.command|app_commands\.command)"],
+        ["**/*.py"],
+    )
+    allowed_command_paths = (
+        "cogs/",
+        "packages/c1c-coreops/",
+        "tests/",
+    )
+    decorators_outside_cogs = [
+        t
+        for t in decorators_outside_cogs
+        if not any(t[0].startswith(prefix) for prefix in allowed_command_paths)
+    ]
+    for rel, ln, line in decorators_outside_cogs:
+        _echo_violation("S-03", "command decorator outside cogs/*", rel, ln)
+        errors.append(f"S-03: command decorator outside cogs/* → {rel}:{ln}: `{line}`")
+
+    # 3) Docs checks
+    docs = [p for p in ROOT.glob("docs/**/*.md") if p.is_file()]
+    for md in docs:
+        if has_phase_title(md):
+            rel_md = str(md.relative_to(ROOT))
+            _echo_violation("D-01", "'Phase' in title", rel_md)
+            errors.append(f"D-01: 'Phase' in title → {rel_md}")
+        if not footer_ok(md):
+            rel_md = str(md.relative_to(ROOT))
+            _echo_violation("D-02", "missing or malformed footer", rel_md)
+            errors.append(f"D-02: missing or malformed footer → {rel_md}")
+
+    # 4) ENV parity (SSoT)
+    config_md = ROOT / "docs" / "ops" / "Config.md"
+    env_candidates = [
+        ROOT / ".env.example",
+        ROOT / "docs" / "ops" / ".env.example",
+    ]
+    env_example = next((candidate for candidate in env_candidates if candidate.exists()), None)
+    if config_md.exists() and env_example is not None:
+        md_txt = config_md.read_text(encoding="utf-8", errors="ignore")
+        keys_in_md = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", md_txt))
+        env_txt = env_example.read_text(encoding="utf-8", errors="ignore")
+        keys_in_env = set(re.findall(r"^([A-Z][A-Z0-9_]+)=", env_txt, flags=re.MULTILINE))
+        missing_in_env = sorted(k for k in keys_in_md if k not in keys_in_env)
+        extra_in_env = sorted(k for k in keys_in_env if k not in keys_in_md)
+        if missing_in_env:
+            _echo_violation(
+                "D-03",
+                "keys in Config.md missing in .env.example",
+                str(env_example.relative_to(ROOT)),
+            )
+            errors.append(
+                f"D-03: keys in Config.md missing in .env.example → {missing_in_env}"
+            )
+        if extra_in_env:
+            _echo_violation(
+                "D-03",
+                "keys in .env.example not documented in Config.md",
+                str(config_md.relative_to(ROOT)),
+            )
+            errors.append(
+                f"D-03: keys in .env.example not documented in Config.md → {extra_in_env}"
+            )
+    else:
+        searched = ", ".join(str(path.relative_to(ROOT)) for path in env_candidates)
+        notes.append(
+            "ENV parity skipped: docs/ops/Config.md or .env.example missing "
+            f"(looked for: {searched})"
+        )
+
+    return errors, notes
+
+
+def build_summary(errors: list[str], notes: list[str]) -> list[str]:
+    summary: list[str] = ["# Guardrails Check Summary", ""]
+    if errors:
+        summary.append(f"- ❌ **Status:** {len(errors)} violation(s) detected")
+        summary.append("- 📌 **Top findings:**")
+        for issue in errors[:10]:
+            summary.append(f"  - {issue}")
+        if len(errors) > 10:
+            summary.append(f"  - … {len(errors) - 10} more violation(s) (see report)")
+    else:
+        summary.append("- ✅ **Status:** No guardrail violations detected")
+
+    if notes:
+        summary.append("- ℹ️ **Notes:**")
+        for note in notes:
+            summary.append(f"  - {note}")
+
+    return summary
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run guardrails checks and emit reports.")
+    parser.add_argument(
+        "--summary",
+        type=pathlib.Path,
+        help="Optional path to write a markdown summary for PR comments.",
+    )
+    args = parser.parse_args(argv)
+
+    errors, notes = run_checks()
+
+    out = ["# Guardrails Compliance Report", "", f"- Findings: {len(errors)} error(s)"]
+    if notes:
+        out.append(f"- Notes: {len(notes)}")
+        for n in notes:
+            out.append(f"  - {n}")
+    out.append(section("Errors"))
+    out.extend([f"- {e}" for e in errors] or ["- None"])
+
+    REPORT.write_text("\n".join(out) + "\n", encoding="utf-8")
+    print(f"Wrote {REPORT}")
+
+    if args.summary:
+        summary_lines = build_summary(errors, notes)
+        args.summary.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
