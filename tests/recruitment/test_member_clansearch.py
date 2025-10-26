@@ -39,6 +39,7 @@ class FakeMessage:
         self.files = list(files or [])
         self.view = view
         self.edit_calls: list[dict] = []
+        self.ephemeral = False
 
     async def edit(
         self,
@@ -103,7 +104,8 @@ class FakeChannel:
         for message in self.messages:
             if message.id == message_id:
                 return message
-        raise discord.NotFound(response=None, message="missing")
+        response = types.SimpleNamespace(status=404, reason="missing")
+        raise discord.NotFound(response=response, message="missing")
 
 
 class FakeAuthor:
@@ -138,23 +140,48 @@ class FakeContext:
 class FakeInteractionResponse:
     def __init__(self):
         self._done = False
+        self.defer_calls = 0
+        self.defer_kwargs: list[dict] = []
+        self.send_calls: list[tuple[tuple, dict]] = []
 
     def is_done(self):
         return self._done
 
     async def defer(self, *args, **kwargs):
+        self.defer_calls += 1
+        self.defer_kwargs.append(dict(kwargs))
         self._done = True
 
     async def send_message(self, *args, **kwargs):
         self._done = True
+        self.send_calls.append((args, dict(kwargs)))
 
 
 class FakeFollowup:
     def __init__(self, channel):
         self._channel = channel
         self.sent: list[FakeMessage] = []
+        self.calls: list[dict] = []
 
     async def send(self, *args, **kwargs):
+        record = {"args": args, "kwargs": dict(kwargs)}
+        self.calls.append(record)
+        ephemeral = record["kwargs"].get("ephemeral")
+        if ephemeral:
+            content = record["kwargs"].get("content")
+            embeds = record["kwargs"].get("embeds")
+            files = record["kwargs"].get("files")
+            view = record["kwargs"].get("view")
+            message = FakeMessage(
+                self._channel,
+                content=content,
+                embeds=embeds,
+                files=files,
+                view=view,
+            )
+            message.ephemeral = True
+            self.sent.append(message)
+            return message
         message = await self._channel.send(*args, **kwargs)
         self.sent.append(message)
         return message
@@ -162,6 +189,7 @@ class FakeFollowup:
     async def edit_message(self, *, message_id, **kwargs):
         message = await self._channel.fetch_message(message_id)
         await message.edit(**kwargs)
+        self.calls.append({"args": (), "kwargs": {"message_id": message_id, **kwargs}})
         return message
 
 
@@ -308,7 +336,7 @@ def test_first_invocation_creates_message(monkeypatch):
     asyncio.run(_run())
 
 
-def test_search_edits_same_results_message(monkeypatch):
+def test_search_second_press_edits_and_resolves_interaction(monkeypatch):
     async def _run():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         cog = RecruitmentMember(bot)
@@ -343,6 +371,8 @@ def test_search_edits_same_results_message(monkeypatch):
         interaction = FakeInteraction(panel_message, user=ctx.author)
         await search_button.callback(interaction)  # type: ignore[misc]
 
+        assert interaction.response.defer_calls == 1
+        assert interaction.followup.calls
         assert len(ctx.channel.messages) == 2
         results_message = ctx.channel.messages[1]
         assert isinstance(results_message.view, member_panel_legacy.MemberSearchPagedView)
@@ -351,6 +381,10 @@ def test_search_edits_same_results_message(monkeypatch):
         second_interaction = FakeInteraction(panel_message, user=ctx.author)
         await search_button.callback(second_interaction)  # type: ignore[misc]
 
+        assert second_interaction.response.defer_calls == 1
+        assert second_interaction.followup.calls
+        # Last followup should acknowledge the refresh (ephemeral)
+        assert second_interaction.followup.sent[-1].ephemeral
         assert len(ctx.channel.messages) == 2
         refreshed_message = ctx.channel.messages[1]
         assert refreshed_message.id == results_message.id
@@ -418,13 +452,14 @@ def test_edit_uses_attachments_not_files(monkeypatch):
         assert last_edit["attachments"]
         assert last_edit["attachments"][0].filename == "run1.png"
         assert last_edit["files"] == []
+        assert second_interaction.followup.sent[-1].ephemeral
 
         await bot.close()
 
     asyncio.run(_run())
 
 
-def test_callback_always_resolves_deferred_interaction(monkeypatch):
+def test_callback_uses_followup_after_defer(monkeypatch):
     async def _run():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         cog = RecruitmentMember(bot)
@@ -448,27 +483,65 @@ def test_callback_always_resolves_deferred_interaction(monkeypatch):
         )
 
         interaction = FakeInteraction(panel_message, user=ctx.author)
-        original_send = interaction.followup.send
-        call_count = {"value": 0}
-
-        async def flaky_send(*args, **kwargs):
-            call_count["value"] += 1
-            if call_count["value"] == 1:
-                response = types.SimpleNamespace(status=500, reason="boom")
-                raise discord.HTTPException(response=response, message="boom")
-            return await original_send(*args, **kwargs)
-
-        interaction.followup.send = flaky_send  # type: ignore[assignment]
-
         await search_button.callback(interaction)  # type: ignore[misc]
 
-        assert call_count["value"] >= 2
-        assert interaction.followup.sent
-        fallback = interaction.followup.sent[-1]
-        assert "I couldn’t post the clan search results" in (fallback.content or "")
+        assert interaction.response.defer_calls == 1
+        assert interaction.response.send_calls == []
+        assert interaction.followup.calls
+        first_call = interaction.followup.calls[0]
+        assert first_call["kwargs"].get("allowed_mentions") == member_panel_legacy.ALLOWED_MENTIONS
+        assert len(ctx.channel.messages) == 2
+
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_stale_message_creates_new_and_resolves(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        cog = RecruitmentMember(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 40, make_row("Clan Fresh", tag="CF00", spots=1)]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(
+            "modules.recruitment.views.member_panel_legacy.fetch_clans_async",
+            fake_fetch,
+        )
+
+        await RecruitmentMember.clansearch.callback(cog, ctx)
+        panel_message = ctx.channel.messages[0]
+        view = panel_message.view
+        search_button = next(
+            child for child in view.children if isinstance(child, discord.ui.Button) and child.label == "Search Clans"
+        )
+
+        first_interaction = FakeInteraction(panel_message, user=ctx.author)
+        await search_button.callback(first_interaction)  # type: ignore[misc]
+
+        assert len(ctx.channel.messages) == 2
+        original_results = ctx.channel.messages[1]
+
+        # Simulate the stored message disappearing (deleted or missing)
+        ctx.channel.messages.pop()
+
+        stale_interaction = FakeInteraction(panel_message, user=ctx.author)
+        await search_button.callback(stale_interaction)  # type: ignore[misc]
+
+        assert stale_interaction.response.defer_calls == 1
+        assert stale_interaction.followup.calls
+        assert len(ctx.channel.messages) == 2
+        new_results = ctx.channel.messages[1]
+        assert new_results.id != original_results.id
+        # New send should satisfy the deferred interaction (non-ephemeral)
+        assert not stale_interaction.followup.sent[-1].ephemeral
 
         key = (0, ctx.channel.id, ctx.author.id)
-        assert key not in member_panel_legacy.ACTIVE_RESULTS
+        assert member_panel_legacy.ACTIVE_RESULTS[key] == new_results.id
 
         await bot.close()
 

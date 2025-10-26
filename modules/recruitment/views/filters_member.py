@@ -10,6 +10,8 @@ from discord import InteractionResponded
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .member_panel_legacy import MemberPanelControllerLegacy, MemberPanelState
 
+from .interaction_utils import defer_once
+
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
 HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
@@ -45,6 +47,7 @@ class _FilterSelect(discord.ui.Select):
         self._field = field
 
     async def callback(self, interaction: discord.Interaction) -> None:  # pragma: no cover - exercised indirectly
+        await defer_once(interaction, thinking=False)
         view = cast("MemberFiltersView", self.view)
         value = self.values[0] if self.values else None
         await view.apply_changes(interaction, **{self._field: value})
@@ -199,19 +202,24 @@ class MemberFiltersView(discord.ui.View):
         await self._edit_panel(interaction)
 
     async def _handle_cvc(self, interaction: discord.Interaction) -> None:
+        await defer_once(interaction, thinking=False)
         await self.apply_changes(interaction, cvc=self._cycle_flag(self.state.cvc))
 
     async def _handle_siege(self, interaction: discord.Interaction) -> None:
+        await defer_once(interaction, thinking=False)
         await self.apply_changes(interaction, siege=self._cycle_flag(self.state.siege))
 
     async def _handle_roster(self, interaction: discord.Interaction) -> None:
         next_value = self._cycle_roster(self.state.roster_mode)
+        await defer_once(interaction, thinking=False)
         await self.apply_changes(interaction, roster_mode=next_value)
 
     async def _handle_reset(self, interaction: discord.Interaction) -> None:
+        await defer_once(interaction, thinking=False)
         await self.controller.on_reset(interaction, self)
 
     async def _handle_search(self, interaction: discord.Interaction) -> None:
+        await defer_once(interaction, thinking=True)
         await self.controller.on_search(interaction, self)
 
     def set_state(self, state: "MemberPanelState") -> None:
