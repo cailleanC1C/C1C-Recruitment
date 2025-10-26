@@ -11,6 +11,7 @@ from discord import InteractionResponded
 from .. import cards, emoji_pipeline
 
 PAGE_SIZE = 5
+ALLOWED_MENTIONS = discord.AllowedMentions.none()
 
 
 class MemberSearchPagedView(discord.ui.View):
@@ -173,7 +174,12 @@ class MemberSearchPagedView(discord.ui.View):
         embeds = list(embeds)
         files = list(files)
         try:
-            sent = await interaction.followup.send(embeds=embeds, files=files, view=self)
+            sent = await interaction.followup.send(
+                embeds=embeds,
+                files=files,
+                view=self,
+                allowed_mentions=ALLOWED_MENTIONS,
+            )
         finally:
             for file in files:
                 try:
