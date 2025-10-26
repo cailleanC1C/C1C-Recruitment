@@ -34,7 +34,7 @@ def _sample_rows() -> list[list[str]]:
     return [header, row]
 
 
-def test_recruiter_search_uses_async_facade(monkeypatch):
+def test_recruiter_search_uses_async_facade(monkeypatch, patch_recruitment_fetch):
     async def runner() -> None:
         monkeypatch.setattr(panel.RecruiterPanelView, "_build_components", lambda self: None)
         monkeypatch.setattr(panel.RecruiterPanelView, "_sync_visuals", lambda self: None)
@@ -44,16 +44,11 @@ def test_recruiter_search_uses_async_facade(monkeypatch):
 
         captured = {"called": False, "force": None}
 
-        async def fake_fetch(*, force: bool = False):
-            captured["called"] = True
-            captured["force"] = force
-            return _sample_rows()
-
         async def fake_rebuild(self, interaction, *, ack_ephemeral=None):
             self._busy = False
             return None
 
-        monkeypatch.setattr(panel.sheets, "fetch_clans", fake_fetch)
+        patch_recruitment_fetch(panel, _sample_rows(), capture=captured)
         monkeypatch.setattr(
             panel.RecruiterPanelView, "_rebuild_and_edit", fake_rebuild, raising=False
         )
