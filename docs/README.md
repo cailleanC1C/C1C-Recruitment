@@ -41,6 +41,7 @@ It exists so that contributors update the correct references after each developm
 * [`DocStyle.md`](_meta/DocStyle.md) — documentation formatting conventions.
 
 ### `/docs/guardrails/`
+* [`guardrails.md`](guardrails.md) — high-level summary of CI-enforced guardrails surfaced on pull requests.
 * [`RepositoryGuardrails.md`](guardrails/RepositoryGuardrails.md) — canonical guardrails specification covering structure, coding, documentation, and governance rules.
 
 ### `/docs/contracts/`
@@ -52,6 +53,7 @@ It exists so that contributors update the correct references after each developm
 * [`Architecture.md`](ops/Architecture.md) — detailed system flow, runtime design, and module topology.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
+* [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
 * [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
 * [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
 * [`Watchers.md`](ops/Watchers.md) — background jobs covering schedulers, refreshers, and watchdogs.
