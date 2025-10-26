@@ -187,6 +187,10 @@ class MemberFiltersView(discord.ui.View):
     # State helpers
     # ------------------------------------------------------------------
     async def apply_changes(self, interaction: discord.Interaction, **changes) -> None:
+        if "roster_mode" in changes:
+            roster_value = changes["roster_mode"]
+            if roster_value in {"", "any"}:
+                changes["roster_mode"] = None
         self.state = self.state.with_updates(**changes)
         panel_id = self.panel_message_id
         if panel_id is not None:
@@ -269,10 +273,11 @@ class MemberFiltersView(discord.ui.View):
 
     @staticmethod
     def _cycle_roster(current: str | None) -> str | None:
-        order = ["open", "inactives", "full", None]
-        if current not in order:
+        order: list[str | None] = ["open", "full", None]
+        normalized = None if current in {None, "", "any"} else current
+        if normalized not in order:
             return "open"
-        idx = order.index(current) + 1
+        idx = order.index(normalized) + 1
         if idx >= len(order):
             idx = 0
         return order[idx]
@@ -287,13 +292,13 @@ class MemberFiltersView(discord.ui.View):
 
     @staticmethod
     def _roster_visual(value: str | None) -> tuple[str, discord.ButtonStyle]:
+        if value == "any":
+            value = None
         if value == "open":
             return "Open Spots Only", discord.ButtonStyle.success
-        if value == "inactives":
-            return "Inactives Only", discord.ButtonStyle.danger
         if value == "full":
             return "Full Only", discord.ButtonStyle.primary
-        return "Any Roster", discord.ButtonStyle.secondary
+        return "Open or Full (no filter)", discord.ButtonStyle.secondary
 
 
 __all__ = ["MemberFiltersView"]
