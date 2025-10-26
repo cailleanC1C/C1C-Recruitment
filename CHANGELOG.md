@@ -1,6 +1,6 @@
 # Changelog
 
-# v0.9.7 — 2025-10-27
+# v0.9.6 — 2025-10-26
 
 ### Added
 - Daily Recruiter Update reporting module with UTC scheduler and manual `!report recruiters` trigger, including embed rendering, Sheets parsing, and LOG channel telemetry.
@@ -11,8 +11,6 @@
 
 ### Tests
 - Added parser and command coverage for the Daily Recruiter Update utilities.
-
-## v0.9.6 — 2025-10-26
 
 ### Documentation
 - Sync documentation with live command set, feature toggles, and watcher behavior.
