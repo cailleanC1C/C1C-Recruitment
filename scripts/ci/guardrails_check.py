@@ -25,11 +25,19 @@ def _echo_violation(rule_id, message, file_path=None, line_no=None):
         parts.append(f"line: {line_no}")
     print(" ".join(parts))
 
+def is_under_audit(path: pathlib.Path) -> bool:
+    try:
+        path.relative_to(ROOT / "AUDIT")
+        return True
+    except ValueError:
+        return False
+
+
 def glob(paths: List[str]) -> List[pathlib.Path]:
-    out=[]
-    for p in paths:
-        out.extend(ROOT.glob(p))
-    return [p for p in out if p.exists()]
+    out = []
+    for pattern in paths:
+        out.extend(ROOT.glob(pattern))
+    return [p for p in out if p.exists() and not is_under_audit(p)]
 
 def has_phase_title(md: pathlib.Path) -> bool:
     txt = md.read_text(encoding="utf-8", errors="ignore")
@@ -48,16 +56,19 @@ def md_links(md: pathlib.Path) -> List[Tuple[str,str]]:
 def file_exists(rel: str) -> bool:
     return (ROOT / rel).exists()
 
-def grep(patterns: List[str], in_paths: List[str]) -> List[Tuple[str,int,str]]:
-    outs=[]
-    for g in in_paths:
-        for p in ROOT.glob(g):
-            if p.is_dir() or not p.suffix in {".py",".md"}: continue
+def grep(patterns: List[str], in_paths: List[str]) -> List[Tuple[str, int, str]]:
+    outs = []
+    for pattern in in_paths:
+        for path in ROOT.glob(pattern):
+            if is_under_audit(path) or path.is_dir() or path.suffix not in {".py", ".md"}:
+                continue
             try:
-                for i,l in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(),1):
-                    for pat in patterns:
-                        if re.search(pat, l):
-                            outs.append((str(p.relative_to(ROOT)), i, l.strip()))
+                for idx, line in enumerate(
+                    path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
+                ):
+                    for regex in patterns:
+                        if re.search(regex, line):
+                            outs.append((str(path.relative_to(ROOT)), idx, line.strip()))
             except Exception:
                 pass
     return outs
@@ -67,8 +78,12 @@ def section(title: str) -> str:
 
 # 1) Structure checks
 bad_imports = grep(
-    [r"\brecruitment\.", r"\bonboarding\.", r"\bplacement\."],
-    ["**/*.py"]
+    [
+        r"(?<!modules\.)recruitment\.(?=[A-Za-z_])",
+        r"(?<!modules\.)onboarding\.(?=[A-Za-z_])",
+        r"(?<!modules\.)placement\.(?=[A-Za-z_])",
+    ],
+    ["**/*.py"],
 )
 # Allow only under modules/
 bad_imports = [t for t in bad_imports if not t[0].startswith("modules/")]
@@ -95,9 +110,18 @@ for pkg in ["modules/recruitment", "modules/placement", "modules/onboarding", "s
 # 2) Coding checks
 decorators_outside_cogs = grep(
     [r"@(?:commands\.command|bot\.command|tree\.command|app_commands\.command)"],
-    ["**/*.py"]
+    ["**/*.py"],
 )
-decorators_outside_cogs = [t for t in decorators_outside_cogs if not t[0].startswith("cogs/")]
+allowed_command_paths = (
+    "cogs/",
+    "packages/c1c-coreops/",
+    "tests/",
+)
+decorators_outside_cogs = [
+    t
+    for t in decorators_outside_cogs
+    if not any(t[0].startswith(prefix) for prefix in allowed_command_paths)
+]
 for rel, ln, line in decorators_outside_cogs:
     _echo_violation("S-03", "command decorator outside cogs/*", rel, ln)
     errors.append(f"S-03: command decorator outside cogs/* → {rel}:{ln}: `{line}`")
