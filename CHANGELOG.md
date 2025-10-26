@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased / Next
+
+- Docs: Added EPIC and ADR for Phase 6 (Daily Recruiter Update v1).
+
 ## v0.9.6 — 2025-10-26
 
 ### Documentation
