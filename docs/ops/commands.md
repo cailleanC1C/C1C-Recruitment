@@ -65,6 +65,15 @@ Shows a clan’s profile and entry-criteria card.
 - **Error Handling:** If tag not found, returns a small red embed.
 - **Feature Toggle:** `clan_profile`
 
+### !clansearch
+
+Launches the member-facing search panel.
+
+- **Access:** Public (no role restrictions)
+- **Behavior:** Opens an interactive panel that edits its own message whenever filters change so channels do not fill with duplicates.
+- **Usage:** `!clansearch`
+- **Feature Toggle:** `member_panel`
+
 ### !clanmatch
 
 Opens the text-only recruiter panel for filtering and matching clans.
@@ -75,4 +84,22 @@ Opens the text-only recruiter panel for filtering and matching clans.
 - **Usage:** `!clanmatch`
 - **Feature Toggle:** `recruiter_panel`
 
-Doc last updated: 2025-10-22 (v0.9.5)
+### !welcome `[clan] @mention`
+
+Posts the cached welcome template for the provided clan tag.
+
+- **Access:** Staff / Admin
+- **Behavior:** Pulls templates via `shared.sheets` cache; appends any additional note supplied after the mention.
+- **Usage:** `!welcome C1CE @Player`
+- **Feature Toggle:** `recruitment_welcome`
+
+### `!rec ping`
+
+Prefix proxy for the admin ping command.
+
+- **Access:** Admin (shares gating with the base `!ping` command)
+- **Behavior:** Delegates to the hidden admin command that reacts with 🏓; used to confirm shard responsiveness.
+- **Usage:** `!rec ping`
+- **Notes:** Because the proxy invokes the admin command directly, non-admins still receive the “Admins only.” denial message.
+
+Doc last updated: 2025-10-26 (v0.9.6)

@@ -56,7 +56,7 @@ They apply to **all phases, PRs, and documentation changes**.
   * Make Codex **read** the relevant doc files first.
   * Add updates in the **existing format** and section.
   * Follow the structure in the current documentation tree (see `/docs` layout: `adr/`, `ops/`, `contracts/`, `compliance/`).
-  * **Documentation Index (v0.9.4):** This index explains the intent and ownership of every file in the documentation tree. It exists so that contributors update the correct references after each development phase or PR.
+  * **Documentation Index (v0.9.6):** This index explains the intent and ownership of every file in the documentation tree. It exists so that contributors update the correct references after each development phase or PR.
   * **Quality gate:** All docs must follow [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md) and pass `scripts/ci/check_docs.py`. Environment keys are authoritative in [`docs/ops/Config.md`](../ops/Config.md); keep `.env.example` synchronized.
 
     * **`/docs/adr/` — Architectural Decision Records**
@@ -91,7 +91,7 @@ They apply to **all phases, PRs, and documentation changes**.
     * **Maintenance Rules**
       * Update this index whenever documentation files are added, renamed, or removed.
       * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
-      * Ensure the version shown in this index (currently v0.9.4) matches the bot version in the root `README.md`.
+      * Ensure the version shown in this index (currently v0.9.6) matches the bot version in the root `README.md`.
 
     * **Cross-References**
       * `docs/ops/CollaborationContract.md` documents contributor responsibilities and embeds this index under “Documentation Discipline.”
@@ -230,4 +230,4 @@ AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew l
 * Keep ENV + Sheet config consistent.
 * Stop and ask if unsure.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

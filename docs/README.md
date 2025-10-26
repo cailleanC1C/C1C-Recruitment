@@ -1,4 +1,4 @@
-# C1C Recruitment Bot Documentation Overview (v0.9.7)
+# C1C Recruitment Bot Documentation Overview (v0.9.6)
 
 ## Purpose
 This index explains the intent and ownership of every file in the documentation tree.
@@ -56,7 +56,7 @@ It exists so that contributors update the correct references after each developm
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
 * [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
 * [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
-* [`Watchers.md`](ops/Watchers.md) — background jobs covering schedulers, refreshers, and watchdogs.
+* [`Watchers.md`](ops/Watchers.md) — environment-gated welcome/promo listeners and cache refresh scheduler notes.
 * [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
 * [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
 * [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
@@ -74,9 +74,9 @@ It exists so that contributors update the correct references after each developm
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.
 * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
-* Ensure the version shown in this index (currently v0.9.7) matches the bot version in the root `README.md`.
+* Ensure the version shown in this index (currently v0.9.6) matches the bot version in the root `README.md`.
 
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

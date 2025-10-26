@@ -10,18 +10,18 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 | `member_panel` | `TRUE` | Enables prefix `!clansearch` for members (single-message results updated in-place). |
 | `recruiter_panel` | `ON` | Enables the text-only recruiter panel (`!clanmatch`). |
 | `clan_profile` | `ON` | Enables the public `!clan` command with crest and 💡 reaction toggle. |
-| `recruitment_welcome` | `TRUE` | Welcome command and onboarding listeners. |
-| `recruitment_reports` | `TRUE` | Daily recruiter digest embed. |
+| `recruitment_welcome` | `TRUE` | Enables the `!welcome` command; onboarding listeners remain env-gated. |
+| `recruitment_reports` | `TRUE` | Stub module that logs load/unload only (no digest command yet). |
 
 ## Placement
 
 | Toggle | Default | Notes |
 | --- | --- | --- |
-| `placement_target_select` | `TRUE` | Enables placement target picker inside recruiter workflows. |
-| `placement_reservations` | `TRUE` | Reservation holds and release workflow. |
+| `placement_target_select` | `TRUE` | Stub module for future placement picker. |
+| `placement_reservations` | `TRUE` | Stub module for future reservation workflow. |
 
 Set the desired value in the `FeatureToggles` tab, then run `!rec refresh config`
 to apply it. The runtime logs whether each module was loaded or skipped at boot. See
 [`Config.md`](Config.md#feature-toggles-worksheet) for the worksheet contract.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

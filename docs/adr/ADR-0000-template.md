@@ -18,4 +18,4 @@ Call out follow-up work, trade-offs, and operational impact so future readers un
 
 Draft
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

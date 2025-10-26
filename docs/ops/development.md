@@ -26,7 +26,7 @@
 
 ## Testing commands
 - `!rec refresh all` — verify cache warmers and actor logging.
-- `!digest --debug` — confirm public telemetry includes age/next/retries.
+- `!rec digest` — confirm public telemetry includes age/next/retries and fallback text.
 - `!checksheet --debug` — inspect tab headers and template previews post-refresh.
 
 ## Command routing
@@ -34,4 +34,4 @@
   `COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and
   blocked in CI.
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

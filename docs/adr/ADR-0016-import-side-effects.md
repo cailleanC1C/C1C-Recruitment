@@ -24,4 +24,4 @@ Runtime boot still fails fast when required env is missing (because `shared.conf
 Test suite passes in CI.
 
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

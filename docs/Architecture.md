@@ -12,7 +12,7 @@ flowchart TD
     SheetsAdapters --> Sheets[(Google Sheets)]
     Watchers --> SheetsAdapters
     CoreOpsCog --> SheetsAdapters
-    Scheduler --> HealthLogs[Digest & refresh logs]
+    Scheduler --> CacheJobs[Cache refresh jobs]
     Http[aiohttp health server] --> ReadyEndpoint[/ready/]
     Http --> HealthEndpoint[/health & healthz/]
     CoreOpsCog --> Http
@@ -65,8 +65,8 @@ off in production until the panels ship._
   features → Discord extensions. Abort boot if config or sheets layers fail.
 - Watchdog owns keepalive cadences, stall detection, reconnect timers, and feeds its
   metrics into the health server output.
-- Runtime scheduler handles cron refreshes, recruiter digest delivery, and any hygiene
-  jobs registered by feature modules.
+- Runtime scheduler handles cache refreshes (`clans`, `templates`, `clan_tags`) and posts
+  `[cache]` summaries to the ops channel.
 
 ## Data paths
 - Reads: commands and watcher listeners use `shared.sheets.recruitment` /
@@ -97,10 +97,10 @@ off in production until the panels ship._
 - Approved keys:
   - `member_panel` — member search panels.
   - `recruiter_panel` — recruiter dashboards and match tools.
-  - `recruitment_welcome` — welcome command plus onboarding listeners.
-  - `recruitment_reports` — daily recruiter digest watcher and manual digest command.
-  - `placement_target_select` — placement picker UI inside panels.
-  - `placement_reservations` — reservation workflow for recruiter holds.
+  - `recruitment_welcome` — welcome command (welcome/promo listeners remain env-gated).
+  - `recruitment_reports` — stub module that logs load/unload only.
+  - `placement_target_select` — stub module for future placement picker.
+  - `placement_reservations` — stub module for future reservation workflow.
 - Toggles live in the recruitment Sheet `FeatureToggles` worksheet; `TRUE`/`true`/`1`
   enable a feature, `FALSE`/`false`/`0` disable it. Misconfigurations post a single admin-ping warning to the runtime log
   channel.
@@ -116,4 +116,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

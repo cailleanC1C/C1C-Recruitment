@@ -1,61 +1,50 @@
 # Watchers & Schedules
 
 ## Overview
-Watchers coordinate Discord-side automation for recruitment and onboarding. They load
-configuration, warm Sheets caches, then register whichever listeners and cron jobs are
-enabled for the deployment.
+Watchers coordinate Discord-side automation for recruitment and onboarding. They resolve
+configuration from Sheets, register their Discord listeners, and hand cache warm-up to the
+shared scheduler. The current release ships two event listeners (welcome/promo thread
+closures) and one scheduler that refreshes the Sheets caches.
 
 ## Terminology (important)
 - **Watcher** → *event-driven listener* registered on the Discord gateway. These respond
-  immediately to welcome/promo activity and log using the `[watcher]` prefix.
+  to welcome/promo thread updates and log using prefixes such as `[welcome_watcher]` and
+  `[promo_watcher]`.
 - **Lifecycle** → CoreOps runtime notices (startup, reload, manual refresh). They emit
   `[watcher|lifecycle]` for this release and will drop back to `[lifecycle]` next cycle.
-- **Cron** → *scheduled job* triggered by the runtime scheduler. Cron runs are logged with
-  the `[cron]` prefix (start/result/retry/summary).
-- Environment toggles `ENABLE_WELCOME_HOOK` and `ENABLE_PROMO_WATCHER` remain canonical;
-  see [`Config.md`](Config.md#environment-keys) for the authoritative list and defaults.
+- **Cron** → *scheduled job* triggered by the runtime scheduler. Cache refresh runs are
+  logged with the `[cache]` prefix (bucket name, duration, retries, result).
+- Environment toggles `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, and
+  `ENABLE_PROMO_WATCHER` remain canonical; see [`Config.md`](Config.md#environment-keys)
+  for the authoritative list and defaults.
 
 ## Load order
 1. `shared.config` — env snapshot (IDs, toggles, sheet metadata).
 2. `modules.common.runtime` — logging, scheduler, watchdog wiring.
 3. `shared.sheets.core` — Google API client + worksheet cache.
 4. `shared.sheets.recruitment` / `shared.sheets.onboarding` — TTL caches for clan data and templates exposed through the async facade.
-5. Feature modules — watchers register event hooks and cron jobs based on toggles.
+5. Feature modules — onboarding watchers and cache scheduler register based on the active toggles.
 
 _If steps 1–4 fail, abort boot. If a watcher fails to load, continue without it and emit a
 single structured log._
 
 ## Current Watchers (event listeners)
-- **Welcome listeners** (`ENABLE_WELCOME_HOOK`) — greet new members, open tickets, and
-  sync sheet rows. They now resolve channel, thread, and role targets from the shared
-  config registry — no hard-coded IDs remain.
-- **Promo listeners** (`ENABLE_PROMO_WATCHER`) — track promo requests, tag recruiters, and
-  update onboarding tabs. Targets load from the same registry to maintain parity between
-  environments.
+- **Welcome watcher** (`WELCOME_ENABLED` + `ENABLE_WELCOME_HOOK`) — listens for welcome
+  thread closures, appends a row to the configured Sheet tab, and logs the result via
+  `[welcome_watcher]` messages.
+- **Promo watcher** (`WELCOME_ENABLED` + `ENABLE_PROMO_WATCHER`) — mirrors the welcome flow
+  for promo threads, writing to the promo tab and logging as `[promo_watcher]`.
 
-Watchers read clan tags, templates, and ticket rows via the Sheets adapters listed above.
-Writes go back to `WelcomeTickets` / `PromoTickets` using bounded retry helpers that
-invalidate only the affected cache bucket. Role gates come from
-`c1c_coreops.rbac` (`ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`, `RECRUITER_ROLE_IDS`,
-`LEAD_ROLE_IDS`).
+Both listeners rely on the onboarding Sheet adapters and reuse the bounded retry helpers in
+`shared.sheets.async_core`. Failures reset their cached worksheet handles so the next event
+retries with a fresh connection.
 
 ## Current Cron Jobs (scheduled)
-- **Clan tag refresh** (`CRON_REFRESH_CLAN_TAGS`, default 15m) — invalidates and warms the
-  clan tag cache.
-- **Sheets sync** (`CRON_REFRESH_SHEETS`, default 30m) — reconciles Sheets metadata and logs
-  durations.
-- **Cache warmers** (`CRON_REFRESH_CACHE`, default 60m) — sweeps remaining caches and writes
-  a daily roll-up summary to `[cron]`.
-- **`bot_info` telemetry refresh** (`cron` every 3 h) — scheduler triggers
-  `refresh_now("bot_info", actor="cron")`; completion logs post a success/failure summary
-  to the ops channel.
-- **Recruiter digest** — loads only when `modules.common.feature_flags.is_enabled("recruitment_reports")`
-  evaluates `True`. The digest cron posts nightly summaries; when the toggle is off the
-  scheduler skips registration. Welcome and promo watchers remain controlled by their
-  `ENABLE_WELCOME_HOOK` / `ENABLE_PROMO_WATCHER` environment toggles and ignore feature flags.
+- **`clans` refresh** — every 3 h (`cadence_label: 3h`). Warms the recruitment roster cache.
+- **`templates` refresh** — every 7 d (`cadence_label: 7d`). Warms cached welcome templates.
+- **`clan_tags` refresh** — every 7 d (`cadence_label: 7d`). Warms the tag autocomplete cache.
 
-Cron jobs run even if corresponding listeners are disabled (for example, refresh cycles can
-stay active while promo listeners are paused).
+All jobs post `[cache]` summaries to the ops channel via `modules.common.runtime.send_log_message`.
 
 ## Caches & invalidation
 - `shared.sheets.core` caches worksheet handles (no TTL).
@@ -65,17 +54,14 @@ stay active while promo listeners are paused).
   the same helpers.
 
 ## Scheduler responsibilities
-- Dispatch cron jobs on their configured cadence and log `[cron start]`, `[cron result]`,
-  `[cron retry]`, and `[cron summary]` events.
-- Deliver the daily recruiter digest.
-- Register cleanup or hygiene jobs supplied by watcher modules.
+- Ensure cache buckets are registered (`ensure_cache_registration`).
+- Register cache refresh jobs for `clans`, `templates`, and `clan_tags` with their configured cadences.
+- Emit `[cache]` summaries to the ops channel for both success and failure cases.
 
 ## Failure handling & health
-- Read failure → serve stale cache (if present) and log error.
-- Write failure → log structured error (ticket, tab, row, reason) and enqueue bounded
-  retry.
-- `/healthz` reports watcher toggle state, last cron run, and watchdog timers.
-- `LOG_CHANNEL_ID` receives all lifecycle notices (`[watcher|lifecycle]`, dropping to
-  `[lifecycle]` next release) plus cron notices (`[cron]`).
+- Watcher read/write failure → log a structured warning (thread, tab, reason) and retry on the next event.
+- Cache refresh failure → `[cache]` summary includes `err=...`; manual refresh commands remain available.
+- `/healthz` reports watchdog metrics and cache timestamps; `!rec config` surfaces the active watcher toggles.
+- `LOG_CHANNEL_ID` receives lifecycle notices plus watcher (`[welcome_watcher]`, `[promo_watcher]`) and `[cache]` refresh messages.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

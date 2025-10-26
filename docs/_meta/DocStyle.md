@@ -7,7 +7,7 @@ This guide defines the documentation rules enforced by `scripts/ci/check_docs.py
 - H1 titles **must not** include delivery phases or transient project codes.
 
 ## Footer contract
-- The final line of every doc is the exact footer: `Doc last updated: 2025-10-22 (v0.9.5)`.
+- The final line of every doc is the exact footer: `Doc last updated: 2025-10-26 (v0.9.6)`.
 - Do not append extra whitespace or commentary after the footer.
 
 ## Environment source of truth
@@ -22,4 +22,4 @@ This guide defines the documentation rules enforced by `scripts/ci/check_docs.py
 - Run `python scripts/ci/check_docs.py` (or `make -f scripts/ci/Makefile docs-check`) before opening a PR.
 - The checker validates title rules, footers, index coverage, ENV parity, and in-doc links.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

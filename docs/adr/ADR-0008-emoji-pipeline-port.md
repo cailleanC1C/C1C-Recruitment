@@ -45,4 +45,4 @@ helpers while back-end caches and filters were restored.
 
 **Draft — awaiting command integration in subsequent Phase 5 PRs.**
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
