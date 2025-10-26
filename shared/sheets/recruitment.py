@@ -317,6 +317,24 @@ def _templates_tab() -> str:
     return _config_lookup("welcome_templates_tab", "WelcomeTemplates") or "WelcomeTemplates"
 
 
+def get_reports_tab_name(default: str = "Statistics") -> str:
+    """Return the configured Reports worksheet name (default "Statistics")."""
+
+    value = _config_lookup("reports_tab", default) or default
+    text = str(value or "").strip()
+    return text or default
+
+
+async def afetch_reports_tab(tab_name: str | None = None) -> List[List[str]]:
+    """Fetch the recruitment reports worksheet as a raw matrix."""
+
+    _ensure_service_account_credentials()
+    sheet_id = _sheet_id()
+    tab = tab_name or get_reports_tab_name()
+    normalized = tab.strip() or get_reports_tab_name()
+    return await afetch_values(sheet_id, normalized)
+
+
 def _sanitize_clan_rows(
     raw_rows: List[List[str]], roster_index: int | None
 ) -> List[List[str]]:

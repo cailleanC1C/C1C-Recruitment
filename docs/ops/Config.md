@@ -79,6 +79,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
+| `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
 
 ### Feature toggles and runtime flags
 | Key | Type | Default | Notes |
@@ -90,7 +91,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
 
-> Feature toggles `recruitment_reports`, `placement_target_select`, and `placement_reservations` currently load stub modules that only log whether they were enabled. They do **not** register commands or cron jobs yet.
+> Feature toggle `recruitment_reports` enables the Daily Recruiter Update (UTC scheduler plus `!report recruiters`). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
 ### Watchdog, cache, and cleanup
 | Key | Type | Default | Notes |
@@ -100,6 +101,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `WATCHDOG_DISCONNECT_GRACE_SEC` | int | `WATCHDOG_STALL_SEC` | Disconnect grace period; falls back to stall threshold. |
 | `KEEPALIVE_INTERVAL_SEC` | int | — | Legacy alias for `WATCHDOG_CHECK_SEC`; logs a warning when used. |
 | `CLAN_TAGS_CACHE_TTL_SEC` | int | `3600` | TTL for cached clan tags. |
+| `REPORT_DAILY_POST_TIME` | HH:MM | `09:30` | UTC time for the Daily Recruiter Update scheduler. |
 | `CLEANUP_AGE_HOURS` | int | `72` | Age threshold for cleanup jobs. |
 
 ### Media rendering
@@ -127,7 +129,7 @@ sync modules remain available for non-async scripts and cache warmers.
 > `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
 > 'ENABLE_WELCOME_WATCHER' entries from deployment environments.
 
-> Cron cadences are fixed in code today; the only scheduled jobs refresh the `clans`, `templates`, and `clan_tags` cache buckets and post `[cache]` summaries to the ops channel. Update the scheduler directly if the defaults change.
+> Cron cadences are fixed in code today; scheduled jobs refresh the `clans`, `templates`, and `clan_tags` cache buckets, post `[cache]` summaries to the ops channel, and emit the Daily Recruiter Update at `REPORT_DAILY_POST_TIME` (UTC). Update the scheduler directly if the defaults change.
 
 ## Sheet config tabs
 Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and **Value** columns.
@@ -136,6 +138,7 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'CLANS_TAB'
 - 'WELCOME_TEMPLATES_TAB'
 - 'FEATURE_TOGGLES_TAB'
+- 'REPORTS_TAB'
 
 ### Onboarding sheet keys
 - 'WELCOME_TICKETS_TAB'
@@ -187,7 +190,7 @@ Feature Toggles:
 - Missing feature row ⇒ that feature disabled; logs one admin-ping warning the first time the key is evaluated.
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
-- The `recruitment_reports` and `placement_*` rows only control stub modules today; enabling them logs load state but does not expose new commands yet.
+- The `recruitment_reports` row powers the Daily Recruiter Update (scheduler + manual command). The `placement_*` rows still control stub modules that only log load state.
 
 **Operator flow**
 
@@ -201,4 +204,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.7)

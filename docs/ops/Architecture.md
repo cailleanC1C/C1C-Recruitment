@@ -68,8 +68,8 @@ flowchart TD
   - `member_panel` — member view of recruitment roster/search panels.
   - `recruiter_panel` — recruiter dashboard, match queue, and escalations.
   - `recruitment_welcome` — welcome command (welcome/promo listeners remain env-gated).
-  - `recruitment_reports` — stub module that logs load/unload events only.
+  - `recruitment_reports` — Daily Recruiter Update (UTC scheduler + `!report recruiters`).
   - `placement_target_select` — stub module (no runtime surface yet).
   - `placement_reservations` — stub module (no runtime surface yet).
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.7)

@@ -63,6 +63,7 @@ from shared.sheets.async_core import (
     acall_with_backoff,
     afetch_records,
 )
+from shared.sheets.recruitment import get_reports_tab_name
 
 from .config import CoreOpsSettings, load_coreops_settings
 from .prefix import detect_admin_bang_command
@@ -315,6 +316,7 @@ class _ConfigDiscoveryResult:
     tabs: list[str]
     header_names: tuple[str, str]
     preview_rows: list[list[str]]
+    tab_map: Dict[str, str]
 
 
 async def _discover_tabs_from_config(
@@ -344,7 +346,9 @@ async def _discover_tabs_from_config(
         logger.info("[checksheet] raw Config rows (%s): %d", tab_range, len(rows))
     except Exception as exc:
         logger.warning("[checksheet] failed to read Config range %s: %s", config_tab, exc)
-        return _ConfigDiscoveryResult(tabs=[], header_names=("A", "B"), preview_rows=[])
+        return _ConfigDiscoveryResult(
+            tabs=[], header_names=("A", "B"), preview_rows=[], tab_map={}
+        )
 
     if debug and rows:
         preview: list[str] = []
@@ -407,6 +411,7 @@ async def _discover_tabs_from_config(
     if key_idx is None or val_idx is None:
         key_idx, val_idx = 0, 1
 
+    tab_map: Dict[str, str] = {}
     discovered: list[str] = []
     seen: set[str] = set()
     max_index = max(key_idx, val_idx)
@@ -423,14 +428,23 @@ async def _discover_tabs_from_config(
         val = str(cells[val_idx] or "").strip()
         if not key or not val:
             continue
-        if key.upper().endswith("_TAB"):
+        key_upper = key.upper()
+        if key_upper.endswith("_TAB"):
             dedupe = val.lower()
             if not dedupe or dedupe in seen:
                 continue
             seen.add(dedupe)
-            discovered.append(val.strip())
+            cleaned_value = val.strip()
+            if cleaned_value:
+                tab_map.setdefault(key_upper, cleaned_value)
+                discovered.append(cleaned_value)
 
-    return _ConfigDiscoveryResult(tabs=discovered, header_names=header_names, preview_rows=preview_rows)
+    return _ConfigDiscoveryResult(
+        tabs=discovered,
+        header_names=header_names,
+        preview_rows=preview_rows,
+        tab_map=tab_map,
+    )
 
 
 @dataclass(frozen=True)
@@ -1657,18 +1671,35 @@ class CoreOpsCog(commands.Cog):
         logger.info("[checksheet] first_rows=%s", preview_json)
 
         config_headers_label = self._format_config_headers_label(discovery.header_names)
-        sanitized_tabs_for_log = [sanitize_text(name) for name in discovery.tabs]
+        tab_names = list(discovery.tabs)
+
+        sanitized_tabs_for_log = [sanitize_text(name) for name in tab_names]
         joined = ", ".join(sanitized_tabs_for_log)
         if len(joined) > 120:
             joined = f"{joined[:117]}…"
-        if discovery.tabs:
+
+        if tab_names:
             logger.info(
                 "[checksheet] discovered %d tabs: %s",
-                len(discovery.tabs),
+                len(tab_names),
                 joined,
             )
         else:
             logger.info("[checksheet] no *_TAB rows found in Config")
+            warning = f"⚠️ No tabs listed in '{config_tab_display}'"
+            warnings.append(warning)
+
+        reports_config = discovery.tab_map.get("REPORTS_TAB")
+        reports_default = get_reports_tab_name("Statistics")
+        reports_tab = (reports_config or reports_default or "").strip()
+        if reports_tab:
+            normalized_reports = reports_tab.lower()
+            if not any((name or "").strip().lower() == normalized_reports for name in tab_names):
+                tab_names.append(reports_tab)
+                logger.info(
+                    "[checksheet] injecting reports tab '%s' for inspection",
+                    sanitize_text(reports_tab),
+                )
 
         try:
             workbook = await aopen_by_key(sheet_id)
@@ -1696,10 +1727,8 @@ class CoreOpsCog(commands.Cog):
                 config_tab=config_tab_display,
                 config_headers=config_headers_label,
                 config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
-                discovered_tabs=tuple(discovery.tabs),
+                discovered_tabs=tuple(tab_names),
             )
-
-        tab_names = discovery.tabs
 
         if not tab_names:
             sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
@@ -1708,7 +1737,8 @@ class CoreOpsCog(commands.Cog):
                 sheet_label,
             )
             warning = f"⚠️ No tabs listed in '{config_tab_display}'"
-            warnings.append(warning)
+            if warning not in warnings:
+                warnings.append(warning)
             return ChecksheetSheetEntry(
                 title=sheet_title,
                 sheet_id=display_sheet_id,
@@ -1717,7 +1747,7 @@ class CoreOpsCog(commands.Cog):
                 config_tab=config_tab_display,
                 config_headers=config_headers_label,
                 config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
-                discovered_tabs=tuple(discovery.tabs),
+                discovered_tabs=tuple(tab_names),
             )
 
         sheet_label = _format_sheet_log_label(sheet_title, sheet_id)
@@ -1743,7 +1773,7 @@ class CoreOpsCog(commands.Cog):
             config_tab=config_tab_display,
             config_headers=config_headers_label,
             config_preview_rows=tuple(tuple(row) for row in discovery.preview_rows),
-            discovered_tabs=tuple(discovery.tabs),
+            discovered_tabs=tuple(tab_names),
         )
 
     def _build_checksheet_targets(self) -> Sequence[_ChecksheetSheetTarget]:
@@ -2713,6 +2743,7 @@ class CoreOpsCog(commands.Cog):
             "NOTIFY_CHANNEL_ID",
             "PROMO_CHANNEL_ID",
             "RECRUITERS_THREAD_ID",
+            "REPORT_RECRUITERS_DEST_ID",
             "PANEL_FIXED_THREAD_ID",
             "PANEL_THREAD_MODE",
         ]
@@ -2868,7 +2899,12 @@ class CoreOpsCog(commands.Cog):
         return lines or ["—"]
 
     def _format_cache_refresh(self, entries: Dict[str, _EnvEntry]) -> List[str]:
-        ordered = ["CLAN_TAGS_CACHE_TTL_SEC", "REFRESH_TIMES", "CLEANUP_AGE_HOURS"]
+        ordered = [
+            "CLAN_TAGS_CACHE_TTL_SEC",
+            "REFRESH_TIMES",
+            "REPORT_DAILY_POST_TIME",
+            "CLEANUP_AGE_HOURS",
+        ]
         lines = [self._format_simple_line(key, entries.get(key)) for key in ordered]
         seen = set(ordered)
         dynamic = [
