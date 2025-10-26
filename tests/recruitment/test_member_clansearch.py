@@ -1,8 +1,19 @@
 import asyncio
+import sys
+import types
+
 import pytest
 import discord
 
 from discord.ext import commands
+
+_coreops = types.ModuleType("c1c_coreops")
+_coreops_helpers = types.ModuleType("c1c_coreops.helpers")
+_coreops_helpers.audit_tiers = lambda *args, **kwargs: None
+_coreops_helpers.rehydrate_tiers = lambda *args, **kwargs: None
+_coreops.helpers = _coreops_helpers  # type: ignore[attr-defined]
+sys.modules.setdefault("c1c_coreops", _coreops)
+sys.modules.setdefault("c1c_coreops.helpers", _coreops_helpers)
 
 from cogs.recruitment_member import RecruitmentMember
 from modules.recruitment import search_helpers
@@ -87,6 +98,41 @@ class FakeContext:
         message = await self.channel.send(*args, **kwargs)
         self.replies.append(message)
         return message
+
+
+class FakeInteractionResponse:
+    def __init__(self):
+        self._done = False
+
+    def is_done(self):
+        return self._done
+
+    async def defer(self):
+        self._done = True
+
+    async def send_message(self, *args, **kwargs):  # pragma: no cover - defensive
+        self._done = True
+
+
+class FakeFollowup:
+    def __init__(self, channel):
+        self._channel = channel
+        self.sent: list[FakeMessage] = []
+
+    async def send(self, *args, **kwargs):
+        message = await self._channel.send(*args, **kwargs)
+        self.sent.append(message)
+        return message
+
+
+class FakeInteraction:
+    def __init__(self, message, *, user=None):
+        self.message = message
+        self.user = user or FakeAuthor()
+        self.response = FakeInteractionResponse()
+        self.followup = FakeFollowup(message.channel)
+        self.channel = message.channel
+        self.guild = None
 
 
 def make_row(
@@ -176,6 +222,98 @@ def test_first_invocation_creates_message(monkeypatch):
         message = ctx.channel.messages[0]
         assert message.view is not None
         assert message.embeds
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_zero_state_has_view_and_disabled_nav(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        controller = MemberPanelController(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 32]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(member_panel, "fetch_clans_async", fake_fetch)
+
+        await controller.update_results(ctx, filters=MemberSearchFilters())
+
+        assert len(ctx.channel.messages) == 1
+        message = ctx.channel.messages[0]
+        assert message.embeds
+        assert message.view is not None
+        view = message.view
+        assert hasattr(view, "has_results")
+        assert not view.has_results
+
+        expected_disabled = {"ms_prev", "ms_next", "ms_lite", "ms_entry", "ms_profile"}
+        for child in view.children:
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.custom_id in expected_disabled:
+                assert child.disabled, f"{child.custom_id} should be disabled"
+
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_zero_state_edit_reuses_message_with_embed(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        controller = MemberPanelController(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 32]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(member_panel, "fetch_clans_async", fake_fetch)
+
+        await controller.update_results(ctx, filters=MemberSearchFilters())
+        assert len(ctx.channel.messages) == 1
+        message = ctx.channel.messages[0]
+
+        await controller.update_results(ctx, filters=MemberSearchFilters())
+
+        assert len(ctx.channel.messages) == 1
+        assert message.edit_calls
+        for call in message.edit_calls:
+            assert call["embeds"], "edit should include at least one embed"
+
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_view_callbacks_on_empty_do_not_400(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        controller = MemberPanelController(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 32]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(member_panel, "fetch_clans_async", fake_fetch)
+
+        await controller.update_results(ctx, filters=MemberSearchFilters())
+        message = ctx.channel.messages[0]
+        view = message.view
+        interaction = FakeInteraction(message)
+
+        await view._edit(interaction)
+
+        assert message.edit_calls
+        assert message.edit_calls[-1]["embeds"], "view edit should include an embed"
+
         await bot.close()
 
     asyncio.run(_run())
