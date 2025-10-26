@@ -702,11 +702,13 @@ class Runtime:
         """Load all feature modules into the shared bot instance."""
 
         from c1c_coreops import cog as coreops_cog
+        from cogs import app_admin
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
         from c1c_coreops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
+        await app_admin.setup(self.bot)
 
         from modules.common import feature_flags as features
 
@@ -808,14 +810,14 @@ class Runtime:
         await _load_feature_module("cogs.recruitment_recruiter", ("recruiter_panel",))
 
         if features.is_enabled("clan_profile"):
-            from modules.recruitment import clan_profile
+            from cogs import recruitment_clan_profile
 
-            await clan_profile.setup(self.bot)
+            await recruitment_clan_profile.setup(self.bot)
             log.info("modules: clan_profile enabled")
         else:
             log.info("modules: clan_profile disabled")
         await _load_feature_module(
-            "modules.recruitment.welcome", ("recruitment_welcome",)
+            "cogs.recruitment_welcome", ("recruitment_welcome",)
         )
         await _load_feature_module(
             "modules.recruitment.reports", ("recruitment_reports",)
