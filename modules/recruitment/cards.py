@@ -6,7 +6,12 @@ from typing import Sequence
 
 import discord
 
-from shared.sheets.recruitment import RecruitmentClanRecord
+from shared.sheets.recruitment import (
+    FALLBACK_INACTIVES_INDEX,
+    FALLBACK_OPEN_SPOTS_INDEX,
+    FALLBACK_RESERVED_INDEX,
+    RecruitmentClanRecord,
+)
 
 from . import emoji_pipeline
 
@@ -45,16 +50,26 @@ def make_embed_for_row_classic(
     row, record = _coerce_entry(entry)
     clan = (row[1] or "").strip()
     tag = (row[2] or "").strip()
-    spots = str(record.open_spots) if record else (row[4] or "").strip()
+    spots = (
+        str(record.open_spots)
+        if record is not None
+        else (row[FALLBACK_OPEN_SPOTS_INDEX] or "").strip()
+        if len(row) > FALLBACK_OPEN_SPOTS_INDEX
+        else ""
+    )
     inactives_value = (
         str(record.inactives)
         if record is not None and record.inactives > 0
-        else (row[31] if len(row) > 31 else "").strip()
+        else (
+            row[FALLBACK_INACTIVES_INDEX] if len(row) > FALLBACK_INACTIVES_INDEX else ""
+        ).strip()
     )
     reserved_value = (
         str(record.reserved)
         if record is not None and record.reserved > 0
-        else (row[28] or "").strip() if len(row) > 28 else ""
+        else (
+            row[FALLBACK_RESERVED_INDEX] if len(row) > FALLBACK_RESERVED_INDEX else ""
+        ).strip()
     )
     comments = (row[29] or "").strip() if len(row) > 29 else ""
     addl_req = (row[30] or "").strip() if len(row) > 30 else ""
@@ -126,7 +141,13 @@ def make_embed_for_row_search(
     name = (row[1] or "").strip()
     tag = (row[2] or "").strip()
     level = (row[3] or "").strip()
-    spots = str(record.open_spots) if record else (row[4] or "").strip()
+    spots = (
+        str(record.open_spots)
+        if record is not None
+        else (row[FALLBACK_OPEN_SPOTS_INDEX] or "").strip()
+        if len(row) > FALLBACK_OPEN_SPOTS_INDEX
+        else ""
+    )
 
     v = (row[21] or "").strip() if len(row) > 21 else ""
     w = (row[22] or "").strip() if len(row) > 22 else ""

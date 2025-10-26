@@ -9,6 +9,7 @@ import discord
 from discord import InteractionResponded
 
 from .. import cards, emoji_pipeline
+from shared.sheets.recruitment import RecruitmentClanRecord
 
 PAGE_SIZE = 5
 ALLOWED_MENTIONS = discord.AllowedMentions.none()
@@ -102,17 +103,18 @@ class MemberSearchPagedView(discord.ui.View):
             elif child.custom_id == "ms_next":
                 child.disabled = not has_rows or self.page >= max_page
 
-    def _make_embed(self, row) -> discord.Embed:
+    def _make_embed(self, entry) -> discord.Embed:
         if self.mode == "entry":
-            return cards.make_embed_for_row_search(row, self.filters_text, self.guild)
+            return cards.make_embed_for_row_search(entry, self.filters_text, self.guild)
         if self.mode == "profile":
+            row = entry.row if isinstance(entry, RecruitmentClanRecord) else entry
             embed = cards.make_embed_for_profile(row, self.guild)
             if self.filters_text:
                 embed.set_footer(text=f"Filters used: {self.filters_text}")
             else:
                 embed.set_footer(text="")
             return embed
-        embed = cards.make_embed_for_row_lite(row, self.filters_text, self.guild)
+        embed = cards.make_embed_for_row_lite(entry, self.filters_text, self.guild)
         if self.filters_text:
             embed.set_footer(text=f"Filters used: {self.filters_text}")
         return embed
@@ -134,11 +136,14 @@ class MemberSearchPagedView(discord.ui.View):
 
         badge_size, badge_box = emoji_pipeline.tag_badge_defaults()
 
-        for row in self.rows[start:end]:
-            embed = self._make_embed(row)
+        for entry in self.rows[start:end]:
+            embed = self._make_embed(entry)
+            source_row = (
+                entry.row if isinstance(entry, RecruitmentClanRecord) else entry
+            )
             tag = ""
             try:
-                tag = (row[2] or "").strip()
+                tag = (source_row[2] or "").strip()
             except Exception:
                 tag = ""
             if tag:
