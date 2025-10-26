@@ -18,7 +18,6 @@ from shared.config import (
 )
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
-from c1c_coreops.helpers import tier
 from modules.common.runtime import Runtime
 from c1c_coreops.config import (
     build_command_variants,
@@ -28,7 +27,6 @@ from c1c_coreops.config import (
 )
 from c1c_coreops.prefix import detect_admin_bang_command
 from c1c_coreops.rbac import (
-    admin_only,
     get_admin_role_ids,
     get_staff_role_ids,
     is_admin_member,
@@ -295,20 +293,6 @@ async def on_command_error(ctx: commands.Context, error: Exception):
         )
     except Exception:
         log.exception("failed to send command error to log channel")
-
-
-@tier("admin")
-@bot.command(
-    name="ping",
-    hidden=True,
-    help="Quick admin check to confirm the bot is responsive.",
-)
-@admin_only()
-async def ping(ctx: commands.Context):
-    try:
-        await ctx.message.add_reaction("🏓")
-    except Exception:
-        pass
 
 
 BOT_VERSION = os.getenv("BOT_VERSION", "dev")
