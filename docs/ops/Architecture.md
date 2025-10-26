@@ -10,7 +10,7 @@ flowchart TD
     Renderer -->|embeds| Discord
     Preloader[Startup preloader] -->|warm buckets| CacheSvc
     Scheduler[Runtime scheduler] -->|cron refresh| CacheSvc
-    Scheduler --> Digest[Recruiter digest jobs]
+    Scheduler --> CacheJobs[Cache refresh jobs]
     User[Member/Admin requests] --> CoreOps
     Http[aiohttp runtime] --> Ready[/ready endpoint/]
     Http --> Health[/health & healthz/]
@@ -33,8 +33,8 @@ flowchart TD
   statuses for `/ready` and `/health` whenever Discord or the HTTP server changes state.
 - **Preloader:** Runs automatically during boot, logging `[refresh] startup` entries for
   each bucket.
-- **Scheduler:** Handles cron work including the 3-hour `bot_info` refresh, digest
-  delivery, and template/watchers hygiene tasks.
+- **Scheduler:** Handles cron work for cache refreshes (`clans`, `templates`,
+  `clan_tags`) and posts results to the ops channel.
 - **Telemetry → Embed renderer:** Command responses pull structured telemetry and render
   embeds without timestamps; version metadata lives solely in the footer.
 - **Runtime HTTP interface:** `/` returns the status payload and echoes the request
@@ -67,9 +67,9 @@ flowchart TD
 - **Feature map:**
   - `member_panel` — member view of recruitment roster/search panels.
   - `recruiter_panel` — recruiter dashboard, match queue, and escalations.
-  - `recruitment_welcome` — welcome command plus onboarding listeners.
-  - `recruitment_reports` — daily recruiter digest watcher and embeds.
-  - `placement_target_select` — placement targeting picker inside panels.
-  - `placement_reservations` — reservation holds and release workflow.
+  - `recruitment_welcome` — welcome command (welcome/promo listeners remain env-gated).
+  - `recruitment_reports` — stub module that logs load/unload events only.
+  - `placement_target_select` — stub module (no runtime surface yet).
+  - `placement_reservations` — stub module (no runtime surface yet).
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

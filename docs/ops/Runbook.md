@@ -10,7 +10,7 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.
 2. **Warm-up:** The preloader calls `refresh_now(name, actor="startup")` for every
-   registered cache bucket (Sheets, templates, bot_info, digest payloads, etc.).
+   registered cache bucket (`clans`, `templates`, `clan_tags`).
 3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
  completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
   result.
@@ -91,4 +91,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

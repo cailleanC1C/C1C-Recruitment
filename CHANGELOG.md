@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.6 — 2025-10-26
+
+### Documentation
+- Sync documentation with live command set, feature toggles, and watcher behavior.
+- Updated configuration references, module toggle notes, and operator runbooks to reflect the current runtime.
+- Bumped doc footers and indices to v0.9.6 with the 2025-10-26 review date.
+
 ## v0.9.5 — 2025-10-26
 
 ### Fixed

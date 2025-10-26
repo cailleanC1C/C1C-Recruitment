@@ -30,8 +30,7 @@ The cog currently imports several modules that are **not** shipped with this
 package:
 
 * `config.runtime` — provides bot identity, prefix, and watchdog settings.
-* `modules.coreops.helpers` — contributes the `tier` decorator used by the
-  help-surface integration tests.
+* `modules.common.feature_flags` / `modules.common.runtime` — feature toggle refresh and runtime scheduling helpers.
 * `shared.*` packages — supply cache, Sheets, telemetry, and redaction helpers
   relied upon by the command implementations.
 
@@ -64,4 +63,4 @@ to another project.
 Please keep this README up to date whenever dependencies change so other teams
 can evaluate the work required to adopt CoreOps.
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

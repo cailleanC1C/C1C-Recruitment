@@ -26,4 +26,4 @@ private cache structures.
 
 Accepted — 2025-10-20
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

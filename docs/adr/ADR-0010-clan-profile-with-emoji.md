@@ -37,4 +37,4 @@ entry criteria side remains text-only.
 * The owner-locked flip view allows future commands to supply custom embed
   builders, enabling richer toggles without duplicating UI code.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

@@ -34,4 +34,4 @@ Adopt a Modules-First layout:
 * The `member_panel` flag exists but does not enable new behavior yet; future PRs
   will register the cog when the sheet value is `TRUE`.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

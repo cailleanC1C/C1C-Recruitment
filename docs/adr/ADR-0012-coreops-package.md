@@ -32,4 +32,4 @@ working while we stage the follow-up import rewrite.
 * We must follow up with a PR to update imports to `c1c_coreops.*` and remove
   the shims once callers move over.
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

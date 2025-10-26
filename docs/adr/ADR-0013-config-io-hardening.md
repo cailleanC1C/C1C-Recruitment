@@ -24,4 +24,4 @@ An audit highlighted four regressions: Discord log posts could silently land in 
 
 Accepted
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

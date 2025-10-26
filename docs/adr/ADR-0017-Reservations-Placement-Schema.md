@@ -93,4 +93,4 @@ labels: docs, architecture, comp:onboarding, comp:placement, comp:data-sheets, b
 milestone: Harmonize v1.0
 **[/meta]**
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

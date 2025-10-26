@@ -26,4 +26,4 @@ loaded as part of the recruiter workflow.
 * Other recruitment commands (`!clansearch`, `!clan <tag>`) remain free to add
   crest rendering in follow-up work without affecting recruiter performance.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

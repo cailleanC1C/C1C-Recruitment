@@ -90,6 +90,8 @@ sync modules remain available for non-async scripts and cache warmers.
 | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
 
+> Feature toggles `recruitment_reports`, `placement_target_select`, and `placement_reservations` currently load stub modules that only log whether they were enabled. They do **not** register commands or cron jobs yet.
+
 ### Watchdog, cache, and cleanup
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -119,13 +121,13 @@ sync modules remain available for non-async scripts and cache warmers.
 ## Automation listeners & cron jobs
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `ENABLE_WELCOME_HOOK` | bool | `true` | Event listeners for welcomes. Disable to pause ticket automation. |
-| `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promos. |
+| `ENABLE_WELCOME_HOOK` | bool | `true` | Event listeners for welcome thread closures that log to Sheets. |
+| `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promo thread closures that log to Sheets. |
 
 > `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
 > 'ENABLE_WELCOME_WATCHER' entries from deployment environments.
 
-> Cron cadences are fixed in code today; update the scheduler directly if the defaults change.
+> Cron cadences are fixed in code today; the only scheduled jobs refresh the `clans`, `templates`, and `clan_tags` cache buckets and post `[cache]` summaries to the ops channel. Update the scheduler directly if the defaults change.
 
 ## Sheet config tabs
 Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and **Value** columns.
@@ -185,6 +187,7 @@ Feature Toggles:
 - Missing feature row ⇒ that feature disabled; logs one admin-ping warning the first time the key is evaluated.
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
+- The `recruitment_reports` and `placement_*` rows only control stub modules today; enabling them logs load state but does not expose new commands yet.
 
 **Operator flow**
 
@@ -198,4 +201,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-26 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)

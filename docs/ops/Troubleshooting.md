@@ -1,7 +1,7 @@
 # Troubleshooting & Redaction
 
 ## Quick triage
-- **Cron quiet** → confirm the latest `[cron result]` within the expected interval before
+- **Cron quiet** → confirm the latest `[cache]` refresh summary within the expected interval before
   triggering manual refreshes. If missing, inspect `/healthz` and deployment logs.
 - **Command fails for staff** → confirm roles, then rerun with admin watching logs.
 - **Watcher quiet** → check toggles in `!rec config` and verify `/healthz` for stale
@@ -56,4 +56,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.6)
