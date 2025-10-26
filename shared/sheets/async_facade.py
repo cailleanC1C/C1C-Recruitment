@@ -35,6 +35,10 @@ async def fetch_clans_async(*args: Any, **kwargs: Any) -> Any:
     return await fetch_clans(*args, **kwargs)
 
 
+async def fetch_clan_records(*args: Any, **kwargs: Any) -> Any:
+    return await _to_thread(_recruitment_sync.get_clan_records, *args, **kwargs)
+
+
 async def fetch_templates(*args: Any, **kwargs: Any) -> Any:
     return await _to_thread(_recruitment_sync.fetch_templates, *args, **kwargs)
 
@@ -87,6 +91,7 @@ async def call_with_backoff(*args: Any, **kwargs: Any) -> Any:
 __all__ = [
     "fetch_clans",
     "fetch_clans_async",
+    "fetch_clan_records",
     "fetch_templates",
     "fetch_clan_rows",
     "fetch_welcome_templates",

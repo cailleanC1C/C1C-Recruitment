@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
@@ -11,16 +11,13 @@ import discord
 from discord import Message
 from discord.ext import commands
 
-from .. import search_helpers
-from ..search_helpers import (
-    format_filters_footer,
-    parse_inactives_num,
-    parse_spots_num,
-    row_matches,
-)
+from .. import search as roster_search
+from ..search_helpers import format_filters_footer
 from .shared import MemberSearchPagedView
 from shared import config as shared_config
-from shared.sheets.async_facade import fetch_clans_async
+from shared.sheets.recruitment import RecruitmentClanRecord
+
+fetch_clans_async = roster_search.fetch_roster_records
 
 log = logging.getLogger("c1c.recruitment.member")
 
@@ -157,8 +154,13 @@ class MemberPanelController:
 
         message = await self._fetch_existing_message(channel, key)
 
-        rows = await self._load_rows()
-        matches = self._filter_rows(rows, filters)
+        records = await self._load_rows()
+        matches = self._filter_rows(records, filters)
+        matches = roster_search.enforce_inactives_only(
+            matches,
+            filters.roster_mode,
+            context="member_panel:pre_pagination",
+        )
 
         soft_cap = max(1, shared_config.get_search_results_soft_cap(25))
         visible_cap = min(soft_cap, MAX_VISIBLE_ROWS)
@@ -453,52 +455,25 @@ class MemberPanelController:
             },
         )
 
-    async def _load_rows(self) -> list[Sequence[str]]:
+    async def _load_rows(self) -> list[RecruitmentClanRecord]:
         try:
-            rows = await fetch_clans_async(force=False)
+            records = await fetch_clans_async(force=False)
         except Exception:  # pragma: no cover - defensive guard
             log.exception("failed to fetch member clan rows")
             return []
-        return rows or []
+        return roster_search.normalize_records(list(records))
 
     def _filter_rows(
-        self, rows: Sequence[Sequence[str]], filters: MemberSearchFilters
-    ) -> list[Sequence[str]]:
-        matches: list[Sequence[str]] = []
-        if not rows:
-            return matches
-
-        for row in rows:
-            try:
-                if not row_matches(
-                    row,
-                    filters.cb,
-                    filters.hydra,
-                    filters.chimera,
-                    filters.cvc,
-                    filters.siege,
-                    filters.playstyle,
-                ):
-                    continue
-                spots = parse_spots_num(
-                    row[search_helpers.COL_E_SPOTS]
-                    if len(row) > search_helpers.COL_E_SPOTS
-                    else ""
-                )
-                inactives = parse_inactives_num(
-                    row[search_helpers.IDX_AG_INACTIVES]
-                    if len(row) > search_helpers.IDX_AG_INACTIVES
-                    else ""
-                )
-                if filters.roster_mode == "open" and spots <= 0:
-                    continue
-                if filters.roster_mode == "full" and spots > 0:
-                    continue
-                if filters.roster_mode == "inactives" and inactives <= 0:
-                    continue
-                matches.append(row)
-            except Exception:
-                continue
-
-        return matches
+        self, records: Sequence[RecruitmentClanRecord], filters: MemberSearchFilters
+    ) -> list[RecruitmentClanRecord]:
+        return roster_search.filter_records(
+            records,
+            cb=filters.cb,
+            hydra=filters.hydra,
+            chimera=filters.chimera,
+            cvc=filters.cvc,
+            siege=filters.siege,
+            playstyle=filters.playstyle,
+            roster_mode=filters.roster_mode,
+        )
 

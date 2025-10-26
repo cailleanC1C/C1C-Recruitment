@@ -18,7 +18,11 @@ sys.modules.setdefault("c1c_coreops.helpers", _coreops_helpers)
 from cogs.recruitment_member import RecruitmentMember
 from modules.recruitment import search_helpers
 from modules.recruitment.views import member_panel, member_panel_legacy
-from modules.recruitment.views.member_panel import MemberPanelController, MemberSearchFilters
+from modules.recruitment.views.member_panel import (
+    ACTIVE_PANELS,
+    MemberPanelController,
+    MemberSearchFilters,
+)
 
 
 class FakeMessage:
@@ -373,5 +377,5 @@ def test_filter_rows_requires_positive_inactives():
         [positive, zero], MemberSearchFilters(roster_mode="inactives")
     )
 
-    assert matches == [positive]
+    assert [match.row for match in matches] == [tuple(positive)]
 

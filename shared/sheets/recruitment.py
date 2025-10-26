@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import time
-from typing import Any, Dict, List, Optional, cast
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Sequence, cast
 
 from shared.sheets import core
 from shared.sheets.async_core import afetch_records, afetch_values
 from shared.sheets.cache_service import cache
+
+log = logging.getLogger(__name__)
 
 _CACHE_TTL = int(os.getenv("SHEETS_CACHE_TTL_SEC", "900"))
 _CONFIG_TTL = int(os.getenv("SHEETS_CONFIG_CACHE_TTL_SEC", str(_CACHE_TTL)))
@@ -23,6 +28,167 @@ _CLAN_TAG_INDEX_TS: float = 0.0
 
 _TEMPLATE_ROWS: List[Dict[str, Any]] | None = None
 _TEMPLATE_ROWS_TS: float = 0.0
+
+_CLAN_HEADER_ROW: List[str] | None = None
+_CLAN_HEADER_MAP: Dict[str, int] | None = None
+_CLAN_HEADER_TS: float = 0.0
+
+_CLAN_RECORDS: List["RecruitmentClanRecord"] | None = None
+_CLAN_RECORDS_TS: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class RecruitmentClanRecord:
+    """Normalized representation of a recruitment roster row."""
+
+    row: Sequence[str]
+    open_spots: int
+    inactives: int
+    reserved: int
+    roster: str
+
+
+_DEFAULT_ROSTER_INDEX = 4
+
+_HEADER_ALIASES: Dict[str, tuple[str, ...]] = {
+    "open_spots": (
+        "spots",
+        "open spots",
+        "open spot",
+        "spots avail",
+        "spots available",
+        "open slots",
+        "available slots",
+        "avail. slots",
+        "manual open spots",
+    ),
+    "inactives": (
+        "inactives",
+        "inactive",
+        "inactive count",
+        "inactive players",
+        "manual inactives",
+    ),
+    "reserved": (
+        "reserved",
+        "reserved slots",
+        "reserved spot",
+        "reserved count",
+        "reserved spots",
+        "manual reserved",
+    ),
+    "roster": (
+        "roster",
+        "roster status",
+        "roster column",
+    ),
+}
+
+
+def _normalize_header(cell: Any) -> str:
+    text = "" if cell is None else str(cell).strip().lower()
+    return " ".join(text.split())
+
+
+def _find_header_row(raw_rows: Sequence[Sequence[Any]]) -> List[str]:
+    if len(raw_rows) >= 3:
+        candidate = raw_rows[2]
+        if any(str(cell or "").strip() for cell in candidate):
+            return list(candidate)
+    for row in raw_rows:
+        if any(str(cell or "").strip() for cell in row):
+            return list(row)
+    return []
+
+
+def _build_header_map(header_row: Sequence[Any], tab: str) -> Dict[str, int]:
+    lookup: Dict[str, int] = {}
+    for idx, cell in enumerate(header_row):
+        normalized = _normalize_header(cell)
+        if normalized:
+            lookup[normalized] = idx
+
+    column_map: Dict[str, int] = {}
+    missing: list[str] = []
+    for key, aliases in _HEADER_ALIASES.items():
+        resolved: Optional[int] = None
+        for alias in aliases:
+            candidate = lookup.get(_normalize_header(alias))
+            if candidate is not None:
+                resolved = candidate
+                break
+        if resolved is None:
+            missing.append(key)
+        else:
+            column_map[key] = resolved
+
+    for key in missing:
+        log.debug(
+            "recruitment sheet column missing", extra={"tab": tab, "column": key}
+        )
+
+    return column_map
+
+
+def _cell_value(row: Sequence[Any], index: Optional[int]) -> Any:
+    if index is None or index < 0:
+        return ""
+    if index >= len(row):
+        return ""
+    return row[index]
+
+
+def _to_int(value: Any) -> int:
+    if value is None:
+        return 0
+    text = str(value).strip()
+    if not text:
+        return 0
+    if text in {"-", "—"}:
+        return 0
+    match = re.search(r"-?\d+", text)
+    if not match:
+        return 0
+    try:
+        return int(match.group())
+    except (TypeError, ValueError):  # pragma: no cover - defensive guard
+        return 0
+
+
+def _make_clan_record(row: Sequence[str], header_map: Dict[str, int]) -> RecruitmentClanRecord:
+    roster_idx = header_map.get("roster", _DEFAULT_ROSTER_INDEX)
+    roster_cell = _cell_value(row, roster_idx)
+    open_spots = _to_int(_cell_value(row, header_map.get("open_spots")))
+    inactives = _to_int(_cell_value(row, header_map.get("inactives")))
+    reserved = _to_int(_cell_value(row, header_map.get("reserved")))
+    return RecruitmentClanRecord(
+        row=tuple(str(cell) if cell is not None else "" for cell in row),
+        open_spots=open_spots,
+        inactives=inactives,
+        reserved=reserved,
+        roster=str(roster_cell or "").strip(),
+    )
+
+
+def _process_clan_sheet(
+    raw_rows: List[List[str]], now: float, tab: str
+) -> List[List[str]]:
+    global _CLAN_HEADER_ROW, _CLAN_HEADER_MAP, _CLAN_HEADER_TS
+    global _CLAN_RECORDS, _CLAN_RECORDS_TS
+
+    header_row = _find_header_row(raw_rows)
+    header_map = _build_header_map(header_row, tab)
+    sanitized = _sanitize_clan_rows(raw_rows, header_map.get("roster"))
+
+    records = [_make_clan_record(row, header_map) for row in sanitized]
+
+    _CLAN_HEADER_ROW = list(header_row)
+    _CLAN_HEADER_MAP = dict(header_map)
+    _CLAN_HEADER_TS = now
+    _CLAN_RECORDS = records
+    _CLAN_RECORDS_TS = now
+
+    return sanitized
 
 
 def _sheet_id() -> str:
@@ -103,19 +269,23 @@ def _templates_tab() -> str:
     return _config_lookup("welcome_templates_tab", "WelcomeTemplates") or "WelcomeTemplates"
 
 
-def _sanitize_clan_rows(raw_rows: List[List[str]]) -> List[List[str]]:
+def _sanitize_clan_rows(
+    raw_rows: List[List[str]], roster_index: int | None
+) -> List[List[str]]:
     """Drop header rows and blank entries from ``raw_rows``."""
 
     def _norm(value: Any) -> str:
         return str(value).strip().upper() if value is not None else ""
 
     cleaned: List[List[str]] = []
+    roster_idx = roster_index if roster_index is not None else _DEFAULT_ROSTER_INDEX
+
     for row in raw_rows[3:]:  # Sheet headers occupy rows 1–3.
         if not row:
             continue
         name = _norm(row[1] if len(row) > 1 else "")
         tag = _norm(row[2] if len(row) > 2 else "")
-        roster = str(row[4]).strip() if len(row) > 4 and row[4] is not None else ""
+        roster = str(_cell_value(row, roster_idx) or "").strip()
         if not name and not tag:
             continue
         if name in {"CLAN", "CLAN NAME", "CLANS"}:
@@ -132,6 +302,7 @@ def fetch_clans(force: bool = False) -> List[List[str]]:
     """Fetch the recruitment clan matrix from Sheets."""
 
     global _CLAN_ROWS, _CLAN_ROWS_TS, _CLAN_TAG_INDEX, _CLAN_TAG_INDEX_TS
+    global _CLAN_RECORDS, _CLAN_RECORDS_TS
     now = time.time()
     if not force and _CLAN_ROWS and (now - _CLAN_ROWS_TS) < _CACHE_TTL:
         if _CLAN_TAG_INDEX is None:
@@ -139,13 +310,35 @@ def fetch_clans(force: bool = False) -> List[List[str]]:
             _CLAN_TAG_INDEX_TS = _CLAN_ROWS_TS
         return _CLAN_ROWS
 
-    rows = core.fetch_values(_sheet_id(), _clans_tab())
-    sanitized = _sanitize_clan_rows(rows)
+    tab = _clans_tab()
+    rows = core.fetch_values(_sheet_id(), tab)
+    sanitized = _process_clan_sheet(rows, now, tab)
     _CLAN_ROWS = sanitized
     _CLAN_ROWS_TS = now
     _CLAN_TAG_INDEX = _build_tag_index(sanitized)
     _CLAN_TAG_INDEX_TS = now
+    _CLAN_RECORDS_TS = now
     return sanitized
+
+
+def get_clan_header_map(force: bool = False) -> Dict[str, int]:
+    """Return the cached header-to-column mapping for the clan roster."""
+
+    global _CLAN_HEADER_MAP, _CLAN_HEADER_TS
+    now = time.time()
+    if force or _CLAN_HEADER_MAP is None or (now - _CLAN_HEADER_TS) >= _CACHE_TTL:
+        fetch_clans(force=force)
+    return dict(_CLAN_HEADER_MAP or {})
+
+
+def get_clan_records(force: bool = False) -> List[RecruitmentClanRecord]:
+    """Return normalized clan roster records with numeric roster metadata."""
+
+    global _CLAN_RECORDS, _CLAN_RECORDS_TS
+    now = time.time()
+    if force or _CLAN_RECORDS is None or (now - _CLAN_RECORDS_TS) >= _CACHE_TTL:
+        fetch_clans(force=force)
+    return list(_CLAN_RECORDS or [])
 
 
 def fetch_templates(force: bool = False) -> List[Dict[str, Any]]:
@@ -197,7 +390,16 @@ async def _load_clans_async() -> List[List[str]]:
     sheet_id = _sheet_id()
     tab = _clans_tab()
     rows = await afetch_values(sheet_id, tab)
-    return _sanitize_clan_rows(rows)
+    now = time.time()
+    sanitized = _process_clan_sheet(rows, now, tab)
+
+    global _CLAN_ROWS, _CLAN_ROWS_TS, _CLAN_TAG_INDEX, _CLAN_TAG_INDEX_TS
+    _CLAN_ROWS = sanitized
+    _CLAN_ROWS_TS = now
+    _CLAN_TAG_INDEX = _build_tag_index(sanitized)
+    _CLAN_TAG_INDEX_TS = now
+
+    return sanitized
 
 
 async def _load_templates_async() -> List[Dict[str, Any]]:
