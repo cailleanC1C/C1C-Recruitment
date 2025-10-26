@@ -1,7 +1,7 @@
 <!-- Keep README user-facing -->
 <!-- Dev layout reference: recruitment modules now live in modules/recruitment/, -->
 <!-- shared sheet adapters consolidate under shared/sheets/. See docs/Architecture.md. -->
-# C1C Recruitment Bot v0.9.7
+# C1C Recruitment Bot v0.9.5
 Welcome to the C1C recruitment helper.  
 The bot keeps clan rosters healthy, helps new friends find their hall, and makes sure every welcome lands in the right place.
 
