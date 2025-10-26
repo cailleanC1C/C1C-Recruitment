@@ -2,7 +2,7 @@
 **Phase:** 7 — Placement Tools  
 **Milestone:** Harmonize v1.0  
 **Status:** Specification (pre-implementation)  
-**Related ADR:** 0014 — Reservations & Placement Schema  
+**Related ADR:** 0017 — Reservations & Placement Schema  
 **Modules affected:** onboarding, placement, recruitment, sheets services  
 **Owner:** Recruitment Bot (CoreOps-aligned)
 
