@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import discord
 
+from shared.sheets.recruitment import RecruitmentClanRecord
+
 from . import emoji_pipeline
+
+
+def _coerce_entry(
+    entry: Sequence[str] | RecruitmentClanRecord,
+) -> tuple[Sequence[str], RecruitmentClanRecord | None]:
+    if isinstance(entry, RecruitmentClanRecord):
+        return entry.row, entry
+    return entry, None
 
 
 def _set_thumbnail(embed: discord.Embed, guild: discord.Guild | None, tag: str) -> None:
@@ -22,7 +34,7 @@ def _set_thumbnail(embed: discord.Embed, guild: discord.Guild | None, tag: str) 
 
 
 def make_embed_for_row_classic(
-    row,
+    entry: Sequence[str] | RecruitmentClanRecord,
     filters_text: str,
     guild: discord.Guild | None = None,
     *,
@@ -30,19 +42,28 @@ def make_embed_for_row_classic(
 ) -> discord.Embed:
     """Classic recruiter embed with entry criteria and optional filters footer."""
 
+    row, record = _coerce_entry(entry)
     clan = (row[1] or "").strip()
     tag = (row[2] or "").strip()
-    spots = (row[4] or "").strip()
-    inactives = (row[31] if len(row) > 31 else "").strip()
-    reserved = (row[28] or "").strip() if len(row) > 28 else ""
+    spots = str(record.open_spots) if record else (row[4] or "").strip()
+    inactives_value = (
+        str(record.inactives)
+        if record is not None and record.inactives > 0
+        else (row[31] if len(row) > 31 else "").strip()
+    )
+    reserved_value = (
+        str(record.reserved)
+        if record is not None and record.reserved > 0
+        else (row[28] or "").strip() if len(row) > 28 else ""
+    )
     comments = (row[29] or "").strip() if len(row) > 29 else ""
     addl_req = (row[30] or "").strip() if len(row) > 30 else ""
 
     title = f"{clan} `{tag}`  — Spots: {spots}"
-    if inactives:
-        title += f" | Inactives: {inactives}"
-    if reserved:
-        title += f" | Reserved: {reserved}"
+    if inactives_value:
+        title += f" | Inactives: {inactives_value}"
+    if reserved_value:
+        title += f" | Reserved: {reserved_value}"
 
     sections = [
         build_entry_criteria_classic(row),
@@ -95,16 +116,17 @@ def build_entry_criteria_classic(row) -> str:
 
 
 def make_embed_for_row_search(
-    row,
+    entry: Sequence[str] | RecruitmentClanRecord,
     filters_text: str,
     guild: discord.Guild | None = None,
 ) -> discord.Embed:
     """Member-facing entry criteria embed used by clan search flows."""
 
+    row, record = _coerce_entry(entry)
     name = (row[1] or "").strip()
     tag = (row[2] or "").strip()
     level = (row[3] or "").strip()
-    spots = (row[4] or "").strip()
+    spots = str(record.open_spots) if record else (row[4] or "").strip()
 
     v = (row[21] or "").strip() if len(row) > 21 else ""
     w = (row[22] or "").strip() if len(row) > 22 else ""
@@ -153,12 +175,13 @@ def make_embed_for_row_search(
 
 
 def make_embed_for_row_lite(
-    row,
+    entry: Sequence[str] | RecruitmentClanRecord,
     filters_text: str,
     guild: discord.Guild | None = None,
 ) -> discord.Embed:
     """Compact member-facing embed summarising rank, level, and style."""
 
+    row, _ = _coerce_entry(entry)
     name = (row[1] or "").strip()
     tag = (row[2] or "").strip()
     level = (row[3] or "").strip()

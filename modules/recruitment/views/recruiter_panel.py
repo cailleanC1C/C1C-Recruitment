@@ -17,14 +17,10 @@ import discord
 from discord import InteractionResponded
 
 from .. import cards
-from ..search_helpers import (
-    format_filters_footer as _format_filters_footer,
-    parse_inactives_num,
-    parse_spots_num,
-    row_matches as _row_matches,
-)
+from .. import search as roster_search
+from ..search_helpers import format_filters_footer as _format_filters_footer
 from modules.common import config_access as config
-from shared.sheets import async_facade as sheets
+from shared.sheets.recruitment import RecruitmentClanRecord
 from .results_pager import ResultsPagerView
 
 if TYPE_CHECKING:
@@ -167,7 +163,7 @@ def _playstyle_ok(cell_text: str, wanted: Optional[str]) -> bool:
 
 
 def _page_embeds(
-    page_rows: Sequence[Sequence[str]],
+    page_rows: Sequence[RecruitmentClanRecord | Sequence[str]],
     filters_text: str,
     showing_now: int,
     total_available: int,
@@ -220,7 +216,7 @@ class RecruiterPanelView(discord.ui.View):
         self.siege: Optional[str] = None
         self.roster_mode: Optional[str] = "open"
 
-        self.matches: list[Sequence[str]] = []
+        self.matches: list[RecruitmentClanRecord] = []
         self.results_filters_text: str = ""
         self.results_note: str | None = None
         self.total_found: int = 0
@@ -813,9 +809,9 @@ class RecruiterPanelView(discord.ui.View):
         current_task = asyncio.current_task()
         try:
             try:
-                rows = await sheets.fetch_clans(force=False)
+                records = await roster_search.fetch_roster_records(force=False)
             except Exception as exc:  # pragma: no cover - defensive guard
-                log.exception("failed to fetch clan rows", exc_info=exc)
+                log.exception("failed to fetch clan records", exc_info=exc)
                 if self.matches:
                     self.results_stale = True
                 self._sync_visuals()
@@ -827,38 +823,21 @@ class RecruiterPanelView(discord.ui.View):
 
             self.has_searched = True
 
-            filtered_rows: list[Sequence[str]] = []
-            for row in rows:
-                try:
-                    if not _row_matches(
-                        row,
-                        self.cb,
-                        self.hydra,
-                        self.chimera,
-                        self.cvc,
-                        self.siege,
-                        self.playstyle,
-                    ):
-                        continue
-                    spots = int(
-                        parse_spots_num(
-                            row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else ""
-                        )
-                    )
-                    inactives = int(
-                        parse_inactives_num(
-                            row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
-                        )
-                    )
-                    if self.roster_mode == "open" and spots <= 0:
-                        continue
-                    if self.roster_mode == "full" and spots > 0:
-                        continue
-                    if self.roster_mode == "inactives" and inactives <= 0:
-                        continue
-                    filtered_rows.append(row)
-                except Exception:
-                    continue
+            filtered_records = roster_search.filter_records(
+                records,
+                cb=self.cb,
+                hydra=self.hydra,
+                chimera=self.chimera,
+                cvc=self.cvc,
+                siege=self.siege,
+                playstyle=self.playstyle,
+                roster_mode=self.roster_mode,
+            )
+            filtered_records = roster_search.enforce_inactives_only(
+                filtered_records,
+                self.roster_mode,
+                context="recruiter_panel:pre_pagination",
+            )
 
             filters_summary = _format_filters_footer(
                 self.cb,
@@ -870,7 +849,7 @@ class RecruiterPanelView(discord.ui.View):
                 self.roster_mode,
             )
 
-            if not filtered_rows:
+            if not filtered_records:
                 self.matches = []
                 self.results_filters_text = filters_summary
                 self.results_note = None
@@ -882,8 +861,8 @@ class RecruiterPanelView(discord.ui.View):
                 return
 
             soft_cap = max(PAGE_SIZE, config.get_search_results_soft_cap(25))
-            total_found = len(filtered_rows)
-            limited_rows = filtered_rows[:soft_cap]
+            total_found = len(filtered_records)
+            limited_rows = filtered_records[:soft_cap]
             shown_count = len(limited_rows)
             cap_note = None
             if total_found > shown_count:

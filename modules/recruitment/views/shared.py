@@ -8,6 +8,7 @@ from typing import Callable, Mapping, Sequence
 import discord
 
 from .. import cards, emoji_pipeline
+from shared.sheets.recruitment import RecruitmentClanRecord
 
 PAGE_SIZE = 5
 
@@ -85,17 +86,20 @@ class MemberSearchPagedView(discord.ui.View):
             elif child.custom_id == "ms_next":
                 child.disabled = not self.has_results or self.page >= max_page
 
-    def _make_embed(self, row) -> discord.Embed:
+    def _make_embed(self, entry) -> discord.Embed:
         if self.mode == "entry":
-            return cards.make_embed_for_row_search(row, self.filters_text, self.guild)
+            return cards.make_embed_for_row_search(entry, self.filters_text, self.guild)
         if self.mode == "profile":
+            row = (
+                entry.row if isinstance(entry, RecruitmentClanRecord) else entry
+            )
             embed = cards.make_embed_for_profile(row, self.guild)
             if self.filters_text:
                 embed.set_footer(text=f"Filters used: {self.filters_text}")
             else:
                 embed.set_footer(text="")
             return embed
-        embed = cards.make_embed_for_row_lite(row, self.filters_text, self.guild)
+        embed = cards.make_embed_for_row_lite(entry, self.filters_text, self.guild)
         if self.filters_text:
             embed.set_footer(text=f"Filters used: {self.filters_text}")
         return embed
@@ -113,8 +117,9 @@ class MemberSearchPagedView(discord.ui.View):
 
             return [_build_empty_embed(self.filters_text)], []
 
-        for row in self.rows[start:end]:
-            embed = self._make_embed(row)
+        for entry in self.rows[start:end]:
+            embed = self._make_embed(entry)
+            row = entry.row if isinstance(entry, RecruitmentClanRecord) else entry
             tag = ""
             try:
                 tag = (row[2] or "").strip()
