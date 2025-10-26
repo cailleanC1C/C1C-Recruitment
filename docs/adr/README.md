@@ -24,5 +24,6 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0015](ADR-0015-config-hygiene-and-secrets.md) | Config hygiene & secrets handling | Accepted |
 | [ADR-0016](ADR-0016-import-side-effects.md) | Import-time side effects removal | Accepted |
 | [ADR-0017](ADR-0017-Reservations-Placement-Schema.md) | Reservations & placement schema | — |
+| [ADR-0018](ADR-0018_DailyRecruiterUpdate.md) | Daily recruiter update v1 (UTC, sheet-driven) | Accepted — 2025-10-26 |
 
 Doc last updated: 2025-10-26 (v0.9.6)
