@@ -1,4 +1,5 @@
 import asyncio
+import io
 import sys
 import types
 
@@ -16,13 +17,14 @@ sys.modules.setdefault("c1c_coreops", _coreops)
 sys.modules.setdefault("c1c_coreops.helpers", _coreops_helpers)
 
 from cogs.recruitment_member import RecruitmentMember
-from modules.recruitment import search_helpers
+from modules.recruitment import cards, search_helpers
 from modules.recruitment.views import member_panel, member_panel_legacy
 from modules.recruitment.views.member_panel import (
     ACTIVE_PANELS,
     MemberPanelController,
     MemberSearchFilters,
 )
+from modules.recruitment.views.filters_member import MemberFiltersView
 
 
 class FakeMessage:
@@ -38,16 +40,40 @@ class FakeMessage:
         self.view = view
         self.edit_calls: list[dict] = []
 
-    async def edit(self, *, content=None, embeds=None, attachments=None, view=None):
+    async def edit(
+        self,
+        *,
+        content=None,
+        embeds=None,
+        attachments=None,
+        files=None,
+        view=None,
+        **_ignored,
+    ):
         if content is not None:
             self.content = content
         if embeds is not None:
             self.embeds = list(embeds)
+        updated_files = None
         if attachments is not None:
-            self.files = list(attachments)
+            updated_files = list(attachments)
+        if files is not None:
+            if updated_files is None:
+                updated_files = list(self.files)
+            updated_files.extend(list(files))
+        if updated_files is not None:
+            self.files = updated_files
         if view is not None:
             self.view = view
-        self.edit_calls.append({"content": content, "embeds": self.embeds, "view": view})
+        self.edit_calls.append(
+            {
+                "content": content,
+                "embeds": list(self.embeds),
+                "attachments": attachments,
+                "files": list(files or []),
+                "view": view,
+            }
+        )
         return self
 
 
@@ -133,6 +159,11 @@ class FakeFollowup:
         self.sent.append(message)
         return message
 
+    async def edit_message(self, *, message_id, **kwargs):
+        message = await self._channel.fetch_message(message_id)
+        await message.edit(**kwargs)
+        return message
+
 
 class FakeInteraction:
     def __init__(self, message, *, user=None):
@@ -177,6 +208,7 @@ def make_row(
 @pytest.fixture(autouse=True)
 def reset_panels(monkeypatch):
     ACTIVE_PANELS.clear()
+    member_panel_legacy.ACTIVE_RESULTS.clear()
     monkeypatch.setattr(
         "modules.recruitment.views.shared_member.emoji_pipeline.tag_badge_defaults",
         lambda: (0, 0),
@@ -276,16 +308,22 @@ def test_first_invocation_creates_message(monkeypatch):
     asyncio.run(_run())
 
 
-def test_search_posts_new_results_message(monkeypatch):
+def test_search_edits_same_results_message(monkeypatch):
     async def _run():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         cog = RecruitmentMember(bot)
         ctx = FakeContext(bot)
 
-        rows = [["header"] * 40, make_row("Clan A", tag="C1A", spots=3)]
+        datasets = [
+            [["header"] * 40, make_row("Clan A", tag="C1A", spots=3)],
+            [["header"] * 40, make_row("Clan B", tag="C1B", spots=0)],
+        ]
+        call_count = {"value": 0}
 
         async def fake_fetch(**_):
-            return rows
+            index = min(call_count["value"], len(datasets) - 1)
+            call_count["value"] += 1
+            return datasets[index]
 
         monkeypatch.setattr(
             "modules.recruitment.views.member_panel_legacy.fetch_clans_async",
@@ -309,6 +347,77 @@ def test_search_posts_new_results_message(monkeypatch):
         results_message = ctx.channel.messages[1]
         assert isinstance(results_message.view, member_panel_legacy.MemberSearchPagedView)
         assert results_message.embeds
+
+        second_interaction = FakeInteraction(panel_message, user=ctx.author)
+        await search_button.callback(second_interaction)  # type: ignore[misc]
+
+        assert len(ctx.channel.messages) == 2
+        refreshed_message = ctx.channel.messages[1]
+        assert refreshed_message.id == results_message.id
+        assert refreshed_message.edit_calls
+
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_search_edits_results_reuploads_files(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        cog = RecruitmentMember(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 40, make_row("Clan Files", tag="CF01", spots=2)]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(
+            "modules.recruitment.views.member_panel_legacy.fetch_clans_async",
+            fake_fetch,
+        )
+
+        call_index = {"value": 0}
+
+        async def fake_build_outputs(self):
+            idx = call_index["value"]
+            call_index["value"] += 1
+            embed = discord.Embed(title=f"Run {idx}")
+            payload = io.BytesIO(f"file-{idx}".encode())
+            file = discord.File(payload, filename=f"run{idx}.png")
+            return [embed], [file]
+
+        monkeypatch.setattr(
+            member_panel_legacy.MemberSearchPagedView,
+            "build_outputs",
+            fake_build_outputs,
+        )
+
+        await RecruitmentMember.clansearch.callback(cog, ctx)
+        panel_message = ctx.channel.messages[0]
+        view = panel_message.view
+        search_button = next(
+            child for child in view.children if isinstance(child, discord.ui.Button) and child.label == "Search Clans"
+        )
+
+        interaction = FakeInteraction(panel_message, user=ctx.author)
+        await search_button.callback(interaction)  # type: ignore[misc]
+
+        assert len(ctx.channel.messages) == 2
+        results_message = ctx.channel.messages[1]
+        assert results_message.files
+        assert results_message.files[0].filename == "run0.png"
+
+        second_interaction = FakeInteraction(panel_message, user=ctx.author)
+        await search_button.callback(second_interaction)  # type: ignore[misc]
+
+        assert len(ctx.channel.messages) == 2
+        assert results_message.files
+        assert results_message.files[0].filename == "run1.png"
+        last_edit = results_message.edit_calls[-1]
+        assert last_edit["attachments"] == []
+        assert last_edit["files"]
+        assert last_edit["files"][0].filename == "run1.png"
 
         await bot.close()
 
@@ -354,6 +463,32 @@ def test_zero_state_results_attach_pager_with_disabled_nav(monkeypatch):
         await bot.close()
 
     asyncio.run(_run())
+
+
+def test_entry_criteria_shows_ae_notes_when_present():
+    row = make_row("Clan Notes", tag="CNOT", spots=5)
+    while len(row) <= 30:
+        row.append("")
+    row[30] = "Additional entry notes go here."
+
+    embed = cards.make_embed_for_row_search(row, filters_text="", guild=None)
+    note_field = next((field for field in embed.fields if field.name == "Notes"), None)
+
+    assert note_field is not None
+    assert note_field.value == "Additional entry notes go here."
+
+
+def test_roster_select_hides_inactives_and_renames_any():
+    assert MemberFiltersView._cycle_roster("open") == "full"
+    assert MemberFiltersView._cycle_roster("full") is None
+    assert MemberFiltersView._cycle_roster(None) == "open"
+    assert MemberFiltersView._cycle_roster("inactives") == "open"
+
+    label_none, _ = MemberFiltersView._roster_visual(None)
+    assert label_none == "Open or Full (no filter)"
+
+    label_any, _ = MemberFiltersView._roster_visual("any")
+    assert label_any == "Open or Full (no filter)"
 
 
 def test_filter_rows_skips_blank_roster_entries():

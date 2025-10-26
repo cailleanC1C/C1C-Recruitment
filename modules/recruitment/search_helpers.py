@@ -215,6 +215,9 @@ def format_filters_footer(
     if playstyle:
         parts.append(f"Playstyle: {playstyle}")
 
+    if roster_mode in {"", "any"}:
+        roster_mode = None
+
     roster_label = "All"
     if roster_mode == "open":
         roster_label = "Open only"

@@ -23,7 +23,7 @@ from .shared_member import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.async_facade import fetch_clans_async
 
-log = logging.getLogger("c1c.recruitment.member.legacy")
+log = logging.getLogger("c1c.recruitment.member")
 
 ALLOWED_MENTIONS = discord.AllowedMentions.none()
 
@@ -32,10 +32,8 @@ PANEL_KEY_VARIANT = "search"
 # Track active panel message per user (legacy behavior)
 ACTIVE_PANELS: dict[tuple[int, str], int] = {}
 
-_EMPTY_RESULTS_TEXT = (
-    "No matching clans found. You might have set too many filter criteria — try again with fewer."
-)
-
+# Track the most recent results message posted per user/channel.
+ACTIVE_RESULTS: dict[tuple[int, int, int], int] = {}
 
 @dataclass
 class MemberPanelState:
@@ -54,6 +52,8 @@ class MemberPanelState:
         return replace(self)
 
     def with_updates(self, **changes) -> "MemberPanelState":
+        if "roster_mode" in changes and changes["roster_mode"] in {"", "any"}:
+            changes["roster_mode"] = None
         return replace(self, **changes)
 
     def any_filters(self) -> bool:
@@ -67,7 +67,7 @@ class MemberPanelState:
                 self.siege,
                 self.playstyle,
             )
-        ) or self.roster_mode is not None
+        ) or self.roster_mode not in {None, "", "any"}
 
 
 class MemberPanelControllerLegacy:
@@ -161,9 +161,7 @@ class MemberPanelControllerLegacy:
             extra_note=cap_note,
         )
 
-        empty_embed = discord.Embed(description=_EMPTY_RESULTS_TEXT)
-        if filters_text:
-            empty_embed.set_footer(text=f"Filters used: {filters_text}")
+        empty_embed = self._empty_results_embed(filters_text)
 
         results_view = MemberSearchPagedView(
             author_id=state.author_id,
@@ -181,21 +179,71 @@ class MemberPanelControllerLegacy:
         if not embeds:
             embeds = [empty_embed]
 
+        guild_id = getattr(interaction.guild, "id", 0) or 0
+        channel_id = getattr(getattr(interaction, "channel", None), "id", None)
+        user_id = getattr(getattr(interaction, "user", None), "id", state.author_id)
+        key = (int(guild_id), int(channel_id or 0), int(user_id))
+
+        sent: discord.Message | None = None
+        msg_id = ACTIVE_RESULTS.get(key)
+
         try:
-            sent = await interaction.followup.send(
-                embeds=embeds,
-                files=files,
-                view=results_view,
-                allowed_mentions=ALLOWED_MENTIONS,
-            )
-        except discord.HTTPException as exc:
-            log.exception("member results send failed", exc_info=exc)
+            if msg_id is None:
+                sent = await interaction.followup.send(
+                    embeds=embeds,
+                    files=files or [],
+                    view=results_view,
+                    allowed_mentions=ALLOWED_MENTIONS,
+                )
+            else:
+                try:
+                    sent = await interaction.followup.edit_message(
+                        message_id=msg_id,
+                        embeds=embeds,
+                        attachments=[],
+                        files=files or [],
+                        view=results_view,
+                    )
+                except discord.NotFound:
+                    ACTIVE_RESULTS.pop(key, None)
+                    sent = await interaction.followup.send(
+                        embeds=embeds,
+                        files=files or [],
+                        view=results_view,
+                        allowed_mentions=ALLOWED_MENTIONS,
+                    )
+        except discord.Forbidden:
+            ACTIVE_RESULTS.pop(key, None)
+            log.warning("member results post/edit forbidden", extra={"key": key})
+            try:
+                await interaction.followup.send(
+                    "I can’t post the search results here (missing permissions like **Embed Links**). Try another channel.",
+                    allowed_mentions=ALLOWED_MENTIONS,
+                )
+            except Exception:
+                pass
+            sent = None
+        except discord.HTTPException:
+            ACTIVE_RESULTS.pop(key, None)
+            log.exception("member results post/edit failed", extra={"key": key})
             sent = None
         finally:
             _close_files(files)
 
+        message_id = getattr(sent, "id", None)
+        if message_id is not None:
+            try:
+                ACTIVE_RESULTS[key] = int(message_id)
+            except (TypeError, ValueError):
+                pass
+
         if isinstance(sent, discord.Message):
             results_view.bind_message(sent)
+        elif message_id is not None and sent is not None:
+            try:
+                results_view.bind_message(sent)  # type: ignore[arg-type]
+            except Exception:
+                pass
 
     async def on_reset(self, interaction: discord.Interaction, view: MemberFiltersView) -> None:
         new_state = MemberPanelState(author_id=view.state.author_id)
@@ -250,11 +298,15 @@ class MemberPanelControllerLegacy:
                     row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
                 )
 
-                if state.roster_mode == "open" and spots_num <= 0:
+                roster_mode = state.roster_mode
+                if roster_mode == "any":
+                    roster_mode = None
+
+                if roster_mode == "open" and spots_num <= 0:
                     continue
-                if state.roster_mode == "full" and spots_num > 0:
+                if roster_mode == "full" and spots_num > 0:
                     continue
-                if state.roster_mode == "inactives" and inactives_num <= 0:
+                if roster_mode == "inactives" and inactives_num <= 0:
                     continue
 
                 matches.append(row)
@@ -262,6 +314,15 @@ class MemberPanelControllerLegacy:
                 continue
 
         return matches
+
+    def _empty_results_embed(self, filters_text: str | None) -> discord.Embed:
+        embed = discord.Embed(
+            title="No matching clans found.",
+            description="Try adjusting your filters and search again.",
+        )
+        if filters_text:
+            embed.set_footer(text=f"Filters used: {filters_text}")
+        return embed
 
     async def _send_permission_fallback(self, ctx: commands.Context) -> None:
         message = (

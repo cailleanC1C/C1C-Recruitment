@@ -169,6 +169,22 @@ def make_embed_for_row_search(
 
     _set_thumbnail(embed, guild, tag)
 
+    notes_text = ""
+    if isinstance(row, dict):
+        notes_text = (
+            row.get("AE")
+            or row.get("Entry Notes")
+            or row.get("Notes")
+            or ""
+        )
+        notes_text = str(notes_text).strip()
+    else:
+        source_row = record.row if record is not None else row
+        if len(source_row) > 30:
+            notes_text = str(source_row[30]).strip()
+    if notes_text:
+        embed.add_field(name="Notes", value=notes_text[:1024], inline=False)
+
     if filters_text:
         embed.set_footer(text=f"Filters used: {filters_text}")
     return embed
