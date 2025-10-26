@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 PAGE_SIZE = 10
 
-# Column indices (0-based) sourced from the legacy Sheets schema.
+# Legacy column indices preserved for tests and compatibility shims.
 COL_B_CLAN = 1
 COL_C_TAG = 2
 COL_E_SPOTS = 4
@@ -42,16 +42,6 @@ COL_S_CVC = 18
 COL_T_SIEGE = 19
 COL_U_STYLE = 20
 
-IDX_V = 21
-IDX_W = 22
-IDX_X = 23
-IDX_Y = 24
-IDX_Z = 25
-IDX_AA = 26
-IDX_AB = 27
-IDX_AC_RESERVED = 28
-IDX_AD_COMMENTS = 29
-IDX_AE_REQUIREMENTS = 30
 IDX_AG_INACTIVES = 32
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
@@ -84,13 +74,6 @@ STYLE_CANON = {
 
 def _norm(value: str) -> str:
     return (value or "").strip().upper()
-
-
-def _is_header_row(row: Sequence[str]) -> bool:
-    clan = _norm(row[COL_B_CLAN]) if len(row) > COL_B_CLAN else ""
-    tag = _norm(row[COL_C_TAG]) if len(row) > COL_C_TAG else ""
-    spots = _norm(row[COL_E_SPOTS]) if len(row) > COL_E_SPOTS else ""
-    return clan in {"CLAN", "CLAN NAME"} or tag == "TAG" or spots == "SPOTS"
 
 
 def _map_token(choice: str) -> str:

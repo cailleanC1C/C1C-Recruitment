@@ -7,7 +7,13 @@ from typing import Iterable, Sequence
 
 from shared.sheets import async_facade as sheets
 from shared.sheets import recruitment as sheet_recruitment
-from shared.sheets.recruitment import RecruitmentClanRecord
+from shared.sheets.recruitment import (
+    DEFAULT_ROSTER_INDEX,
+    FALLBACK_INACTIVES_INDEX,
+    FALLBACK_OPEN_SPOTS_INDEX,
+    FALLBACK_RESERVED_INDEX,
+    RecruitmentClanRecord,
+)
 
 from . import search_helpers
 from .search_helpers import (
@@ -59,14 +65,22 @@ def _ensure_record(
         return "" if value is None else str(value)
 
     row = tuple("" if cell is None else str(cell) for cell in entry)
-    roster_idx = mapping.get("roster", search_helpers.COL_E_SPOTS)
+    roster_idx = mapping.get("roster")
+    if roster_idx is None:
+        roster_idx = DEFAULT_ROSTER_INDEX
     roster_cell = _cell(roster_idx).strip()
     if not roster_cell:
         raise ValueError("blank roster cell")
 
-    open_idx = mapping.get("open_spots", search_helpers.COL_E_SPOTS)
-    inactives_idx = mapping.get("inactives", search_helpers.IDX_AG_INACTIVES)
-    reserved_idx = mapping.get("reserved", 28)
+    open_idx = mapping.get("open_spots")
+    if open_idx is None:
+        open_idx = FALLBACK_OPEN_SPOTS_INDEX
+    inactives_idx = mapping.get("inactives")
+    if inactives_idx is None:
+        inactives_idx = FALLBACK_INACTIVES_INDEX
+    reserved_idx = mapping.get("reserved")
+    if reserved_idx is None:
+        reserved_idx = FALLBACK_RESERVED_INDEX
 
     open_spots = parse_spots_num(_cell(open_idx))
     inactives = parse_inactives_num(_cell(inactives_idx))
