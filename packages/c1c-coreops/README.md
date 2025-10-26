@@ -63,3 +63,5 @@ to another project.
 
 Please keep this README up to date whenever dependencies change so other teams
 can evaluate the work required to adopt CoreOps.
+
+Doc last updated: 2025-10-26 (v0.9.5)
