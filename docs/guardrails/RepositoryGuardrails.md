@@ -22,7 +22,7 @@ Every audit and CI check validates against this document.
 - **C-06 Error Handling:** User-facing errors are friendly; exceptions are logged.
 - **C-07 RBAC Centralized:** All role/permission checks use the standard RBAC helpers (no ad-hoc checks).
 - **C-08 Single-Message Panels:** Interactive panels (like clan panels) update in place; avoid message spam.
-- **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, `shared/coreops`, `shared/utils/coreops_*`).
+- **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, deprecated shared CoreOps shims, `shared/utils/coreops_*`).
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 
 ## 3) Documentation
@@ -57,4 +57,4 @@ labels: docs, governance, guardrails, ready
 milestone: Harmonize v1.0
 [/meta]
 
-Doc last updated: 2025-10-24 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.5)

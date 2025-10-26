@@ -39,7 +39,7 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 | `TIMEZONE` | string | `Europe/Vienna` | Olson timezone used for embeds and scheduling. |
 | `REFRESH_TIMES` | csv | `02:00,10:00,18:00` | Optional daily refresh windows (HH:MM, comma separated). |
 | `PORT` | int | `10000` | Render injects this automatically; local runs fall back to 10000. |
-| `LOG_LEVEL` | string | `INFO` | Python logging level. |
+| `LOG_LEVEL` | string | 'INFO' | Python logging level. |
 | `LOG_CHANNEL_ID` | snowflake | — | Required for Discord channel logging. If unset or empty, logging to Discord is disabled and a one-time startup warning is emitted. No implicit defaults. |
 
 ### Google Sheets access
@@ -123,7 +123,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promos. |
 
 > `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
-> `ENABLE_WELCOME_WATCHER` entries from deployment environments.
+> 'ENABLE_WELCOME_WATCHER' entries from deployment environments.
 
 > Cron cadences are fixed in code today; update the scheduler directly if the defaults change.
 
@@ -131,14 +131,14 @@ sync modules remain available for non-async scripts and cache warmers.
 Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and **Value** columns.
 
 ### Recruitment sheet keys
-- `CLANS_TAB`
-- `WELCOME_TEMPLATES_TAB`
-- `FEATURE_TOGGLES_TAB`
+- 'CLANS_TAB'
+- 'WELCOME_TEMPLATES_TAB'
+- 'FEATURE_TOGGLES_TAB'
 
 ### Onboarding sheet keys
-- `WELCOME_TICKETS_TAB`
-- `PROMO_TICKETS_TAB`
-- `CLANLIST_TAB`
+- 'WELCOME_TICKETS_TAB'
+- 'PROMO_TICKETS_TAB'
+- 'CLANLIST_TAB'
 
 Leave values blank only if a module is disabled via toggles.
 
@@ -162,12 +162,12 @@ Feature Toggles:
 
 | KEY | VALUE |
 | --- | --- |
-| `FEATURE_TOGGLES_TAB` | `FeatureToggles` |
+| 'FEATURE_TOGGLES_TAB' | `FeatureToggles` |
 
 **FeatureToggles tab (recruitment Sheet)**
 
 - Headers: `feature_name`, `enabled` (case-insensitive).
-- **Only `TRUE` (ON) enables a feature.** Any other value (`FALSE`, numbers, text, blank) disables it.
+- **Only 'TRUE' (ON) enables a feature.** Any other value ('FALSE', numbers, text, blank) disables it.
 - Seed rows:
   ```
   feature_name,enabled
@@ -198,4 +198,4 @@ Feature Toggles:
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
 - Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.5)

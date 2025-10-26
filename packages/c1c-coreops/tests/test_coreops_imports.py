@@ -5,7 +5,7 @@ import sys
 
 
 def _ensure_src_on_path() -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[3]
     root_str = str(root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)

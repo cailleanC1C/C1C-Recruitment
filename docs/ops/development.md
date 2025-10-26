@@ -1,7 +1,7 @@
 # CoreOps Development Notes
 
 ## Telemetry helpers only
-- Import telemetry data via `shared.coreops.cache_public` helpers (`list_buckets`,
+- Import telemetry data via `c1c_coreops.cache_public` helpers (`list_buckets`,
   `get_snapshot`, `refresh_now`).
 - Never import or reference private cache attributes (anything prefixed with `_`). Guard
   checks in CI will fail the build if private modules leak into the cog.
@@ -34,4 +34,4 @@
   `COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and
   blocked in CI.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-26 (v0.9.5)

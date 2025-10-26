@@ -46,7 +46,7 @@ from shared.cache import telemetry as cache_telemetry
 from shared.cache.telemetry import get_snapshot as cache_get_snapshot
 from shared.cache.telemetry import humanize_duration as cache_humanize_duration
 from shared.cache.telemetry import list_buckets as cache_list_buckets
-from shared.help import (
+from .help import (
     COREOPS_VERSION,
     HelpCommandInfo,
     HelpOverviewSection,

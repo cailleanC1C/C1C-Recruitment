@@ -15,4 +15,4 @@ Ephemeral messages are reserved for guard rails (for example preventing other
 users from pressing the controls); the panel refresh flow itself never emits
 "Updating…" or other transient notices.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-26 (v0.9.5)
