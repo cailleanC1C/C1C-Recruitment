@@ -172,74 +172,22 @@ class MemberPanelControllerLegacy:
         results_view.state = state.copy()
 
         embeds, files = await results_view.build_outputs()
-        if not embeds:
-            embeds = [empty_embed]
 
         guild_id = getattr(interaction.guild, "id", 0) or 0
         channel_id = getattr(getattr(interaction, "channel", None), "id", None)
         user_id = getattr(getattr(interaction, "user", None), "id", state.author_id)
         key = (int(guild_id), int(channel_id or 0), int(user_id))
 
-        sent: discord.Message | None = None
-        msg_id = ACTIVE_RESULTS.get(key)
-
-        try:
-            if msg_id is None:
-                sent = await interaction.followup.send(
-                    embeds=embeds,
-                    files=files or [],
-                    view=results_view,
-                    allowed_mentions=ALLOWED_MENTIONS,
-                )
-            else:
-                try:
-                    sent = await interaction.followup.edit_message(
-                        message_id=msg_id,
-                        embeds=embeds,
-                        attachments=[],
-                        files=files or [],
-                        view=results_view,
-                    )
-                except discord.NotFound:
-                    ACTIVE_RESULTS.pop(key, None)
-                    sent = await interaction.followup.send(
-                        embeds=embeds,
-                        files=files or [],
-                        view=results_view,
-                        allowed_mentions=ALLOWED_MENTIONS,
-                    )
-        except discord.Forbidden:
-            ACTIVE_RESULTS.pop(key, None)
-            log.warning("member results post/edit forbidden", extra={"key": key})
-            try:
-                await interaction.followup.send(
-                    "I can’t post the search results here (missing permissions like **Embed Links**). Try another channel.",
-                    allowed_mentions=ALLOWED_MENTIONS,
-                )
-            except Exception:
-                pass
-            sent = None
-        except discord.HTTPException:
-            ACTIVE_RESULTS.pop(key, None)
-            log.exception("member results post/edit failed", extra={"key": key})
-            sent = None
-        finally:
-            _close_files(files)
-
-        message_id = getattr(sent, "id", None)
-        if message_id is not None:
-            try:
-                ACTIVE_RESULTS[key] = int(message_id)
-            except (TypeError, ValueError):
-                pass
-
-        if isinstance(sent, discord.Message):
-            results_view.bind_message(sent)
-        elif message_id is not None and sent is not None:
-            try:
-                results_view.bind_message(sent)  # type: ignore[arg-type]
-            except Exception:
-                pass
+        existing = await self._fetch_existing_results_message(interaction, key)
+        await self._send_or_edit_results(
+            interaction,
+            key,
+            existing_message=existing,
+            embeds=embeds,
+            files=files,
+            view=results_view,
+            empty_embed=empty_embed,
+        )
 
     async def on_reset(self, interaction: discord.Interaction, view: MemberFiltersView) -> None:
         new_state = MemberPanelState(author_id=view.state.author_id)
@@ -263,6 +211,171 @@ class MemberPanelControllerLegacy:
         if message_id is None:
             return
         self._panel_states[message_id] = state
+
+    async def _fetch_existing_results_message(
+        self,
+        interaction: discord.Interaction,
+        key: tuple[int, int, int],
+    ) -> discord.Message | None:
+        message_id = ACTIVE_RESULTS.get(key)
+        if not message_id:
+            return None
+
+        channel = getattr(interaction, "channel", None)
+        fetcher = getattr(channel, "fetch_message", None)
+        if fetcher is None:
+            ACTIVE_RESULTS.pop(key, None)
+            return None
+
+        try:
+            message = await fetcher(message_id)
+        except discord.NotFound:
+            ACTIVE_RESULTS.pop(key, None)
+            return None
+        except discord.Forbidden:
+            ACTIVE_RESULTS.pop(key, None)
+            log.warning("member results fetch forbidden", extra={"key": key})
+            return None
+        except discord.HTTPException:
+            ACTIVE_RESULTS.pop(key, None)
+            log.exception("member results fetch failed", extra={"key": key})
+            return None
+
+        return message
+
+    async def _handle_results_forbidden(
+        self,
+        interaction: discord.Interaction,
+        key: tuple[int, int, int],
+        exc: discord.Forbidden,
+    ) -> None:
+        ACTIVE_RESULTS.pop(key, None)
+        log.warning(
+            "member results send/edit forbidden",
+            extra={"key": key, "exception": repr(exc)},
+        )
+
+        notice = (
+            "I can’t post the search results here (missing permissions like **Embed Links** or "
+            "**Use External Emojis**). Ask staff to adjust channel perms, or try in #bot-test."
+        )
+
+        sender = None
+        if not interaction.response.is_done():
+            sender = interaction.response.send_message
+        else:
+            sender = interaction.followup.send
+
+        if sender is None:
+            return
+
+        try:
+            await sender(notice, allowed_mentions=ALLOWED_MENTIONS)
+        except Exception:
+            pass
+
+    async def _notify_results_failure(
+        self, interaction: discord.Interaction, key: tuple[int, int, int]
+    ) -> None:
+        log.exception("member results post/edit failed", extra={"key": key})
+        note = "⚠️ I couldn’t post the clan search results. Try again in a moment."
+
+        sender = None
+        if not interaction.response.is_done():
+            sender = interaction.response.send_message
+        else:
+            sender = interaction.followup.send
+
+        if sender is None:
+            return
+
+        try:
+            await sender(note, allowed_mentions=ALLOWED_MENTIONS)
+        except Exception:
+            pass
+
+    async def _send_or_edit_results(
+        self,
+        interaction: discord.Interaction,
+        key: tuple[int, int, int],
+        *,
+        existing_message: discord.Message | None,
+        embeds: Sequence[discord.Embed],
+        files: Iterable[discord.File],
+        view: MemberSearchPagedView,
+        empty_embed: discord.Embed,
+    ) -> None:
+        embed_list = list(embeds) if embeds else []
+        safe_embeds = embed_list if embed_list else [empty_embed]
+        attachments = list(files or [])
+
+        while True:
+            if existing_message is not None:
+                try:
+                    await existing_message.edit(
+                        content=None,
+                        embeds=safe_embeds,
+                        attachments=attachments,
+                        view=view,
+                        allowed_mentions=ALLOWED_MENTIONS,
+                    )
+                except discord.NotFound:
+                    ACTIVE_RESULTS.pop(key, None)
+                    existing_message = None
+                    continue
+                except discord.Forbidden as exc:
+                    _close_files(attachments)
+                    await self._handle_results_forbidden(interaction, key, exc)
+                    return
+                except discord.HTTPException:
+                    _close_files(attachments)
+                    ACTIVE_RESULTS.pop(key, None)
+                    await self._notify_results_failure(interaction, key)
+                    return
+                else:
+                    _close_files(attachments)
+                    try:
+                        message_id = int(existing_message.id)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                    else:
+                        ACTIVE_RESULTS[key] = message_id
+                    view.bind_message(existing_message)
+                    return
+
+            try:
+                sent = await interaction.followup.send(
+                    content=None,
+                    embeds=safe_embeds,
+                    files=attachments,
+                    view=view,
+                    allowed_mentions=ALLOWED_MENTIONS,
+                )
+            except discord.Forbidden as exc:
+                _close_files(attachments)
+                await self._handle_results_forbidden(interaction, key, exc)
+                return
+            except discord.HTTPException:
+                _close_files(attachments)
+                ACTIVE_RESULTS.pop(key, None)
+                await self._notify_results_failure(interaction, key)
+                return
+            else:
+                _close_files(attachments)
+                message_id = getattr(sent, "id", None)
+                if message_id is not None:
+                    try:
+                        ACTIVE_RESULTS[key] = int(message_id)
+                    except (TypeError, ValueError):
+                        pass
+                if isinstance(sent, discord.Message):
+                    view.bind_message(sent)
+                else:
+                    try:
+                        view.bind_message(sent)  # type: ignore[arg-type]
+                    except Exception:
+                        pass
+                return
 
     async def _load_rows(self) -> Sequence[RecruitmentClanRecord]:
         try:

@@ -361,7 +361,7 @@ def test_search_edits_same_results_message(monkeypatch):
     asyncio.run(_run())
 
 
-def test_search_edits_results_reuploads_files(monkeypatch):
+def test_edit_uses_attachments_not_files(monkeypatch):
     async def _run():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         cog = RecruitmentMember(bot)
@@ -415,9 +415,60 @@ def test_search_edits_results_reuploads_files(monkeypatch):
         assert results_message.files
         assert results_message.files[0].filename == "run1.png"
         last_edit = results_message.edit_calls[-1]
-        assert last_edit["attachments"] == []
-        assert last_edit["files"]
-        assert last_edit["files"][0].filename == "run1.png"
+        assert last_edit["attachments"]
+        assert last_edit["attachments"][0].filename == "run1.png"
+        assert last_edit["files"] == []
+
+        await bot.close()
+
+    asyncio.run(_run())
+
+
+def test_callback_always_resolves_deferred_interaction(monkeypatch):
+    async def _run():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        cog = RecruitmentMember(bot)
+        ctx = FakeContext(bot)
+
+        rows = [["header"] * 40, make_row("Clan Boom", tag="CBM", spots=2)]
+
+        async def fake_fetch(**_):
+            return rows
+
+        monkeypatch.setattr(
+            "modules.recruitment.views.member_panel_legacy.fetch_clans_async",
+            fake_fetch,
+        )
+
+        await RecruitmentMember.clansearch.callback(cog, ctx)
+        panel_message = ctx.channel.messages[0]
+        view = panel_message.view
+        search_button = next(
+            child for child in view.children if isinstance(child, discord.ui.Button) and child.label == "Search Clans"
+        )
+
+        interaction = FakeInteraction(panel_message, user=ctx.author)
+        original_send = interaction.followup.send
+        call_count = {"value": 0}
+
+        async def flaky_send(*args, **kwargs):
+            call_count["value"] += 1
+            if call_count["value"] == 1:
+                response = types.SimpleNamespace(status=500, reason="boom")
+                raise discord.HTTPException(response=response, message="boom")
+            return await original_send(*args, **kwargs)
+
+        interaction.followup.send = flaky_send  # type: ignore[assignment]
+
+        await search_button.callback(interaction)  # type: ignore[misc]
+
+        assert call_count["value"] >= 2
+        assert interaction.followup.sent
+        fallback = interaction.followup.sent[-1]
+        assert "I couldn’t post the clan search results" in (fallback.content or "")
+
+        key = (0, ctx.channel.id, ctx.author.id)
+        assert key not in member_panel_legacy.ACTIVE_RESULTS
 
         await bot.close()
 
