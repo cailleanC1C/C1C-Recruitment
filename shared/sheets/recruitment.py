@@ -48,12 +48,21 @@ class RecruitmentClanRecord:
     roster: str
 
 
-_DEFAULT_ROSTER_INDEX = 4
+DEFAULT_ROSTER_INDEX = 4
+# Fallback indices for legacy rows when header resolution is unavailable.
+FALLBACK_OPEN_SPOTS_INDEX = 31  # Column AF
+FALLBACK_INACTIVES_INDEX = 32  # Column AG
+FALLBACK_RESERVED_INDEX = 34  # Column AI
 
-_HEADER_ALIASES: Dict[str, tuple[str, ...]] = {
-    "open_spots": (
-        "spots",
+
+def _column_aliases(*aliases: str) -> tuple[str, ...]:
+    return tuple(aliases)
+
+
+HEADER_MAP: Dict[str, tuple[str, ...]] = {
+    "open_spots": _column_aliases(
         "open spots",
+        "spots",
         "open spot",
         "spots avail",
         "spots available",
@@ -62,14 +71,14 @@ _HEADER_ALIASES: Dict[str, tuple[str, ...]] = {
         "avail. slots",
         "manual open spots",
     ),
-    "inactives": (
+    "inactives": _column_aliases(
         "inactives",
         "inactive",
         "inactive count",
         "inactive players",
         "manual inactives",
     ),
-    "reserved": (
+    "reserved": _column_aliases(
         "reserved",
         "reserved slots",
         "reserved spot",
@@ -77,7 +86,7 @@ _HEADER_ALIASES: Dict[str, tuple[str, ...]] = {
         "reserved spots",
         "manual reserved",
     ),
-    "roster": (
+    "roster": _column_aliases(
         "roster",
         "roster status",
         "roster column",
@@ -101,26 +110,60 @@ def _find_header_row(raw_rows: Sequence[Sequence[Any]]) -> List[str]:
     return []
 
 
+def _index_to_column_letter(index: int) -> str:
+    """Return the spreadsheet column label for ``index`` (0-based)."""
+
+    if index < 0:
+        return ""
+    label = ""
+    value = index
+    while True:
+        value, remainder = divmod(value, 26)
+        label = chr(ord("A") + remainder) + label
+        if value == 0:
+            break
+        value -= 1
+    return label
+
+
 def _build_header_map(header_row: Sequence[Any], tab: str) -> Dict[str, int]:
-    lookup: Dict[str, int] = {}
+    lookup: Dict[str, list[int]] = {}
     for idx, cell in enumerate(header_row):
         normalized = _normalize_header(cell)
-        if normalized:
-            lookup[normalized] = idx
+        if not normalized:
+            continue
+        lookup.setdefault(normalized, []).append(idx)
 
     column_map: Dict[str, int] = {}
     missing: list[str] = []
-    for key, aliases in _HEADER_ALIASES.items():
+
+    for key, aliases in HEADER_MAP.items():
         resolved: Optional[int] = None
+        ignored: list[int] = []
         for alias in aliases:
-            candidate = lookup.get(_normalize_header(alias))
-            if candidate is not None:
-                resolved = candidate
-                break
+            candidates = lookup.get(_normalize_header(alias))
+            if not candidates:
+                continue
+            resolved = max(candidates)
+            if len(candidates) > 1:
+                ignored = [idx for idx in candidates if idx != resolved]
+            break
         if resolved is None:
             missing.append(key)
-        else:
-            column_map[key] = resolved
+            continue
+        if ignored:
+            log.debug(
+                "recruitment sheet column resolved to later header",
+                extra={
+                    "tab": tab,
+                    "column": key,
+                    "selected": _index_to_column_letter(resolved),
+                    "ignored": [
+                        _index_to_column_letter(idx) for idx in sorted(ignored)
+                    ],
+                },
+            )
+        column_map[key] = resolved
 
     for key in missing:
         log.debug(
@@ -156,11 +199,16 @@ def _to_int(value: Any) -> int:
 
 
 def _make_clan_record(row: Sequence[str], header_map: Dict[str, int]) -> RecruitmentClanRecord:
-    roster_idx = header_map.get("roster", _DEFAULT_ROSTER_INDEX)
+    roster_idx = header_map.get("roster", DEFAULT_ROSTER_INDEX)
     roster_cell = _cell_value(row, roster_idx)
-    open_spots = _to_int(_cell_value(row, header_map.get("open_spots")))
-    inactives = _to_int(_cell_value(row, header_map.get("inactives")))
-    reserved = _to_int(_cell_value(row, header_map.get("reserved")))
+
+    open_idx = header_map.get("open_spots", FALLBACK_OPEN_SPOTS_INDEX)
+    inactives_idx = header_map.get("inactives", FALLBACK_INACTIVES_INDEX)
+    reserved_idx = header_map.get("reserved", FALLBACK_RESERVED_INDEX)
+
+    open_spots = _to_int(_cell_value(row, open_idx))
+    inactives = _to_int(_cell_value(row, inactives_idx))
+    reserved = _to_int(_cell_value(row, reserved_idx))
     return RecruitmentClanRecord(
         row=tuple(str(cell) if cell is not None else "" for cell in row),
         open_spots=open_spots,
@@ -278,7 +326,7 @@ def _sanitize_clan_rows(
         return str(value).strip().upper() if value is not None else ""
 
     cleaned: List[List[str]] = []
-    roster_idx = roster_index if roster_index is not None else _DEFAULT_ROSTER_INDEX
+    roster_idx = roster_index if roster_index is not None else DEFAULT_ROSTER_INDEX
 
     for row in raw_rows[3:]:  # Sheet headers occupy rows 1–3.
         if not row:

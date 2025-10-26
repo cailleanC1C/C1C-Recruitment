@@ -10,18 +10,14 @@ import discord
 from discord import InteractionResponded
 from discord.ext import commands
 
-from ..search_helpers import (
-    COL_E_SPOTS,
-    IDX_AG_INACTIVES,
-    format_filters_footer,
-    parse_inactives_num,
-    parse_spots_num,
-    row_matches,
-)
+from .. import search as roster_search
+from ..search_helpers import format_filters_footer
 from .filters_member import MemberFiltersView
 from .shared_member import MemberSearchPagedView
 from shared import config as shared_config
-from shared.sheets.async_facade import fetch_clans_async
+from shared.sheets.recruitment import RecruitmentClanRecord
+
+fetch_clans_async = roster_search.fetch_roster_records
 
 log = logging.getLogger("c1c.recruitment.member")
 
@@ -268,52 +264,37 @@ class MemberPanelControllerLegacy:
             return
         self._panel_states[message_id] = state
 
-    async def _load_rows(self) -> Sequence[Sequence[str]]:
+    async def _load_rows(self) -> Sequence[RecruitmentClanRecord]:
         try:
             rows = await fetch_clans_async(force=False)
         except Exception as exc:
             log.exception("member panel sheets fetch failed", exc_info=exc)
             return []
-        return rows or []
+        return roster_search.normalize_records(list(rows or []))
 
     def _filter_rows(
-        self, rows: Sequence[Sequence[str]], state: MemberPanelState
-    ) -> list[Sequence[str]]:
-        matches: list[Sequence[str]] = []
-        for row in rows[1:]:  # skip headers
-            try:
-                if not row_matches(
-                    row,
-                    state.cb,
-                    state.hydra,
-                    state.chimera,
-                    state.cvc,
-                    state.siege,
-                    state.playstyle,
-                ):
-                    continue
+        self, rows: Sequence[RecruitmentClanRecord], state: MemberPanelState
+    ) -> list[RecruitmentClanRecord]:
+        roster_mode = state.roster_mode
+        if roster_mode in {"", "any"}:
+            roster_mode = None
 
-                spots_num = parse_spots_num(row[COL_E_SPOTS] if len(row) > COL_E_SPOTS else "")
-                inactives_num = parse_inactives_num(
-                    row[IDX_AG_INACTIVES] if len(row) > IDX_AG_INACTIVES else ""
-                )
+        matches = roster_search.filter_records(
+            rows,
+            cb=state.cb,
+            hydra=state.hydra,
+            chimera=state.chimera,
+            cvc=state.cvc,
+            siege=state.siege,
+            playstyle=state.playstyle,
+            roster_mode=roster_mode,
+        )
 
-                roster_mode = state.roster_mode
-                if roster_mode == "any":
-                    roster_mode = None
-
-                if roster_mode == "open" and spots_num <= 0:
-                    continue
-                if roster_mode == "full" and spots_num > 0:
-                    continue
-                if roster_mode == "inactives" and inactives_num <= 0:
-                    continue
-
-                matches.append(row)
-            except Exception:
-                continue
-
-        return matches
+        return roster_search.enforce_inactives_only(
+            matches,
+            roster_mode,
+            context="member_panel_legacy:pre_pagination",
+        )
 
     def _empty_results_embed(self, filters_text: str | None) -> discord.Embed:
         embed = discord.Embed(
