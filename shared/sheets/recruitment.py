@@ -115,11 +115,14 @@ def _sanitize_clan_rows(raw_rows: List[List[str]]) -> List[List[str]]:
             continue
         name = _norm(row[1] if len(row) > 1 else "")
         tag = _norm(row[2] if len(row) > 2 else "")
+        roster = str(row[4]).strip() if len(row) > 4 and row[4] is not None else ""
         if not name and not tag:
             continue
         if name in {"CLAN", "CLAN NAME", "CLANS"}:
             continue
         if tag in {"TAG", "CLAN TAG", "CLAN"}:
+            continue
+        if not roster:
             continue
         cleaned.append(row)
     return cleaned
