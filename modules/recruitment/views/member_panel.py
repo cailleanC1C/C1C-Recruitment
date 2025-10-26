@@ -468,7 +468,7 @@ class MemberPanelController:
         if not rows:
             return matches
 
-        for row in rows[1:]:
+        for row in rows:
             try:
                 if not row_matches(
                     row,
