@@ -12,8 +12,15 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
-HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "NM"]
-CHIMERA_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
+HYDRA_CHOICES = ["Normal", "Hard", "Brutal", "Nightmare"]
+CHIMERA_CHOICES = [
+    "Easy",
+    "Normal",
+    "Hard",
+    "Brutal",
+    "Nightmare",
+    "Ultra-Nightmare",
+]
 PLAYSTYLE_CHOICES = ["stress-free", "Casual", "Semi Competitive", "Competitive"]
 
 
