@@ -13,7 +13,10 @@ This document consolidates the guardrail expectations enforced by CI.
 - Use repository-relative file paths in citations and reference IDs for logs.
 
 ## Automation Notes
-- CI posts a **Guardrails Summary** comment on every PR covering config/docs parity
-  drift and Discord token leak scans. Address listed issues before requesting review.
+- CI posts dedicated summary comments for every PR check (tests, docs lint, guardrails,
+  CoreOps audits, etc.). Each summary is bounded by `<!-- …-summary -->` markers so
+  reruns refresh the same comment instead of creating duplicates.
+- The legacy **Guardrails Summary** for config/docs parity and Discord token scans
+  remains in place; address any listed issues before requesting review.
 
 Doc last updated: 2025-10-25 (v0.9.5)

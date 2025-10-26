@@ -2,6 +2,7 @@
 """Docs linter enforcing collaboration contract rules."""
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -137,13 +138,41 @@ def check_env_parity(errors: list[str]) -> None:
             )
 
 
-def main() -> int:
+def build_summary(errors: list[str]) -> list[str]:
+    summary: list[str] = ["# Docs Lint Summary", ""]
+    if errors:
+        summary.append(f"- ❌ **Status:** {len(errors)} issue(s) detected")
+        summary.append("- 📌 **Details:**")
+        for line in errors[:10]:
+            summary.append(f"  - {line}")
+        if len(errors) > 10:
+            remaining = len(errors) - 10
+            summary.append(f"  - … {remaining} more issue(s) (see workflow logs)")
+    else:
+        summary.append("- ✅ **Status:** Documentation contract satisfied")
+    return summary
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--summary",
+        type=Path,
+        help="Optional path to write a markdown summary for PR comments.",
+    )
+    args = parser.parse_args(argv)
+
     errors: list[str] = []
     for path in iter_markdown_files():
         check_titles_and_footers(path, errors)
         check_links(path, errors)
     check_readme_index(errors)
     check_env_parity(errors)
+
+    if args.summary:
+        summary_lines = build_summary(errors)
+        args.summary.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
     if errors:
         for err in errors:
             print(err, file=sys.stderr)
