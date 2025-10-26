@@ -9,7 +9,7 @@ from typing import Sequence
 
 import discord
 
-from shared.help import COREOPS_VERSION, build_coreops_footer
+from .help import COREOPS_VERSION, build_coreops_footer
 from shared.utils import humanize_duration
 from .tags import lifecycle_tag
 

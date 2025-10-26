@@ -16,6 +16,8 @@ def _iter_files(root: Path) -> list[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
+        if "AUDIT" in path.parts:
+            continue
         if ".git" in path.parts:
             continue
         if path.suffix in {".pyc", ".pyo", ".py.class"}:

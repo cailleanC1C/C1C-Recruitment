@@ -14,10 +14,12 @@ __all__ = (
     "render",
     "tags",
     "helpers",
+    "help",
     "cronlog",
     "cron_summary",
     "commands",
     "ops",
+    "cache_public",
 )
 
 __version__ = "0.0.0"

@@ -140,8 +140,12 @@ for md in docs:
 
 # 4) ENV parity (SSoT)
 config_md = ROOT / "docs" / "ops" / "Config.md"
-env_example = ROOT / ".env.example"
-if config_md.exists() and env_example.exists():
+env_candidates = [
+    ROOT / ".env.example",
+    ROOT / "docs" / "ops" / ".env.example",
+]
+env_example = next((candidate for candidate in env_candidates if candidate.exists()), None)
+if config_md.exists() and env_example is not None:
     md_txt = config_md.read_text(encoding="utf-8", errors="ignore")
     keys_in_md = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", md_txt))
     env_txt = env_example.read_text(encoding="utf-8", errors="ignore")
@@ -149,13 +153,25 @@ if config_md.exists() and env_example.exists():
     missing_in_env = sorted(k for k in keys_in_md if k not in keys_in_env)
     extra_in_env = sorted(k for k in keys_in_env if k not in keys_in_md)
     if missing_in_env:
-        _echo_violation("D-03", "keys in Config.md missing in .env.example", str(env_example.relative_to(ROOT)))
+        _echo_violation(
+            "D-03",
+            "keys in Config.md missing in .env.example",
+            str(env_example.relative_to(ROOT)),
+        )
         errors.append(f"D-03: keys in Config.md missing in .env.example → {missing_in_env}")
     if extra_in_env:
-        _echo_violation("D-03", "keys in .env.example not documented in Config.md", str(config_md.relative_to(ROOT)))
+        _echo_violation(
+            "D-03",
+            "keys in .env.example not documented in Config.md",
+            str(config_md.relative_to(ROOT)),
+        )
         errors.append(f"D-03: keys in .env.example not documented in Config.md → {extra_in_env}")
 else:
-    notes.append("ENV parity skipped: docs/ops/Config.md or .env.example missing")
+    searched = ", ".join(str(path.relative_to(ROOT)) for path in env_candidates)
+    notes.append(
+        "ENV parity skipped: docs/ops/Config.md or .env.example missing "
+        f"(looked for: {searched})"
+    )
 
 # Write report
 out = ["# Guardrails Compliance Report", "", f"- Findings: {len(errors)} error(s)"]

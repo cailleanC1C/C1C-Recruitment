@@ -3,7 +3,7 @@
 ## v0.9.5 — 2025-10-23
 
 ### Changed
-- Refactor: Introduced internal `c1c_coreops` package; legacy `shared/coreops_*` now deprecated shims. No behavior changes.
+- Refactor: Introduced internal `c1c_coreops` package; legacy shared CoreOps modules now deprecated shims. No behavior changes.
 
 ### Fixed
 - Recruiter panel no longer overflows Discord’s 5-row limit; pagination returned to the standalone results message with explicit row placement.
@@ -19,7 +19,7 @@
 - Move recruiter command registration to `cogs/recruitment_recruiter.py`.
 - Remove legacy in-module registration; preserve existing UX and flags.
 - Continue honoring `PANEL_THREAD_MODE`/`PANEL_FIXED_THREAD_ID` when redirecting the panel thread.
-* Consolidate CoreOps to `modules/coreops`; remove `shared/coreops`.
+* Consolidate CoreOps to `packages/c1c-coreops`; remove legacy shared CoreOps shims.
 * Remove empty `ops/` folder.
 * Add `cogs/recruitment_recruiter.py` for symmetry with member cog.
 * No functional changes.

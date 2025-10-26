@@ -10,7 +10,7 @@ private cache structures.
 
 ## Decision
 
-- Introduce `shared/coreops/cache_public.py` as the only import surface for telemetry.
+- Introduce `c1c_coreops.cache_public` as the only import surface for telemetry.
 - Expose helper functions such as `get_snapshot(name)`, `get_summary(name)`, and
   `refresh_now(name, actor)` that proxy to the cache service.
 - Strip private fields from snapshots before returning them to command handlers.
@@ -26,4 +26,4 @@ private cache structures.
 
 Accepted — 2025-10-20
 
-Doc last updated: 2025-10-22 (v0.9.5)
+Doc last updated: 2025-10-26 (v0.9.5)
