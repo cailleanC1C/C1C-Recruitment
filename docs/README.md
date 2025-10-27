@@ -56,6 +56,7 @@ It exists so that contributors update the correct references after each developm
 * [`Architecture.md`](ops/Architecture.md) — detailed system flow, runtime design, and module topology.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
+* [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
 * [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
@@ -83,4 +84,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.6)
