@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from discord.ext import commands
 
+from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
 
 from modules.recruitment.reporting.daily_recruiter_update import (
@@ -17,6 +18,12 @@ class RecruitmentReporting(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
+    @tier("admin")
+    @help_metadata(
+        function_group="operational",
+        section="utilities",
+        access_tier="admin",
+    )
     @commands.command(name="report", help="Reporting utilities")
     @admin_only()
     async def report_group(self, ctx: commands.Context, *args: str) -> None:

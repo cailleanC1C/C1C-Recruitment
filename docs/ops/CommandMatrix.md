@@ -6,6 +6,9 @@ Each entry supplies the one-line copy that powers the refreshed help index. Use 
 short descriptions in the four-embed `@Bot help` layout; detailed blurbs live in
 [`commands.md`](commands.md).
 
+- **Audience map:** Admin surfaces operational controls plus the Welcome Templates bucket; Staff lists recruitment flows, Sheet Tools, and milestones; User lists recruitment, milestones, and general member commands (including mention-only entry points).
+- **Function groups:** Commands declare `function_group` metadata. Valid values are `operational`, `recruitment`, `milestones`, `reminder`, and `general`. The help renderer filters and groups strictly by this map so cross-tier leakage is impossible.
+
 ## Admin — CoreOps & refresh controls
 _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*` (command behavior unchanged).
 
@@ -47,4 +50,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.6)

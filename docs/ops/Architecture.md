@@ -56,8 +56,8 @@ flowchart TD
 
 ### Help metadata
 - Commands opt-in to the multi-embed help surface via the `help_metadata` decorator.
-- Each command carries `access_tier` (admin/staff/user), a `function_group`, and a
-  `help_section` hint so `@Bot help` can assemble the Overview + Admin/Staff/User embeds.
+- `@Bot help` dynamically discovers commands from the live registry and filters by
+  `access_tier` + `function_group`. Admin shows operational controls plus Welcome Templates, Staff shows recruitment + Sheet Tools + milestones, and User shows recruitment + milestones + general (including the mention-only `@Bot help` / `@Bot ping`). Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
 - Empty sections collapse automatically; set `SHOW_EMPTY_SECTIONS=true` to render a
   “Coming soon” placeholder. The footer always reads `Bot v… · CoreOps v… • For details: @Bot help`.
 
@@ -79,4 +79,4 @@ flowchart TD
   - `placement_target_select` — stub module (no runtime surface yet).
   - `placement_reservations` — stub module (no runtime surface yet).
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.6)
