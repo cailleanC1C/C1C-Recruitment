@@ -135,7 +135,7 @@ def _collect_bracket_sections(
     rows: Sequence[Sequence[str]],
     *,
     start_row: int,
-) -> Dict[str, List[Sequence[str]]]:
+) -> Tuple[Dict[str, List[Sequence[str]]], Dict[str, Tuple[int, int, int]]]:
     wanted = [
         "elite end game",
         "early end game",
@@ -144,21 +144,26 @@ def _collect_bracket_sections(
         "early game",
         "beginners",
     ]
-    desired = {label: [] for label in wanted}
+    sections: Dict[str, List[Sequence[str]]] = {label: [] for label in wanted}
+    totals: Dict[str, Tuple[int, int, int]] = {label: (0, 0, 0) for label in wanted}
     active: Optional[str] = None
     for idx in range(start_row, len(rows)):
         row = rows[idx]
         group = str(row[1] if len(row) > 1 else "").strip().lower()
-        if group in desired:
+        if group in sections:
             active = group
+            open_total = _parse_int(row[3] if len(row) > 3 else "0")
+            inactive_total = _parse_int(row[4] if len(row) > 4 else "0")
+            reserved_total = _parse_int(row[5] if len(row) > 5 else "0")
+            totals[group] = (open_total, inactive_total, reserved_total)
             continue
         if active is None:
             continue
         if not any(str(cell).strip() for cell in row):
             active = None
             continue
-        desired[active].append(row)
-    return desired
+        sections[active].append(row)
+    return sections, totals
 
 
 def _resolve_index(headers: HeadersMap, name: str) -> Optional[int]:
@@ -166,7 +171,9 @@ def _resolve_index(headers: HeadersMap, name: str) -> Optional[int]:
     return headers.get(normalized)
 
 
-def _format_line(headers: HeadersMap, row: Sequence[str]) -> Optional[str]:
+def _format_line(
+    headers: HeadersMap, row: Sequence[str], *, always: bool = False
+) -> Optional[str]:
     key_idx = _resolve_index(headers, "key")
     open_idx = _resolve_index(headers, "open spots")
     inactive_idx = _resolve_index(headers, "inactives")
@@ -180,31 +187,12 @@ def _format_line(headers: HeadersMap, row: Sequence[str]) -> Optional[str]:
     inactive_value = _parse_int(_column(row, inactive_idx))
     reserved_value = _parse_int(_column(row, reserved_idx))
 
-    if (open_value, inactive_value, reserved_value) == (0, 0, 0):
+    if not always and (open_value, inactive_value, reserved_value) == (0, 0, 0):
         return None
     return (
         f"\U0001F539{label}: open {open_value} "
         f"| inactives {inactive_value} | reserved {reserved_value}"
     )
-
-
-def _sum_section(headers: HeadersMap, rows: Sequence[Sequence[str]]) -> Tuple[int, int, int]:
-    open_idx = _resolve_index(headers, "open spots")
-    inactive_idx = _resolve_index(headers, "inactives")
-    reserved_idx = _resolve_index(headers, "reserved spots")
-
-    if None in {open_idx, inactive_idx, reserved_idx}:
-        return 0, 0, 0
-
-    open_total = 0
-    inactive_total = 0
-    reserved_total = 0
-    for row in rows:
-        open_total += _parse_int(_column(row, open_idx))
-        inactive_total += _parse_int(_column(row, inactive_idx))
-        reserved_total += _parse_int(_column(row, reserved_idx))
-
-    return open_total, inactive_total, reserved_total
 
 
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
@@ -245,8 +233,11 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             stop_column=stop_column,
             stop_value=stop_value,
         )
+        key_index = _resolve_index(headers, "key")
+        always_visible = {"overall", "top 10", "top 5"}
         for row in block:
-            line = _format_line(headers, row)
+            label = _column(row, key_index).strip().lower() if key_index is not None else ""
+            line = _format_line(headers, row, always=label in always_visible)
             if line:
                 general_lines.append(line)
 
@@ -259,7 +250,7 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
 
     if bracket_index != -1:
         # Section: Per Bracket — one full-width box per bracket, with compact totals in the field title
-        sections = _collect_bracket_sections(rows, start_row=bracket_index + 1)
+        sections, totals = _collect_bracket_sections(rows, start_row=bracket_index + 1)
         order = [
             "elite end game",
             "early end game",
@@ -273,16 +264,27 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             formatted = [line for row in entries if (line := _format_line(headers, row))]
             if not formatted:
                 continue
-            open_total, inactive_total, reserved_total = _sum_section(headers, entries)
+            open_total, inactive_total, reserved_total = totals.get(key, (0, 0, 0))
+            if (open_total, inactive_total, reserved_total) == (0, 0, 0):
+                open_idx = _resolve_index(headers, "open spots")
+                inactive_idx = _resolve_index(headers, "inactives")
+                reserved_idx = _resolve_index(headers, "reserved spots")
+                if None not in {open_idx, inactive_idx, reserved_idx}:
+                    open_total = sum(_parse_int(_column(row, open_idx)) for row in entries)
+                    inactive_total = sum(
+                        _parse_int(_column(row, inactive_idx)) for row in entries
+                    )
+                    reserved_total = sum(
+                        _parse_int(_column(row, reserved_idx)) for row in entries
+                    )
             field_title = (
                 f"{key.title()} — open {open_total} "
                 f"| inactives {inactive_total} | reserved {reserved_total}"
             )
-            # inline=False → full-width field = clean boxed section like !env
             embed.add_field(
                 name=field_title,
                 value="\n".join(formatted),
-                inline=False,
+                inline=True,
             )
 
     return embed
