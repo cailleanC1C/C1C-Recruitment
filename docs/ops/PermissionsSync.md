@@ -59,7 +59,9 @@ allow/deny rules. The command is admin-only and defaults to a dry run.
 
 Running with `--dry false` posts a confirmation prompt; type `confirm` within
 45 seconds to proceed. After a live run completes, the bot writes the audit CSV
-and posts a short note to the CoreOps log channel.
+and posts a short note to the CoreOps log channel. When errors occur the
+sync summary lists an “Error details” section with the most common exception
+messages, and the log note mirrors those reasons for fast triage.【F:modules/ops/permissions_sync.py†L864-L910】【F:modules/ops/permissions_sync.py†L1184-L1222】
 
 ### CSV Columns
 
@@ -72,7 +74,7 @@ and posts a short note to the CoreOps log channel.
 | `matched_by` | Which list produced the match (`category-allow`, `channel-deny`, etc.). |
 | `prior_state` | Summary of the existing overwrite (or `missing`). |
 | `action` | `created`, `updated`, `plan-create`, `plan-update`, `noop`, `skip-manual-deny`, or `skip-limit`. |
-| `details` | Human-readable explanation for the action. |
+| `details` | Human-readable explanation for the action (error rows include the exception text returned by Discord). |
 
 ### Manual Deny Safeguard
 
