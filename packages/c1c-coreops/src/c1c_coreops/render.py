@@ -570,6 +570,8 @@ class RefreshEmbedRow:
     duration: str
     result: str
     retries: str
+    ttl_expired: str
+    count: str
     error: str
 
 
@@ -592,13 +594,15 @@ def build_refresh_embed(
     actor_line = f"actor: {actor_display.strip() or actor_display} • trigger: {trigger}"
     embed.description = actor_line
 
-    headers = ["bucket", "duration", "result", "retries", "error"]
+    headers = ["bucket", "duration", "result", "retries", "ttl", "count", "error"]
     data = [
         [
             row.bucket,
             row.duration,
             row.result,
             row.retries,
+            row.ttl_expired,
+            row.count,
             row.error,
         ]
         for row in rows

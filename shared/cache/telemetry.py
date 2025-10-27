@@ -32,6 +32,9 @@ class CacheSnapshot:
     last_result: Optional[str]
     last_error: Optional[str]
     retries: Optional[int]
+    last_trigger: Optional[str]
+    ttl_expired: Optional[bool]
+    item_count: Optional[int]
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,13 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
     last_result = _clean_text(raw.get("last_result")) if available else None
     last_error = _clean_text(raw.get("last_error")) if available else None
     retries = _to_int(raw.get("retries")) if available else None
+    last_trigger = _clean_text(raw.get("last_trigger")) if available else None
+    ttl_expired: Optional[bool] = None
+    if available:
+        value = raw.get("ttl_expired")
+        if isinstance(value, bool):
+            ttl_expired = value
+    item_count = _to_int(raw.get("item_count")) if available else None
 
     now = _now_utc()
     age_seconds: Optional[int] = None
@@ -122,6 +132,9 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
         last_result=last_result,
         last_error=last_error,
         retries=retries,
+        last_trigger=last_trigger,
+        ttl_expired=ttl_expired,
+        item_count=item_count,
     )
 
 
