@@ -79,3 +79,5 @@ section that groups the exception messages Discord returned (for example,
 pinpoint the affected channels. The log message sent to Core Ops also echoes the
 top reasons in brackets for quick triage. Otherwise a “zero applied” run simply
 means the bot role already has the correct permissions everywhere.【F:modules/ops/permissions_sync.py†L630-L707】【F:modules/ops/permissions_sync.py†L1184-L1222】
+
+_Doc last updated: 2025-10-27 (v0.9.6)_
