@@ -28,19 +28,27 @@ def test_build_embed_from_rows_filters_and_groups():
     embed = dru._build_embed_from_rows(rows, headers)
 
     assert isinstance(embed, Embed)
-    assert len(embed.fields) == 2
+    # One General Overview field plus one per non-empty bracket section
+    assert len(embed.fields) == 3
 
     general_field = embed.fields[0]
     assert general_field.name == "General Overview"
     assert "Ops Summary" in general_field.value
     assert "Ops Idle" not in general_field.value
 
-    per_bracket = embed.fields[1]
-    assert per_bracket.name == "Per Bracket"
-    assert "**Elite End Game**" in per_bracket.value
-    assert "Clan Alpha" in per_bracket.value
-    assert "Clan Beta" not in per_bracket.value
-    assert "Clan Delta" in per_bracket.value
+    elite_end_game = embed.fields[1]
+    assert (
+        elite_end_game.name
+        == "Elite End Game — open 5 | inactives 0 | reserved 1"
+    )
+    assert elite_end_game.inline is True
+    assert "Clan Alpha" in elite_end_game.value
+    assert "Clan Beta" not in elite_end_game.value
+
+    mid_game = embed.fields[2]
+    assert mid_game.name == "Mid Game — open 2 | inactives 2 | reserved 0"
+    assert mid_game.inline is True
+    assert "Clan Delta" in mid_game.value
 
 
 def test_parse_utc_time_returns_aware_time():
