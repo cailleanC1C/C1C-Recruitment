@@ -47,4 +47,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-30 (v0.9.8)
+Doc last updated: 2025-10-27 (v0.9.8)

@@ -56,4 +56,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-10-30 (v0.9.8)
+Doc last updated: 2025-10-27 (v0.9.8)
