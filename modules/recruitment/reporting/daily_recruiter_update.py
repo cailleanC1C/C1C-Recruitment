@@ -188,6 +188,25 @@ def _format_line(headers: HeadersMap, row: Sequence[str]) -> Optional[str]:
     )
 
 
+def _sum_section(headers: HeadersMap, rows: Sequence[Sequence[str]]) -> Tuple[int, int, int]:
+    open_idx = _resolve_index(headers, "open spots")
+    inactive_idx = _resolve_index(headers, "inactives")
+    reserved_idx = _resolve_index(headers, "reserved spots")
+
+    if None in {open_idx, inactive_idx, reserved_idx}:
+        return 0, 0, 0
+
+    open_total = 0
+    inactive_total = 0
+    reserved_total = 0
+    for row in rows:
+        open_total += _parse_int(_column(row, open_idx))
+        inactive_total += _parse_int(_column(row, inactive_idx))
+        reserved_total += _parse_int(_column(row, reserved_idx))
+
+    return open_total, inactive_total, reserved_total
+
+
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     sheet_id = get_recruitment_sheet_id().strip()
     if not sheet_id:
@@ -206,7 +225,12 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
     )
 
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    embed.set_footer(text=f"last updated {timestamp} • daily UTC snapshot")
+    embed.set_footer(
+        text=(
+            "last updated "
+            f"{timestamp} • daily snapshot, for most accurate numbers use `!clanmatch`"
+        )
+    )
 
     general_index = _find_row_equals(rows, 0, "general overview")
     bracket_index = _find_row_equals(rows, 0, "per bracket")
@@ -233,7 +257,6 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             inline=False,
         )
 
-    bracket_lines: List[str] = []
     if bracket_index != -1:
         sections = _collect_bracket_sections(rows, start_row=bracket_index + 1)
         order = [
@@ -249,15 +272,16 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             formatted = [line for row in entries if (line := _format_line(headers, row))]
             if not formatted:
                 continue
-            bracket_lines.append(f"**{key.title()}**")
-            bracket_lines.extend(formatted)
-
-    if bracket_lines:
-        embed.add_field(
-            name="Per Bracket",
-            value="\n".join(bracket_lines),
-            inline=False,
-        )
+            open_total, inactive_total, reserved_total = _sum_section(headers, entries)
+            field_title = (
+                f"{key.title()} — open {open_total} "
+                f"| inactives {inactive_total} | reserved {reserved_total}"
+            )
+            embed.add_field(
+                name=field_title,
+                value="\n".join(formatted),
+                inline=True,
+            )
 
     return embed
 
