@@ -98,7 +98,7 @@ off in production until the panels ship._
   - `member_panel` — member search panels.
   - `recruiter_panel` — recruiter dashboards and match tools.
   - `recruitment_welcome` — welcome command (welcome/promo listeners remain env-gated).
-  - `recruitment_reports` — stub module that logs load/unload only.
+  - `recruitment_reports` — Daily Recruiter Update (UTC scheduler + `!report recruiters`).
   - `placement_target_select` — stub module for future placement picker.
   - `placement_reservations` — stub module for future reservation workflow.
 - Toggles live in the recruitment Sheet `FeatureToggles` worksheet; `TRUE`/`true`/`1`

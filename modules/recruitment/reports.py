@@ -1,4 +1,4 @@
-"""Stub module for future recruitment reports integration."""
+"""Recruitment reporting module wiring."""
 
 import logging
 
@@ -6,7 +6,10 @@ import logging
 log = logging.getLogger(__name__)
 
 
-async def setup(_bot) -> None:
-    """Log that the reports stub has been loaded."""
+async def setup(bot) -> None:
+    """Register recruitment reporting commands and services."""
 
-    log.info("modules.recruitment.reports stub loaded (no commands)")
+    from cogs import recruitment_reporting
+
+    await recruitment_reporting.setup(bot)
+    log.info("modules.recruitment.reports loaded (reporting enabled)")

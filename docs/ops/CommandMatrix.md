@@ -20,6 +20,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!refresh all` | ✅ | Bang alias for the full cache sweep (same cooldown as the `!rec` variant). | `!refresh all` |
 | `!reload [--reboot]` | ✅ | Admin bang alias for config reload plus optional soft reboot. | `!reload [--reboot]` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
+| `!report recruiters` | ✅ | Posts Daily Recruiter Update to the configured destination (manual trigger; UTC snapshot also posts automatically). | `!report recruiters` |
 
 ## Recruiter / Staff — recruitment workflows
 | Command | Status | Short text | Usage |
@@ -41,6 +42,6 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
 
-> Feature toggle note — `recruitment_reports`, `placement_target_select`, and `placement_reservations` currently load stub modules that only log when enabled.
+> Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
 Doc last updated: 2025-10-26 (v0.9.6)

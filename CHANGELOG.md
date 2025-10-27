@@ -1,6 +1,16 @@
 # Changelog
 
-## v0.9.6 — 2025-10-26
+# v0.9.6 — 2025-10-26
+
+### Added
+- Daily Recruiter Update reporting module with UTC scheduler and manual `!report recruiters` trigger, including embed rendering, Sheets parsing, and LOG channel telemetry.
+
+### Changed
+- CoreOps surfaces now list reporting env keys, verify the Reports tab via `!checksheet`, and document the manual command in help/command matrix.
+- Documentation refreshed for reporting toggle, environment keys, and architecture references.
+
+### Tests
+- Added parser and command coverage for the Daily Recruiter Update utilities.
 
 ### Documentation
 - Sync documentation with live command set, feature toggles, and watcher behavior.
