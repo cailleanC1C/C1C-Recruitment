@@ -365,7 +365,7 @@ def _dedupe_sheet(
                 }
             }
         }
-        for start, end in ranges
+        for start, end in reversed(ranges)
     ]
 
     deleted = 0
