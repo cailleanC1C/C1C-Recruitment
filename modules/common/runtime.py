@@ -717,6 +717,8 @@ class Runtime:
         from cogs import app_admin
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
+        from modules.ops import permissions_sync as ops_permissions
+        from modules.ops import watchers_permissions as ops_watchers
         from c1c_coreops import ops as ops_cog
 
         await coreops_cog.setup(self.bot)
@@ -844,6 +846,8 @@ class Runtime:
         await onboarding_welcome.setup(self.bot)
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
+        await ops_permissions.setup(self.bot)
+        await ops_watchers.setup(self.bot)
 
         # (Refresh commands now live directly in the CoreOps cog.)
 
