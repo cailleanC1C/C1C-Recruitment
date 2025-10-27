@@ -195,6 +195,13 @@ def _format_line(
     )
 
 
+# --- Embed helpers ---------------------------------------------------------------
+def add_fullwidth_field(embed: discord.Embed, *, name: str, value: str) -> None:
+    """Always add a full-width (boxed) field."""
+
+    embed.add_field(name=name, value=value, inline=False)
+
+
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     sheet_id = get_recruitment_sheet_id().strip()
     if not sheet_id:
@@ -242,10 +249,10 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
                 general_lines.append(line)
 
     if general_lines:
-        embed.add_field(
+        add_fullwidth_field(
+            embed,
             name="General Overview",
             value="\n".join(general_lines),
-            inline=False,
         )
 
     if bracket_index != -1:
@@ -281,11 +288,18 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
                 f"{key.title()} — open {open_total} "
                 f"| inactives {inactive_total} | reserved {reserved_total}"
             )
-            embed.add_field(
+            add_fullwidth_field(
+                embed,
                 name=field_title,
                 value="\n".join(formatted),
-                inline=True,
             )
+
+    # Safety: ensure all fields remain full width (belt + suspenders)
+    for field in getattr(embed, "fields", []):
+        try:
+            field.inline = False
+        except Exception:
+            pass
 
     return embed
 
