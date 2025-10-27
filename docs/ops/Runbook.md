@@ -98,4 +98,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-27 (v0.9.x)
+Doc last updated: 2025-10-26 (v0.9.6)

@@ -107,4 +107,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-10-27 (v0.9.x)
+Doc last updated: 2025-10-26 (v0.9.6)

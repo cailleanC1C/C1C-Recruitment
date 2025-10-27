@@ -31,4 +31,4 @@ usage without cluttering the main index.
 
 Accepted — 2025-10-20
 
-Doc last updated: 2025-10-27 (v0.9.x)
+Doc last updated: 2025-10-26 (v0.9.6)

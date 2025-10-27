@@ -79,4 +79,4 @@ flowchart TD
   - `placement_target_select` — stub module (no runtime surface yet).
   - `placement_reservations` — stub module (no runtime surface yet).
 
-Doc last updated: 2025-10-27 (v0.9.x)
+Doc last updated: 2025-10-26 (v0.9.6)

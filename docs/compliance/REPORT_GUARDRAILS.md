@@ -67,4 +67,4 @@
 ## Risk scan
 * No blocking risks observed—extension contract, config sourcing, embed parity, and RBAC controls all validate cleanly in the current codebase.
 
-Doc last updated: 2025-10-27 (v0.9.x)
+Doc last updated: 2025-10-26 (v0.9.6)
