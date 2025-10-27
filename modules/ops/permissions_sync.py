@@ -16,6 +16,7 @@ from typing import Iterable, Mapping, Optional, Sequence, Tuple
 import discord
 from discord.ext import commands
 
+from c1c_coreops.helpers import tier
 from c1c_coreops.rbac import admin_only
 from modules.common import runtime as runtime_helpers
 from shared.permissions.bot_access_profile import (
@@ -903,6 +904,7 @@ class BotPermissionCog(commands.Cog):
             )
         return "\n".join(lines)
 
+    @tier("admin")
     @commands.group(name="perm", invoke_without_command=True)
     @admin_only()
     async def perm_group(self, ctx: commands.Context) -> None:
@@ -911,6 +913,7 @@ class BotPermissionCog(commands.Cog):
             mention_author=False,
         )
 
+    @tier("admin")
     @perm_group.group(name="bot", invoke_without_command=True)
     @admin_only()
     async def perm_bot(self, ctx: commands.Context) -> None:
@@ -918,7 +921,13 @@ class BotPermissionCog(commands.Cog):
             "Available subcommands: list, allow, deny, remove, sync.",
             mention_author=False,
         )
+    _extras = getattr(perm_bot, "extras", None)
+    if isinstance(_extras, dict):
+        _extras.setdefault("hide_in_help", True)
+    else:  # pragma: no cover - defensive fallback
+        perm_bot.extras = {"hide_in_help": True}
 
+    @tier("admin")
     @perm_bot.command(name="list")
     @admin_only()
     async def perm_bot_list(self, ctx: commands.Context, *, flags: ListFlags) -> None:
@@ -995,6 +1004,7 @@ class BotPermissionCog(commands.Cog):
         if flags.json:
             await self._send_snapshot_json(ctx, snapshot)
 
+    @tier("admin")
     @perm_bot.command(name="allow")
     @admin_only()
     async def perm_bot_allow(self, ctx: commands.Context, *, targets: str) -> None:
@@ -1046,6 +1056,7 @@ class BotPermissionCog(commands.Cog):
         )
         await ctx.reply(message, mention_author=False)
 
+    @tier("admin")
     @perm_bot.command(name="deny")
     @admin_only()
     async def perm_bot_deny(self, ctx: commands.Context, *, targets: str) -> None:
@@ -1097,6 +1108,7 @@ class BotPermissionCog(commands.Cog):
         )
         await ctx.reply(message, mention_author=False)
 
+    @tier("admin")
     @perm_bot.command(name="remove")
     @admin_only()
     async def perm_bot_remove(self, ctx: commands.Context, *, targets: str) -> None:
@@ -1128,6 +1140,7 @@ class BotPermissionCog(commands.Cog):
         )
         await ctx.reply(message, mention_author=False)
 
+    @tier("admin")
     @perm_bot.command(name="sync")
     @admin_only()
     async def perm_bot_sync(self, ctx: commands.Context, *, flags: SyncFlags) -> None:

@@ -27,6 +27,7 @@ _ensure_src_on_path()
 
 from c1c_coreops.cog import CoreOpsCog
 from c1c_coreops.helpers import tier
+from modules.ops.permissions_sync import BotPermissionCog
 
 
 class DummyMember:
@@ -182,6 +183,43 @@ def test_admin_help_without_tag(monkeypatch: pytest.MonkeyPatch) -> None:
                     )
                     continue
                 assert entry in admin_block
+        finally:
+            await bot.close()
+
+    asyncio.run(runner())
+
+
+def test_admin_help_includes_perm_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TAG", "rec")
+    monkeypatch.setenv("COREOPS_ENABLE_TAGGED_ALIASES", "1")
+    monkeypatch.setenv("COREOPS_ENABLE_GENERIC_ALIASES", "0")
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+
+        await bot.add_cog(CoreOpsCog(bot))
+        await bot.add_cog(BotPermissionCog(bot))
+
+        try:
+            cog = bot.get_cog("CoreOpsCog")
+            assert cog is not None
+            ctx = HelpContext(bot)
+            await cog.render_help(ctx)
+            assert ctx._replies, "Help did not reply with an embed"
+            fields = _extract_fields(ctx._replies[0])
+            admin_block = fields.get("admin", "")
+
+            expected = [
+                "!perm",
+                "!perm bot list",
+                "!perm bot allow",
+                "!perm bot deny",
+                "!perm bot remove",
+                "!perm bot sync",
+            ]
+
+            for entry in expected:
+                assert entry in admin_block, f"Expected {entry} in admin help output"
         finally:
             await bot.close()
 

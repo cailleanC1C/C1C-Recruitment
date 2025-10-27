@@ -2615,7 +2615,7 @@ class CoreOpsCog(commands.Cog):
         top = command
         while top.parent is not None:
             top = top.parent
-        return top.qualified_name == "rec"
+        return top.qualified_name in {"rec", "perm"}
 
     async def _gather_subcommand_infos(
         self, command: commands.Command[Any, Any, Any], ctx: commands.Context

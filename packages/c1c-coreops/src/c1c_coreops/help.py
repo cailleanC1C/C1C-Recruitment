@@ -56,6 +56,54 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
+    "perm": _metadata(
+        short="Manages channel allow/deny lists for bot access.",
+        detailed=(
+            "Provides administrative controls for which channels or categories the bot will listen to. "
+            "Run `!perm bot list` to inspect the current allow/deny lists, then `!perm bot sync` to apply updates."
+        ),
+        tier="admin",
+    ),
+    "perm bot list": _metadata(
+        short="Shows the current allow/deny configuration.",
+        detailed=(
+            "Displays the allowed and denied categories/channels along with the last-updated timestamp. "
+            "Use flags like `--json` to export the raw configuration payload."
+        ),
+        tier="admin",
+    ),
+    "perm bot allow": _metadata(
+        short="Adds channels or categories to the allow list.",
+        detailed=(
+            "Accepts one or more channel/category mentions, IDs, or quoted names and records them in the allow list. "
+            "Combine multiple entries in a single call (for example: `!perm bot allow #recruiters 1234567890`)."
+        ),
+        tier="admin",
+    ),
+    "perm bot deny": _metadata(
+        short="Adds channels or categories to the deny list.",
+        detailed=(
+            "Places the provided channels or categories on the deny list so the bot ignores them. "
+            "Use the same targeting syntax as the allow command and review with `!perm bot list`."
+        ),
+        tier="admin",
+    ),
+    "perm bot remove": _metadata(
+        short="Removes channels or categories from allow/deny lists.",
+        detailed=(
+            "Clears the provided channel/category IDs from whichever list currently contains them. "
+            "Run after a mistake or when access needs to revert to the default state."
+        ),
+        tier="admin",
+    ),
+    "perm bot sync": _metadata(
+        short="Applies allow/deny changes to Discord overwrites.",
+        detailed=(
+            "Calculates the required permission overwrites based on the stored allow/deny lists and applies them. "
+            "Supports `--dry false` for live updates plus flags for threads, include filters, and limits."
+        ),
+        tier="admin",
+    ),
     "ping": _metadata(
         short="Verifies the bot is awake with a quick pong reaction.",
         detailed=(
