@@ -278,11 +278,10 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
                 f"{key.title()} — open {open_total} "
                 f"| inactives {inactive_total} | reserved {reserved_total}"
             )
-            # inline=False → full-width field = clean boxed section like !env
             embed.add_field(
                 name=field_title,
                 value="\n".join(formatted),
-                inline=False,
+                inline=True,
             )
 
     return embed

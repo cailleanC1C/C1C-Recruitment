@@ -221,12 +221,24 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
             cleaned_error = f"{cleaned_error[:67]}…"
 
         label = name or "-"
+        ttl_display = "?"
+        if snapshot.ttl_expired is True:
+            ttl_display = "yes"
+        elif snapshot.ttl_expired is False:
+            ttl_display = "no"
+
+        count_display = "-"
+        if snapshot.item_count is not None:
+            count_display = str(snapshot.item_count)
+
         rows.append(
             RefreshEmbedRow(
                 bucket=label,
                 duration=f"{duration_ms} ms",
                 result=display_result,
                 retries=retries_flag,
+                ttl_expired=ttl_display,
+                count=count_display,
                 error=cleaned_error or "-",
             )
         )
