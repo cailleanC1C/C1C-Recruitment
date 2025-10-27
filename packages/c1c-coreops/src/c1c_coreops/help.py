@@ -142,6 +142,22 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
+    "report": _metadata(
+        short="Posts the Daily Recruiter Update immediately.",
+        detailed=(
+            "Runs the Daily Recruiter Update and posts it to the configured destination channel or thread.\n"
+            "Tip: Use `!report recruiters` when you need an out-of-band snapshot before the scheduled UTC post."
+        ),
+        tier="admin",
+    ),
+    "report recruiters": _metadata(
+        short="Posts the Daily Recruiter Update to the configured channel.",
+        detailed=(
+            "Triggers the Daily Recruiter Update manually. The command respects the feature toggle and logs the result to the ops channel.\n"
+            "Tip: Confirm `REPORT_RECRUITERS_DEST_ID` is set and the `recruitment_reports` toggle is ON before running it."
+        ),
+        tier="admin",
+    ),
     # Recruiter/Staff Commands
     "checksheet": _metadata(
         short="Shows what sheet and tabs are currently loaded.",

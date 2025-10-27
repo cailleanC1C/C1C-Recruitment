@@ -11,7 +11,7 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 | `recruiter_panel` | `ON` | Enables the text-only recruiter panel (`!clanmatch`). |
 | `clan_profile` | `ON` | Enables the public `!clan` command with crest and 💡 reaction toggle. |
 | `recruitment_welcome` | `TRUE` | Enables the `!welcome` command; onboarding listeners remain env-gated. |
-| `recruitment_reports` | `TRUE` | Stub module that logs load/unload only (no digest command yet). |
+| `recruitment_reports` | `TRUE` | Enables the Daily Recruiter Update (UTC scheduler + `!report recruiters`). |
 
 ## Placement
 

@@ -32,6 +32,7 @@ from c1c_coreops.rbac import (
     is_admin_member,
 )
 from c1c_coreops.cron_summary import emit_daily_summary
+from modules.recruitment.reporting.daily_recruiter_update import ensure_scheduler_started
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -190,6 +191,8 @@ async def on_ready():
         log.info("[cron] summary scheduler started (00:05Z)")
 
     runtime.schedule_startup_preload()
+
+    await ensure_scheduler_started(bot)
 
 
 @bot.event
