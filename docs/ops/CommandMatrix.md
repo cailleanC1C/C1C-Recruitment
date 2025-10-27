@@ -3,7 +3,7 @@
 Legend: ✅ = active command · 🧩 = shared CoreOps surface (available across tiers)
 
 Each entry supplies the one-line copy that powers the refreshed help index. Use these
-short descriptions in `!help` and tier-specific listings; detailed blurbs live in
+short descriptions in the four-embed `@Bot help` layout; detailed blurbs live in
 [`commands.md`](commands.md).
 
 ## Admin — CoreOps & refresh controls
@@ -23,6 +23,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!perm bot list` | ✅ | Show the current bot allow/deny lists with counts and IDs. | `!perm bot list [--json]` |
 | `!perm bot sync` | ✅ | Bulk apply bot role overwrites with audit logging. | `!perm bot sync [--dry] [--threads on|off] [--include voice|stage] [--limit N]` |
 | `!report recruiters` | ✅ | Posts Daily Recruiter Update to the configured destination (manual trigger; UTC snapshot also posts automatically). | `!report recruiters` |
+| `!welcome-refresh` | ✅ | Reload the `WelcomeTemplates` cache bucket before running `!welcome`. | `!welcome-refresh` |
 
 ## Recruiter / Staff — recruitment workflows
 | Command | Status | Short text | Usage |
@@ -35,16 +36,15 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!rec reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!rec reload [--reboot]` |
 | `!clanmatch` | 🧩 | Recruiter match workflow (requires recruiter/staff role). [gated: `recruiter_panel`] | `!clanmatch` |
 | `!welcome <clan> [@member] [note]` | ✅ | Post the legacy welcome embed with crest, pings, and general notice routing. [gated: `recruitment_welcome`] | `!welcome <clan> [@member] [note]` |
-| `!welcome-refresh` | ✅ | Reload the `WelcomeTemplates` cache bucket before running `!welcome` again. | `!welcome-refresh` |
-| `!rec ping` | 🧩 | Prefix proxy for the admin ping command (still requires admin access). | `!rec ping` |
 
 ## User — general members
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
-| `!rec help [command]` | 🧩 | List accessible commands or expand one with usage and tips. | `!rec help` / `!rec help <command>` |
+| `@Bot help [command]` | 🧩 | List accessible commands or expand one with usage and tips. | `@Bot help` / `@Bot help <command>` |
+| `@Bot ping` | 🧩 | Quick pong reply to confirm the bot is online. | `@Bot ping` |
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-27 (v0.9.8)
+Doc last updated: 2025-10-26 (v0.9.6)

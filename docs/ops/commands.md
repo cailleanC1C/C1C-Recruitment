@@ -4,25 +4,30 @@ The help surfaces pull from the command matrix and cache registry to render cons
 copy across tiers. Use the following behavior notes when validating deploys or triaging
 reports from staff and recruiters.
 
-## `!help` — short index
-- **Audience:** Admin-only shortcut; mirrors `!rec help` for the caller's tier.
-- **Behavior:** Returns a compact embed grouped by tier with one-line blurbs only. The
-  embed footer shows `Bot vX.Y.Z · CoreOps vA.B.C`; timestamps are no longer rendered.
+## `@Bot help` — overview layout
+- **Audience:** Everyone; the embed set filters to the caller’s access tier.
+- **Behavior:** Sends one message containing four embeds in fixed order:
+  1. **Overview** — long-form description reused verbatim from the legacy help copy.
+  2. **Admin / Operational** — Config & Health, Sheets & Cache, Permissions, Utilities, Welcome Templates.
+  3. **Staff** — Recruitment, Sheet Tools, Milestones.
+  4. **User** — Recruitment, Milestones, General (includes `@Bot help` and `@Bot ping`).
+- **Empty sections:** Hidden by default; set `SHOW_EMPTY_SECTIONS=true` to render a
+  “Coming soon” placeholder.
+- **Footer:** `Bot vX.Y.Z · CoreOps vA.B.C • For details: @Bot help` on every embed.
 - **Tip:** Trigger this after reloads to confirm the tier catalog hydrated from the live
   cache.
 
-### Example (Admin tier excerpt)
+### Example (Admin embed excerpt)
 ```
-Admin
-- !config — Admin embed of the live registry with guild names and sheet linkage.
-- !rec reload — Rebuild the config registry; optionally schedule a soft reboot.
+Admin / Operational — Config & Health
+• !rec env — Staff snapshot of environment name, guild IDs, and sheet linkage.
+• !rec health — Inspect cache/watchdog telemetry pulled from the public API.
 ```
 
-## `!help <command>` — detailed view
+## `@Bot help <command>` — detailed view
 - **Audience:** Any tier that can see the command in the short index.
 - **Behavior:** Expands the command with the detailed copy from the Command Matrix,
-  including a **Usage** line, prefix warning (commands accept `!rec` and admin bang
-  aliases), and a contextual tip.
+  including a **Usage** line and contextual tip.
 - **Footer:** Version info only; embeds omit timestamps to match the new audit policy.
 - **Reminder:** The detailed embed highlights when the caller lacks the required tier.
 
@@ -46,7 +51,7 @@ Tip: Re-run if digest ages drift after clan merges.
 
 ### Example (User)
 ```
-!rec ping
+@Bot ping
 Usage: !rec ping
 Tier: User
 Detail: Report bot latency and shard status without hitting the cache.
@@ -93,13 +98,13 @@ Posts the cached welcome template for the provided clan tag.
 - **Usage:** `!welcome C1CE @Player`
 - **Feature Toggle:** `recruitment_welcome`
 
-### `!rec ping`
+### `@Bot ping`
 
-Prefix proxy for the admin ping command.
+Mention-style health check.
 
-- **Access:** Admin (shares gating with the base `!ping` command)
-- **Behavior:** Delegates to the hidden admin command that reacts with 🏓; used to confirm shard responsiveness.
-- **Usage:** `!rec ping`
-- **Notes:** Because the proxy invokes the admin command directly, non-admins still receive the “Admins only.” denial message.
+- **Access:** Anyone who can see the bot.
+- **Behavior:** Invokes the prefix proxy and reacts with 🏓 so the caller knows the shard is alive.
+- **Usage:** `@Bot ping`
+- **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
 Doc last updated: 2025-10-26 (v0.9.6)
