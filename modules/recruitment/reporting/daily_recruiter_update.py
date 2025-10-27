@@ -258,6 +258,7 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
         )
 
     if bracket_index != -1:
+        # Section: Per Bracket — one full-width box per bracket, with compact totals in the field title
         sections = _collect_bracket_sections(rows, start_row=bracket_index + 1)
         order = [
             "elite end game",
@@ -277,10 +278,11 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
                 f"{key.title()} — open {open_total} "
                 f"| inactives {inactive_total} | reserved {reserved_total}"
             )
+            # inline=False → full-width field = clean boxed section like !env
             embed.add_field(
                 name=field_title,
                 value="\n".join(formatted),
-                inline=True,
+                inline=False,
             )
 
     return embed
