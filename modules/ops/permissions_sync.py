@@ -24,6 +24,7 @@ from shared.permissions.bot_access_profile import (
     build_deny_overwrite,
     serialize_overwrite,
 )
+from shared.redaction import sanitize_embed
 
 __all__ = ["BotPermissionManager", "BotPermissionCog", "setup"]
 
@@ -742,6 +743,36 @@ class BotPermissionCog(commands.Cog):
         self.manager = BotPermissionManager.for_bot(bot)
 
     @staticmethod
+    def _chunk_lines(lines: Sequence[str], limit: int = 900) -> list[str]:
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+        for line in lines:
+            text = line.rstrip() or "—"
+            additional = len(text) + (1 if current else 0)
+            if current and current_len + additional > limit:
+                chunks.append("\n".join(current))
+                current = [text]
+                current_len = len(text)
+            else:
+                current.append(text)
+                current_len += additional
+        if current:
+            chunks.append("\n".join(current))
+        return chunks or ["—"]
+
+    def _add_embed_section(
+        self, embed: discord.Embed, name: str, entries: Sequence[str]
+    ) -> None:
+        normalized = [entry for entry in entries if entry]
+        if not normalized:
+            normalized = ["—"]
+        chunks = self._chunk_lines(normalized)
+        for index, chunk in enumerate(chunks):
+            label = name if index == 0 else f"{name} (cont.)"
+            embed.add_field(name=label, value=chunk, inline=False)
+
+    @staticmethod
     def _tokenize_targets(raw: str) -> list[str]:
         try:
             return shlex.split(raw)
@@ -901,45 +932,66 @@ class BotPermissionCog(commands.Cog):
         channels_allow = snapshot["channels"]["allow"]
         channels_deny = snapshot["channels"]["deny"]
         updated = snapshot.get("updated_at") or "never"
-        lines = ["📜 Current Bot Access Lists", ""]
-        lines.append(f"🟩 Allowed Categories ({len(categories_allow)})")
-        if categories_allow:
-            lines.extend(
+        totals_line = " · ".join(
+            [
+                f"allowed categories: {len(categories_allow)}",
+                f"allowed channels: {len(channels_allow)}",
+                f"denied categories: {len(categories_deny)}",
+                f"denied channels: {len(channels_deny)}",
+            ]
+        )
+        embed = discord.Embed(
+            title=f"{runtime_helpers.get_bot_name()} · bot access",
+            description=totals_line,
+            colour=discord.Colour.blurple(),
+        )
+        embed.set_author(name=guild.name)
+        embed.set_footer(text=f"Last updated: {updated}")
+
+        if isinstance(updated, str) and updated not in {"", "never"}:
+            try:
+                parsed = dt.datetime.fromisoformat(updated)
+            except ValueError:
+                parsed = None
+            if parsed is not None:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=dt.timezone.utc)
+                embed.timestamp = parsed
+
+        self._add_embed_section(
+            embed,
+            "🟩 Allowed Categories",
+            [
                 self._format_category_entry(guild, category_id)
                 for category_id in categories_allow
-            )
-        else:
-            lines.append("• —")
-        lines.append("")
-        lines.append(f"🟩 Allowed Channels ({len(channels_allow)})")
-        if channels_allow:
-            lines.extend(
+            ],
+        )
+        self._add_embed_section(
+            embed,
+            "🟩 Allowed Channels",
+            [
                 self._format_channel_entry(guild, channel_id)
                 for channel_id in channels_allow
-            )
-        else:
-            lines.append("• —")
-        lines.append("")
-        lines.append(f"🟥 Denied Categories ({len(categories_deny)})")
-        if categories_deny:
-            lines.extend(
+            ],
+        )
+        self._add_embed_section(
+            embed,
+            "🟥 Denied Categories",
+            [
                 self._format_category_entry(guild, category_id)
                 for category_id in categories_deny
-            )
-        else:
-            lines.append("• —")
-        lines.append("")
-        lines.append(f"🟥 Denied Channels ({len(channels_deny)})")
-        if channels_deny:
-            lines.extend(
+            ],
+        )
+        self._add_embed_section(
+            embed,
+            "🟥 Denied Channels",
+            [
                 self._format_channel_entry(guild, channel_id)
                 for channel_id in channels_deny
-            )
-        else:
-            lines.append("• —")
-        lines.append("")
-        lines.append(f"Last Updated: {updated}")
-        await ctx.reply("\n".join(lines), mention_author=False)
+            ],
+        )
+
+        await ctx.reply(embed=sanitize_embed(embed), mention_author=False)
         if flags.json:
             await self._send_snapshot_json(ctx, snapshot)
 
