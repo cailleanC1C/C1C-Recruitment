@@ -9,7 +9,7 @@ import json
 import logging
 import shlex
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
@@ -80,6 +80,7 @@ class SyncReport:
     include_stage: bool
     limit: int | None
     updated_threads_default: bool
+    error_reasons: Counter[str] = field(default_factory=Counter)
 
 
 class ChannelOrCategoryConverter(commands.Converter[discord.abc.GuildChannel]):
@@ -366,6 +367,14 @@ class BotPermissionManager:
             return None
         return overwrite
 
+    @staticmethod
+    def _summarize_exception(exc: Exception) -> str:
+        message = str(exc).strip()
+        if not message:
+            message = exc.__class__.__name__
+        sanitized = " ".join(message.split())
+        return sanitized[:200]
+
     def _build_plan(
         self,
         channel: discord.abc.GuildChannel,
@@ -555,6 +564,7 @@ class BotPermissionManager:
         counts: Counter[str] = Counter()
         processed = 0
         limit_value = limit if isinstance(limit, int) and limit > 0 else None
+        error_reasons: Counter[str] = Counter()
         for plan in matched_plans:
             channel = plan.channel
             prior = serialize_overwrite(plan.existing)
@@ -635,9 +645,13 @@ class BotPermissionManager:
                         overwrite=plan.desired,
                         reason="bot role sync",
                     )
-                except Exception:  # pragma: no cover - discord.py failure
+                except Exception as exc:  # pragma: no cover - discord.py failure
+                    reason = self._summarize_exception(exc)
                     log.warning(
-                        "Failed to apply overwrite for channel %s", plan.channel, exc_info=True
+                        "Failed to apply overwrite for channel %s",
+                        plan.channel,
+                        exc_info=True,
+                        extra={"error_reason": reason},
                     )
                     rows.append(
                         ChannelSyncRow(
@@ -648,10 +662,11 @@ class BotPermissionManager:
                             matched_by=plan.matched_by,
                             prior_state=prior,
                             action="error",
-                            details="exception applying overwrite",
+                            details=f"exception applying overwrite: {reason}",
                         )
                     )
                     counts["error"] += 1
+                    error_reasons[reason] += 1
                     continue
                 action = "created" if plan.existing is None else "updated"
                 details = (
@@ -722,6 +737,7 @@ class BotPermissionManager:
             include_stage=include_stage,
             limit=limit_value,
             updated_threads_default=updated_threads_default,
+            error_reasons=error_reasons,
         )
 
     @staticmethod
@@ -888,6 +904,14 @@ class BotPermissionCog(commands.Cog):
             errors = report.counts.get("error", 0)
             if errors:
                 lines.append(f"• Errors: {errors}")
+                if report.error_reasons:
+                    lines.append("• Error details:")
+                    for reason, count in report.error_reasons.most_common(3):
+                        lines.append(f"  • {count}× {reason}")
+                    if len(report.error_reasons) > 3:
+                        lines.append(
+                            "  • … additional error types logged"
+                        )
         if report.counts.get("noop"):
             lines.append(f"• No-ops: {report.counts['noop']}")
         if report.counts.get("skip_manual_deny"):
@@ -1226,9 +1250,17 @@ class BotPermissionCog(commands.Cog):
         )
         applied = report.counts.get("created", 0) + report.counts.get("updated", 0)
         errors = report.counts.get("error", 0)
+        error_suffix = ""
+        if errors and report.error_reasons:
+            top_reasons = ", ".join(
+                f"{count}× {reason}"
+                for reason, count in report.error_reasons.most_common(2)
+            )
+            error_suffix = f" [{top_reasons}]"
         await runtime_helpers.send_log_message(
             "🔐 Bot permission sync applied: "
-            f"{applied} overwrites, errors={errors}, threads={'on' if report.threads_enabled else 'off'}"
+            f"{applied} overwrites, errors={errors}, "
+            f"threads={'on' if report.threads_enabled else 'off'}{error_suffix}"
         )
 
 
