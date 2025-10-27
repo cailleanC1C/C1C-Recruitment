@@ -233,8 +233,11 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             stop_column=stop_column,
             stop_value=stop_value,
         )
+        key_index = _resolve_index(headers, "key")
+        always_visible = {"overall", "top 10", "top 5"}
         for row in block:
-            line = _format_line(headers, row, always=True)
+            label = _column(row, key_index).strip().lower() if key_index is not None else ""
+            line = _format_line(headers, row, always=label in always_visible)
             if line:
                 general_lines.append(line)
 
@@ -262,15 +265,26 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             if not formatted:
                 continue
             open_total, inactive_total, reserved_total = totals.get(key, (0, 0, 0))
+            if (open_total, inactive_total, reserved_total) == (0, 0, 0):
+                open_idx = _resolve_index(headers, "open spots")
+                inactive_idx = _resolve_index(headers, "inactives")
+                reserved_idx = _resolve_index(headers, "reserved spots")
+                if None not in {open_idx, inactive_idx, reserved_idx}:
+                    open_total = sum(_parse_int(_column(row, open_idx)) for row in entries)
+                    inactive_total = sum(
+                        _parse_int(_column(row, inactive_idx)) for row in entries
+                    )
+                    reserved_total = sum(
+                        _parse_int(_column(row, reserved_idx)) for row in entries
+                    )
             field_title = (
                 f"{key.title()} — open {open_total} "
                 f"| inactives {inactive_total} | reserved {reserved_total}"
             )
-            # inline=False → full-width field = clean boxed section like !env
             embed.add_field(
                 name=field_title,
                 value="\n".join(formatted),
-                inline=False,
+                inline=True,
             )
 
     return embed
