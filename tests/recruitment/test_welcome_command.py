@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -136,7 +136,7 @@ def test_welcome_happy_path_posts_embed(monkeypatch, stub_logs):
         monkeypatch.setattr(
             welcome_module.sheets,
             "get_cached_welcome_templates",
-            AsyncMock(return_value=_template_rows()),
+            Mock(return_value=_template_rows()),
         )
         monkeypatch.setattr(welcome_module, "get_welcome_general_channel_id", lambda: 999)
 
@@ -172,7 +172,7 @@ def test_default_merge_uses_c1c_row(monkeypatch):
         message = FakeMessage()
         ctx = FakeContext(bot=bot, guild=guild, channel=clan_channel, author=author, message=message)
 
-        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", AsyncMock(return_value=rows))
+        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", Mock(return_value=rows))
         monkeypatch.setattr(welcome_module, "get_welcome_general_channel_id", lambda: None)
 
         bridge = WelcomeBridge(bot)
@@ -198,7 +198,7 @@ def test_ping_respects_toggle(monkeypatch):
         message = FakeMessage(mentions=[recruit])
         ctx = FakeContext(bot=bot, guild=guild, channel=clan_channel, author=author, message=message)
 
-        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", AsyncMock(return_value=rows))
+        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", Mock(return_value=rows))
         monkeypatch.setattr(welcome_module, "get_welcome_general_channel_id", lambda: None)
 
         bridge = WelcomeBridge(bot)
@@ -228,7 +228,7 @@ def test_target_channel_routing(monkeypatch):
         message = FakeMessage()
         ctx = FakeContext(bot=bot, guild=guild, channel=fallback_channel, author=author, message=message)
 
-        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", AsyncMock(return_value=rows))
+        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", Mock(return_value=rows))
         monkeypatch.setattr(welcome_module, "get_welcome_general_channel_id", lambda: None)
 
         bridge = WelcomeBridge(bot)
@@ -251,7 +251,7 @@ def test_missing_or_inactive_rows(monkeypatch):
         message = FakeMessage()
         ctx = FakeContext(bot=bot, guild=guild, channel=clan_channel, author=author, message=message)
 
-        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", AsyncMock(return_value=rows))
+        monkeypatch.setattr(welcome_module.sheets, "get_cached_welcome_templates", Mock(return_value=rows))
         monkeypatch.setattr(welcome_module, "get_welcome_general_channel_id", lambda: None)
 
         bridge = WelcomeBridge(bot)

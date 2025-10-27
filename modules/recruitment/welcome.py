@@ -18,7 +18,7 @@ from shared.config import (
     get_refresh_timezone,
     get_welcome_general_channel_id,
 )
-from shared.sheets import async_facade as sheets
+from shared.sheets import recruitment as sheets
 
 try:  # Python 3.9+ optional zoneinfo
     from zoneinfo import ZoneInfo
@@ -124,7 +124,7 @@ def _build_template(row: Mapping[str, Any]) -> Optional[WelcomeTemplate]:
 
 
 async def _load_templates() -> tuple[dict[str, WelcomeTemplate], Optional[WelcomeTemplate]]:
-    rows = await sheets.get_cached_welcome_templates()
+    rows = sheets.get_cached_welcome_templates()
     templates: dict[str, WelcomeTemplate] = {}
     default_row: WelcomeTemplate | None = None
     alt_default: WelcomeTemplate | None = None
