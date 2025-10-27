@@ -41,13 +41,13 @@ def test_build_embed_from_rows_filters_and_groups():
         elite_end_game.name
         == "Elite End Game — open 5 | inactives 0 | reserved 1"
     )
-    assert elite_end_game.inline is True
+    assert elite_end_game.inline is False
     assert "Clan Alpha" in elite_end_game.value
     assert "Clan Beta" not in elite_end_game.value
 
     mid_game = embed.fields[2]
     assert mid_game.name == "Mid Game — open 2 | inactives 2 | reserved 0"
-    assert mid_game.inline is True
+    assert mid_game.inline is False
     assert "Clan Delta" in mid_game.value
 
 
