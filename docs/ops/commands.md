@@ -52,7 +52,7 @@ Tip: Re-run if digest ages drift after clan merges.
 ### Example (User)
 ```
 @Bot ping
-Usage: !rec ping
+Usage: @Bot ping
 Tier: User
 Detail: Report bot latency and shard status without hitting the cache.
 Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
@@ -107,4 +107,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.6)

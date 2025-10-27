@@ -466,9 +466,6 @@ def build_help_overview_embeds(
                     break
             if field_total >= 12:
                 break
-        if field_total == 0 and not show_empty_sections:
-            # Skip tiers with no visible sections.
-            continue
         embed.set_footer(text=footer_text)
         embeds.append(embed)
 

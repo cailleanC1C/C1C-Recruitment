@@ -6,6 +6,11 @@ workflows, and post-change validation.
 
 Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
 
+## Help overview surfaces
+- `@Bot help` renders four embeds in a single response: Overview, Admin / Operational, Staff, and User.
+- Admin only lists operational commands plus the Welcome Templates refresh; Staff surfaces recruitment flows, Sheet Tools, and milestones; User lists recruitment, milestones, and general commands including the mention-only entry points (`@Bot help`, `@Bot ping`).
+- The renderer reads each command’s `access_tier` and `function_group` metadata directly from the registry. Empty sections collapse unless `SHOW_EMPTY_SECTIONS=1`, which swaps in a “Coming soon” placeholder for parity checks.
+
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.
@@ -98,4 +103,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.6)

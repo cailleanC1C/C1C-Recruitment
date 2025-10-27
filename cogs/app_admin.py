@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from discord.ext import commands
 
-from c1c_coreops.helpers import tier
+from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
 
 
@@ -15,6 +15,11 @@ class AppAdmin(commands.Cog):
         self.bot = bot
 
     @tier("admin")
+    @help_metadata(
+        function_group="operational",
+        section="utilities",
+        access_tier="admin",
+    )
     @commands.command(
         name="ping",
         hidden=True,

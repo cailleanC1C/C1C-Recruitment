@@ -967,30 +967,55 @@ class _IdResolver:
 
         return "(not found)"
 
+@dataclass(frozen=True)
+class _HelpSectionConfig:
+    key: str
+    label: str
+    allowed_function_groups: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _HelpAudienceConfig:
+    key: str
+    title: str
+    allowed_function_groups: tuple[str, ...]
+    sections: tuple[_HelpSectionConfig, ...]
+
+
 class CoreOpsCog(commands.Cog):
-    _HELP_TIER_TITLES: Dict[str, str] = {
-        "admin": "Admin / Operational",
-        "staff": "Staff",
-        "user": "User",
-    }
-    _HELP_SECTION_ORDER: Dict[str, List[Tuple[str, str]]] = {
-        "admin": [
-            ("config_health", "Config & Health"),
-            ("sheets_cache", "Sheets & Cache"),
-            ("permissions", "Permissions"),
-            ("utilities", "Utilities"),
-            ("welcome_templates", "Welcome Templates"),
-        ],
-        "staff": [
-            ("recruitment", "Recruitment"),
-            ("sheet_tools", "Sheet Tools"),
-            ("milestones", "Milestones"),
-        ],
-        "user": [
-            ("recruitment", "Recruitment"),
-            ("milestones", "Milestones"),
-            ("general", "General"),
-        ],
+    _HELP_AUDIENCE_CONFIGS: Dict[str, _HelpAudienceConfig] = {
+        "admin": _HelpAudienceConfig(
+            key="admin",
+            title="Admin / Operational",
+            allowed_function_groups=("operational",),
+            sections=(
+                _HelpSectionConfig("config_health", "Config & Health", ("operational",)),
+                _HelpSectionConfig("sheets_cache", "Sheets & Cache", ("operational",)),
+                _HelpSectionConfig("permissions", "Permissions", ("operational",)),
+                _HelpSectionConfig("utilities", "Utilities", ("operational",)),
+                _HelpSectionConfig("welcome_templates", "Welcome Templates", ("operational",)),
+            ),
+        ),
+        "staff": _HelpAudienceConfig(
+            key="staff",
+            title="Staff",
+            allowed_function_groups=("recruitment", "milestones", "operational"),
+            sections=(
+                _HelpSectionConfig("recruitment", "Recruitment", ("recruitment",)),
+                _HelpSectionConfig("sheet_tools", "Sheet Tools", ("operational",)),
+                _HelpSectionConfig("milestones", "Milestones", ("milestones",)),
+            ),
+        ),
+        "user": _HelpAudienceConfig(
+            key="user",
+            title="User",
+            allowed_function_groups=("recruitment", "milestones", "general"),
+            sections=(
+                _HelpSectionConfig("recruitment", "Recruitment", ("recruitment",)),
+                _HelpSectionConfig("milestones", "Milestones", ("milestones",)),
+                _HelpSectionConfig("general", "General", ("general",)),
+            ),
+        ),
     }
 
     def __init__(self, bot: commands.Bot):
@@ -2597,51 +2622,75 @@ class CoreOpsCog(commands.Cog):
             return []
 
         buckets: dict[str, dict[str, list[HelpCommandInfo]]] = {
-            tier: {section: [] for section, _ in sections}
-            for tier, sections in self._HELP_SECTION_ORDER.items()
+            key: {section.key: [] for section in config.sections}
+            for key, config in self._HELP_AUDIENCE_CONFIGS.items()
         }
 
         for info in infos:
             tier_key = (info.access_tier or "user").strip().lower()
-            tier_targets: tuple[str, ...]
-            if tier_key == "admin":
-                tier_targets = ("admin",)
-            elif tier_key == "staff":
-                tier_targets = ("staff", "admin")
-            else:
-                tier_targets = ("user", "staff", "admin")
+            audience = self._HELP_AUDIENCE_CONFIGS.get(tier_key)
+            if audience is None:
+                continue
+
+            function_group = (info.function_group or "general").strip().lower()
+            if (
+                audience.allowed_function_groups
+                and function_group not in audience.allowed_function_groups
+            ):
+                continue
 
             section_key = (info.section or info.function_group or "general").strip().lower()
+            section = self._match_section_config(
+                audience, section_key=section_key, function_group=function_group
+            )
+            if section is None:
+                continue
 
-            for target in tier_targets:
-                if target not in buckets:
-                    continue
-                tier_bucket = buckets[target]
-                bucket_key = section_key if section_key in tier_bucket else None
-                if bucket_key is None and "general" in tier_bucket:
-                    bucket_key = "general"
-                if bucket_key is None and tier_bucket:
-                    bucket_key = next(iter(tier_bucket))
-                if bucket_key is None:
-                    continue
-                tier_bucket.setdefault(bucket_key, []).append(info)
-
-        for tier_bucket in buckets.values():
-            for key, items in tier_bucket.items():
-                tier_bucket[key] = sorted(items, key=self._help_sort_key)
+            buckets.setdefault(tier_key, {}).setdefault(section.key, []).append(info)
 
         tiers: list[HelpTier] = []
-        for tier_key, sections in self._HELP_SECTION_ORDER.items():
-            bucket = buckets.get(tier_key, {})
+        for key, config in self._HELP_AUDIENCE_CONFIGS.items():
+            section_bucket = buckets.get(key, {})
             tier_sections: list[HelpTierSection] = []
-            for section_key, label in sections:
-                commands = tuple(bucket.get(section_key, []))
-                tier_sections.append(
-                    HelpTierSection(label=label, commands=commands)
+            for section in config.sections:
+                commands = tuple(
+                    sorted(section_bucket.get(section.key, ()), key=self._help_sort_key)
                 )
-            title = self._HELP_TIER_TITLES.get(tier_key, tier_key.title())
-            tiers.append(HelpTier(title=title, sections=tuple(tier_sections)))
+                tier_sections.append(
+                    HelpTierSection(label=section.label, commands=commands)
+                )
+            tiers.append(HelpTier(title=config.title, sections=tuple(tier_sections)))
         return tiers
+
+    def _match_section_config(
+        self,
+        audience: _HelpAudienceConfig,
+        *,
+        section_key: str,
+        function_group: str,
+    ) -> _HelpSectionConfig | None:
+        normalized_section = section_key.strip().lower()
+        normalized_group = function_group.strip().lower()
+
+        for section in audience.sections:
+            if section.key != normalized_section:
+                continue
+            if section.allowed_function_groups and normalized_group:
+                if normalized_group not in section.allowed_function_groups:
+                    return None
+            return section
+
+        if not normalized_group:
+            return None
+
+        for section in audience.sections:
+            if section.allowed_function_groups and normalized_group:
+                if normalized_group not in section.allowed_function_groups:
+                    continue
+            if section.key == normalized_group:
+                return section
+
+        return None
 
     def _manual_overview_entries(
         self, seen: Set[str], ctx: commands.Context
@@ -2695,95 +2744,6 @@ class CoreOpsCog(commands.Cog):
                     function_group="general",
                     section="general",
                     usage_override="@Bot ping",
-                )
-            )
-
-        perm_fallbacks = (
-            "perm bot list",
-            "perm bot allow",
-            "perm bot deny",
-            "perm bot remove",
-            "perm bot sync",
-        )
-        for name in perm_fallbacks:
-            if name in seen:
-                continue
-            perm_meta = lookup_help_metadata(name)
-            if perm_meta is None or not _is_allowed(perm_meta.tier):
-                continue
-            entries.append(
-                HelpCommandInfo(
-                    qualified_name=name,
-                    signature="",
-                    short=perm_meta.short,
-                    detailed=perm_meta.detailed,
-                    aliases=(),
-                    access_tier=(perm_meta.tier or "admin"),
-                    function_group="operational",
-                    section="permissions",
-                )
-            )
-
-        welcome_name = "welcome-refresh"
-        if welcome_name not in seen:
-            welcome_meta = lookup_help_metadata(welcome_name)
-            if welcome_meta is not None:
-                entries.append(
-                    HelpCommandInfo(
-                        qualified_name=welcome_name,
-                        signature="",
-                        short=welcome_meta.short,
-                        detailed=welcome_meta.detailed,
-                        aliases=(),
-                        access_tier=welcome_meta.tier or "admin",
-                        function_group="operational",
-                        section="welcome_templates",
-                    )
-                )
-
-        staff_fallbacks = (
-            ("clanmatch", "recruitment"),
-            ("welcome", "recruitment"),
-        )
-        for name, section in staff_fallbacks:
-            if name in seen:
-                continue
-            staff_meta = lookup_help_metadata(name)
-            if staff_meta is None:
-                continue
-            entries.append(
-                HelpCommandInfo(
-                    qualified_name=name,
-                    signature="",
-                    short=staff_meta.short,
-                    detailed=staff_meta.detailed,
-                    aliases=(),
-                    access_tier=staff_meta.tier or "staff",
-                    function_group="recruitment",
-                    section=section,
-                )
-            )
-
-        user_fallbacks = (
-            ("clan", "recruitment"),
-            ("clansearch", "recruitment"),
-        )
-        for name, section in user_fallbacks:
-            if name in seen:
-                continue
-            user_meta = lookup_help_metadata(name)
-            if user_meta is None:
-                continue
-            entries.append(
-                HelpCommandInfo(
-                    qualified_name=name,
-                    signature="",
-                    short=user_meta.short,
-                    detailed=user_meta.detailed,
-                    aliases=(),
-                    access_tier=user_meta.tier or "user",
-                    function_group="recruitment",
-                    section=section,
                 )
             )
 
@@ -2917,7 +2877,7 @@ class CoreOpsCog(commands.Cog):
             "**Recruiters** use it to spot open slots, match new arrivals and drop welcome notes so nobody gets lost on day one.  \n\n"
             "_All handled right here on Discord — fast, friendly, and stitched together with that usual C1C chaos and care._ \n\n"
             "**To learn what a command does, type like this:**  \n"
-            "`!rec help rec ping` → shows info for `!rec ping`"
+            "`@Bot help ping` → shows info for `@Bot ping`"
         )
 
     def _show_empty_sections(self) -> bool:
