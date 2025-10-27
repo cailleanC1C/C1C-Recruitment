@@ -34,7 +34,8 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!rec refresh all` | 🧩 | Warm every registered cache bucket and emit a consolidated summary (30 s guild cooldown). | `!rec refresh all` |
 | `!rec reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!rec reload [--reboot]` |
 | `!clanmatch` | 🧩 | Recruiter match workflow (requires recruiter/staff role). [gated: `recruiter_panel`] | `!clanmatch` |
-| `!welcome [clan] @mention` | ✅ | Post a cached welcome template for the chosen clan. [gated: `recruitment_welcome`] | `!welcome [clan] @mention` |
+| `!welcome <clan> [@member] [note]` | ✅ | Post the legacy welcome embed with crest, pings, and general notice routing. [gated: `recruitment_welcome`] | `!welcome <clan> [@member] [note]` |
+| `!welcome-refresh` | ✅ | Reload the `WelcomeTemplates` cache bucket before running `!welcome` again. | `!welcome-refresh` |
 | `!rec ping` | 🧩 | Prefix proxy for the admin ping command (still requires admin access). | `!rec ping` |
 
 ## User — general members
@@ -46,4 +47,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-27 (v0.9.7)
+Doc last updated: 2025-10-30 (v0.9.8)
