@@ -120,6 +120,31 @@ They apply to **all phases, PRs, and documentation changes**.
 
 ---
 
+### 🔹 Doc Footer & Versioning Rules (Codex must follow)
+
+**Footer Date**
+- Do **not** set any footer date later than *today (UTC)*.
+- Only update a footer date if you changed substantive content in that file.
+- When updating, use **today’s UTC date** in `YYYY-MM-DD` or `YYYY-MM-DD HH:MM UTC`.
+- If unsure, leave the existing date unchanged.
+
+**Version Strings**
+- Do **not** change any version string (e.g., `v0.9.6`) anywhere unless explicitly approved in this PR’s body (see `[approval]` block below).
+- Never invent a version. Use exactly the approved target.
+
+**Required order in PR body**
+1. Normal PR sections
+2. *(optional)* `[approval]` block (only when date/version changes are approved)
+3. Mandatory `[meta]` block
+4. **End of file** — no text after `[meta]`.
+
+**[approval] block (only when approved)**
+[approval]
+version: vX.Y.Z # include only if a bump is approved
+footer_date: YYYY-MM-DD # or YYYY-MM-DD HH:MM UTC; include only if date update is approved
+[/approval]
+---
+
 ### 🔹 Codex PR Formatting Rules
 
 All Codex prompts must be in **one fenced code block** for clean copy/paste.
@@ -138,9 +163,7 @@ labels: <labels here>
 milestone: Harmonize v1.0
 [/meta]
 ```
-
 ---
-
 ### 🔹 Label Reference (Approved Set)
 DO not use any other labels unless approved by caillean first
 
