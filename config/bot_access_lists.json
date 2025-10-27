@@ -1,0 +1,6 @@
+{
+  "categories": {"allow": [], "deny": []},
+  "channels": {"allow": [], "deny": []},
+  "options": {"threads_default": true},
+  "updated_at": null
+}

@@ -20,6 +20,8 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!refresh all` | ✅ | Bang alias for the full cache sweep (same cooldown as the `!rec` variant). | `!refresh all` |
 | `!reload [--reboot]` | ✅ | Admin bang alias for config reload plus optional soft reboot. | `!reload [--reboot]` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
+| `!perm bot list` | ✅ | Show the current bot allow/deny lists with counts and IDs. | `!perm bot list [--json]` |
+| `!perm bot sync` | ✅ | Bulk apply bot role overwrites with audit logging. | `!perm bot sync [--dry] [--threads on|off] [--include voice|stage] [--limit N]` |
 | `!report recruiters` | ✅ | Posts Daily Recruiter Update to the configured destination (manual trigger; UTC snapshot also posts automatically). | `!report recruiters` |
 
 ## Recruiter / Staff — recruitment workflows
@@ -44,4 +46,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.7)
