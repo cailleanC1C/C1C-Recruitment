@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 import discord
 from discord.ext import commands
 
+from c1c_coreops.helpers import help_metadata, tier
+
 from modules.recruitment import cards, emoji_pipeline
 from shared.sheets import async_facade as sheets
 
@@ -58,6 +60,8 @@ class ClanProfileCog(commands.Cog):
         self.bot = bot
         self._flip_index: Dict[int, _FlipState] = {}
 
+    @tier("user")
+    @help_metadata(function_group="recruitment", section="recruitment", access_tier="user")
     @commands.command(
         name="clan",
         help="Show a clan’s profile and entry criteria by tag.",

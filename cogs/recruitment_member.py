@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from discord.ext import commands
 
+from c1c_coreops.helpers import help_metadata, tier
+
 from modules.recruitment.views.member_panel_legacy import MemberPanelControllerLegacy
 
 
@@ -12,6 +14,8 @@ class RecruitmentMember(commands.Cog):
         self.bot = bot
         self.ctrl = MemberPanelControllerLegacy(bot)
 
+    @tier("user")
+    @help_metadata(function_group="recruitment", section="recruitment", access_tier="user")
     @commands.cooldown(1, 2, commands.BucketType.user)
     @commands.command(name="clansearch")
     async def clansearch(

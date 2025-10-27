@@ -2,20 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict
+from typing import Callable, Dict, Sequence
 
 # Qualified name -> tier (e.g., "rec help", "health")
 _TIER_REGISTRY: Dict[str, str] = {}
 
 
-def _set_tier(cmd, level: str) -> None:
-    # Extras is stable across Command.copy() since discord.py 2.x.
+def _ensure_extras(cmd) -> Dict[str, str]:
     try:
         extras = getattr(cmd, "extras", None)
-        if isinstance(extras, dict):
-            extras["tier"] = level
     except Exception:
-        pass
+        extras = None
+    if not isinstance(extras, dict):
+        extras = {}
+        try:
+            setattr(cmd, "extras", extras)
+        except Exception:
+            pass
+    return extras
+
+
+def _set_tier(cmd, level: str) -> None:
+    # Extras is stable across Command.copy() since discord.py 2.x.
+    extras = _ensure_extras(cmd)
+    extras["tier"] = level
+    extras.setdefault("access_tier", level)
     # Also stamp an attribute for convenience on the current object.
     try:
         setattr(cmd, "_tier", level)
@@ -47,13 +58,14 @@ def rehydrate_tiers(bot) -> None:
     for cmd in bot.walk_commands():
         # Prefer extras if already present
         level = None
+        extras = None
         try:
             extras = getattr(cmd, "extras", None)
-            if isinstance(extras, dict):
-                level = extras.get("tier")
         except Exception:
-            level = None
-
+            extras = None
+        if isinstance(extras, dict):
+            level = extras.get("tier") or extras.get("access_tier")
+        
         if not level:
             # Fallback to registry by qualified_name, then name.
             qn = getattr(cmd, "qualified_name", None)
@@ -64,6 +76,35 @@ def rehydrate_tiers(bot) -> None:
 
         if level:
             _set_tier(cmd, level)
+
+
+def help_metadata(
+    *,
+    function_group: str,
+    section: str | None = None,
+    access_tier: str | None = None,
+    usage: str | None = None,
+    flags: str | Sequence[str] | None = None,
+) -> Callable:
+    """Decorator to attach help layout metadata to a command."""
+
+    def wrapper(cmd):
+        extras = _ensure_extras(cmd)
+        extras.setdefault("function_group", function_group)
+        if section is not None:
+            extras.setdefault("help_section", section)
+        if access_tier is not None:
+            extras["access_tier"] = access_tier
+        if usage is not None:
+            extras["help_usage"] = usage
+        if flags is not None:
+            if isinstance(flags, str):
+                extras["help_flags"] = [flags]
+            else:
+                extras["help_flags"] = list(flags)
+        return cmd
+
+    return wrapper
 
 
 def audit_tiers(bot, logger=None) -> None:

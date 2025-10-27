@@ -54,6 +54,13 @@ flowchart TD
 - CoreOps now lives in `packages/c1c-coreops/src/c1c_coreops/`.
 - CoreOps helpers ship only in the `c1c_coreops` package; no shared shims remain.
 
+### Help metadata
+- Commands opt-in to the multi-embed help surface via the `help_metadata` decorator.
+- Each command carries `access_tier` (admin/staff/user), a `function_group`, and a
+  `help_section` hint so `@Bot help` can assemble the Overview + Admin/Staff/User embeds.
+- Empty sections collapse automatically; set `SHOW_EMPTY_SECTIONS=true` to render a
+  “Coming soon” placeholder. The footer always reads `Bot v… · CoreOps v… • For details: @Bot help`.
+
 ### Feature gating at load
 - **Module wiring:** Feature modules call `modules.common.feature_flags.is_enabled(<key>)` during boot.
   Disabled toggles block command registration and watcher wiring; the bot logs the skip

@@ -14,7 +14,7 @@ from discord.ext import commands
 
 from modules.common import config_access as config
 from modules.common import feature_flags
-from c1c_coreops.helpers import tier
+from c1c_coreops.helpers import help_metadata, tier
 from modules.recruitment.views.recruiter_panel import RecruiterPanelView
 from c1c_coreops.rbac import is_admin_member, is_recruiter
 
@@ -210,6 +210,7 @@ class RecruiterPanelCog(commands.Cog):
         return channel, True
 
     @tier("staff")
+    @help_metadata(function_group="recruitment", section="recruitment", access_tier="staff")
     @commands.command(
         name="clanmatch",
         help="Launches the text-only recruiter panel used to match recruits with clans.",

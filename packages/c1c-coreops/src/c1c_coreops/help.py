@@ -18,6 +18,11 @@ class HelpCommandInfo:
     short: str
     detailed: str
     aliases: Sequence[str]
+    access_tier: str
+    function_group: str
+    section: str | None = None
+    usage_override: str | None = None
+    flags: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
@@ -180,6 +185,14 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
+    "welcome-refresh": _metadata(
+        short="Reloads the WelcomeTemplates cache bucket.",
+        detailed=(
+            "Forces the WelcomeTemplates bucket to sync from Google Sheets so fresh welcome messages are available immediately.\n"
+            "Tip: Run this after updating template rows or flags before calling `!welcome`."
+        ),
+        tier="admin",
+    ),
     "reload": _metadata(
         short="Reloads core configuration and modules.",
         detailed=(
@@ -287,8 +300,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         short="Shows help for bot commands.",
         detailed=(
             "Lists all available commands or gives details for one specific command when you add its name.\n"
-            "⚠️ Typing `help` without the prefix calls help from **all bots**. Always use `!rec help` for this one.\n"
-            "Tip: Try `!rec help clansearch` for a how-to on that one."
+            "Tip: Try `@Bot help clansearch` for a how-to on that one."
         ),
         tier="user",
     ),
@@ -296,7 +308,6 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         short="Checks if the bot is awake.",
         detailed=(
             "A simple test command that responds with “pong” to confirm the bot is online and responsive.\n"
-            "⚠️ Using `ping` without `!rec` will make every active bot reply. Keep the prefix.\n"
             "Tip: If it doesn’t answer, the bot might be rebooting or down."
         ),
         tier="user",
@@ -318,6 +329,22 @@ class HelpOverviewSection:
     label: str
     blurb: str
     commands: Sequence[HelpCommandInfo]
+
+
+@dataclass(frozen=True)
+class HelpTierSection:
+    """Section rendered inside a tier-specific help embed."""
+
+    label: str
+    commands: Sequence[HelpCommandInfo]
+
+
+@dataclass(frozen=True)
+class HelpTier:
+    """Tier-specific help embed metadata."""
+
+    title: str
+    sections: Sequence[HelpTierSection]
 
 
 def build_coreops_footer(
@@ -400,6 +427,54 @@ def build_help_detail_embed(
     return embed
 
 
+def build_help_overview_embeds(
+    *,
+    prefix: str,
+    overview_title: str,
+    overview_description: str,
+    tiers: Sequence[HelpTier],
+    bot_version: str,
+    notes: str = "",
+    colour: discord.Colour | None = None,
+    show_empty_sections: bool = False,
+) -> list[discord.Embed]:
+    """Return the ordered embed list for the multi-pane overview."""
+
+    embeds: list[discord.Embed] = []
+    colour = colour or discord.Color.blurple()
+    footer_text = build_coreops_footer(bot_version=bot_version, notes=notes)
+
+    overview = discord.Embed(title=overview_title, colour=colour)
+    overview.description = overview_description.strip()
+    overview.set_footer(text=footer_text)
+    embeds.append(overview)
+
+    for tier in tiers:
+        embed = discord.Embed(title=tier.title, colour=colour)
+        field_total = 0
+        for section in tier.sections:
+            chunks = _build_section_chunks(
+                prefix,
+                section.label,
+                section.commands,
+                show_empty=show_empty_sections,
+            )
+            for name, value in chunks:
+                embed.add_field(name=name, value=value, inline=False)
+                field_total += 1
+                if field_total >= 12:
+                    break
+            if field_total >= 12:
+                break
+        if field_total == 0 and not show_empty_sections:
+            # Skip tiers with no visible sections.
+            continue
+        embed.set_footer(text=footer_text)
+        embeds.append(embed)
+
+    return embeds
+
+
 def _format_usage(prefix: str, qualified_name: str, signature: str | None) -> str:
     sig = (signature or "").strip()
     name = (qualified_name or "").strip()
@@ -408,9 +483,7 @@ def _format_usage(prefix: str, qualified_name: str, signature: str | None) -> st
 
 
 def _format_summary_line(prefix: str, command: HelpCommandInfo) -> str:
-    usage = _format_usage(prefix, command.qualified_name, None)
-    summary = command.short.strip() if command.short else "—"
-    return f"• `{usage}` — {summary}"
+    return _format_overview_lines(prefix, command)[0]
 
 
 def _format_section_value(blurb: str, lines: Sequence[str], *, limit: int = 900) -> str:
@@ -442,3 +515,77 @@ def _join_and_truncate(lines: Sequence[str], limit: int = 900) -> str:
         total += addition
 
     return "\n".join(collected) if collected else "—"
+
+
+def _build_section_chunks(
+    prefix: str,
+    label: str,
+    commands: Sequence[HelpCommandInfo],
+    *,
+    show_empty: bool,
+    limit: int = 800,
+) -> list[tuple[str, str]]:
+    entries = [command for command in commands if command]
+    if not entries:
+        if not show_empty:
+            return []
+        return [(label, "Coming soon")]
+
+    lines: list[str] = []
+    for command in entries:
+        lines.extend(_format_overview_lines(prefix, command))
+
+    chunks = _chunk_lines(lines, limit=limit)
+    fields: list[tuple[str, str]] = []
+    for index, chunk in enumerate(chunks):
+        field_name = label if index == 0 else f"{label} (cont.)"
+        fields.append((field_name, chunk))
+    return fields
+
+
+def _format_overview_lines(prefix: str, command: HelpCommandInfo) -> tuple[str, ...]:
+    usage = command.usage_override or _format_usage(prefix, command.qualified_name, None)
+    summary = command.short.strip() if command.short else "—"
+    first_line = f"• `{usage}` — {summary}"
+    lines: list[str] = [first_line]
+    if command.flags:
+        flags = ", ".join(flag.strip() for flag in command.flags if flag and flag.strip())
+        if flags:
+            lines.append(f"↳ flags: {flags}")
+    return tuple(lines)
+
+
+def _chunk_lines(lines: Sequence[str], *, limit: int) -> list[str]:
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    def flush() -> None:
+        nonlocal current, current_len
+        if current:
+            chunks.append("\n".join(current))
+            current = []
+            current_len = 0
+
+    for line in lines:
+        text = line.strip("\n")
+        if not text:
+            text = ""
+        projected = current_len + (1 if current else 0) + len(text)
+        if projected > limit and current:
+            flush()
+        if len(text) > limit:
+            start = 0
+            while start < len(text):
+                end = min(start + limit, len(text))
+                segment = text[start:end]
+                if current:
+                    flush()
+                chunks.append(segment)
+                start = end
+            continue
+        current.append(text)
+        current_len = current_len + (1 if current_len and text else 0) + len(text)
+
+    flush()
+    return chunks or [""]
