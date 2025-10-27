@@ -29,6 +29,9 @@ class CacheBucket:
         "last_result",
         "last_error",
         "last_retries",
+        "last_item_count",
+        "last_trigger",
+        "last_ttl_expired",
     )
     def __init__(self, name: str, ttl_sec: int, loader: Loader):
         self.name = name
@@ -41,6 +44,9 @@ class CacheBucket:
         self.last_result: Optional[str] = None
         self.last_error: Optional[str] = None
         self.last_retries: int = 0
+        self.last_item_count: Optional[int] = None
+        self.last_trigger: Optional[str] = None
+        self.last_ttl_expired: Optional[bool] = None
 
     def age_sec(self) -> Optional[int]:
         if not self.last_refresh:
@@ -109,6 +115,15 @@ class CacheService:
         retries = 0
         success = False
         new_val: Any = None
+        ttl_expired = False
+        try:
+            age = b.age_sec()
+        except Exception:
+            age = None
+        if b.last_refresh is None:
+            ttl_expired = True
+        elif isinstance(age, int):
+            ttl_expired = age >= b.ttl_sec
         try:
             # run loader with async backoff (single retry on failure)
             try:
@@ -143,6 +158,7 @@ class CacheService:
             if success:
                 b.value = new_val
                 b.last_refresh = dt.datetime.now(UTC)
+                b.last_item_count = _count_items(new_val)
         except asyncio.CancelledError:
             # Let the runtime cancel this task; finally will still run
             result = "cancelled"
@@ -156,6 +172,8 @@ class CacheService:
             b.last_result = result
             b.last_error = err_text
             b.last_retries = retries
+            b.last_trigger = trigger
+            b.last_ttl_expired = ttl_expired
             await self._log_refresh(b, trigger=trigger, actor=actor, retries=retries)
             # clear marker
             b.refreshing = None
@@ -165,17 +183,40 @@ class CacheService:
         error_text = b.last_error or "-"
         if actor == "cron":
             return
+        ttl_flag = "unknown"
+        if b.last_ttl_expired is True:
+            ttl_flag = "true"
+        elif b.last_ttl_expired is False:
+            ttl_flag = "false"
+        count_text = "-"
+        if isinstance(b.last_item_count, int):
+            count_text = str(b.last_item_count)
         msg = (
             f"[refresh] bucket={b.name} trigger={trigger} "
             f"actor={actor or '-'} duration={b.last_latency_ms or 0}ms "
             f"result={b.last_result or 'unknown'} retries={retries} "
-            f"error={error_text}"
+            f"ttl_expired={ttl_flag} count={count_text} error={error_text}"
         )
         try:
             await rt.send_log_message(msg)
         except Exception:
             # Avoid cascading failures if logging channel fails
             pass
+
+
+def _count_items(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return len(value)
+    if isinstance(value, (set, list, tuple)):
+        return len(value)
+    if hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
+        try:
+            return len(value)  # type: ignore[arg-type]
+        except Exception:  # pragma: no cover - defensive guard
+            return None
+    return None
 
 cache = CacheService()
 
@@ -216,4 +257,7 @@ def get_bucket_snapshot(name: str) -> Dict[str, Any]:
         "next_refresh_at": next_refresh,
         "last_result": getattr(bucket, "last_result", None),
         "last_error": getattr(bucket, "last_error", None),
+        "last_trigger": getattr(bucket, "last_trigger", None),
+        "ttl_expired": getattr(bucket, "last_ttl_expired", None),
+        "item_count": getattr(bucket, "last_item_count", None),
     }

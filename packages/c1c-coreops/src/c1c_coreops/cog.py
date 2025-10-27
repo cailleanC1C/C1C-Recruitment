@@ -2423,11 +2423,23 @@ class CoreOpsCog(commands.Cog):
         if len(cleaned_error) > 70:
             cleaned_error = f"{cleaned_error[:67]}…"
 
+        ttl_display = "?"
+        if snapshot.ttl_expired is True:
+            ttl_display = "yes"
+        elif snapshot.ttl_expired is False:
+            ttl_display = "no"
+
+        count_display = "-"
+        if snapshot.item_count is not None:
+            count_display = str(snapshot.item_count)
+
         return RefreshEmbedRow(
             bucket=label,
             duration=duration_text,
             result=display_result or "-",
             retries=retries,
+            ttl_expired=ttl_display,
+            count=count_display,
             error=cleaned_error or "-",
         )
 

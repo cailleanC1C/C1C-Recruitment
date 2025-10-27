@@ -307,6 +307,23 @@ def dedupe() -> Dict[str, int]:
     return results
 
 
+def _collapse_row_ranges(indexes: Sequence[int]) -> List[Tuple[int, int]]:
+    if not indexes:
+        return []
+    ranges: List[Tuple[int, int]] = []
+    start = indexes[0]
+    prev = indexes[0]
+    for idx in indexes[1:]:
+        if idx == prev + 1:
+            prev = idx
+            continue
+        ranges.append((start, prev))
+        start = idx
+        prev = idx
+    ranges.append((start, prev))
+    return ranges
+
+
 def _dedupe_sheet(
     ws,
     *,
@@ -328,10 +345,40 @@ def _dedupe_sheet(
         seen[key] = idx  # keep last occurrence
 
     keep_rows = set(seen.values())
+    to_delete = [
+        row_idx
+        for row_idx in range(2, len(values) + 1)
+        if row_idx not in keep_rows
+    ]
+    if not to_delete:
+        return 0
+
+    ranges = _collapse_row_ranges(sorted(to_delete))
+    requests = [
+        {
+            "deleteDimension": {
+                "range": {
+                    "sheetId": ws.id,
+                    "dimension": "ROWS",
+                    "startIndex": start - 1,
+                    "endIndex": end,
+                }
+            }
+        }
+        for start, end in reversed(ranges)
+    ]
+
     deleted = 0
-    for row_idx in range(len(values), 1, -1):
-        if row_idx in keep_rows:
-            continue
+    try:
+        core.call_with_backoff(ws.spreadsheet.batch_update, {"requests": requests})
+        for start, end in ranges:
+            deleted += end - start + 1
+        return deleted
+    except Exception:
+        pass
+
+    # Fallback to per-row deletes if batch update fails.
+    for row_idx in sorted(to_delete, reverse=True):
         try:
             core.call_with_backoff(ws.delete_rows, row_idx)
             deleted += 1
