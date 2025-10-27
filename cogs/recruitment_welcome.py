@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from discord.ext import commands
 
 from c1c_coreops.helpers import tier
 from c1c_coreops.rbac import is_admin_member, is_staff_member
-from modules.common import runtime as rt
-from shared.sheets import async_facade as sheets
+from modules.recruitment.welcome import WelcomeCommandService
 
 
 def staff_only():
@@ -31,13 +30,14 @@ def staff_only():
 
 
 class WelcomeBridge(commands.Cog):
-    """Recruitment welcome command using cached templates."""
+    """Recruitment welcome command using cached templates and legacy parity."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._service = WelcomeCommandService(bot)
 
     @tier("staff")
-    @commands.command(name="welcome", usage="[clan] @mention")
+    @commands.command(name="welcome", usage="<clan> [@member] [note]")
     @staff_only()
     async def welcome(
         self,
@@ -48,38 +48,15 @@ class WelcomeBridge(commands.Cog):
     ) -> None:
         """Post a templated welcome message for the provided clan tag."""
 
-        templates = await sheets.get_cached_welcome_templates()
-        if not templates:
-            await ctx.send("⚠️ No welcome templates found. Try again after the next refresh.")
-            return
+        await self._service.post_welcome(ctx, clan, tail=note)
 
-        tag = (clan or "").strip().upper()
-        row: Optional[Dict[str, Any]] = None
-        for entry in templates:
-            rtag = str(entry.get("ClanTag", "")).strip().upper()
-            if rtag == tag:
-                row = entry
-                break
+    @tier("staff")
+    @commands.command(name="welcome-refresh")
+    @staff_only()
+    async def welcome_refresh(self, ctx: commands.Context) -> None:
+        """Reload the WelcomeTemplates cache bucket."""
 
-        if not row:
-            await ctx.send(f"⚠️ No template configured for clan tag `{tag}`.")
-            return
-
-        text = str(row.get("Message", "")).strip()
-        if not text:
-            await ctx.send(f"⚠️ Template for `{tag}` is missing a 'Message' field.")
-            return
-        if note:
-            text = f"{text}\n\n{note}"
-
-        await ctx.send(text)
-
-        try:
-            await rt.send_log_message(
-                f"[welcome] actor={ctx.author} clan={tag} channel=#{getattr(ctx.channel, 'name', '?')}"
-            )
-        except Exception:
-            pass
+        await self._service.refresh_templates(ctx)
 
 
 async def setup(bot: commands.Bot) -> None:

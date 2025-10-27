@@ -1,7 +1,7 @@
 <!-- Keep README user-facing -->
 <!-- Dev layout reference: recruitment modules now live in modules/recruitment/, -->
 <!-- shared sheet adapters consolidate under shared/sheets/. See docs/Architecture.md. -->
-# C1C Recruitment Bot v0.9.6
+# C1C Recruitment Bot v0.9.8
 Welcome to the C1C recruitment helper.  
 The bot keeps clan rosters healthy, helps new friends find their hall, and makes sure every welcome lands in the right place.
 
@@ -10,7 +10,7 @@ The bot keeps clan rosters healthy, helps new friends find their hall, and makes
 !clan <tag> — shows a quick profile for any clan in the cluster.
 !clansearch — opens the member search panel with the latest roster filters.
 !clanmatch — recruiter-only panel to match players with open clans.
-!welcome — staff command that posts the standard welcome note once a recruit joins.
+!welcome — staff command that posts the legacy welcome embed (crest, ping, notice) with optional note support.
 
 The bot pulls live data from the cluster sheets so info stays current.
 
@@ -21,4 +21,4 @@ The bot pulls live data from the cluster sheets so info stays current.
 
 ---
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.8)
