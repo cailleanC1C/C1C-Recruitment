@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Sequence
 
 import discord
 import pytest
@@ -50,9 +50,17 @@ class HelpContext:
         self._replies: list[discord.Embed] = []
         self.command = None
 
-    async def reply(self, *args: object, embed: discord.Embed | None = None, **_: object) -> None:
+    async def reply(
+        self,
+        *args: object,
+        embed: discord.Embed | None = None,
+        embeds: Sequence[discord.Embed] | None = None,
+        **_: object,
+    ) -> None:
         if embed is not None:
             self._replies.append(embed)
+        if embeds:
+            self._replies.extend(embeds)
 
 
 @pytest.fixture(autouse=True)
@@ -93,49 +101,60 @@ def test_admin_help_lists_bare_and_tagged(monkeypatch: pytest.MonkeyPatch) -> No
             assert cog is not None
             ctx = HelpContext(bot)
             await cog.render_help(ctx)
-            assert ctx._replies, "Help did not reply with an embed"
-            fields = _extract_fields(ctx._replies[0])
-            admin_block = fields.get("admin", "")
-            staff_block = fields.get("recruiter/staff", "")
-            user_block = fields.get("user", "")
-            combined = "\n".join([admin_block, staff_block, user_block])
+            assert ctx._replies, "Help did not reply with embeds"
+            assert len(ctx._replies) == 4
 
-            bare_expected = [
-                "!checksheet",
-                "!config",
-                "!digest",
-                "!env",
-                "!health",
-                "!ping",
-                "!refresh",
-                "!refresh all",
-                "!reload",
-            ]
-            tagged_expected = [
-                "!rec checksheet",
-                "!rec config",
-                "!rec digest",
-                "!rec env",
-                "!rec health",
-                "!rec ping",
-                "!rec refresh",
-                "!rec refresh all",
-                "!rec reload",
-            ]
+            overview = ctx._replies[0]
+            assert overview.title == "C1C-Recruitment — help"
 
-            for entry in bare_expected:
-                if entry == "!refresh all":
-                    assert (
-                        entry in admin_block
-                        or f"!rec {entry[1:]}" in admin_block
-                    ), f"Expected {entry} or its tagged variant in admin help"
-                    continue
-                assert entry in admin_block
+            embeds_by_title = {embed.title: embed for embed in ctx._replies[1:]}
+            admin_embed = embeds_by_title.get("Admin / Operational")
+            staff_embed = embeds_by_title.get("Staff")
+            user_embed = embeds_by_title.get("User")
+            assert admin_embed and staff_embed and user_embed
 
-            for entry in tagged_expected:
+            admin_fields = _extract_fields(admin_embed)
+            staff_fields = _extract_fields(staff_embed)
+            user_fields = _extract_fields(user_embed)
+
+            admin_text = " \n ".join(admin_fields.values())
+            staff_text = " \n ".join(staff_fields.values())
+            user_text = " \n ".join(user_fields.values())
+
+            for expected in (
+                "`!rec env`",
+                "`!rec health`",
+                "`!perm bot list`",
+                "`!perm bot sync`",
+                "`!welcome-refresh`",
+                "`!rec reload`",
+            ):
                 assert (
-                    entry in combined
-                ), f"Tagged command {entry} missing from help overview"
+                    expected in admin_text
+                ), f"Expected {expected} in admin embed"
+
+            for expected in (
+                "`!rec checksheet`",
+                "`!rec config`",
+                "`!rec digest`",
+                "`!rec refresh`",
+                "`!rec refresh all`",
+                "`!clanmatch`",
+                "`!welcome`",
+            ):
+                assert (
+                    expected in staff_text
+                ), f"Expected {expected} in staff embed"
+
+            for expected in (
+                "`@Bot help`",
+                "`@Bot ping`",
+                "`!clan`",
+                "`!clansearch`",
+            ):
+                assert (
+                    expected in user_text
+                ), f"Expected {expected} in user embed"
         finally:
             await bot.close()
 
@@ -163,26 +182,20 @@ def test_admin_help_without_tag(monkeypatch: pytest.MonkeyPatch) -> None:
             ctx = HelpContext(bot)
             await cog.render_help(ctx)
             assert ctx._replies
-            fields = _extract_fields(ctx._replies[0])
-            admin_block = fields.get("admin", "")
-            for entry in [
-                "!checksheet",
-                "!config",
-                "!digest",
-                "!env",
-                "!health",
-                "!ping",
-                "!refresh",
-                "!refresh all",
-                "!reload",
-            ]:
-                if entry == "!refresh all":
-                    assert (
-                        entry in admin_block
-                        or f"!rec {entry[1:]}" in admin_block
-                    )
-                    continue
-                assert entry in admin_block
+            admin_embed = next(
+                (embed for embed in ctx._replies if embed.title == "Admin / Operational"),
+                None,
+            )
+            assert admin_embed is not None
+            admin_text = " \n ".join(_extract_fields(admin_embed).values())
+            for entry in (
+                "`!rec env`",
+                "`!rec health`",
+                "`!rec refresh`",
+                "`!rec refresh all`",
+                "`!rec reload`",
+            ):
+                assert entry in admin_text
         finally:
             await bot.close()
 
@@ -205,21 +218,22 @@ def test_admin_help_includes_perm_commands(monkeypatch: pytest.MonkeyPatch) -> N
             assert cog is not None
             ctx = HelpContext(bot)
             await cog.render_help(ctx)
-            assert ctx._replies, "Help did not reply with an embed"
-            fields = _extract_fields(ctx._replies[0])
-            admin_block = fields.get("admin", "")
+            assert ctx._replies, "Help did not reply with embeds"
+            admin_embed = next(
+                (embed for embed in ctx._replies if embed.title == "Admin / Operational"),
+                None,
+            )
+            assert admin_embed is not None
+            admin_text = " \n ".join(_extract_fields(admin_embed).values())
 
-            expected = [
-                "!perm",
-                "!perm bot list",
-                "!perm bot allow",
-                "!perm bot deny",
-                "!perm bot remove",
-                "!perm bot sync",
-            ]
-
-            for entry in expected:
-                assert entry in admin_block, f"Expected {entry} in admin help output"
+            for entry in (
+                "`!perm bot list`",
+                "`!perm bot allow`",
+                "`!perm bot deny`",
+                "`!perm bot remove`",
+                "`!perm bot sync`",
+            ):
+                assert entry in admin_text, f"Expected {entry} in admin help output"
         finally:
             await bot.close()
 

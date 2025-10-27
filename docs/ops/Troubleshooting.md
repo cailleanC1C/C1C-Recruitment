@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | `n/a` ages in `!digest` | Bot restarted → cache not yet warmed | wait 5 min or run `!rec refresh all` |
 | “No tabs listed in Config” | Missing key in Sheet Config tab | check sheet permissions + tab names |
-| “I can't find a configured welcome for **TAG**. Add it in the sheet.” | Row missing or inactive in `WelcomeTemplates`; confirm `ACTIVE` = `Y`. | Update the sheet then run `!welcome-refresh` |
+| “I can't find a configured welcome for **TAG**. Add it in the sheet.” | Row missing or inactive in `WelcomeTemplates`; confirm `ACTIVE` = `Y`. | Update the sheet then ask an admin to run `!welcome-refresh` |
 
 Refer to the automation keys listed in [`Config.md`](Config.md#automation-listeners--cron-jobs)
 when adjusting cadences or toggles.
@@ -56,4 +56,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-10-27 (v0.9.8)
+Doc last updated: 2025-10-27 (v0.9.x)

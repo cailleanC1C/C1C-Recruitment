@@ -25,12 +25,12 @@
 |8|Pass|Env key discovery pulls from runtime snapshot + env vars using configured hints; sheet metadata keys map to env-configurable names rather than literals.|No new constants introduced for sheet/env keys.|
 
 ## Command notes
-### !help
-* User-tier command renders overview/detail embeds with sanitized replies and friendly fallbacks when no commands or unknown lookups occur.
+### @Bot help
+* Mention entry renders the overview + tier embeds with sanitized replies and friendly fallbacks when no commands or unknown lookups occur.
 * Command discovery suppresses denial spam and verifies tier/permission checks before including entries, matching Phase 3 spec behavior.
 
-### !ping
-* `!rec ping` delegates to the global `ping` command, reporting availability if the base handler is missing.
+### @Bot ping
+* Mention entry delegates to the prefix proxy, reporting availability if the base handler is missing.
 * Base `!ping` remains admin-only and reacts with 🏓, so the proxy inherits RBAC via the shared decorator.
 
 ### !config
@@ -67,4 +67,4 @@
 ## Risk scan
 * No blocking risks observed—extension contract, config sourcing, embed parity, and RBAC controls all validate cleanly in the current codebase.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.x)

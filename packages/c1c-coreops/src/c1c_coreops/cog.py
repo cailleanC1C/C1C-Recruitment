@@ -49,13 +49,14 @@ from shared.cache.telemetry import list_buckets as cache_list_buckets
 from .help import (
     COREOPS_VERSION,
     HelpCommandInfo,
-    HelpOverviewSection,
+    HelpTier,
+    HelpTierSection,
     build_coreops_footer,
     build_help_detail_embed,
-    build_help_overview_embed,
+    build_help_overview_embeds,
     lookup_help_metadata,
 )
-from .helpers import tier
+from .helpers import help_metadata, tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.sheets.async_core import (
     aget_worksheet,
@@ -610,8 +611,11 @@ def _admin_roles_configured() -> bool:
 
 def _get_tier(cmd: commands.Command[Any, Any, Any]) -> str:
     extras = getattr(cmd, "extras", None)
-    level = extras.get("tier") if isinstance(extras, dict) else None
-    return level or getattr(cmd, "_tier", "user")
+    if isinstance(extras, dict):
+        level = extras.get("access_tier") or extras.get("tier")
+    else:
+        level = None
+    return str(level) if level else getattr(cmd, "_tier", "user")
 
 
 def _should_show(cmd: commands.Command[Any, Any, Any]) -> bool:
@@ -964,6 +968,31 @@ class _IdResolver:
         return "(not found)"
 
 class CoreOpsCog(commands.Cog):
+    _HELP_TIER_TITLES: Dict[str, str] = {
+        "admin": "Admin / Operational",
+        "staff": "Staff",
+        "user": "User",
+    }
+    _HELP_SECTION_ORDER: Dict[str, List[Tuple[str, str]]] = {
+        "admin": [
+            ("config_health", "Config & Health"),
+            ("sheets_cache", "Sheets & Cache"),
+            ("permissions", "Permissions"),
+            ("utilities", "Utilities"),
+            ("welcome_templates", "Welcome Templates"),
+        ],
+        "staff": [
+            ("recruitment", "Recruitment"),
+            ("sheet_tools", "Sheet Tools"),
+            ("milestones", "Milestones"),
+        ],
+        "user": [
+            ("recruitment", "Recruitment"),
+            ("milestones", "Milestones"),
+            ("general", "General"),
+        ],
+    }
+
     def __init__(self, bot: commands.Bot):
         _ensure_config_module()
         self.bot = bot
@@ -1042,7 +1071,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.send(
             str(
                 sanitize_text(
-                    "Use !rec help, !rec help <command>, or !rec help <command> <subcommand>."
+                    "Use @Bot help, @Bot help <command>, or @Bot help <command> <subcommand>."
                 )
             )
         )
@@ -1288,6 +1317,7 @@ class CoreOpsCog(commands.Cog):
         logger.info(log_msg, extra=extra)
 
     @tier("admin")
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
     @rec.command(name="health")
     @ops_only()
     async def rec_health(self, ctx: commands.Context) -> None:
@@ -1854,6 +1884,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     @tier("staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec.command(name="checksheet")
     @guild_only_denied_msg()
     @ops_only()
@@ -1976,6 +2007,7 @@ class CoreOpsCog(commands.Cog):
             await ctx.reply(str(sanitize_text(fallback_line)))
 
     @tier("staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec.command(name="digest")
     @ops_only()
     async def rec_digest(self, ctx: commands.Context) -> None:
@@ -2026,6 +2058,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     @tier("admin")
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
     @rec.command(name="env")
     @guild_only_denied_msg()
     @admin_only()
@@ -2040,7 +2073,7 @@ class CoreOpsCog(commands.Cog):
         await self._env_impl(ctx)
 
     @tier("user")
-    @rec.command(name="help", usage="[command]")
+    @rec.command(name="help", usage="[command]", extras={"hide_in_help": True})
     async def rec_help(
         self, ctx: commands.Context, *, query: str | None = None
     ) -> None:
@@ -2052,7 +2085,7 @@ class CoreOpsCog(commands.Cog):
         await self._render_help(ctx, query=query)
 
     @tier("user")
-    @rec.command(name="ping")
+    @rec.command(name="ping", extras={"hide_in_help": True})
     async def rec_ping(self, ctx: commands.Context) -> None:
         command = self.bot.get_command("ping")
         if command is None:
@@ -2069,18 +2102,21 @@ class CoreOpsCog(commands.Cog):
         lookup = query.strip() if isinstance(query, str) else ""
 
         if not lookup:
-            sections = await self._gather_overview_sections(ctx)
-            if not sections:
+            tiers = await self._gather_overview_tiers(ctx)
+            if not tiers:
                 await ctx.reply(str(sanitize_text("No commands available.")))
                 return
-            embed = build_help_overview_embed(
+            embeds = build_help_overview_embeds(
                 prefix=prefix,
-                sections=sections,
+                overview_title="C1C-Recruitment — help",
+                overview_description=self._help_bot_description(bot_name=bot_name),
+                tiers=tiers,
                 bot_version=bot_version,
-                bot_name=bot_name,
-                bot_description=self._help_bot_description(bot_name=bot_name),
+                notes=" • For details: @Bot help",
+                show_empty_sections=self._show_empty_sections(),
             )
-            await ctx.reply(embed=sanitize_embed(embed))
+            sanitized = [sanitize_embed(embed) for embed in embeds]
+            await ctx.reply(embeds=sanitized)
             return
 
         normalized_lookup = " ".join(lookup.lower().split())
@@ -2251,6 +2287,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.reply(embed=sanitize_embed(embed))
 
     @tier("staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec.command(name="config")
     @guild_only_denied_msg()
     @ops_only()
@@ -2292,6 +2329,7 @@ class CoreOpsCog(commands.Cog):
         await self._reload_impl(ctx, reboot=reboot)
 
     @tier("admin")
+    @help_metadata(function_group="operational", section="utilities", access_tier="admin")
     @rec.command(name="reload")
     @guild_only_denied_msg()
     @ops_only()
@@ -2320,6 +2358,7 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_root(ctx)
 
     @tier("admin")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
@@ -2397,6 +2436,7 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_all_impl(ctx)
 
     @tier("admin")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
@@ -2517,21 +2557,16 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_clansinfo_impl(ctx)
 
     @tier("staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
     @rec_refresh.command(name="clansinfo")
     @guild_only_denied_msg()
     @ops_only()
     async def rec_refresh_clansinfo(self, ctx: commands.Context) -> None:
         await self._refresh_clansinfo_impl(ctx)
 
-    async def _gather_overview_sections(
+    async def _gather_overview_tiers(
         self, ctx: commands.Context
-    ) -> list[HelpOverviewSection]:
-        grouped: dict[str, list[commands.Command[Any, Any, Any]]] = {
-            "user": [],
-            "staff": [],
-            "admin": [],
-        }
-
+    ) -> list[HelpTier]:
         commands_iter: list[commands.Command[Any, Any, Any]] = []
         for command in self.bot.walk_commands():
             if not _should_show(command):
@@ -2543,6 +2578,7 @@ class CoreOpsCog(commands.Cog):
         commands_iter.sort(key=lambda cmd: cmd.qualified_name)
 
         seen: set[str] = set()
+        infos: list[HelpCommandInfo] = []
         for command in commands_iter:
             base_name = command.qualified_name
             if base_name in seen:
@@ -2550,63 +2586,192 @@ class CoreOpsCog(commands.Cog):
             seen.add(base_name)
             if not await self._can_display_command(command, ctx):
                 continue
-            level = _get_tier(command)
-            metadata = (
-                lookup_help_metadata(command.qualified_name)
-                or lookup_help_metadata(command.name)
-                or None
-            )
-            if metadata and metadata.tier:
-                level = metadata.tier
-            if level not in grouped:
-                level = "user"
-            grouped[level].append(command)
+            infos.append(self._build_help_info(command))
 
-        author = getattr(ctx, "author", None)
-        allowed: set[str] = {"user"}
-        if can_view_staff(author):
-            allowed.add("staff")
-        if can_view_admin(author):
-            allowed.add("admin")
+        manual_infos = self._manual_overview_entries(seen)
+        if manual_infos:
+            infos.extend(manual_infos)
+            seen.update(item.qualified_name for item in manual_infos)
 
-        tier_order: list[tuple[str, str, str]] = [
-            ("admin", "Admin", "Operational controls reserved for administrators."),
-            (
-                "staff",
-                "Recruiter/Staff",
-                "Tools for recruiters and staff managing applicant workflows.",
-            ),
-            ("user", "User", "Player-facing commands for everyday recruitment checks."),
-        ]
+        if not infos:
+            return []
 
-        seen: set[str] = set()
-        sections: list[HelpOverviewSection] = []
-        for key, label, blurb in tier_order:
-            if key not in allowed:
-                continue
-            commands_for_tier = grouped.get(key, [])
-            if not commands_for_tier:
-                continue
-            filtered_commands: list[commands.Command[Any, Any, Any]] = []
-            for command in sorted(
-                commands_for_tier, key=lambda command: command.qualified_name
-            ):
-                base_name = command.qualified_name
-                if base_name in seen:
+        buckets: dict[str, dict[str, list[HelpCommandInfo]]] = {
+            tier: {section: [] for section, _ in sections}
+            for tier, sections in self._HELP_SECTION_ORDER.items()
+        }
+
+        for info in infos:
+            tier_key = (info.access_tier or "user").strip().lower()
+            tier_targets: tuple[str, ...]
+            if tier_key == "admin":
+                tier_targets = ("admin",)
+            elif tier_key == "staff":
+                tier_targets = ("staff", "admin")
+            else:
+                tier_targets = ("user", "staff", "admin")
+
+            section_key = (info.section or info.function_group or "general").strip().lower()
+
+            for target in tier_targets:
+                if target not in buckets:
                     continue
-                seen.add(base_name)
-                filtered_commands.append(command)
-            if not filtered_commands:
-                continue
-            infos = [self._build_help_info(command) for command in filtered_commands]
-            sections.append(
-                HelpOverviewSection(
-                    label=label,
-                    blurb=blurb,
-                    commands=tuple(infos),
+                tier_bucket = buckets[target]
+                bucket_key = section_key if section_key in tier_bucket else None
+                if bucket_key is None and "general" in tier_bucket:
+                    bucket_key = "general"
+                if bucket_key is None and tier_bucket:
+                    bucket_key = next(iter(tier_bucket))
+                if bucket_key is None:
+                    continue
+                tier_bucket.setdefault(bucket_key, []).append(info)
+
+        for tier_bucket in buckets.values():
+            for key, items in tier_bucket.items():
+                tier_bucket[key] = sorted(items, key=self._help_sort_key)
+
+        tiers: list[HelpTier] = []
+        for tier_key, sections in self._HELP_SECTION_ORDER.items():
+            bucket = buckets.get(tier_key, {})
+            tier_sections: list[HelpTierSection] = []
+            for section_key, label in sections:
+                commands = tuple(bucket.get(section_key, []))
+                tier_sections.append(
+                    HelpTierSection(label=label, commands=commands)
+                )
+            title = self._HELP_TIER_TITLES.get(tier_key, tier_key.title())
+            tiers.append(HelpTier(title=title, sections=tuple(tier_sections)))
+        return tiers
+
+    def _manual_overview_entries(self, seen: Set[str]) -> list[HelpCommandInfo]:
+        entries: list[HelpCommandInfo] = []
+
+        help_meta = lookup_help_metadata("rec help")
+        if "rec help" not in seen and help_meta is not None:
+            entries.append(
+                HelpCommandInfo(
+                    qualified_name="rec help",
+                    signature="",
+                    short=help_meta.short,
+                    detailed=help_meta.detailed,
+                    aliases=(),
+                    access_tier="user",
+                    function_group="general",
+                    section="general",
+                    usage_override="@Bot help",
                 )
             )
-        return sections
+
+        ping_meta = lookup_help_metadata("rec ping")
+        if "rec ping" not in seen and ping_meta is not None:
+            entries.append(
+                HelpCommandInfo(
+                    qualified_name="rec ping",
+                    signature="",
+                    short=ping_meta.short,
+                    detailed=ping_meta.detailed,
+                    aliases=(),
+                    access_tier="user",
+                    function_group="general",
+                    section="general",
+                    usage_override="@Bot ping",
+                )
+            )
+
+        perm_fallbacks = (
+            "perm bot list",
+            "perm bot allow",
+            "perm bot deny",
+            "perm bot remove",
+            "perm bot sync",
+        )
+        for name in perm_fallbacks:
+            if name in seen:
+                continue
+            perm_meta = lookup_help_metadata(name)
+            if perm_meta is None:
+                continue
+            entries.append(
+                HelpCommandInfo(
+                    qualified_name=name,
+                    signature="",
+                    short=perm_meta.short,
+                    detailed=perm_meta.detailed,
+                    aliases=(),
+                    access_tier=perm_meta.tier or "admin",
+                    function_group="operational",
+                    section="permissions",
+                )
+            )
+
+        welcome_name = "welcome-refresh"
+        if welcome_name not in seen:
+            welcome_meta = lookup_help_metadata(welcome_name)
+            if welcome_meta is not None:
+                entries.append(
+                    HelpCommandInfo(
+                        qualified_name=welcome_name,
+                        signature="",
+                        short=welcome_meta.short,
+                        detailed=welcome_meta.detailed,
+                        aliases=(),
+                        access_tier=welcome_meta.tier or "admin",
+                        function_group="operational",
+                        section="welcome_templates",
+                    )
+                )
+
+        staff_fallbacks = (
+            ("clanmatch", "recruitment"),
+            ("welcome", "recruitment"),
+        )
+        for name, section in staff_fallbacks:
+            if name in seen:
+                continue
+            staff_meta = lookup_help_metadata(name)
+            if staff_meta is None:
+                continue
+            entries.append(
+                HelpCommandInfo(
+                    qualified_name=name,
+                    signature="",
+                    short=staff_meta.short,
+                    detailed=staff_meta.detailed,
+                    aliases=(),
+                    access_tier=staff_meta.tier or "staff",
+                    function_group="recruitment",
+                    section=section,
+                )
+            )
+
+        user_fallbacks = (
+            ("clan", "recruitment"),
+            ("clansearch", "recruitment"),
+        )
+        for name, section in user_fallbacks:
+            if name in seen:
+                continue
+            user_meta = lookup_help_metadata(name)
+            if user_meta is None:
+                continue
+            entries.append(
+                HelpCommandInfo(
+                    qualified_name=name,
+                    signature="",
+                    short=user_meta.short,
+                    detailed=user_meta.detailed,
+                    aliases=(),
+                    access_tier=user_meta.tier or "user",
+                    function_group="recruitment",
+                    section=section,
+                )
+            )
+
+        return entries
+
+    def _help_sort_key(self, info: HelpCommandInfo) -> tuple[str, str]:
+        usage = (info.usage_override or info.qualified_name or "").lower()
+        return (usage, info.qualified_name.lower())
 
     def _include_in_overview(self, command: commands.Command[Any, Any, Any]) -> bool:
         if command.parent is None:
@@ -2687,12 +2852,40 @@ class CoreOpsCog(commands.Cog):
             short = fallback.strip()
             detailed = (command.help or fallback or "").strip()
         aliases = tuple(sorted(alias.strip() for alias in command.aliases if alias.strip()))
+
+        extras = getattr(command, "extras", None)
+        if isinstance(extras, dict):
+            access_tier = str(extras.get("access_tier") or extras.get("tier") or "user")
+            function_group = str(extras.get("function_group") or "general")
+            section = extras.get("help_section")
+            usage_override = extras.get("help_usage")
+            raw_flags = extras.get("help_flags")
+        else:
+            access_tier = str(getattr(command, "_tier", "user"))
+            function_group = "general"
+            section = None
+            usage_override = None
+            raw_flags = None
+
+        flags: tuple[str, ...]
+        if isinstance(raw_flags, (list, tuple, set)):
+            flags = tuple(str(flag).strip() for flag in raw_flags if str(flag).strip())
+        elif isinstance(raw_flags, str) and raw_flags.strip():
+            flags = (raw_flags.strip(),)
+        else:
+            flags = tuple()
+
         return HelpCommandInfo(
             qualified_name=command.qualified_name,
             signature=signature,
             short=short,
             detailed=detailed,
             aliases=aliases,
+            access_tier=access_tier,
+            function_group=function_group,
+            section=str(section).strip() if isinstance(section, str) and section.strip() else None,
+            usage_override=str(usage_override).strip() if isinstance(usage_override, str) and usage_override.strip() else None,
+            flags=flags,
         )
 
     def _help_bot_description(self, *, bot_name: str) -> str:
@@ -2706,6 +2899,11 @@ class CoreOpsCog(commands.Cog):
             "**To learn what a command does, type like this:**  \n"
             "`!rec help rec ping` → shows info for `!rec ping`"
         )
+
+    def _show_empty_sections(self) -> bool:
+        value = os.getenv("SHOW_EMPTY_SECTIONS", "")
+        normalized = value.strip().lower()
+        return normalized in {"1", "true", "yes", "on"}
 
     def _add_embed_group(
         self, embed: discord.Embed, name: str, lines: Sequence[str]

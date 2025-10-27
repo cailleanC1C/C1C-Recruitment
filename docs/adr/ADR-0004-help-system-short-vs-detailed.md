@@ -10,10 +10,12 @@ usage without cluttering the main index.
 
 ## Decision
 
-- `!help` and `!rec help` render the short index: tier headings with single-line blurbs.
-- `!help <command>` (or `!rec help <command>`) renders the detailed embed with usage,
-  tier warnings, and operational tips.
-- Both embeds drop timestamps; the footer carries version info only.
+- `@Bot help` renders the overview message: long description plus Admin/Staff/User embeds
+  grouped by function (`Config & Health`, `Sheets & Cache`, etc.).
+- `@Bot help <command>` renders the detailed embed with usage, tier warnings, and
+  operational tips.
+- Empty sections collapse unless `SHOW_EMPTY_SECTIONS=true`; every embed footer includes
+  version info and the `@Bot help` reminder.
 - Detailed embeds always reference the Command Matrix copy to keep documentation and help
   output in sync.
 
@@ -29,4 +31,4 @@ usage without cluttering the main index.
 
 Accepted — 2025-10-20
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.x)

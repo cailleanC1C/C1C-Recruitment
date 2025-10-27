@@ -54,6 +54,13 @@ Both controls record the invoking actor, even when triggered via admin bang alia
 Manual refreshes never force a restart; even repeated failures leave the bot online while
 logging the error for follow-up.
 
+### Welcome template cache
+- **Command:** `!welcome-refresh` (Admin only)
+- **Purpose:** Reloads the `WelcomeTemplates` cache bucket so the next `!welcome` posts
+  reflect sheet edits.
+- **When to run:** After onboarding updates the sheet or when the welcome copy looks
+  stale. Staff must ask an admin to run it; the command now enforces admin gating.
+
 ### `!reload --reboot`
 - Restarts both the Discord modules and the aiohttp runtime after reloading configuration.
 - Flushes cached Sheets connections so the next command run observes fresh credentials and tabs.
@@ -91,4 +98,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-27 (v0.9.x)

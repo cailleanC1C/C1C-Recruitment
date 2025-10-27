@@ -6,7 +6,7 @@ Welcome to the C1C recruitment helper.
 The bot keeps clan rosters healthy, helps new friends find their hall, and makes sure every welcome lands in the right place.
 
 ### What you can do today
-!rec help — lists the commands your role can use and tips for each.
+@Bot help — lists the commands your role can use and tips for each.
 !clan <tag> — shows a quick profile for any clan in the cluster.
 !clansearch — opens the member search panel with the latest roster filters.
 !clanmatch — recruiter-only panel to match players with open clans.

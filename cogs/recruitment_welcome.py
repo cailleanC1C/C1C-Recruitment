@@ -6,8 +6,8 @@ from typing import Optional
 
 from discord.ext import commands
 
-from c1c_coreops.helpers import tier
-from c1c_coreops.rbac import is_admin_member, is_staff_member
+from c1c_coreops.helpers import help_metadata, tier
+from c1c_coreops.rbac import admin_only, is_admin_member, is_staff_member
 from modules.recruitment.welcome import WelcomeCommandService
 
 
@@ -37,6 +37,7 @@ class WelcomeBridge(commands.Cog):
         self._service = WelcomeCommandService(bot)
 
     @tier("staff")
+    @help_metadata(function_group="recruitment", section="recruitment", access_tier="staff")
     @commands.command(name="welcome", usage="<clan> [@member] [note]")
     @staff_only()
     async def welcome(
@@ -50,9 +51,10 @@ class WelcomeBridge(commands.Cog):
 
         await self._service.post_welcome(ctx, clan, tail=note)
 
-    @tier("staff")
+    @tier("admin")
+    @help_metadata(function_group="operational", section="welcome_templates", access_tier="admin")
     @commands.command(name="welcome-refresh")
-    @staff_only()
+    @admin_only()
     async def welcome_refresh(self, ctx: commands.Context) -> None:
         """Reload the WelcomeTemplates cache bucket."""
 

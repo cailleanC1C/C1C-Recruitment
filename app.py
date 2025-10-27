@@ -95,6 +95,26 @@ def _resolve_coreops_command(lookup: str) -> commands.Command | None:
     return None
 
 
+def _extract_mention_invocation(
+    message: discord.Message,
+) -> tuple[str, str | None] | None:
+    if not bot.user:
+        return None
+    content = message.content or ""
+    mention_variants = (f"<@{bot.user.id}>", f"<@!{bot.user.id}>")
+    lowered = content.lower()
+    for variant in mention_variants:
+        if lowered.startswith(variant.lower()):
+            remainder = content[len(variant) :].strip()
+            if not remainder:
+                return None
+            parts = remainder.split(None, 1)
+            command = parts[0].strip().lower()
+            query = parts[1].strip() if len(parts) > 1 else None
+            return command, query
+    return None
+
+
 async def _enforce_guild_allow_list(
     *, log_when_empty: bool = False, log_success: bool = True
 ) -> bool:
@@ -244,6 +264,29 @@ async def on_message(message: discord.Message):
     )
 
     content = (message.content or "").strip()
+
+    mention_invocation = _extract_mention_invocation(message)
+    if mention_invocation:
+        command_name, remainder = mention_invocation
+        ctx = await bot.get_context(message)
+        if command_name == "help":
+            cog = bot.get_cog("CoreOpsCog")
+            if cog is not None and hasattr(cog, "render_help"):
+                rec_help_command = bot.get_command("rec help")
+                if rec_help_command is not None:
+                    ctx.command = rec_help_command
+                    ctx.invoked_with = "help"
+                await cog.render_help(ctx, query=remainder)
+            return
+        if command_name == "ping":
+            rec_ping_command = bot.get_command("rec ping")
+            if rec_ping_command is not None:
+                ctx.command = rec_ping_command
+                ctx.invoked_with = "ping"
+                await bot.invoke(ctx)
+            else:
+                await ctx.send(str(sanitize_text("Ping command unavailable.")))
+            return
 
     cmd_name = detect_admin_bang_command(
         message, commands=COREOPS_COMMANDS, is_admin=_can_dispatch_bare_coreops
