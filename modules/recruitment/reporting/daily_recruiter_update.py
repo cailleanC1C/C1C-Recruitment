@@ -205,7 +205,7 @@ def add_fullwidth_field(embed: discord.Embed, *, name: str, value: str) -> None:
 def _add_block_divider(embed: discord.Embed) -> None:
     """Insert the spacer/divider sequence between logical blocks."""
 
-    add_fullwidth_field(embed, name="\u200B", value="﹘﹘﹘")
+    add_fullwidth_field(embed, name="\n", value="﹘﹘﹘")
 
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     sheet_id = get_recruitment_sheet_id().strip()
