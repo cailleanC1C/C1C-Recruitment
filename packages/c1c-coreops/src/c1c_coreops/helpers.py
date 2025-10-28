@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Sequence
 
+from discord.ext import commands
+
 # Qualified name -> tier (e.g., "ops help", "health")
 _TIER_REGISTRY: Dict[str, str] = {}
 
@@ -20,6 +22,51 @@ def _ensure_extras(cmd) -> Dict[str, str]:
         except Exception:
             pass
     return extras
+
+
+def _install_command_metadata_accessors() -> None:
+    if not hasattr(commands.Command, "function_group"):
+
+        def _get_function_group(cmd):
+            extras = getattr(cmd, "extras", None)
+            if isinstance(extras, dict):
+                return extras.get("function_group")
+            return None
+
+        def _set_function_group(cmd, value):
+            extras = _ensure_extras(cmd)
+            if value is None:
+                extras.pop("function_group", None)
+                return
+            extras["function_group"] = value
+
+        commands.Command.function_group = property(  # type: ignore[attr-defined]
+            _get_function_group, _set_function_group
+        )
+
+    if not hasattr(commands.Command, "access_tier"):
+
+        def _get_access_tier(cmd):
+            extras = getattr(cmd, "extras", None)
+            if isinstance(extras, dict):
+                tier = extras.get("access_tier") or extras.get("tier")
+                if tier is not None:
+                    return tier
+            return getattr(cmd, "_tier", None)
+
+        def _set_access_tier(cmd, value):
+            extras = _ensure_extras(cmd)
+            if value is None:
+                extras.pop("access_tier", None)
+                return
+            extras["access_tier"] = value
+
+        commands.Command.access_tier = property(  # type: ignore[attr-defined]
+            _get_access_tier, _set_access_tier
+        )
+
+
+_install_command_metadata_accessors()
 
 
 def _set_tier(cmd, level: str) -> None:
@@ -91,10 +138,18 @@ def help_metadata(
     def wrapper(cmd):
         extras = _ensure_extras(cmd)
         extras.setdefault("function_group", function_group)
+        try:
+            setattr(cmd, "function_group", function_group)
+        except Exception:
+            pass
         if section is not None:
             extras.setdefault("help_section", section)
         if access_tier is not None:
             extras["access_tier"] = access_tier
+            try:
+                setattr(cmd, "access_tier", access_tier)
+            except Exception:
+                pass
         if usage is not None:
             extras["help_usage"] = usage
         if flags is not None:

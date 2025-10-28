@@ -1030,9 +1030,12 @@ class CoreOpsCog(commands.Cog):
         self._tagged_aliases: tuple[str, ...] = tuple()
         self._apply_tagged_alias_metadata()
         self._apply_generic_alias_policy()
+        self._command_metadata_overrides = self._build_command_metadata_overrides()
+        self._apply_command_metadata_overrides()
 
     async def cog_load(self) -> None:
         self._log_coreops_settings()
+        self._rehydrate_command_metadata()
 
     def _apply_tagged_alias_metadata(self) -> None:
         command = getattr(self, "ops", None)
@@ -1073,6 +1076,89 @@ class CoreOpsCog(commands.Cog):
         else:
             self._removed_generic_commands = tuple()
         setattr(self, "__cog_commands__", tuple(commands_list))
+
+    def _build_command_metadata_overrides(self) -> dict[str, dict[str, str]]:
+        return {
+            "ops": {"function_group": "operational", "access_tier": "user"},
+            "ops help": {"function_group": "operational", "access_tier": "user"},
+            "health": {"function_group": "operational"},
+            "ops health": {"function_group": "operational"},
+            "checksheet": {"function_group": "operational", "access_tier": "admin"},
+            "ops checksheet": {"function_group": "operational", "access_tier": "admin"},
+            "digest": {"function_group": "operational"},
+            "ops digest": {"function_group": "operational"},
+            "env": {"function_group": "operational"},
+            "ops env": {"function_group": "operational"},
+            "config": {"function_group": "operational"},
+            "ops config": {"function_group": "operational", "access_tier": "admin"},
+            "ops ping": {"function_group": "operational"},
+            "reload": {"function_group": "operational", "access_tier": "admin"},
+            "ops reload": {"function_group": "operational"},
+            "ops refresh": {"function_group": "operational", "access_tier": "admin"},
+            "ops refresh all": {"function_group": "operational", "access_tier": "admin"},
+            "ops refresh clansinfo": {"function_group": "operational", "access_tier": "staff"},
+            "refresh": {"function_group": "operational"},
+            "refresh all": {"function_group": "operational"},
+            "refresh clansinfo": {"function_group": "operational"},
+        }
+
+    def _apply_command_metadata_overrides(
+        self, *, commands_sequence: Iterable[commands.Command[Any, Any, Any]] | None = None
+    ) -> None:
+        if commands_sequence is None:
+            commands_sequence = getattr(self, "__cog_commands__", None)
+        if commands_sequence is None:
+            return
+
+        overrides = getattr(self, "_command_metadata_overrides", {})
+        for command in commands_sequence:
+            qualified_name = getattr(command, "qualified_name", None)
+            if not isinstance(qualified_name, str):
+                continue
+            metadata = overrides.get(qualified_name)
+            if not metadata:
+                self._apply_metadata_attributes(command)
+                continue
+
+            extras = getattr(command, "extras", None)
+            if not isinstance(extras, dict):
+                extras = {}
+                setattr(command, "extras", extras)
+
+            for key, value in metadata.items():
+                extras[key] = value
+                try:
+                    setattr(command, key, value)
+                except Exception:
+                    continue
+            self._apply_metadata_attributes(command)
+
+    def _rehydrate_command_metadata(self) -> None:
+        commands_iterable = list(self.bot.walk_commands())
+        self._apply_command_metadata_overrides(commands_sequence=commands_iterable)
+        for command in commands_iterable:
+            self._apply_metadata_attributes(command)
+
+    def _apply_metadata_attributes(
+        self, command: commands.Command[Any, Any, Any]
+    ) -> None:
+        extras = getattr(command, "extras", None)
+        if not isinstance(extras, dict):
+            return
+
+        function_group = extras.get("function_group")
+        if isinstance(function_group, str):
+            try:
+                setattr(command, "function_group", function_group)
+            except Exception:
+                pass
+
+        access_tier = extras.get("access_tier") or extras.get("tier")
+        if isinstance(access_tier, str):
+            try:
+                setattr(command, "access_tier", access_tier)
+            except Exception:
+                pass
 
     def _log_coreops_settings(self) -> None:
         description = self._settings.describe()
@@ -1908,15 +1994,15 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(embed=sanitize_embed(embed))
 
-    @tier("staff")
-    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
+    @tier("admin")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
     @ops.command(name="checksheet")
     @guild_only_denied_msg()
     @ops_only()
     async def ops_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
-    @tier("staff")
+    @tier("admin")
     @commands.command(name="checksheet", hidden=True)
     @guild_only_denied_msg()
     @ops_only()
@@ -2311,8 +2397,8 @@ class CoreOpsCog(commands.Cog):
 
         await ctx.reply(embed=sanitize_embed(embed))
 
-    @tier("staff")
-    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
+    @tier("admin")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
     @ops.command(name="config")
     @guild_only_denied_msg()
     @ops_only()
@@ -2383,7 +2469,7 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_root(ctx)
 
     @tier("admin")
-    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
     @ops.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
@@ -2461,7 +2547,7 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_all_impl(ctx)
 
     @tier("admin")
-    @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
     @ops_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()

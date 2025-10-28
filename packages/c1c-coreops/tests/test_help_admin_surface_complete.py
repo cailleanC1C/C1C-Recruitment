@@ -212,6 +212,8 @@ def test_help_admin_view_usage_policy(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "`!refresh all`" in admin_text
         assert "`!ops refresh`" in admin_text
         assert "`!ops reload`" in admin_text
+        assert "`!ops checksheet`" in admin_text
+        assert "`!ops config`" in admin_text
         assert "`!welcome-refresh`" in admin_text
         assert "`!perm bot list`" in admin_text
         assert "`@Bot help`" not in admin_text
@@ -252,9 +254,9 @@ def test_help_staff_view(monkeypatch: pytest.MonkeyPatch) -> None:
 
         assert "`!clanmatch`" in staff_text
         assert "`!welcome`" in staff_text
-        assert "`!ops checksheet`" in staff_text
-        assert "`!ops config`" in staff_text
         assert "`!ops digest`" in staff_text
+        assert "`!ops checksheet`" not in staff_text
+        assert "`!ops config`" not in staff_text
         assert "`!welcome-refresh`" not in staff_text
         assert "`!refresh all`" not in staff_text
         assert "`!perm bot list`" not in staff_text

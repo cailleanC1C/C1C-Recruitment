@@ -14,6 +14,33 @@ class AppAdmin(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
+    async def cog_load(self) -> None:
+        command = self.bot.get_command("ping")
+        if command is None:
+            return
+
+        extras = getattr(command, "extras", None)
+        if not isinstance(extras, dict):
+            extras = {}
+            setattr(command, "extras", extras)
+
+        extras.setdefault("function_group", "operational")
+        extras.setdefault("access_tier", "admin")
+
+        try:
+            setattr(command, "function_group", "operational")
+        except Exception:
+            pass
+        try:
+            setattr(command, "access_tier", "admin")
+        except Exception:
+            pass
+
+        coreops = self.bot.get_cog("CoreOpsCog")
+        apply_attrs = getattr(coreops, "_apply_metadata_attributes", None)
+        if callable(apply_attrs):
+            apply_attrs(command)
+
     @tier("admin")
     @help_metadata(
         function_group="operational",
