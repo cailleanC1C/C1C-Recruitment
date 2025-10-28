@@ -110,6 +110,7 @@ class _ThreadClosureWatcher(commands.Cog):
         await self._record_closure(after)
 
     async def _record_closure(self, thread: discord.Thread) -> None:
+        # TODO Phase 7 PR #3: call start_welcome_dialog when closure detected.
         timestamp = dt.datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         owner_name = _thread_owner_name(thread)
         row = [timestamp, str(thread.id), thread.name or "", owner_name]
@@ -145,6 +146,12 @@ class PromoWatcher(_ThreadClosureWatcher):
 
 
 async def setup(bot: commands.Bot) -> None:
+    if not feature_flags.is_enabled("welcome_dialog"):
+        _announce(
+            bot,
+            "📴 Promo watcher disabled: FeatureToggles['welcome_dialog'] is OFF.",
+        )
+        return
     if not feature_flags.is_enabled("welcome_enabled"):
         _announce(
             bot,

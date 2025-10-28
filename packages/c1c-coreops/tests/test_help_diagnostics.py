@@ -196,7 +196,7 @@ def test_help_diagnostics_staff_logs_hidden_admin_commands(
         finally:
             await bot.close()
 
-    message = asyncio.get_event_loop().run_until_complete(runner())
+    message = asyncio.run(runner())
     assert "ops config | admin | operational" in message
     assert "false | no | not runnable for staff" in message
 
@@ -223,7 +223,7 @@ def test_help_diagnostics_admin_logs_admin_entries(
         finally:
             await bot.close()
 
-    message = asyncio.get_event_loop().run_until_complete(runner())
+    message = asyncio.run(runner())
     assert "welcome-refresh | admin | operational | true | yes | ok" in message
     assert "perm bot allow | admin | operational | true | yes | ok" in message
 
@@ -246,7 +246,7 @@ def test_help_diagnostics_ttl_throttles(monkeypatch: pytest.MonkeyPatch) -> None
         finally:
             await bot.close()
 
-    messages = asyncio.get_event_loop().run_until_complete(runner())
+    messages = asyncio.run(runner())
     assert len(messages) == 1
 
 
@@ -265,5 +265,5 @@ def test_help_diagnostics_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
         finally:
             await bot.close()
 
-    messages = asyncio.get_event_loop().run_until_complete(runner())
+    messages = asyncio.run(runner())
     assert messages == []

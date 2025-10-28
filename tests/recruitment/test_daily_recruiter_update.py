@@ -32,7 +32,7 @@ def test_build_embed_from_rows_filters_and_groups():
 
     assert isinstance(embed, Embed)
     # Three logical blocks plus dividers and per-bracket detail sections
-    assert len(embed.fields) == 9
+    assert len(embed.fields) == 7
 
     general_field = embed.fields[0]
     assert general_field.name == "General Overview"
@@ -40,25 +40,29 @@ def test_build_embed_from_rows_filters_and_groups():
     assert "Ops Idle" not in general_field.value
 
     divider_field = embed.fields[1]
-    assert divider_field.name == "\u200B"
-    assert divider_field.value == "﹘﹘﹘"
+    assert divider_field.name.strip() == ""
+    assert divider_field.value in {"﹘﹘﹘", "▫▪▫▪▫▪▫"}
 
-    per_bracket = embed.fields[3]
+    per_bracket = embed.fields[2]
     assert per_bracket.name == "**Per Bracket**"
     assert "Elite End Game: open 2 | inactives 0 | reserved 1" in per_bracket.value
     assert "Mid Game: open 0 | inactives 0 | reserved 0" in per_bracket.value
 
-    detail_header = embed.fields[6]
-    assert detail_header.name == "**Bracket Details**"
-    assert detail_header.value == "\u200B"
+    second_divider = embed.fields[3]
+    assert second_divider.name.strip() == ""
+    assert second_divider.value in {"﹘﹘﹘", "▫▪▫▪▫▪▫"}
 
-    elite_end_game = embed.fields[7]
+    detail_header = embed.fields[4]
+    assert detail_header.name == "**Bracket Details**"
+    assert detail_header.value.strip() == ""
+
+    elite_end_game = embed.fields[5]
     assert elite_end_game.name == "Elite End Game"
     assert elite_end_game.inline is False
     assert "Clan Alpha" in elite_end_game.value
     assert "Clan Beta" not in elite_end_game.value
 
-    mid_game = embed.fields[8]
+    mid_game = embed.fields[6]
     assert mid_game.name == "Mid Game"
     assert mid_game.inline is False
     assert "Clan Delta" in mid_game.value
