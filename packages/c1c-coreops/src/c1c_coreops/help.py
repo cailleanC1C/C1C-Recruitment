@@ -46,7 +46,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
             "Displays which Google Sheets and tabs are currently linked, as defined in the Config tab. "
             "Helps confirm if all links are loaded correctly and readable.\n"
             "⚠️ If you type `config` without the prefix, **every bot** that has one may respond. "
-            "Always use `!rec config` to target this bot.\n"
+            "Always use `!ops config` to target this bot.\n"
             "Tip: Run this after setup or when something seems out of sync."
         ),
         tier="admin",
@@ -56,7 +56,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         detailed=(
             "Generates a status digest with version, environment, cache stats, and sheet sync info. "
             "Useful for spotting stale data or delayed updates.\n"
-            "⚠️ Running `digest` without `!rec` can trigger other bots’ digests too. Always include the prefix.\n"
+            "⚠️ Running `digest` without `!ops` can trigger other bots’ digests too. Always include the prefix.\n"
             "Tip: Use this before reporting an issue — it’s the quick “what’s the bot doing?” check."
         ),
         tier="admin",
@@ -122,7 +122,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         short="Shows environment info (prod/test/etc.).",
         detailed=(
             "Reveals which environment the bot is running in and which guild IDs, tokens, and configs it’s currently using.\n"
-            "⚠️ Calling `env` without `!rec` can wake multiple bots. Always include the prefix.\n"
+            "⚠️ Calling `env` without `!ops` can wake multiple bots. Always include the prefix.\n"
             "Tip: Helps confirm you’re not running test commands in the live cluster."
         ),
         tier="admin",
@@ -136,7 +136,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
-    "rec env": _metadata(
+    "ops env": _metadata(
         short="Shows environment info for this bot.",
         detailed=(
             "Displays which Sheets and tabs the bot is connected to, plus environment name and guild.\n"
@@ -144,7 +144,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
-    "rec health": _metadata(
+    "ops health": _metadata(
         short="Checks the bot’s internal health status.",
         detailed=(
             "Shows cache ages, refresh timings, and recent update status for all active data buckets.\n"
@@ -152,16 +152,16 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
-    "rec refresh": _metadata(
+    "ops refresh": _metadata(
         short="Refreshes a single data bucket from Google Sheets.",
         detailed=(
             "Forces an update for one specific bucket — `templates`, `clansinfo`, or `clantags` — to reload new data from Sheets "
             "immediately instead of waiting for the next scheduled sync.\n"
-            "Tip: Use `!rec refresh templates` after editing a Sheet tab."
+            "Tip: Use `!ops refresh templates` after editing a Sheet tab."
         ),
         tier="admin",
     ),
-    "rec refresh all": _metadata(
+    "ops refresh all": _metadata(
         short="Reloads all data from Sheets.",
         detailed=(
             "Performs a full refresh of every cached bucket — config, templates, clansinfo, and clantags. It can take a few seconds.\n"
@@ -169,7 +169,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="admin",
     ),
-    "rec reload": _metadata(
+    "ops reload": _metadata(
         short="Reloads runtime configs and command modules.",
         detailed=(
             "Reloads the bot’s runtime flags and command modules without restarting it. Good for applying config changes instantly.\n"
@@ -198,7 +198,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         detailed=(
             "Reloads the bot’s entire runtime setup — environment variables, sheet connections, and commands. "
             "Use `--reboot` to force a soft reboot of the bot.\n"
-            "⚠️ Running `reload` without `!rec` might make other bots react too. Always prefix it.\n"
+            "⚠️ Running `reload` without `!ops` might make other bots react too. Always prefix it.\n"
             "Tip: Use with care — affects all modules, not just recruitment."
         ),
         tier="admin",
@@ -224,12 +224,12 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         short="Shows what sheet and tabs are currently loaded.",
         detailed=(
             "Displays the linked sheet and verifies that tabs (like `Applicants`, `Clans`, `Needs`) are cached and accessible.\n"
-            "⚠️ If you use `checksheet` without the prefix, all bots with the same command will answer. Always use `!rec checksheet`.\n"
+            "⚠️ If you use `checksheet` without the prefix, all bots with the same command will answer. Always use `!ops checksheet`.\n"
             "Tip: Quick sanity check before troubleshooting a missing clan."
         ),
         tier="admin",
     ),
-    "rec checksheet": _metadata(
+    "ops checksheet": _metadata(
         short="Shows loaded tabs and headers.",
         detailed=(
             "Prints which tabs and headers the bot is reading, including row counts per tab.\n"
@@ -237,7 +237,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="staff",
     ),
-    "rec config": _metadata(
+    "ops config": _metadata(
         short="Shows current configuration values.",
         detailed=(
             "Displays all active configuration values — sheet IDs, refresh intervals, watcher toggles, and more.\n"
@@ -245,7 +245,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="staff",
     ),
-    "rec digest": _metadata(
+    "ops digest": _metadata(
         short="Shows the bot’s status summary.",
         detailed=(
             "Lists key operational stats: cached sheet names, last refresh time, and update latency.\n"
@@ -253,7 +253,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="staff",
     ),
-    "rec refresh clansinfo": _metadata(
+    "ops refresh clansinfo": _metadata(
         short="Updates the clan info list.",
         detailed=(
             "Forces a refresh for the recruitment infos the `!clanmatch` panel uses, including open spots and clan requirements.\n"
@@ -296,7 +296,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="user",
     ),
-    "rec help": _metadata(
+    "ops help": _metadata(
         short="Shows help for bot commands.",
         detailed=(
             "Lists all available commands or gives details for one specific command when you add its name.\n"
@@ -304,7 +304,7 @@ HELP_COMMAND_REGISTRY: dict[str, HelpCommandMetadata] = {
         ),
         tier="user",
     ),
-    "rec ping": _metadata(
+    "ops ping": _metadata(
         short="Checks if the bot is awake.",
         detailed=(
             "A simple test command that responds with “pong” to confirm the bot is online and responsive.\n"

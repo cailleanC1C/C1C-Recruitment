@@ -20,8 +20,8 @@ reports from staff and recruiters.
 ### Example (Admin embed excerpt)
 ```
 Admin / Operational — Config & Health
-• !rec env — Staff snapshot of environment name, guild IDs, and sheet linkage.
-• !rec health — Inspect cache/watchdog telemetry pulled from the public API.
+• !ops env — Staff snapshot of environment name, guild IDs, and sheet linkage.
+• !ops health — Inspect cache/watchdog telemetry pulled from the public API.
 ```
 
 ## `@Bot help <command>` — detailed view
@@ -42,8 +42,8 @@ Tip: Run after registry edits or onboarding template changes.
 
 ### Example (Recruiter / Staff)
 ```
-!rec refresh clansinfo
-Usage: !rec refresh clansinfo
+!ops refresh clansinfo
+Usage: !ops refresh clansinfo
 Tier: Staff (Recruiter role or higher required)
 Detail: Refresh clan roster data when Sheets updates land.
 Tip: Re-run if digest ages drift after clan merges.
