@@ -354,6 +354,40 @@ def test_help_no_hardcoding(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(runner())
 
 
+def test_all_commands_have_brief(monkeypatch: pytest.MonkeyPatch) -> None:
+    del monkeypatch
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+
+        await bot.add_cog(CoreOpsCog(bot))
+        await bot.add_cog(BotPermissionCog(bot))
+        await bot.add_cog(RecruiterPanelCog(bot))
+        await bot.add_cog(WelcomeBridge(bot))
+        await bot.add_cog(RecruitmentMember(bot))
+        await bot.add_cog(ClanProfileCog(bot))
+
+        try:
+            missing: list[str] = []
+            for command in bot.walk_commands():
+                if getattr(command, "hidden", False):
+                    continue
+                extras = getattr(command, "extras", None)
+                if isinstance(extras, dict) and extras.get("hide_in_help"):
+                    continue
+                if getattr(command, "qualified_name", command.name) == "help":
+                    continue
+                brief = getattr(command, "brief", None)
+                if not isinstance(brief, str) or not brief.strip():
+                    missing.append(getattr(command, "qualified_name", command.name))
+
+            assert not missing, f"Commands missing brief text: {missing}"
+        finally:
+            await bot.close()
+
+    asyncio.run(runner())
+
+
 def test_overview_text_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         embeds = await _gather_help_embeds(

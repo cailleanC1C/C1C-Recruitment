@@ -1171,7 +1171,12 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(msg, extra=extra)
 
-    @commands.group(name="ops", invoke_without_command=True)
+    @commands.group(
+        name="ops",
+        invoke_without_command=True,
+        help="Recruitment toolkit commands for the C1C cluster.",
+        brief="Recruitment toolkit commands for the C1C cluster.",
+    )
     @guild_only_denied_msg()
     async def ops(self, ctx: commands.Context) -> None:
         """Recruitment toolkit commands for the C1C cluster."""
@@ -1428,13 +1433,23 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @ops.command(name="health")
+    @ops.command(
+        name="health",
+        help="Checks the bot's internal health status.",
+        brief="Checks the bot's internal health status.",
+    )
     @ops_only()
     async def ops_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="health", hidden=True)
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
+    @commands.command(
+        name="health",
+        hidden=True,
+        help="Checks the bot's internal health status.",
+        brief="Checks the bot's internal health status.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def health(self, ctx: commands.Context) -> None:
@@ -1995,14 +2010,24 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.command(name="checksheet")
+    @ops.command(
+        name="checksheet",
+        help="Shows loaded tabs and headers.",
+        brief="Shows loaded tabs and headers.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     @tier("admin")
-    @commands.command(name="checksheet", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="checksheet",
+        hidden=True,
+        help="Shows loaded tabs and headers.",
+        brief="Shows loaded tabs and headers.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def checksheet(self, ctx: commands.Context) -> None:
@@ -2118,13 +2143,23 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @ops.command(name="digest")
+    @ops.command(
+        name="digest",
+        help="Displays a quick system summary.",
+        brief="Displays a quick system summary.",
+    )
     @ops_only()
     async def ops_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="digest", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="digest",
+        hidden=True,
+        help="Displays a quick system summary.",
+        brief="Displays a quick system summary.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def digest(self, ctx: commands.Context) -> None:
@@ -2169,14 +2204,24 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @ops.command(name="env")
+    @ops.command(
+        name="env",
+        help="Shows environment info for this bot.",
+        brief="Shows environment info for this bot.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def ops_env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="env", hidden=True)
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
+    @commands.command(
+        name="env",
+        hidden=True,
+        help="Shows environment info for this bot.",
+        brief="Shows environment info for this bot.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def env(self, ctx: commands.Context) -> None:
@@ -2195,6 +2240,7 @@ class CoreOpsCog(commands.Cog):
         await self._render_help(ctx, query=query)
 
     @tier("user")
+    @help_metadata(function_group="operational", section="utilities", access_tier="user")
     @ops.command(name="ping", extras={"hide_in_help": True})
     async def ops_ping(self, ctx: commands.Context) -> None:
         command = self.bot.get_command("ping")
@@ -2398,14 +2444,24 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.command(name="config")
+    @ops.command(
+        name="config",
+        help="Shows current configuration values.",
+        brief="Shows current configuration values.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_config(self, ctx: commands.Context) -> None:
         await self._config_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="config", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="config",
+        hidden=True,
+        help="Shows current configuration values.",
+        brief="Shows current configuration values.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def config_summary(self, ctx: commands.Context) -> None:
@@ -2425,7 +2481,13 @@ class CoreOpsCog(commands.Cog):
         )
 
     @tier("admin")
-    @commands.command(name="reload", hidden=True)
+    @help_metadata(function_group="operational", section="utilities", access_tier="admin")
+    @commands.command(
+        name="reload",
+        hidden=True,
+        help="Reloads runtime configs and command modules.",
+        brief="Reloads runtime configs and command modules.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def reload(self, ctx: commands.Context, *flags: str) -> None:
@@ -2440,7 +2502,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="utilities", access_tier="admin")
-    @ops.command(name="reload")
+    @ops.command(
+        name="reload",
+        help="Reloads runtime configs and command modules.",
+        brief="Reloads runtime configs and command modules.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_reload(self, ctx: commands.Context, *flags: str) -> None:
@@ -2454,7 +2520,14 @@ class CoreOpsCog(commands.Cog):
         await self._reload_impl(ctx, reboot=reboot)
 
     @tier("admin")
-    @commands.group(name="refresh", invoke_without_command=True, hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.group(
+        name="refresh",
+        invoke_without_command=True,
+        hidden=True,
+        help="Refreshes a single data bucket from Google Sheets.",
+        brief="Refreshes a single data bucket from Google Sheets.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def refresh(
@@ -2469,7 +2542,12 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.group(name="refresh", invoke_without_command=True)
+    @ops.group(
+        name="refresh",
+        invoke_without_command=True,
+        help="Refreshes a single data bucket from Google Sheets.",
+        brief="Refreshes a single data bucket from Google Sheets.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_refresh(
@@ -2536,7 +2614,12 @@ class CoreOpsCog(commands.Cog):
         logger.info(log_msg, extra=extra)
 
     @tier("admin")
-    @refresh.command(name="all")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @refresh.command(
+        name="all",
+        help="Reloads all data from Sheets.",
+        brief="Reloads all data from Sheets.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
@@ -2547,7 +2630,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops_refresh.command(name="all")
+    @ops_refresh.command(
+        name="all",
+        help="Reloads all data from Sheets.",
+        brief="Reloads all data from Sheets.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
@@ -2658,7 +2745,12 @@ class CoreOpsCog(commands.Cog):
         )
 
     @tier("admin")
-    @refresh.command(name="clansinfo")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @refresh.command(
+        name="clansinfo",
+        help="Updates the clan info list.",
+        brief="Updates the clan info list.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def refresh_clansinfo(self, ctx: commands.Context) -> None:
@@ -2668,7 +2760,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @ops_refresh.command(name="clansinfo")
+    @ops_refresh.command(
+        name="clansinfo",
+        help="Updates the clan info list.",
+        brief="Updates the clan info list.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_refresh_clansinfo(self, ctx: commands.Context) -> None:

@@ -38,7 +38,12 @@ class WelcomeBridge(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="recruitment", section="recruitment", access_tier="staff")
-    @commands.command(name="welcome", usage="<clan> [@member] [note]")
+    @commands.command(
+        name="welcome",
+        usage="<clan> [@member] [note]",
+        help="Posts a templated welcome message for a new recruit.",
+        brief="Posts a templated welcome message for a new recruit.",
+    )
     @staff_only()
     async def welcome(
         self,
@@ -53,7 +58,11 @@ class WelcomeBridge(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="welcome_templates", access_tier="admin")
-    @commands.command(name="welcome-refresh")
+    @commands.command(
+        name="welcome-refresh",
+        help="Reloads the WelcomeTemplates cache bucket.",
+        brief="Reloads the WelcomeTemplates cache bucket.",
+    )
     @admin_only()
     async def welcome_refresh(self, ctx: commands.Context) -> None:
         """Reload the WelcomeTemplates cache bucket."""
