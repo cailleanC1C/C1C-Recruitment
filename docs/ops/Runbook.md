@@ -16,7 +16,6 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 - Toggle on with `HELP_DIAGNOSTICS=1` to emit a one-shot summary of discovered commands for each help invocation. The payload includes visible vs discovered totals plus a `yes`/`no` decision per command, and it sanitizes user and guild names before posting.
 - Messages post to the configured log channel resolved by `resolve_ops_log_channel_id`. If that channel is missing, only admins receive a DM copy; staff and members do not get fallbacks.
 - Use `HELP_DIAGNOSTICS_TTL_SEC` (default `60`) to throttle repeat posts per audience + guild so repeated help calls during the window reuse the existing diagnostics.
-- In CI tests, the diagnostics cache is reset before each run.
 
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
