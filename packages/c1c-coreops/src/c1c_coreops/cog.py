@@ -3070,6 +3070,16 @@ class CoreOpsCog(commands.Cog):
             key: {} for key in ordered_audiences
         }
 
+        allow_empty_tiers = self._show_empty_sections()
+        author = getattr(ctx, "author", None)
+
+        def _audience_is_visible(key: str) -> bool:
+            if key == "admin":
+                return can_view_admin(author)
+            if key == "staff":
+                return can_view_staff(author)
+            return True
+
         for info in infos:
             tier_key = (info.access_tier or "user").strip().lower()
             if tier_key not in buckets:
@@ -3104,7 +3114,8 @@ class CoreOpsCog(commands.Cog):
                 tier_sections.append(
                     HelpTierSection(label=section.label, commands=commands)
                 )
-            if not any(section.commands for section in tier_sections):
+            has_commands = any(section.commands for section in tier_sections)
+            if not has_commands and (not allow_empty_tiers or not _audience_is_visible(key)):
                 continue
             tiers.append(HelpTier(title=config.title, sections=tuple(tier_sections)))
         return tiers

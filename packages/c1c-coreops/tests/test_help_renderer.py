@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Iterable, Mapping, Sequence
@@ -29,7 +30,7 @@ def _resolve_member(target):
 _ensure_src_on_path()
 
 from c1c_coreops import help as help_module
-from c1c_coreops.cog import CoreOpsCog
+from c1c_coreops.cog import CoreOpsCog, _HelpSectionConfig
 from cogs.recruitment_clan_profile import ClanProfileCog
 from cogs.recruitment_member import RecruitmentMember
 from cogs.recruitment_recruiter import RecruiterPanelCog
@@ -299,6 +300,34 @@ def test_help_staff_view(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "`@Bot help`" in user_text
         assert "`@Bot ping`" in user_text
         assert "!ops" not in user_text
+
+    asyncio.run(runner())
+
+
+def test_help_staff_view_with_empty_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def runner() -> None:
+        placeholder = _HelpSectionConfig("void", "Placeholder", ())
+        staff_config = CoreOpsCog._HELP_AUDIENCE_CONFIGS["staff"]
+        monkeypatch.setitem(
+            CoreOpsCog._HELP_AUDIENCE_CONFIGS,
+            "staff",
+            replace(staff_config, sections=(placeholder,)),
+        )
+
+        embeds = await _gather_help_embeds(
+            monkeypatch,
+            DummyMember(is_staff=True),
+            show_empty=True,
+            allowlist="env,health,refresh all",
+        )
+
+        titles = {embed.title: embed for embed in embeds}
+        assert "Staff" in titles
+        staff_embed = titles["Staff"]
+
+        fields = getattr(staff_embed, "fields", ())
+        assert fields, "expected placeholder fields for empty staff tier"
+        assert all(getattr(field, "value", "") == "Coming soon" for field in fields)
 
     asyncio.run(runner())
 
