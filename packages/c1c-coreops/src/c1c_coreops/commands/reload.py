@@ -10,6 +10,8 @@ from discord.ext import commands
 from modules.common import runtime
 from shared import config as cfg
 
+from ..helpers import help_metadata
+
 logger = logging.getLogger("c1c.coreops.commands.reload")
 
 bot: commands.Bot | None = None
@@ -61,6 +63,7 @@ class Reload(commands.Cog):
         self.bot = bot
         _set_bot(bot)
 
+    @help_metadata(function_group="operational", access_tier="admin")
     @commands.command(name="reload")
     async def reload_command(self, ctx: commands.Context, *flags: str) -> None:
         reboot = any(flag == "--reboot" for flag in flags)
