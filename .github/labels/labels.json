@@ -165,6 +165,11 @@
     "description": "README, guides, runbooks"
   },
   {
+    "name": "documentation",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "duplicate",
     "color": "cfd3d7",
     "description": "This issue or pull request already exists"
