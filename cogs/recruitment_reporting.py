@@ -24,7 +24,11 @@ class RecruitmentReporting(commands.Cog):
         section="utilities",
         access_tier="admin",
     )
-    @commands.command(name="report", help="Reporting utilities")
+    @commands.command(
+        name="report",
+        help="Posts the Daily Recruiter Update to the configured channel immediately.",
+        brief="Posts the Daily Recruiter Update immediately.",
+    )
     @admin_only()
     async def report_group(self, ctx: commands.Context, *args: str) -> None:
         if len(args) != 1 or args[0].lower() != "recruiters":

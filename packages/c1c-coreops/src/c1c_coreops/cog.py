@@ -54,7 +54,6 @@ from .help import (
     build_coreops_footer,
     build_help_detail_embed,
     build_help_overview_embeds,
-    lookup_help_metadata,
 )
 from .helpers import help_metadata, tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
@@ -1172,7 +1171,12 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(msg, extra=extra)
 
-    @commands.group(name="ops", invoke_without_command=True)
+    @commands.group(
+        name="ops",
+        invoke_without_command=True,
+        help="Entry point for CoreOps operational commands and utilities.",
+        brief="Entry point for CoreOps operational commands.",
+    )
     @guild_only_denied_msg()
     async def ops(self, ctx: commands.Context) -> None:
         """Recruitment toolkit commands for the C1C cluster."""
@@ -1429,13 +1433,23 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @ops.command(name="health")
+    @ops.command(
+        name="health",
+        help="Checks the bot’s internal health status.",
+        brief="Checks the bot’s internal health status.",
+    )
     @ops_only()
     async def ops_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="health", hidden=True)
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
+    @commands.command(
+        name="health",
+        hidden=True,
+        help="Checks the bot’s internal health status.",
+        brief="Checks the bot’s internal health status.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def health(self, ctx: commands.Context) -> None:
@@ -1996,14 +2010,24 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.command(name="checksheet")
+    @ops.command(
+        name="checksheet",
+        help="Shows loaded tabs and headers.",
+        brief="Shows loaded tabs and headers.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     @tier("admin")
-    @commands.command(name="checksheet", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="checksheet",
+        hidden=True,
+        help="Shows loaded tabs and headers.",
+        brief="Shows loaded tabs and headers.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def checksheet(self, ctx: commands.Context) -> None:
@@ -2119,13 +2143,23 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @ops.command(name="digest")
+    @ops.command(
+        name="digest",
+        help="Displays a quick system summary.",
+        brief="Displays a quick system summary.",
+    )
     @ops_only()
     async def ops_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="digest", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="digest",
+        hidden=True,
+        help="Displays a quick system summary.",
+        brief="Displays a quick system summary.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def digest(self, ctx: commands.Context) -> None:
@@ -2170,21 +2204,37 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @ops.command(name="env")
+    @ops.command(
+        name="env",
+        help="Shows environment info for this bot.",
+        brief="Shows environment info for this bot.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def ops_env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="env", hidden=True)
+    @help_metadata(function_group="operational", section="config_health", access_tier="admin")
+    @commands.command(
+        name="env",
+        hidden=True,
+        help="Shows environment info for this bot.",
+        brief="Shows environment info for this bot.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
     @tier("user")
-    @ops.command(name="help", usage="[command]", extras={"hide_in_help": True})
+    @ops.command(
+        name="help",
+        usage="[command]",
+        extras={"hide_in_help": True},
+        help="Shows the permission-aware help menu with dynamic visibility.",
+        brief="Shows the permission-aware help menu.",
+    )
     async def ops_help(
         self, ctx: commands.Context, *, query: str | None = None
     ) -> None:
@@ -2196,7 +2246,13 @@ class CoreOpsCog(commands.Cog):
         await self._render_help(ctx, query=query)
 
     @tier("user")
-    @ops.command(name="ping", extras={"hide_in_help": True})
+    @help_metadata(function_group="operational", section="general", access_tier="user")
+    @ops.command(
+        name="ping",
+        extras={"hide_in_help": True},
+        help="Routes to the mention-based ping command for quick availability checks.",
+        brief="Routes to the mention-based ping command.",
+    )
     async def ops_ping(self, ctx: commands.Context) -> None:
         command = self.bot.get_command("ping")
         if command is None:
@@ -2399,14 +2455,24 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.command(name="config")
+    @ops.command(
+        name="config",
+        help="Shows current configuration values.",
+        brief="Shows current configuration values.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_config(self, ctx: commands.Context) -> None:
         await self._config_impl(ctx)
 
     @tier("admin")
-    @commands.command(name="config", hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.command(
+        name="config",
+        hidden=True,
+        help="Shows current configuration values.",
+        brief="Shows current configuration values.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def config_summary(self, ctx: commands.Context) -> None:
@@ -2426,7 +2492,13 @@ class CoreOpsCog(commands.Cog):
         )
 
     @tier("admin")
-    @commands.command(name="reload", hidden=True)
+    @help_metadata(function_group="operational", section="utilities", access_tier="admin")
+    @commands.command(
+        name="reload",
+        hidden=True,
+        help="Reloads runtime configs and command modules.",
+        brief="Reloads runtime configs and command modules.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def reload(self, ctx: commands.Context, *flags: str) -> None:
@@ -2441,7 +2513,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="utilities", access_tier="admin")
-    @ops.command(name="reload")
+    @ops.command(
+        name="reload",
+        help="Reloads runtime configs and command modules.",
+        brief="Reloads runtime configs and command modules.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_reload(self, ctx: commands.Context, *flags: str) -> None:
@@ -2455,7 +2531,14 @@ class CoreOpsCog(commands.Cog):
         await self._reload_impl(ctx, reboot=reboot)
 
     @tier("admin")
-    @commands.group(name="refresh", invoke_without_command=True, hidden=True)
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @commands.group(
+        name="refresh",
+        invoke_without_command=True,
+        hidden=True,
+        help="Refreshes a single data bucket from Google Sheets.",
+        brief="Refreshes a single data bucket from Google Sheets.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def refresh(
@@ -2470,7 +2553,12 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops.group(name="refresh", invoke_without_command=True)
+    @ops.group(
+        name="refresh",
+        invoke_without_command=True,
+        help="Refreshes a single data bucket from Google Sheets.",
+        brief="Refreshes a single data bucket from Google Sheets.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_refresh(
@@ -2537,7 +2625,12 @@ class CoreOpsCog(commands.Cog):
         logger.info(log_msg, extra=extra)
 
     @tier("admin")
-    @refresh.command(name="all")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @refresh.command(
+        name="all",
+        help="Reloads all data from Sheets.",
+        brief="Reloads all data from Sheets.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
@@ -2548,7 +2641,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
-    @ops_refresh.command(name="all")
+    @ops_refresh.command(
+        name="all",
+        help="Reloads all data from Sheets.",
+        brief="Reloads all data from Sheets.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
@@ -2659,7 +2756,12 @@ class CoreOpsCog(commands.Cog):
         )
 
     @tier("admin")
-    @refresh.command(name="clansinfo")
+    @help_metadata(function_group="operational", section="sheet_tools", access_tier="admin")
+    @refresh.command(
+        name="clansinfo",
+        help="Updates the clan info list.",
+        brief="Updates the clan info list.",
+    )
     @guild_only_denied_msg()
     @admin_only()
     async def refresh_clansinfo(self, ctx: commands.Context) -> None:
@@ -2669,7 +2771,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @ops_refresh.command(name="clansinfo")
+    @ops_refresh.command(
+        name="clansinfo",
+        help="Updates the clan info list.",
+        brief="Updates the clan info list.",
+    )
     @guild_only_denied_msg()
     @ops_only()
     async def ops_refresh_clansinfo(self, ctx: commands.Context) -> None:
@@ -2678,18 +2784,11 @@ class CoreOpsCog(commands.Cog):
     async def _gather_overview_tiers(
         self, ctx: commands.Context
     ) -> list[HelpTier]:
-        author = getattr(ctx, "author", None)
-        audience_order: list[str] = []
-        if can_view_admin(author):
-            audience_order.append("admin")
-        if can_view_staff(author):
-            audience_order.append("staff")
-        audience_order.append("user")
-
-        ordered_audiences: list[str] = []
-        for key in audience_order:
-            if key not in ordered_audiences and key in self._HELP_AUDIENCE_CONFIGS:
-                ordered_audiences.append(key)
+        ordered_audiences = [
+            key
+            for key in ("admin", "staff", "user")
+            if key in self._HELP_AUDIENCE_CONFIGS
+        ]
 
         if not ordered_audiences:
             return []
@@ -2715,7 +2814,9 @@ class CoreOpsCog(commands.Cog):
             if base_name in seen:
                 continue
             seen.add(base_name)
-            if not await self._can_display_command(command, ctx):
+            if not await self._can_display_command(
+                command, ctx, log_failures=True
+            ):
                 continue
             info = self._build_help_info(command)
             info = await self._apply_help_overrides(
@@ -2723,7 +2824,7 @@ class CoreOpsCog(commands.Cog):
             )
             infos.append(info)
 
-        manual_infos = self._manual_overview_entries(seen, ctx)
+        manual_infos = await self._manual_overview_entries(seen, ctx)
         if manual_infos:
             infos.extend(manual_infos)
             seen.update(item.qualified_name for item in manual_infos)
@@ -2893,7 +2994,7 @@ class CoreOpsCog(commands.Cog):
 
         return None
 
-    def _manual_overview_entries(
+    async def _manual_overview_entries(
         self, seen: Set[str], ctx: commands.Context
     ) -> list[HelpCommandInfo]:
         entries: list[HelpCommandInfo] = []
@@ -2908,43 +3009,23 @@ class CoreOpsCog(commands.Cog):
                 return can_view_staff(author)
             return True
 
-        help_meta = lookup_help_metadata("ops help")
-        if (
-            "ops help" not in seen
-            and help_meta is not None
-            and _is_allowed(help_meta.tier)
-        ):
+        for command_name, usage in ("ops help", "@Bot help"), ("ops ping", "@Bot ping"):
+            if command_name in seen:
+                continue
+            command = self.bot.get_command(command_name)
+            if command is None:
+                continue
+            if not await self._can_display_command(command, ctx, log_failures=True):
+                continue
+            info = self._build_help_info(command)
+            if not _is_allowed(info.access_tier):
+                continue
             entries.append(
-                HelpCommandInfo(
-                    qualified_name="ops help",
-                    signature="",
-                    short=help_meta.short,
-                    detailed=help_meta.detailed,
-                    aliases=(),
-                    access_tier="user",
-                    function_group="general",
+                replace(
+                    info,
                     section="general",
-                    usage_override="@Bot help",
-                )
-            )
-
-        ping_meta = lookup_help_metadata("ops ping")
-        if (
-            "ops ping" not in seen
-            and ping_meta is not None
-            and _is_allowed(ping_meta.tier)
-        ):
-            entries.append(
-                HelpCommandInfo(
-                    qualified_name="ops ping",
-                    signature="",
-                    short=ping_meta.short,
-                    detailed=ping_meta.detailed,
-                    aliases=(),
-                    access_tier="user",
                     function_group="general",
-                    section="general",
-                    usage_override="@Bot ping",
+                    usage_override=usage,
                 )
             )
 
@@ -2979,7 +3060,9 @@ class CoreOpsCog(commands.Cog):
             if base_name in seen:
                 continue
             seen.add(base_name)
-            if not await self._can_display_command(subcommand, ctx):
+            if not await self._can_display_command(
+                subcommand, ctx, log_failures=True
+            ):
                 continue
             infos.append(self._build_help_info(subcommand))
 
@@ -2987,7 +3070,11 @@ class CoreOpsCog(commands.Cog):
         return infos
 
     async def _can_display_command(
-        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+        self,
+        command: commands.Command[Any, Any, Any],
+        ctx: commands.Context,
+        *,
+        log_failures: bool = False,
     ) -> bool:
         if not command.enabled:
             return False
@@ -3001,10 +3088,17 @@ class CoreOpsCog(commands.Cog):
         previous = getattr(ctx, "_coreops_suppress_denials", sentinel)
         setattr(ctx, "_coreops_suppress_denials", True)
         try:
-            return await command.can_run(ctx)
+            ok = await command.can_run(ctx)
+            if not ok and log_failures:
+                self._log_help_denial(command, ctx)
+            return ok
         except commands.CheckFailure:
+            if log_failures:
+                self._log_help_denial(command, ctx)
             return False
         except commands.CommandError:
+            if log_failures:
+                self._log_help_denial(command, ctx)
             return False
         except Exception:  # pragma: no cover - defensive guard
             logger.exception("failed help gate for command", exc_info=True)
@@ -3018,20 +3112,30 @@ class CoreOpsCog(commands.Cog):
             else:
                 setattr(ctx, "_coreops_suppress_denials", previous)
 
+    def _log_help_denial(
+        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+    ) -> None:
+        author = getattr(ctx, "author", None)
+        if can_view_admin(author):
+            caller_role = "admin"
+        elif can_view_staff(author):
+            caller_role = "staff"
+        else:
+            caller_role = "user"
+        qualified = getattr(command, "qualified_name", None) or command.name
+        logger.error(
+            "[help] skipped command %s for caller role %s",
+            qualified,
+            caller_role,
+        )
+
     def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
         signature = command.signature or ""
-        metadata = (
-            lookup_help_metadata(command.qualified_name)
-            or lookup_help_metadata(command.name)
-            or None
-        )
-        if metadata is not None:
-            short = metadata.short
-            detailed = metadata.detailed
-        else:
-            fallback = command.short_doc or command.help or command.brief or ""
-            short = fallback.strip()
-            detailed = (command.help or fallback or "").strip()
+        fallback = command.short_doc or command.help or command.brief or ""
+        detailed = (command.help or fallback or "").strip()
+        short = fallback.strip()
+        if not short:
+            short = detailed.splitlines()[0].strip() if detailed else ""
         aliases = tuple(sorted(alias.strip() for alias in command.aliases if alias.strip()))
 
         extras = getattr(command, "extras", None)

@@ -64,7 +64,11 @@ class Reload(commands.Cog):
         _set_bot(bot)
 
     @help_metadata(function_group="operational", access_tier="admin")
-    @commands.command(name="reload")
+    @commands.command(
+        name="reload",
+        help="Reloads runtime configs and command modules, with optional soft reboot support.",
+        brief="Reloads runtime configs and command modules.",
+    )
     async def reload_command(self, ctx: commands.Context, *flags: str) -> None:
         reboot = any(flag == "--reboot" for flag in flags)
         # Re-parse env + re-apply config invariants at runtime.

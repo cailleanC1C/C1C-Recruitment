@@ -213,7 +213,8 @@ class RecruiterPanelCog(commands.Cog):
     @help_metadata(function_group="recruitment", section="recruitment", access_tier="staff")
     @commands.command(
         name="clanmatch",
-        help="Launches the text-only recruiter panel used to match recruits with clans.",
+        help="Opens the recruiter clan-search panel to match recruits with available clans.",
+        brief="Opens the recruiter clan-search panel.",
     )
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def clanmatch(self, ctx: commands.Context) -> None:
