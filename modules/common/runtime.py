@@ -715,6 +715,7 @@ class Runtime:
 
         from c1c_coreops import cog as coreops_cog
         from cogs import app_admin
+        from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
         from modules.ops import permissions_sync as ops_permissions
@@ -843,6 +844,7 @@ class Runtime:
             "modules.placement.reservations", ("placement_reservations",)
         )
 
+        await onboarding_reaction_fallback.setup(self.bot)
         await onboarding_welcome.setup(self.bot)
         await onboarding_promo.setup(self.bot)
         await ops_cog.setup(self.bot)
