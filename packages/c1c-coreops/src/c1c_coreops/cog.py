@@ -3063,10 +3063,6 @@ class CoreOpsCog(commands.Cog):
 
     def _format_features(self, entries: Dict[str, _EnvEntry]) -> List[str]:
         ordered = [
-            "WELCOME_ENABLED",
-            "ENABLE_WELCOME_HOOK",
-            "ENABLE_PROMO_WATCHER",
-            "ENABLE_NOTIFY_FALLBACK",
             "STRICT_PROBE",
             "PANEL_THREAD_MODE",
             "SEARCH_RESULTS_SOFT_CAP",

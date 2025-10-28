@@ -9,7 +9,7 @@ Configuration Snapshot — prod
 Guilds: Clash Champs (Recruitment), Clash Champs Lounge (Onboarding)
 Sheets: Recruitment → 1aBCDefGhijKLMnoPqrStuV · Onboarding → 9zYXwvUTsrQpoNMlkJihGFed
 Watchers: welcome✅ promo✅
-Toggles: STRICT_PROBE=off · ENABLE_NOTIFY_FALLBACK=on · SEARCH_RESULTS_SOFT_CAP=25
+Toggles: STRICT_PROBE=off · SEARCH_RESULTS_SOFT_CAP=25
 Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 ```
 
@@ -49,6 +49,8 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | secret | — | Legacy alias for `GSPREAD_CREDENTIALS`. |
 | `RECRUITMENT_SHEET_ID` | string | — | Google Sheet ID for recruitment data. |
 | `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
+| `REMINDER_SHEET_ID` | string | — | Google Sheet ID for reminders (service-specific). |
+| `MILESTONES_SHEET_ID` | string | — | Google Sheet ID for Milestones (claims, appreciation, shard & mercy, missions) (service-specific). |
 | `GOOGLE_SHEET_ID` | string | — | Back-compat sheet ID used when dedicated IDs are unset. |
 | `GSHEET_ID` | string | — | Legacy alias checked when the other IDs are blank. |
 | `RECRUITMENT_CONFIG_TAB` | string | `Config` | Worksheet name containing recruitment config. |
@@ -81,17 +83,13 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
 
-### Feature toggles and runtime flags
+### Runtime flags
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `WELCOME_ENABLED` | bool | `true` | Master switch for the welcome workflow. |
-| `ENABLE_WELCOME_HOOK` | bool | `true` | Enables welcome event listeners; disable to keep tickets offline. |
-| `ENABLE_PROMO_WATCHER` | bool | `true` | Enables promo event listeners. |
-| `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to the fallback channel when true. |
 | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
 
-> Feature toggle `recruitment_reports` enables the Daily Recruiter Update (UTC scheduler plus `!report recruiters`). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
+> Feature toggles such as `recruitment_reports`, `placement_target_select`, `placement_reservations`, and onboarding watcher flags are sourced from the FeatureToggles worksheet.
 
 ### Watchdog, cache, and cleanup
 | Key | Type | Default | Notes |
@@ -121,13 +119,8 @@ sync modules remain available for non-async scripts and cache warmers.
 > The `/emoji-pad` proxy enforces HTTPS-only source URLs. Any HTTP attempt returns `400 invalid source host`.
 
 ## Automation listeners & cron jobs
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `ENABLE_WELCOME_HOOK` | bool | `true` | Event listeners for welcome thread closures that log to Sheets. |
-| `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promo thread closures that log to Sheets. |
 
-> `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
-> 'ENABLE_WELCOME_WATCHER' entries from deployment environments.
+Event listeners and watcher availability are controlled by FeatureToggles sheet entries rather than ENV variables.
 
 > Cron cadences are fixed in code today; scheduled jobs refresh the `clans`, `templates`, and `clan_tags` cache buckets, post `[cache]` summaries to the ops channel, and emit the Daily Recruiter Update at `REPORT_DAILY_POST_TIME` (UTC). Update the scheduler directly if the defaults change.
 
@@ -182,6 +175,9 @@ Feature Toggles:
   recruitment_reports,TRUE
   placement_target_select,TRUE
   placement_reservations,TRUE
+  welcome_enabled,TRUE
+  enable_welcome_hook,TRUE
+  enable_promo_watcher,TRUE
   ```
 
 **Behavior**
@@ -191,6 +187,8 @@ Feature Toggles:
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
 - The `recruitment_reports` row powers the Daily Recruiter Update (scheduler + manual command). The `placement_*` rows still control stub modules that only log load state.
+
+Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV variables must not be used for feature flags.
 
 **Operator flow**
 

@@ -10,12 +10,9 @@ from typing import Any, Optional
 import discord
 from discord.ext import commands
 
+from modules.common import feature_flags
 from modules.common import runtime as rt
-from shared.config import (
-    get_enable_welcome_hook,
-    get_welcome_channel_id,
-    get_welcome_enabled,
-)
+from shared.config import get_welcome_channel_id
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
 from shared.sheets.onboarding import _resolve_onboarding_and_welcome_tab
 
@@ -153,11 +150,17 @@ class WelcomeWatcher(_ThreadClosureWatcher):
 
 
 async def setup(bot: commands.Bot) -> None:
-    if not get_welcome_enabled():
-        _announce(bot, "📴 Welcome watcher disabled: WELCOME_ENABLED is false.")
+    if not feature_flags.is_enabled("welcome_enabled"):
+        _announce(
+            bot,
+            "📴 Welcome watcher disabled: FeatureToggles['welcome_enabled'] is OFF.",
+        )
         return
-    if not get_enable_welcome_hook():
-        _announce(bot, "📴 Welcome watcher disabled via config toggle.")
+    if not feature_flags.is_enabled("enable_welcome_hook"):
+        _announce(
+            bot,
+            "📴 Welcome watcher disabled: FeatureToggles['enable_welcome_hook'] is OFF.",
+        )
         return
 
     channel_id = get_welcome_channel_id()

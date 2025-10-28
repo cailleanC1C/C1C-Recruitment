@@ -97,15 +97,17 @@ off in production until the panels ship._
 - Approved keys:
   - `member_panel` — member search panels.
   - `recruiter_panel` — recruiter dashboards and match tools.
-  - `recruitment_welcome` — welcome command (welcome/promo listeners remain env-gated).
+  - `recruitment_welcome` — welcome command.
+  - `welcome_enabled` — global enable for onboarding automation listeners.
+  - `enable_welcome_hook` — enables the welcome thread watcher.
+  - `enable_promo_watcher` — enables the promo thread watcher.
   - `recruitment_reports` — Daily Recruiter Update (UTC scheduler + `!report recruiters`).
   - `placement_target_select` — stub module for future placement picker.
   - `placement_reservations` — stub module for future reservation workflow.
 - Toggles live in the recruitment Sheet `FeatureToggles` worksheet; `TRUE`/`true`/`1`
   enable a feature, `FALSE`/`false`/`0` disable it. Misconfigurations post a single admin-ping warning to the runtime log
   channel.
-- `ENABLE_WELCOME_HOOK` and `ENABLE_PROMO_WATCHER` environment flags control watcher
-  registration independently of the feature sheet (see [`Config.md`](ops/Config.md#environment-keys)).
+- Watcher registration is driven solely by FeatureToggles entries rather than environment keys.
 - RBAC derives from `c1c_coreops.rbac`, mapping `ADMIN_ROLE_IDS`, `STAFF_ROLE_IDS`,
   `RECRUITER_ROLE_IDS`, and `LEAD_ROLE_IDS` from configuration.
 

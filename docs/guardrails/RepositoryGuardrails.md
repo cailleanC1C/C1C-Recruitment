@@ -18,7 +18,7 @@ Every audit and CI check validates against this document.
 - **C-02 Logging:** Use structured logging helpers; no bare `print`.
 - **C-03 Imports:** Prefer absolute imports; no parent (`..`) imports.
 - **C-04 Feature Flags:** Sourced from the **Features** sheet as `TRUE`/`FALSE` (case-insensitive normalization).
-- **C-05 ENV Surface:** Optional toggles live in ENV; all ENV keys documented in `docs/ops/Config.md` and mirrored in `.env.example`.
+- **C-05 ENV Surface:** ENV is reserved for tokens, IDs, and infrastructure knobs. Feature flags **must not** live in ENV and are sourced exclusively from the FeatureToggles sheet.
 - **C-06 Error Handling:** User-facing errors are friendly; exceptions are logged.
 - **C-07 RBAC Centralized:** All role/permission checks use the standard RBAC helpers (no ad-hoc checks).
 - **C-08 Single-Message Panels:** Interactive panels (like clan panels) update in place; avoid message spam.
