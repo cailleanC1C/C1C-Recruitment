@@ -83,6 +83,13 @@ UTC = dt.timezone.utc
 
 logger = logging.getLogger(__name__)
 
+
+_HELP_DIAGNOSTICS_CACHE: Dict[tuple[str, int | None], float] = {}
+
+
+def _reset_help_diagnostics_cache() -> None:
+    _HELP_DIAGNOSTICS_CACHE.clear()
+
 _NAME_CACHE_TTL_SEC = 600.0
 _ID_PATTERN = re.compile(r"\d{5,}")
 _ID_KEY_HINTS = ("ID", "ROLE", "CHANNEL", "THREAD", "GUILD")
@@ -982,6 +989,122 @@ class _HelpAudienceConfig:
     sections: tuple[_HelpSectionConfig, ...]
 
 
+@dataclass
+class _CommandAccessResult:
+    can_run: bool
+    reason: str | None = None
+
+
+@dataclass
+class _HelpDiagnosticsEntry:
+    qualified_name: str
+    access_tier: str
+    function_group: str
+    can_run: bool = False
+    displayed: bool = False
+    reason: str = "hidden"
+
+
+@dataclass
+class _HelpDiagnosticsReport:
+    entries: tuple[_HelpDiagnosticsEntry, ...]
+    total: int
+    visible: int
+    hidden: int
+
+
+class _HelpDiagnosticsCollector:
+    __slots__ = ("_entries", "_order")
+
+    def __init__(self) -> None:
+        self._entries: Dict[str, _HelpDiagnosticsEntry] = {}
+        self._order: List[str] = []
+
+    def register(self, command: commands.Command[Any, Any, Any]) -> None:
+        qualified = getattr(command, "qualified_name", None)
+        if not isinstance(qualified, str) or not qualified:
+            return
+        if qualified in self._entries:
+            return
+        access_tier = _get_tier(command)
+        function_group = getattr(command, "function_group", None)
+        if not isinstance(function_group, str) or not function_group.strip():
+            extras = getattr(command, "extras", None)
+            if isinstance(extras, dict):
+                function_group = str(extras.get("function_group") or "").strip()
+        normalized_group = function_group if function_group else "MISSING"
+        entry = _HelpDiagnosticsEntry(
+            qualified_name=qualified,
+            access_tier=(access_tier.strip() or "MISSING"),
+            function_group=normalized_group or "MISSING",
+        )
+        self._entries[qualified] = entry
+        self._order.append(qualified)
+
+    def entry(self, qualified: str) -> _HelpDiagnosticsEntry | None:
+        return self._entries.get(qualified)
+
+    def mark_can_run(self, qualified: str, result: _CommandAccessResult) -> None:
+        entry = self.entry(qualified)
+        if entry is None:
+            return
+        entry.can_run = result.can_run
+        if not result.can_run and result.reason:
+            entry.reason = result.reason
+
+    def mark_filtered(self, qualified: str, reason: str) -> None:
+        entry = self.entry(qualified)
+        if entry is None:
+            return
+        entry.displayed = False
+        entry.reason = reason
+
+    def mark_not_displayed(self, qualified: str, reason: str | None = None) -> None:
+        entry = self.entry(qualified)
+        if entry is None:
+            return
+        entry.displayed = False
+        if reason:
+            entry.reason = reason
+
+    def mark_displayed(self, qualified: str) -> None:
+        entry = self.entry(qualified)
+        if entry is None:
+            return
+        entry.displayed = True
+        entry.reason = "ok"
+
+    def mark_manual_display(self, qualified: str) -> None:
+        entry = self.entry(qualified)
+        if entry is None:
+            entry = _HelpDiagnosticsEntry(
+                qualified_name=qualified,
+                access_tier="MISSING",
+                function_group="MISSING",
+            )
+            self._entries[qualified] = entry
+            self._order.append(qualified)
+        entry.can_run = True
+        entry.displayed = True
+        entry.reason = "ok"
+
+    def build_report(self) -> _HelpDiagnosticsReport | None:
+        if not self._entries:
+            return None
+        ordered = sorted(
+            (
+                self._entries[key]
+                for key in self._order
+                if key in self._entries
+            ),
+            key=lambda item: (not item.displayed, item.qualified_name),
+        )
+        total = len(ordered)
+        visible = sum(1 for entry in ordered if entry.displayed)
+        hidden = total - visible
+        return _HelpDiagnosticsReport(entries=tuple(ordered), total=total, visible=visible, hidden=hidden)
+
+
 class CoreOpsCog(commands.Cog):
     _HELP_AUDIENCE_CONFIGS: Dict[str, _HelpAudienceConfig] = {
         "admin": _HelpAudienceConfig(
@@ -1028,6 +1151,7 @@ class CoreOpsCog(commands.Cog):
         }
         self._removed_generic_commands: tuple[str, ...] = tuple()
         self._tagged_aliases: tuple[str, ...] = tuple()
+        self._help_diag_cache: Dict[tuple[str, int | None], float] = _HELP_DIAGNOSTICS_CACHE
         self._apply_tagged_alias_metadata()
         self._apply_generic_alias_policy()
         self._command_metadata_overrides = self._build_command_metadata_overrides()
@@ -2212,10 +2336,15 @@ class CoreOpsCog(commands.Cog):
         bot_name = get_bot_name()
         lookup = query.strip() if isinstance(query, str) else ""
 
+        diagnostics: _HelpDiagnosticsCollector | None = None
+        if self._help_diagnostics_enabled():
+            diagnostics = self._create_help_diagnostics_collector()
+
         if not lookup:
-            tiers = await self._gather_overview_tiers(ctx)
+            tiers = await self._gather_overview_tiers(ctx, diagnostics=diagnostics)
             if not tiers:
                 await ctx.reply(str(sanitize_text("No commands available.")))
+                await self._maybe_emit_help_diagnostics(ctx, diagnostics)
                 return
             embeds = build_help_overview_embeds(
                 prefix=prefix,
@@ -2228,6 +2357,7 @@ class CoreOpsCog(commands.Cog):
             )
             sanitized = [sanitize_embed(embed) for embed in embeds]
             await ctx.reply(embeds=sanitized)
+            await self._maybe_emit_help_diagnostics(ctx, diagnostics)
             return
 
         normalized_lookup = " ".join(lookup.lower().split())
@@ -2236,10 +2366,16 @@ class CoreOpsCog(commands.Cog):
             command = self.bot.get_command(f"ops {normalized_lookup}")
         if command is None:
             await ctx.reply(str(sanitize_text(f"Unknown command `{lookup}`.")))
+            if diagnostics is not None:
+                await self._gather_overview_tiers(ctx, diagnostics=diagnostics)
+            await self._maybe_emit_help_diagnostics(ctx, diagnostics)
             return
 
         if not await self._can_display_command(command, ctx):
             await ctx.reply(str(sanitize_text("You do not have access to that command.")))
+            if diagnostics is not None:
+                await self._gather_overview_tiers(ctx, diagnostics=diagnostics)
+            await self._maybe_emit_help_diagnostics(ctx, diagnostics)
             return
 
         command_info = self._build_help_info(command)
@@ -2250,6 +2386,9 @@ class CoreOpsCog(commands.Cog):
             bot_name=bot_name,
         )
         await ctx.reply(embed=sanitize_embed(embed))
+        if diagnostics is not None:
+            await self._gather_overview_tiers(ctx, diagnostics=diagnostics)
+        await self._maybe_emit_help_diagnostics(ctx, diagnostics)
 
     async def _config_impl(self, ctx: commands.Context) -> None:
         snapshot = get_config_snapshot()
@@ -2676,7 +2815,10 @@ class CoreOpsCog(commands.Cog):
         await self._refresh_clansinfo_impl(ctx)
 
     async def _gather_overview_tiers(
-        self, ctx: commands.Context
+        self,
+        ctx: commands.Context,
+        *,
+        diagnostics: _HelpDiagnosticsCollector | None = None,
     ) -> list[HelpTier]:
         author = getattr(ctx, "author", None)
         audience_order: list[str] = []
@@ -2697,12 +2839,29 @@ class CoreOpsCog(commands.Cog):
         admin_allowlist = self._resolve_admin_allowlist()
 
         commands_iter: list[commands.Command[Any, Any, Any]] = []
+        access_results: Dict[str, _CommandAccessResult] = {}
         for command in self.bot.walk_commands():
+            qualified = getattr(command, "qualified_name", None)
+            if diagnostics is not None and isinstance(qualified, str) and qualified:
+                diagnostics.register(command)
+
+            result = await self._evaluate_command_access(command, ctx)
+            if isinstance(qualified, str) and qualified:
+                access_results[qualified] = result
+                if diagnostics is not None:
+                    diagnostics.mark_can_run(qualified, result)
+
             if not _should_show(command):
+                if diagnostics is not None and isinstance(qualified, str) and qualified:
+                    diagnostics.mark_filtered(qualified, "hidden")
                 continue
             if not self._include_in_overview(command):
+                if diagnostics is not None and isinstance(qualified, str) and qualified:
+                    diagnostics.mark_filtered(qualified, "not in overview")
                 continue
             if self._is_duplicate_admin_alias(command):
+                if diagnostics is not None and isinstance(qualified, str) and qualified:
+                    diagnostics.mark_filtered(qualified, "duplicate alias")
                 continue
             commands_iter.append(command)
 
@@ -2711,22 +2870,69 @@ class CoreOpsCog(commands.Cog):
         seen: set[str] = set()
         infos: list[HelpCommandInfo] = []
         for command in commands_iter:
-            base_name = command.qualified_name
-            if base_name in seen:
+            qualified = command.qualified_name
+            if qualified in seen:
+                if diagnostics is not None:
+                    diagnostics.mark_filtered(qualified, "duplicate entry")
                 continue
-            seen.add(base_name)
-            if not await self._can_display_command(command, ctx):
+            seen.add(qualified)
+
+            result = access_results.get(qualified)
+            if result is None:
+                result = await self._evaluate_command_access(command, ctx)
+                if diagnostics is not None:
+                    diagnostics.mark_can_run(qualified, result)
+
+            if not result.can_run:
+                if diagnostics is not None:
+                    diagnostics.mark_not_displayed(
+                        qualified, result.reason or "not runnable"
+                    )
                 continue
+
             info = self._build_help_info(command)
             info = await self._apply_help_overrides(
                 ctx, command, info, admin_allowlist
             )
+
+            tier_key = (info.access_tier or "user").strip().lower()
+            if tier_key not in ordered_audiences:
+                if diagnostics is not None:
+                    diagnostics.mark_not_displayed(qualified, "audience mismatch")
+                continue
+
+            audience = self._HELP_AUDIENCE_CONFIGS[tier_key]
+            function_group = (info.function_group or "general").strip().lower()
+            if (
+                audience.allowed_function_groups
+                and function_group not in audience.allowed_function_groups
+            ):
+                if diagnostics is not None:
+                    diagnostics.mark_not_displayed(qualified, "hidden")
+                continue
+
+            section_key = (
+                info.section or info.function_group or "general"
+            ).strip().lower()
+            section = self._match_section_config(
+                audience, section_key=section_key, function_group=function_group
+            )
+            if section is None:
+                if diagnostics is not None:
+                    diagnostics.mark_not_displayed(qualified, "empty section")
+                continue
+
             infos.append(info)
+            if diagnostics is not None:
+                diagnostics.mark_displayed(qualified)
 
         manual_infos = self._manual_overview_entries(seen, ctx)
         if manual_infos:
             infos.extend(manual_infos)
             seen.update(item.qualified_name for item in manual_infos)
+            if diagnostics is not None:
+                for item in manual_infos:
+                    diagnostics.mark_manual_display(item.qualified_name)
 
         if not infos:
             return []
@@ -2986,29 +3192,47 @@ class CoreOpsCog(commands.Cog):
         infos.sort(key=lambda item: item.qualified_name)
         return infos
 
-    async def _can_display_command(
+    def _audience_denial_reason(self, audience: str, required: str) -> str:
+        if required == "admin":
+            if audience == "staff":
+                return "not runnable for staff"
+            return "not runnable for user"
+        if required == "staff":
+            return "not runnable for user"
+        return "not runnable"
+
+    async def _evaluate_command_access(
         self, command: commands.Command[Any, Any, Any], ctx: commands.Context
-    ) -> bool:
+    ) -> _CommandAccessResult:
         if not command.enabled:
-            return False
+            return _CommandAccessResult(can_run=False, reason="disabled")
+
+        audience = self._current_help_audience(ctx)
         author = getattr(ctx, "author", None)
-        tier = _get_tier(command)
+        tier = _get_tier(command).strip().lower()
         if tier == "admin" and not can_view_admin(author):
-            return False
+            return _CommandAccessResult(
+                can_run=False,
+                reason=self._audience_denial_reason(audience, "admin"),
+            )
         if tier == "staff" and not can_view_staff(author):
-            return False
+            return _CommandAccessResult(
+                can_run=False,
+                reason=self._audience_denial_reason(audience, "staff"),
+            )
+
         sentinel = object()
         previous = getattr(ctx, "_coreops_suppress_denials", sentinel)
         setattr(ctx, "_coreops_suppress_denials", True)
         try:
-            return await command.can_run(ctx)
+            await command.can_run(ctx)
         except commands.CheckFailure:
-            return False
+            return _CommandAccessResult(can_run=False, reason="not runnable")
         except commands.CommandError:
-            return False
+            return _CommandAccessResult(can_run=False, reason="not runnable")
         except Exception:  # pragma: no cover - defensive guard
             logger.exception("failed help gate for command", exc_info=True)
-            return False
+            return _CommandAccessResult(can_run=False, reason="error")
         finally:
             if previous is sentinel:
                 try:
@@ -3017,6 +3241,14 @@ class CoreOpsCog(commands.Cog):
                     pass
             else:
                 setattr(ctx, "_coreops_suppress_denials", previous)
+
+        return _CommandAccessResult(can_run=True, reason=None)
+
+    async def _can_display_command(
+        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+    ) -> bool:
+        result = await self._evaluate_command_access(command, ctx)
+        return result.can_run
 
     def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
         signature = command.signature or ""
@@ -3085,6 +3317,175 @@ class CoreOpsCog(commands.Cog):
         value = os.getenv("SHOW_EMPTY_SECTIONS", "")
         normalized = value.strip().lower()
         return normalized in {"1", "true", "yes", "on"}
+
+    def _help_diagnostics_enabled(self) -> bool:
+        value = os.getenv("HELP_DIAGNOSTICS", "")
+        normalized = value.strip().lower()
+        return normalized in {"1", "true", "yes", "on"}
+
+    def _help_diagnostics_ttl(self) -> float:
+        raw = os.getenv("HELP_DIAGNOSTICS_TTL_SEC", "").strip()
+        if not raw:
+            return 60.0
+        try:
+            ttl = float(raw)
+        except (TypeError, ValueError):
+            return 60.0
+        return max(0.0, ttl)
+
+    def _current_help_audience(self, ctx: commands.Context) -> str:
+        author = getattr(ctx, "author", None)
+        if can_view_admin(author):
+            return "admin"
+        if can_view_staff(author):
+            return "staff"
+        return "user"
+
+    def _create_help_diagnostics_collector(self) -> _HelpDiagnosticsCollector:
+        return _HelpDiagnosticsCollector()
+
+    def _sanitize_log_identity(self, value: object) -> str:
+        if value is None:
+            return "unknown"
+        return str(sanitize_text(value))
+
+    def _format_help_diagnostics_message(
+        self,
+        ctx: commands.Context,
+        *,
+        report: _HelpDiagnosticsReport,
+        audience: str,
+    ) -> str | None:
+        author = getattr(ctx, "author", None)
+        user_name = self._sanitize_log_identity(
+            getattr(author, "display_name", None)
+            or getattr(author, "name", None)
+            or "unknown"
+        )
+        user_id = getattr(author, "id", "?")
+
+        guild = getattr(ctx, "guild", None)
+        guild_name = self._sanitize_log_identity(
+            getattr(guild, "name", None) or "DM"
+        )
+        guild_id = getattr(guild, "id", "?")
+
+        header = (
+            f"[Help Diagnostics] audience={audience} • "
+            f"guild={guild_name}({guild_id}) • user={user_name}({user_id})"
+        )
+        summary = (
+            f"visible {report.visible} / discovered {report.total} "
+            f"(hidden {report.hidden})"
+        )
+
+        entries = list(report.entries)
+        display_entries = entries[:30]
+        extra_count = len(entries) - len(display_entries)
+
+        def _build(rows: list[_HelpDiagnosticsEntry], extra: int) -> str:
+            table_rows = [
+                "qualname | access_tier | function_group | can_run | displayed | reason"
+            ]
+            for entry in rows:
+                access_tier = entry.access_tier or "MISSING"
+                function_group = entry.function_group or "MISSING"
+                can_run = "true" if entry.can_run else "false"
+                displayed = "yes" if entry.displayed else "no"
+                reason = entry.reason or "hidden"
+                table_rows.append(
+                    f"{entry.qualified_name} | {access_tier} | {function_group} | "
+                    f"{can_run} | {displayed} | {reason}"
+                )
+
+            block = "\n".join(table_rows)
+            base = (
+                f"{header}\n{summary}\n\n"
+                f"```markdown\n{block}\n```"
+            )
+            if extra > 0:
+                base = f"{base}\n(+{extra} more)"
+            return str(sanitize_text(base))
+
+        sanitized = _build(display_entries, extra_count)
+        while len(sanitized) > 1800 and display_entries:
+            display_entries.pop()
+            extra_count += 1
+            sanitized = _build(display_entries, extra_count)
+
+        return sanitized
+
+    async def _resolve_help_log_target(
+        self, ctx: commands.Context
+    ) -> tuple[discord.abc.Messageable | None, bool]:
+        try:
+            channel_id = resolve_ops_log_channel_id(bot=self.bot)
+        except Exception:
+            channel_id = None
+        if channel_id:
+            try:
+                snowflake = int(channel_id)
+            except (TypeError, ValueError):
+                snowflake = None
+            if snowflake is not None:
+                channel = self.bot.get_channel(snowflake)
+                if channel is not None and hasattr(channel, "send"):
+                    return channel, False
+
+        author = getattr(ctx, "author", None)
+        if can_view_admin(author):
+            send = getattr(author, "send", None)
+            if callable(send):
+                return author, True
+
+        return None, False
+
+    async def _maybe_emit_help_diagnostics(
+        self,
+        ctx: commands.Context,
+        collector: _HelpDiagnosticsCollector | None,
+    ) -> None:
+        if collector is None:
+            return
+
+        report = collector.build_report()
+        if report is None or not report.entries:
+            return
+
+        audience = self._current_help_audience(ctx)
+        guild = getattr(ctx, "guild", None)
+        guild_id = getattr(guild, "id", None)
+        try:
+            guild_key = int(guild_id) if guild_id is not None else None
+        except (TypeError, ValueError):
+            guild_key = None
+
+        ttl = self._help_diagnostics_ttl()
+        now = time.monotonic()
+        cache_key = (audience, guild_key)
+        if ttl > 0:
+            expires = self._help_diag_cache.get(cache_key)
+            if expires and expires > now:
+                return
+
+        message = self._format_help_diagnostics_message(
+            ctx, report=report, audience=audience
+        )
+        if not message:
+            return
+
+        target, _ = await self._resolve_help_log_target(ctx)
+        if target is None:
+            return
+
+        try:
+            await target.send(message)
+        except Exception:
+            logger.exception("failed to post help diagnostics", exc_info=True)
+            return
+
+        if ttl > 0:
+            self._help_diag_cache[cache_key] = now + ttl
 
     def _add_embed_group(
         self, embed: discord.Embed, name: str, lines: Sequence[str]
