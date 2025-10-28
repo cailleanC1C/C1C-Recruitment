@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.7 — 2025-10-28
+### Added
+- **Welcome Dialog groundwork (Phase 7):**
+  - Shared entrypoint `start_welcome_dialog(...)` created for both automated and manual triggers.
+  - **Ticket Tool trigger** (`source="ticket"`) now starts the dialog automatically on welcome/promo thread closure.
+  - **🧭 emoji fallback trigger** (`source="emoji"`) added — Recruiters, Staff, or Admins can manually start the same dialog.
+  - Deduplication via pinned marker and structured logging integrated.
+- All related documentation (EPIC, ADR-0017, Guardrails, Reports) updated to reflect these additions.
+
+### Planned
+- Dialog modal and summary embed integration (Phase 7 PR #5, in progress).
+
 ## v0.9.6 — 2025-10-26
 
 ### Added
@@ -222,4 +234,4 @@
 
 ---
 
-_Doc last updated: 2025-10-22 (v0.9.5-prep)_
+Doc last updated: 2025-10-28 (v0.9.7)
