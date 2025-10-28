@@ -83,6 +83,13 @@ UTC = dt.timezone.utc
 
 logger = logging.getLogger(__name__)
 
+
+_HELP_DIAGNOSTICS_CACHE: Dict[tuple[str, int | None], float] = {}
+
+
+def _reset_help_diagnostics_cache() -> None:
+    _HELP_DIAGNOSTICS_CACHE.clear()
+
 _NAME_CACHE_TTL_SEC = 600.0
 _ID_PATTERN = re.compile(r"\d{5,}")
 _ID_KEY_HINTS = ("ID", "ROLE", "CHANNEL", "THREAD", "GUILD")
@@ -1144,7 +1151,7 @@ class CoreOpsCog(commands.Cog):
         }
         self._removed_generic_commands: tuple[str, ...] = tuple()
         self._tagged_aliases: tuple[str, ...] = tuple()
-        self._help_diag_cache: Dict[tuple[str, int | None], float] = {}
+        self._help_diag_cache: Dict[tuple[str, int | None], float] = _HELP_DIAGNOSTICS_CACHE
         self._apply_tagged_alias_metadata()
         self._apply_generic_alias_policy()
         self._command_metadata_overrides = self._build_command_metadata_overrides()

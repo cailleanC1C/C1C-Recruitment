@@ -21,7 +21,7 @@ def _ensure_src_on_path() -> None:
 
 _ensure_src_on_path()
 
-from c1c_coreops.cog import CoreOpsCog
+from c1c_coreops.cog import CoreOpsCog, _reset_help_diagnostics_cache
 from modules.ops.permissions_sync import BotPermissionCog
 from cogs.recruitment_clan_profile import ClanProfileCog
 from cogs.recruitment_member import RecruitmentMember
@@ -84,6 +84,7 @@ def _resolve_member(target):
 
 @pytest.fixture(autouse=True)
 def patch_rbac(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
+    _reset_help_diagnostics_cache()
     monkeypatch.setattr("c1c_coreops.rbac.get_admin_role_ids", lambda: set())
     monkeypatch.setattr("c1c_coreops.rbac.get_staff_role_ids", lambda: set())
     monkeypatch.setattr("c1c_coreops.rbac._resolve_member", _resolve_member)
@@ -158,6 +159,7 @@ def patch_rbac(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
     monkeypatch.setattr("c1c_coreops.rbac.discord.Member", DummyMember)
     monkeypatch.setattr("c1c_coreops.cog.discord.Member", DummyMember)
     yield
+    _reset_help_diagnostics_cache()
 
 
 async def _setup_bot(monkeypatch: pytest.MonkeyPatch) -> tuple[commands.Bot, DummyLogChannel]:
