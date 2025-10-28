@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Sequence
 
-# Qualified name -> tier (e.g., "rec help", "health")
+# Qualified name -> tier (e.g., "ops help", "health")
 _TIER_REGISTRY: Dict[str, str] = {}
 
 
@@ -118,7 +118,7 @@ def audit_tiers(bot, logger=None) -> None:
         except Exception:
             pass
         tier = tier or getattr(cmd, "_tier", None)
-        if not tier and cmd.qualified_name not in ("rec",):
+        if not tier and cmd.qualified_name not in ("ops",):
             missing.append(cmd.qualified_name)
     if missing and logger is not None:
         logger.warning("Help tiers missing for: %s", ", ".join(sorted(missing)))

@@ -22,7 +22,7 @@ intervention.
 
 - Operators can rely on warm caches immediately after deploys without manual intervention.
 - `bot_info` embeds stay current even if no commands are executed for several hours.
-- Failed startup warmers become visible in logs, prompting manual `!rec refresh all` if
+- Failed startup warmers become visible in logs, prompting manual `!ops refresh all` if
   needed.
 
 ## Status

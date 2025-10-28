@@ -89,9 +89,9 @@ def build_command_variants(
         if tagged and tagged not in variants:
             variants.append(tagged)
 
-    legacy = f"rec {cleaned}".strip()
-    if legacy and legacy not in variants:
-        variants.append(legacy)
+    namespace = f"ops {cleaned}".strip()
+    if namespace and namespace not in variants:
+        variants.append(namespace)
 
     return tuple(variants)
 

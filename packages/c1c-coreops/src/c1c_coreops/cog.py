@@ -620,7 +620,7 @@ def _get_tier(cmd: commands.Command[Any, Any, Any]) -> str:
 
 def _should_show(cmd: commands.Command[Any, Any, Any]) -> bool:
     # never show internals or the group container
-    if cmd.qualified_name == "rec" or cmd.name.startswith("_"):
+    if cmd.qualified_name == "ops" or cmd.name.startswith("_"):
         return False
 
     # respect explicit opt-out flag in extras
@@ -1035,7 +1035,7 @@ class CoreOpsCog(commands.Cog):
         self._log_coreops_settings()
 
     def _apply_tagged_alias_metadata(self) -> None:
-        command = getattr(self, "rec", None)
+        command = getattr(self, "ops", None)
         if not isinstance(command, commands.Group):
             self._tagged_aliases = tuple()
             return
@@ -1086,9 +1086,9 @@ class CoreOpsCog(commands.Cog):
         )
         logger.info(msg, extra=extra)
 
-    @commands.group(name="rec", invoke_without_command=True)
+    @commands.group(name="ops", invoke_without_command=True)
     @guild_only_denied_msg()
-    async def rec(self, ctx: commands.Context) -> None:
+    async def ops(self, ctx: commands.Context) -> None:
         """Recruitment toolkit commands for the C1C cluster."""
 
         if ctx.invoked_subcommand is not None:
@@ -1343,9 +1343,9 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @rec.command(name="health")
+    @ops.command(name="health")
     @ops_only()
-    async def rec_health(self, ctx: commands.Context) -> None:
+    async def ops_health(self, ctx: commands.Context) -> None:
         await self._health_impl(ctx)
 
     @tier("admin")
@@ -1910,10 +1910,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec.command(name="checksheet")
+    @ops.command(name="checksheet")
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_checksheet(self, ctx: commands.Context) -> None:
+    async def ops_checksheet(self, ctx: commands.Context) -> None:
         await self._checksheet_impl(ctx, debug=self._has_debug_flag(ctx))
 
     @tier("staff")
@@ -2033,9 +2033,9 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec.command(name="digest")
+    @ops.command(name="digest")
     @ops_only()
-    async def rec_digest(self, ctx: commands.Context) -> None:
+    async def ops_digest(self, ctx: commands.Context) -> None:
         await self._digest_impl(ctx)
 
     @tier("admin")
@@ -2084,10 +2084,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
-    @rec.command(name="env")
+    @ops.command(name="env")
     @guild_only_denied_msg()
     @admin_only()
-    async def rec_env(self, ctx: commands.Context) -> None:
+    async def ops_env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
 
     @tier("admin")
@@ -2098,8 +2098,8 @@ class CoreOpsCog(commands.Cog):
         await self._env_impl(ctx)
 
     @tier("user")
-    @rec.command(name="help", usage="[command]", extras={"hide_in_help": True})
-    async def rec_help(
+    @ops.command(name="help", usage="[command]", extras={"hide_in_help": True})
+    async def ops_help(
         self, ctx: commands.Context, *, query: str | None = None
     ) -> None:
         await self.render_help(ctx, query=query)
@@ -2110,8 +2110,8 @@ class CoreOpsCog(commands.Cog):
         await self._render_help(ctx, query=query)
 
     @tier("user")
-    @rec.command(name="ping", extras={"hide_in_help": True})
-    async def rec_ping(self, ctx: commands.Context) -> None:
+    @ops.command(name="ping", extras={"hide_in_help": True})
+    async def ops_ping(self, ctx: commands.Context) -> None:
         command = self.bot.get_command("ping")
         if command is None:
             await ctx.send(str(sanitize_text("Ping command unavailable.")))
@@ -2146,8 +2146,8 @@ class CoreOpsCog(commands.Cog):
 
         normalized_lookup = " ".join(lookup.lower().split())
         command = self.bot.get_command(normalized_lookup)
-        if command is None and not normalized_lookup.startswith("rec "):
-            command = self.bot.get_command(f"rec {normalized_lookup}")
+        if command is None and not normalized_lookup.startswith("ops "):
+            command = self.bot.get_command(f"ops {normalized_lookup}")
         if command is None:
             await ctx.reply(str(sanitize_text(f"Unknown command `{lookup}`.")))
             return
@@ -2313,10 +2313,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec.command(name="config")
+    @ops.command(name="config")
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_config(self, ctx: commands.Context) -> None:
+    async def ops_config(self, ctx: commands.Context) -> None:
         await self._config_impl(ctx)
 
     @tier("admin")
@@ -2355,10 +2355,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="utilities", access_tier="admin")
-    @rec.command(name="reload")
+    @ops.command(name="reload")
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_reload(self, ctx: commands.Context, *flags: str) -> None:
+    async def ops_reload(self, ctx: commands.Context, *flags: str) -> None:
         reboot, unknown = self._parse_reload_flags(flags)
         if unknown is not None:
             await ctx.send(
@@ -2384,10 +2384,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec.group(name="refresh", invoke_without_command=True)
+    @ops.group(name="refresh", invoke_without_command=True)
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_refresh(
+    async def ops_refresh(
         self, ctx: commands.Context, *, bucket: Optional[str] = None
     ) -> None:
         if bucket and bucket.strip():
@@ -2462,11 +2462,11 @@ class CoreOpsCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec_refresh.command(name="all")
+    @ops_refresh.command(name="all")
     @guild_only_denied_msg()
     @ops_only()
     @commands.cooldown(1, 30.0, commands.BucketType.guild)
-    async def rec_refresh_all(self, ctx: commands.Context) -> None:
+    async def ops_refresh_all(self, ctx: commands.Context) -> None:
         await self._refresh_all_impl(ctx)
 
     def _build_refresh_row(
@@ -2583,10 +2583,10 @@ class CoreOpsCog(commands.Cog):
 
     @tier("staff")
     @help_metadata(function_group="operational", section="sheet_tools", access_tier="staff")
-    @rec_refresh.command(name="clansinfo")
+    @ops_refresh.command(name="clansinfo")
     @guild_only_denied_msg()
     @ops_only()
-    async def rec_refresh_clansinfo(self, ctx: commands.Context) -> None:
+    async def ops_refresh_clansinfo(self, ctx: commands.Context) -> None:
         await self._refresh_clansinfo_impl(ctx)
 
     async def _gather_overview_tiers(
@@ -2707,15 +2707,15 @@ class CoreOpsCog(commands.Cog):
                 return can_view_staff(author)
             return True
 
-        help_meta = lookup_help_metadata("rec help")
+        help_meta = lookup_help_metadata("ops help")
         if (
-            "rec help" not in seen
+            "ops help" not in seen
             and help_meta is not None
             and _is_allowed(help_meta.tier)
         ):
             entries.append(
                 HelpCommandInfo(
-                    qualified_name="rec help",
+                    qualified_name="ops help",
                     signature="",
                     short=help_meta.short,
                     detailed=help_meta.detailed,
@@ -2727,15 +2727,15 @@ class CoreOpsCog(commands.Cog):
                 )
             )
 
-        ping_meta = lookup_help_metadata("rec ping")
+        ping_meta = lookup_help_metadata("ops ping")
         if (
-            "rec ping" not in seen
+            "ops ping" not in seen
             and ping_meta is not None
             and _is_allowed(ping_meta.tier)
         ):
             entries.append(
                 HelpCommandInfo(
-                    qualified_name="rec ping",
+                    qualified_name="ops ping",
                     signature="",
                     short=ping_meta.short,
                     detailed=ping_meta.detailed,
@@ -2760,7 +2760,7 @@ class CoreOpsCog(commands.Cog):
         top = command
         while top.parent is not None:
             top = top.parent
-        return top.qualified_name in {"rec", "perm"}
+        return top.qualified_name in {"ops", "perm"}
 
     async def _gather_subcommand_infos(
         self, command: commands.Command[Any, Any, Any], ctx: commands.Context

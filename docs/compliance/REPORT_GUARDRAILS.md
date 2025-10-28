@@ -35,11 +35,11 @@
 
 ### !config
 * Builds a rich embed summarizing env snapshot, allow-list resolution, sheet IDs, and ops channel status with sanitized output and footer metadata.
-* Staff can access via `!rec config` (`@ops_only`), while the legacy alias stays admin-only, satisfying gating expectations.
+* Staff can access via `!ops config` (`@ops_only`), while the legacy alias stays admin-only, satisfying gating expectations.
 
 ### !digest
 * Aggregates cache telemetry into a digest embed and falls back to a formatted text line if embed construction or send fails; logging throttled through sanitize helpers.
-* Staff-tier command exposed under both `!rec` and legacy admin alias, maintaining parity with spec.
+* Staff-tier command exposed under both `!ops` and legacy admin alias, maintaining parity with spec.
 
 ### !health
 * Produces a health embed combining runtime metrics and cache telemetry, with humanized durations and UTC-aware next refresh text.
@@ -51,7 +51,7 @@
 
 ### !reload
 * Handles `--reboot` flag parsing, logs failures once, and reports duration to the caller; errors return sanitized warnings instead of aborting.
-* Admin-only for both legacy and `!rec` entry points, respecting guardrail + cooldown expectations (no cooldown required here).
+* Admin-only for both legacy and `!ops` entry points, respecting guardrail + cooldown expectations (no cooldown required here).
 
 ### !checksheet
 * Iterates configured sheet targets, inspects tabs with backoff, and composes embeds listing results/warnings; errors logged once per sheet/tab context.
