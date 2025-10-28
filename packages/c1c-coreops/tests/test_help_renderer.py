@@ -277,10 +277,12 @@ def test_help_staff_view(monkeypatch: pytest.MonkeyPatch) -> None:
             DummyMember(is_staff=True),
             allowlist="env,health,refresh all",
         )
-        assert len(embeds) == 4
-        _, admin_embed, staff_embed, user_embed = embeds
+        assert len(embeds) == 3
+        titles = {embed.title: embed for embed in embeds}
+        assert "Admin / Operational" not in titles
 
-        assert not _fields(admin_embed)
+        staff_embed = titles["Staff"]
+        user_embed = titles["User"]
 
         staff_text = _collect_text(staff_embed)
         user_text = _collect_text(user_embed)
@@ -308,11 +310,12 @@ def test_help_user_view(monkeypatch: pytest.MonkeyPatch) -> None:
             DummyMember(),
             allowlist="env,health,refresh all",
         )
-        assert len(embeds) == 4
-        _, admin_embed, staff_embed, user_embed = embeds
+        assert len(embeds) == 2
+        titles = {embed.title: embed for embed in embeds}
+        assert "Admin / Operational" not in titles
+        assert "Staff" not in titles
 
-        assert not _fields(admin_embed)
-        assert not _fields(staff_embed)
+        user_embed = titles["User"]
 
         user_text = _collect_text(user_embed)
         assert "`!clan`" in user_text

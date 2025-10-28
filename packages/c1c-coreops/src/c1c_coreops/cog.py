@@ -3104,6 +3104,8 @@ class CoreOpsCog(commands.Cog):
                 tier_sections.append(
                     HelpTierSection(label=section.label, commands=commands)
                 )
+            if not any(section.commands for section in tier_sections):
+                continue
             tiers.append(HelpTier(title=config.title, sections=tuple(tier_sections)))
         return tiers
 
