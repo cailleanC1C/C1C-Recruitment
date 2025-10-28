@@ -60,6 +60,20 @@ Both controls record the invoking actor, even when triggered via admin bang alia
 Manual refreshes never force a restart; even repeated failures leave the bot online while
 logging the error for follow-up.
 
+### Permissions sync commands
+- **`!perm`** — Entry point for the bot permissions toolkit; points admins at the bot
+  subcommands when invoked bare.
+- **`!perm bot list`** — Summarises the current allow/deny configuration, including totals
+  for each bucket. Supports `--json` to emit a downloadable snapshot.
+- **`!perm bot allow`** — Adds channels or categories to the allow list and trims matching
+  entries from the deny list.
+- **`!perm bot deny`** — Adds channels or categories to the deny list and trims matching
+  entries from the allow list.
+- **`!perm bot remove`** — Removes channels or categories from the stored allow/deny lists
+  without adding new entries.
+- **`!perm bot sync`** — Applies the stored allow/deny state to Discord overwrites. Runs
+  in dry mode by default; pass `--dry false` to persist changes.
+
 ### Welcome template cache
 - **Command:** `!welcome-refresh` (Admin only)
 - **Purpose:** Reloads the `WelcomeTemplates` cache bucket so the next `!welcome` posts
