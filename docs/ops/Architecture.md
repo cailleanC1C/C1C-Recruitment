@@ -56,11 +56,8 @@ flowchart TD
 
 ### Help metadata
 - Commands opt-in to the multi-embed help surface via the `help_metadata` decorator.
-- `@Bot help` dynamically discovers commands from the live registry and filters by
-  `access_tier` + `function_group`. Admin viewers receive Overview + Admin + Staff + User, Staff see Overview + Staff + User, and members see Overview + User. Admin covers operational controls (including Welcome Templates + refresh/perm suites), Staff shows recruitment + Sheet Tools + milestones, and User shows recruitment + milestones + general (including the mention-only `@Bot help` / `@Bot ping`). Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
-- Bare admin aliases follow `COREOPS_ADMIN_BANG_ALLOWLIST`; non-allowlisted commands display as `!ops <command>`.
-- Empty sections collapse automatically; set `SHOW_EMPTY_SECTIONS=true` to render a
-  “Coming soon” placeholder. The footer always reads `Bot v… · CoreOps v… • For details: @Bot help`.
+- `@Bot help` dynamically discovers commands from the live registry via `bot.walk_commands()` and filters each candidate with `command.can_run(ctx)` so RBAC decorators remain authoritative. Every reply includes Overview + Admin / Operational + Staff + User embeds; sections without runnable commands collapse unless `SHOW_EMPTY_SECTIONS=true` is set, which swaps in a “Coming soon” placeholder. Admin covers operational controls (including Welcome Templates + refresh/perm suites), Staff shows recruitment + Sheet Tools + milestones, and User shows recruitment + milestones + general (including the mention-only `@Bot help` / `@Bot ping`). Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
+- Bare admin aliases follow `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes. The footer always reads `Bot v… · CoreOps v… • For details: @Bot help`.
 
 ### Feature gating at load
 - **Module wiring:** Feature modules call `modules.common.feature_flags.is_enabled(<key>)` during boot.
@@ -80,4 +77,4 @@ flowchart TD
   - `placement_target_select` — stub module (no runtime surface yet).
   - `placement_reservations` — stub module (no runtime surface yet).
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)

@@ -7,10 +7,10 @@ workflows, and post-change validation.
 Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
 
 ## Help overview surfaces
-- `@Bot help` adapts to the caller. Admins receive Overview + Admin / Operational + Staff + User, Staff see Overview + Staff + User, and members see Overview + User.
+- `@Bot help` adapts to the caller but always returns four embeds (Overview, Admin / Operational, Staff, User). Sections collapse when the caller cannot run any commands in that slice unless `SHOW_EMPTY_SECTIONS=1` is set, which swaps in a “Coming soon” placeholder for parity checks.
+- Commands are discovered dynamically via `bot.walk_commands()` and filtered through `command.can_run(ctx)` so permission decorators stay authoritative.
 - Admin covers the operational commands (including `welcome-refresh` and every `refresh*`/`perm*` control), Staff surfaces recruitment flows, Sheet Tools, and milestones, and User lists recruitment, milestones, and the mention-only entry points (`@Bot help`, `@Bot ping`).
-- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`; anything not allowlisted renders as `!ops <command>`.
-- The renderer reads each command’s `access_tier` and `function_group` metadata directly from the registry. Empty sections collapse unless `SHOW_EMPTY_SECTIONS=1`, which swaps in a “Coming soon” placeholder for parity checks.
+- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes.
 
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
@@ -104,4 +104,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)
