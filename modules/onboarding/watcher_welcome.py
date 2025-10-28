@@ -12,6 +12,8 @@ from discord.ext import commands
 
 from modules.common import feature_flags
 from modules.common import runtime as rt
+from modules.onboarding import thread_scopes
+from modules.onboarding.welcome_flow import start_welcome_dialog
 from shared.config import get_welcome_channel_id
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
 from shared.sheets.onboarding import _resolve_onboarding_and_welcome_tab
@@ -114,8 +116,21 @@ class _ThreadClosureWatcher(commands.Cog):
             return
         await self._record_closure(after)
 
+        if not feature_flags.is_enabled("welcome_dialog"):
+            return
+        if not thread_scopes.is_welcome_parent(after):
+            return
+
+        try:
+            await start_welcome_dialog(after, self.bot.user, "ticket")
+        except Exception:
+            log.exception(
+                "%s watcher failed to launch dialog",
+                self.log_prefix,
+                extra={"thread_id": after.id},
+            )
+
     async def _record_closure(self, thread: discord.Thread) -> None:
-        # TODO Phase 7 PR #3: call start_welcome_dialog when closure detected.
         timestamp = dt.datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         owner_name = _thread_owner_name(thread)
         row = [timestamp, str(thread.id), thread.name or "", owner_name]

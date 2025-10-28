@@ -25,17 +25,19 @@ async def start_welcome_dialog(
         logging.info("onboarding.welcome.start %s", {"skipped": "feature_disabled"})
         return
 
-    allowed_initiator = rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator)
-    if not allowed_initiator:
-        logging.info(
-            "onboarding.welcome.start %s",
-            {
-                "rejected": "scope_or_role",
-                "source": source,
-                "thread_id": getattr(thread, "id", None),
-            },
-        )
-        return
+    if source != "ticket":
+        if not initiator or not (
+            rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator)
+        ):
+            logging.info(
+                "onboarding.welcome.start %s",
+                {
+                    "rejected": "scope_or_role",
+                    "source": source,
+                    "thread_id": getattr(thread, "id", None),
+                },
+            )
+            return
 
     if not (
         thread_scopes.is_welcome_parent(thread)
@@ -54,7 +56,7 @@ async def start_welcome_dialog(
     display_name = (
         getattr(initiator, "display_name", None)
         or getattr(initiator, "name", None)
-        or str(initiator)
+        or ("system" if initiator is None else str(initiator))
     )
     marker_text = f"🧭 Dialog initiated by {display_name} via {source}"
     existing_markers = [
@@ -89,10 +91,11 @@ async def start_welcome_dialog(
             "guild_id": getattr(getattr(thread, "guild", None), "id", None),
             "parent_id": getattr(getattr(thread, "parent", None), "id", None),
             "thread_id": getattr(thread, "id", None),
-            "by": {
-                "id": getattr(initiator, "id", None),
-                "name": str(initiator),
-            },
+            "by": (
+                {"id": getattr(initiator, "id", None), "name": str(initiator)}
+                if initiator
+                else {"id": None, "name": "system"}
+            ),
             "dedup": "created",
         },
     )
