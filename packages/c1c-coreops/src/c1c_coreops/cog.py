@@ -2412,7 +2412,7 @@ class CoreOpsCog(commands.Cog):
                 show_empty_sections=self._show_empty_sections(),
             )
             sanitized = [sanitize_embed(embed) for embed in embeds]
-            await ctx.reply(embeds=sanitized)
+            await self._reply_with_help_embeds(ctx, sanitized)
             await self._maybe_emit_help_diagnostics(ctx, diagnostics)
             return
 
@@ -2441,10 +2441,40 @@ class CoreOpsCog(commands.Cog):
             bot_version=bot_version,
             bot_name=bot_name,
         )
-        await ctx.reply(embed=sanitize_embed(embed))
+        await self._reply_with_help_embeds(ctx, [sanitize_embed(embed)])
         if diagnostics is not None:
             await self._gather_overview_tiers(ctx, diagnostics=diagnostics)
         await self._maybe_emit_help_diagnostics(ctx, diagnostics)
+
+    async def _reply_with_help_embeds(
+        self, ctx: commands.Context, embeds: Sequence[discord.Embed]
+    ) -> None:
+        if not embeds:
+            return
+
+        try:
+            await ctx.reply(embeds=list(embeds))
+            return
+        except TypeError:
+            pass
+        except discord.HTTPException:
+            logger.exception(
+                "failed to send consolidated help embeds; falling back to sequential send",
+                exc_info=True,
+            )
+
+        first, *rest = embeds
+        try:
+            await ctx.reply(embed=first)
+        except (TypeError, discord.HTTPException):
+            await ctx.send(embed=first)
+
+        for embed in rest:
+            try:
+                await ctx.send(embed=embed)
+            except discord.HTTPException:
+                logger.exception("failed to send help embed", exc_info=True)
+                break
 
     async def _config_impl(self, ctx: commands.Context) -> None:
         snapshot = get_config_snapshot()
