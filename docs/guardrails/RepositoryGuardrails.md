@@ -27,6 +27,8 @@ Every audit and CI check validates against this document.
 
 ### Feature Toggles and Config Policy
 - Onboarding emoji fallback: When welcome_dialog is TRUE, a controlled manual reaction trigger (🧭 on the first message in a valid welcome/promo thread) by Recruiter/Staff/Admin is permitted. This does not add new ENV or Sheet keys and must reuse existing channel scope.
+- Ticket Tool closure events are now recognized as a valid automated source for welcome_dialog.
+- The same validation and logging policies apply; no additional configuration is introduced.
 
 ## 3) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
