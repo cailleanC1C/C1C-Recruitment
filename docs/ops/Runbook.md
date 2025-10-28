@@ -12,6 +12,11 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 - Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`; anything not allowlisted renders as `!ops <command>`.
 - The renderer reads each command’s `access_tier` and `function_group` metadata directly from the registry. Empty sections collapse unless `SHOW_EMPTY_SECTIONS=1`, which swaps in a “Coming soon” placeholder for parity checks.
 
+## Help diagnostics (temporary)
+- Toggle on with `HELP_DIAGNOSTICS=1` to emit a one-shot summary of discovered commands for each help invocation. The payload includes visible vs discovered totals plus a `yes`/`no` decision per command, and it sanitizes user and guild names before posting.
+- Messages post to the configured log channel resolved by `resolve_ops_log_channel_id`. If that channel is missing, only admins receive a DM copy; staff and members do not get fallbacks.
+- Use `HELP_DIAGNOSTICS_TTL_SEC` (default `60`) to throttle repeat posts per audience + guild so repeated help calls during the window reuse the existing diagnostics.
+
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.
@@ -104,4 +109,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)
