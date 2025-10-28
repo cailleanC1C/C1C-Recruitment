@@ -3326,9 +3326,23 @@ class CoreOpsCog(commands.Cog):
         return _CommandAccessResult(can_run=True, reason=None)
 
     async def _can_display_command(
-        self, command: commands.Command[Any, Any, Any], ctx: commands.Context
+        self,
+        command: commands.Command[Any, Any, Any],
+        ctx: commands.Context,
+        *,
+        log_failures: bool = False,
     ) -> bool:
         result = await self._evaluate_command_access(command, ctx)
+        if log_failures and not result.can_run:
+            qualified = getattr(command, "qualified_name", None) or getattr(
+                command, "name", "<unknown>"
+            )
+            reason = result.reason or "unknown"
+            logger.debug(
+                "help gating suppressed command %s (%s)",
+                qualified,
+                reason,
+            )
         return result.can_run
 
     def _build_help_info(self, command: commands.Command[Any, Any, Any]) -> HelpCommandInfo:
