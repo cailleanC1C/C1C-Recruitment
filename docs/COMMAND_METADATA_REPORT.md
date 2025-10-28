@@ -2,34 +2,34 @@
 
 ## Summary
 - Total commands discovered: 36
-- Commands missing access_tier: 2
-- Commands missing function_group: 15
-- Commands missing both: 2
+- Commands missing access_tier: 1
+- Commands missing function_group: 3
+- Commands missing both: 1
 
 ## Findings
 | Command | File:Line | access_tier | function_group | Notes |
 | --- | --- | --- | --- | --- |
-| ops | packages/c1c-coreops/src/c1c_coreops/cog.py:1089 | MISSING | MISSING | Parent group lacks tier metadata. |
+| ops | packages/c1c-coreops/src/c1c_coreops/cog.py:1089 | user | operational | |
 | ops health | packages/c1c-coreops/src/c1c_coreops/cog.py:1346 | admin | operational | |
-| health | packages/c1c-coreops/src/c1c_coreops/cog.py:1352 | admin | MISSING | Hidden alias mirrors ops health but lacks help metadata. |
-| ops checksheet | packages/c1c-coreops/src/c1c_coreops/cog.py:1913 | staff | operational | |
-| checksheet | packages/c1c-coreops/src/c1c_coreops/cog.py:1920 | staff | MISSING | Hidden alias mirrors ops checksheet but lacks help metadata. |
+| health | packages/c1c-coreops/src/c1c_coreops/cog.py:1352 | admin | operational | |
+| ops checksheet | packages/c1c-coreops/src/c1c_coreops/cog.py:1913 | admin | operational | |
+| checksheet | packages/c1c-coreops/src/c1c_coreops/cog.py:1920 | admin | operational | |
 | ops digest | packages/c1c-coreops/src/c1c_coreops/cog.py:2036 | staff | operational | |
-| digest | packages/c1c-coreops/src/c1c_coreops/cog.py:2042 | admin | MISSING | Hidden alias mirrors ops digest but lacks help metadata. |
+| digest | packages/c1c-coreops/src/c1c_coreops/cog.py:2042 | admin | operational | |
 | ops env | packages/c1c-coreops/src/c1c_coreops/cog.py:2087 | admin | operational | |
-| env | packages/c1c-coreops/src/c1c_coreops/cog.py:2094 | admin | MISSING | Hidden alias mirrors ops env but lacks help metadata. |
-| ops help | packages/c1c-coreops/src/c1c_coreops/cog.py:2101 | user | MISSING | Help dispatcher missing function group classification. |
-| ops ping | packages/c1c-coreops/src/c1c_coreops/cog.py:2113 | user | MISSING | Delegates to global ping without help metadata. |
-| ops config | packages/c1c-coreops/src/c1c_coreops/cog.py:2316 | staff | operational | |
-| config | packages/c1c-coreops/src/c1c_coreops/cog.py:2323 | admin | MISSING | Hidden alias mirrors ops config but lacks help metadata. |
-| reload | packages/c1c-coreops/src/c1c_coreops/cog.py:2343 | admin | MISSING | Hidden alias mirrors ops reload but lacks help metadata. |
+| env | packages/c1c-coreops/src/c1c_coreops/cog.py:2094 | admin | operational | |
+| ops help | packages/c1c-coreops/src/c1c_coreops/cog.py:2101 | user | operational | |
+| ops ping | packages/c1c-coreops/src/c1c_coreops/cog.py:2113 | user | operational | |
+| ops config | packages/c1c-coreops/src/c1c_coreops/cog.py:2316 | admin | operational | |
+| config | packages/c1c-coreops/src/c1c_coreops/cog.py:2323 | admin | operational | |
+| reload | packages/c1c-coreops/src/c1c_coreops/cog.py:2343 | admin | operational | |
 | ops reload | packages/c1c-coreops/src/c1c_coreops/cog.py:2358 | admin | operational | |
-| refresh | packages/c1c-coreops/src/c1c_coreops/cog.py:2372 | admin | MISSING | Hidden refresh group missing help metadata. |
-| ops refresh | packages/c1c-coreops/src/c1c_coreops/cog.py:2387 | admin | operational | Tier decorator overrides help_metadata access tier to admin. |
-| refresh all | packages/c1c-coreops/src/c1c_coreops/cog.py:2454 | admin | MISSING | Hidden subcommand mirrors ops refresh all but lacks help metadata. |
-| ops refresh all | packages/c1c-coreops/src/c1c_coreops/cog.py:2465 | admin | operational | Tier decorator overrides help_metadata access tier to admin. |
-| refresh clansinfo | packages/c1c-coreops/src/c1c_coreops/cog.py:2576 | admin | MISSING | Hidden subcommand mirrors ops refresh clansinfo but lacks help metadata. |
-| ops refresh clansinfo | packages/c1c-coreops/src/c1c_coreops/cog.py:2586 | admin | operational | Tier decorator overrides help_metadata access tier to admin. |
+| refresh | packages/c1c-coreops/src/c1c_coreops/cog.py:2372 | admin | operational | |
+| ops refresh | packages/c1c-coreops/src/c1c_coreops/cog.py:2387 | admin | operational | |
+| refresh all | packages/c1c-coreops/src/c1c_coreops/cog.py:2454 | admin | operational | |
+| ops refresh all | packages/c1c-coreops/src/c1c_coreops/cog.py:2465 | admin | operational | |
+| refresh clansinfo | packages/c1c-coreops/src/c1c_coreops/cog.py:2576 | admin | operational | |
+| ops refresh clansinfo | packages/c1c-coreops/src/c1c_coreops/cog.py:2586 | staff | operational | |
 | clan | cogs/recruitment_clan_profile.py:65 | user | recruitment | |
 | clansearch | cogs/recruitment_member.py:20 | user | recruitment | |
 | clanmatch | cogs/recruitment_recruiter.py:214 | staff | recruitment | |
@@ -48,17 +48,16 @@
 
 ## Hotspots
 ### Files
-- packages/c1c-coreops/src/c1c_coreops/cog.py — 12 command(s) missing metadata
 - modules/ops/permissions_sync.py — 2 command(s) missing metadata
 - packages/c1c-coreops/src/c1c_coreops/commands/reload.py — 1 command(s) missing metadata
 
 ### Directories
-- packages/c1c-coreops/src/c1c_coreops — 13 command(s) missing metadata
 - modules/ops — 2 command(s) missing metadata
+- packages/c1c-coreops/src/c1c_coreops/commands — 1 command(s) missing metadata
 
 ## Suggested fixes
 - Extend `help_metadata(...)` coverage to hidden admin aliases (e.g., `health`, `checksheet`, `digest`, `env`, `config`, `reload`, `refresh` variants) to surface consistent function groups.
-- Consider applying a lightweight `help_metadata` decorator (or equivalent helper) to group roots like `ops`, `perm`, and `perm bot` so the help system can classify them.
+- Consider applying a lightweight `help_metadata` decorator (or equivalent helper) to group roots like `perm` and `permbot` so the help system can classify them.
 - Add a tier/helper decorator to `packages/c1c-coreops/src/c1c_coreops/commands/reload.py` if the command remains active so it inherits access tier and function group metadata.
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)
