@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 
 from pathlib import Path
-import sys
 from types import SimpleNamespace
 from typing import Iterable, Mapping, Sequence
 
 import discord
-from discord.ext import commands
 import pytest
+import sys
+from discord.ext import commands
 
 
 def _ensure_src_on_path() -> None:
@@ -24,6 +24,12 @@ def _ensure_src_on_path() -> None:
 
 
 _ensure_src_on_path()
+
+
+def _resolve_member(target):
+    if isinstance(target, commands.Context):
+        return getattr(target, "author", None)
+    return target
 
 from c1c_coreops.cog import CoreOpsCog, _reset_help_diagnostics_cache
 from c1c_coreops.helpers import tier
