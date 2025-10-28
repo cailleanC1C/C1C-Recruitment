@@ -14,9 +14,9 @@ closures) and one scheduler that refreshes the Sheets caches.
   `[watcher|lifecycle]` for this release and will drop back to `[lifecycle]` next cycle.
 - **Cron** → *scheduled job* triggered by the runtime scheduler. Cache refresh runs are
   logged with the `[cache]` prefix (bucket name, duration, retries, result).
-- Environment toggles `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, and
-  `ENABLE_PROMO_WATCHER` remain canonical; see [`Config.md`](Config.md#environment-keys)
-  for the authoritative list and defaults.
+- Feature toggles `welcome_enabled`, `enable_welcome_hook`, and
+  `enable_promo_watcher` live in the recruitment Sheet `FeatureToggles` worksheet.
+  See [`Config.md`](Config.md#feature-toggles-worksheet) for worksheet contract and defaults.
 
 ## Load order
 1. `shared.config` — env snapshot (IDs, toggles, sheet metadata).
@@ -29,10 +29,10 @@ _If steps 1–4 fail, abort boot. If a watcher fails to load, continue without i
 single structured log._
 
 ## Current Watchers (event listeners)
-- **Welcome watcher** (`WELCOME_ENABLED` + `ENABLE_WELCOME_HOOK`) — listens for welcome
+- **Welcome watcher** (`welcome_enabled` + `enable_welcome_hook`) — listens for welcome
   thread closures, appends a row to the configured Sheet tab, and logs the result via
   `[welcome_watcher]` messages.
-- **Promo watcher** (`WELCOME_ENABLED` + `ENABLE_PROMO_WATCHER`) — mirrors the welcome flow
+- **Promo watcher** (`welcome_enabled` + `enable_promo_watcher`) — mirrors the welcome flow
   for promo threads, writing to the promo tab and logging as `[promo_watcher]`.
 
 Both listeners rely on the onboarding Sheet adapters and reuse the bounded retry helpers in

@@ -39,10 +39,6 @@ __all__ = [
     "get_staff_role_ids",
     "get_recruiter_role_ids",
     "get_lead_role_ids",
-    "get_welcome_enabled",
-    "get_enable_welcome_hook",
-    "get_enable_promo_watcher",
-    "get_enable_notify_fallback",
     "get_feature_toggles",
     "get_strict_probe",
     "get_search_results_soft_cap",
@@ -324,10 +320,6 @@ def _load_config() -> Dict[str, object]:
         "LOG_CHANNEL_ID": log_channel,
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
-        "WELCOME_ENABLED": _env_bool("WELCOME_ENABLED", True),
-        "ENABLE_WELCOME_HOOK": _env_bool("ENABLE_WELCOME_HOOK", True),
-        "ENABLE_PROMO_WATCHER": _env_bool("ENABLE_PROMO_WATCHER", True),
-        "ENABLE_NOTIFY_FALLBACK": _env_bool("ENABLE_NOTIFY_FALLBACK", True),
         "STRICT_PROBE": _env_bool("STRICT_PROBE", False),
         "SEARCH_RESULTS_SOFT_CAP": _int_env("SEARCH_RESULTS_SOFT_CAP", 25, min_value=1),
         "WATCHDOG_CHECK_SEC": keepalive,
@@ -566,25 +558,6 @@ def get_recruiter_role_ids() -> Set[int]:
 
 def get_lead_role_ids() -> Set[int]:
     return _role_set("LEAD_ROLE_IDS")
-
-
-def get_welcome_enabled() -> bool:
-    return bool(_CONFIG.get("WELCOME_ENABLED", True))
-
-
-def get_enable_welcome_hook() -> bool:
-    value = _CONFIG.get("ENABLE_WELCOME_HOOK")
-    if value is None:
-        return True
-    return bool(value)
-
-
-def get_enable_promo_watcher() -> bool:
-    return bool(_CONFIG.get("ENABLE_PROMO_WATCHER", True))
-
-
-def get_enable_notify_fallback() -> bool:
-    return bool(_CONFIG.get("ENABLE_NOTIFY_FALLBACK", True))
 
 
 def get_feature_toggles() -> Dict[str, bool]:

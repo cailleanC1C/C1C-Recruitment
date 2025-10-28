@@ -43,7 +43,7 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
   - Disconnected for > disconnect grace → `exit(1)`
 
 ## Command Routing & Prefix
-- Supported: `!rec`, `!rec␣`, `rec`, `rec␣`, `@mention`.
+- Supported: `!ops`, `!ops␣`, `ops`, `ops␣`, `@mention`.
 - Admin bang shortcuts: `!env`, `!reload`, `!health`, `!digest`, `!checksheet`, `!config`, `!help`, `!ping`, `!refresh all` (Admin role only).
 - No bare-word shortcuts.
 
@@ -52,7 +52,7 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
   `list_buckets()`, `get_snapshot(name)`, `refresh_now(name, actor=…)`, and telemetry helpers.
 - Private internals such as `_CONFIG_CACHE` or `_sheet_cache_snapshot` are considered
   implementation details and **must not** be imported or accessed directly.
-- Commands that render operational embeds (`!rec health`, `!rec digest`, `!checksheet`)
+- Commands that render operational embeds (`!ops health`, `!ops digest`, `!ops checksheet`)
   consume only public telemetry payloads.
 - Guardrails:
   - No hard-coded IDs in commands or watchers; everything resolves through the config

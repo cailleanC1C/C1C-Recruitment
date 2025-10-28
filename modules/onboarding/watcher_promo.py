@@ -10,12 +10,9 @@ from typing import Any, Optional
 import discord
 from discord.ext import commands
 
+from modules.common import feature_flags
 from modules.common import runtime as rt
-from shared.config import (
-    get_enable_promo_watcher,
-    get_promo_channel_id,
-    get_welcome_enabled,
-)
+from shared.config import get_promo_channel_id
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
 from shared.sheets.onboarding import _resolve_onboarding_and_promo_tab
 
@@ -148,11 +145,17 @@ class PromoWatcher(_ThreadClosureWatcher):
 
 
 async def setup(bot: commands.Bot) -> None:
-    if not get_welcome_enabled():
-        _announce(bot, "📴 Promo watcher disabled: WELCOME_ENABLED is false.")
+    if not feature_flags.is_enabled("welcome_enabled"):
+        _announce(
+            bot,
+            "📴 Promo watcher disabled: FeatureToggles['welcome_enabled'] is OFF.",
+        )
         return
-    if not get_enable_promo_watcher():
-        _announce(bot, "📴 Promo watcher disabled via config toggle.")
+    if not feature_flags.is_enabled("enable_promo_watcher"):
+        _announce(
+            bot,
+            "📴 Promo watcher disabled: FeatureToggles['enable_promo_watcher'] is OFF.",
+        )
         return
 
     channel_id = get_promo_channel_id()
