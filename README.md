@@ -18,6 +18,8 @@ Welcome to the C1C helper. The bot keeps clan rosters healthy, helps new friends
 - `!clan <tag>` — posts a clan profile card and entry citeria pulled straight from our Mirraltih.
 - `!clansearch` — opens the interactive search panel so members can browse clan rosters on their own.
 
+The bot only shows commands you can actually run; if you need more tools, ask an admin to review your roles.
+
 ## Staff quick actions
 
 Staff can use all user commands plus:

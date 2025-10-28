@@ -2,9 +2,9 @@
 
 ## Summary
 - Total commands discovered: 36
-- Commands missing access_tier: 1
-- Commands missing function_group: 3
-- Commands missing both: 1
+- Commands missing access_tier: 0
+- Commands missing function_group: 0
+- Commands missing both: 0
 
 ## Findings
 | Command | File:Line | access_tier | function_group | Notes |
@@ -37,27 +37,23 @@
 | report | cogs/recruitment_reporting.py:27 | admin | operational | |
 | welcome | cogs/recruitment_welcome.py:41 | staff | recruitment | |
 | welcome-refresh | cogs/recruitment_welcome.py:56 | admin | operational | |
-| perm | modules/ops/permissions_sync.py:932 | admin | MISSING | Group entry lacks help metadata. |
-| perm bot | modules/ops/permissions_sync.py:941 | admin | MISSING | Sub-group entry lacks help metadata. |
+| perm | modules/ops/permissions_sync.py:932 | admin | operational | |
+| perm bot | modules/ops/permissions_sync.py:941 | admin | operational | |
 | perm bot list | modules/ops/permissions_sync.py:956 | admin | operational | |
 | perm bot allow | modules/ops/permissions_sync.py:1034 | admin | operational | |
 | perm bot deny | modules/ops/permissions_sync.py:1087 | admin | operational | |
 | perm bot remove | modules/ops/permissions_sync.py:1140 | admin | operational | |
 | perm bot sync | modules/ops/permissions_sync.py:1173 | admin | operational | |
-| reload | packages/c1c-coreops/src/c1c_coreops/commands/reload.py:64 | MISSING | MISSING | Standalone reload command lacks tier and help metadata. |
+| reload | packages/c1c-coreops/src/c1c_coreops/commands/reload.py:64 | admin | operational | |
 
 ## Hotspots
 ### Files
-- modules/ops/permissions_sync.py — 2 command(s) missing metadata
-- packages/c1c-coreops/src/c1c_coreops/commands/reload.py — 1 command(s) missing metadata
+- None — coverage is complete.
 
 ### Directories
-- modules/ops — 2 command(s) missing metadata
-- packages/c1c-coreops/src/c1c_coreops/commands — 1 command(s) missing metadata
+- None — coverage is complete.
 
 ## Suggested fixes
-- Extend `help_metadata(...)` coverage to hidden admin aliases (e.g., `health`, `checksheet`, `digest`, `env`, `config`, `reload`, `refresh` variants) to surface consistent function groups.
-- Consider applying a lightweight `help_metadata` decorator (or equivalent helper) to group roots like `perm` and `permbot` so the help system can classify them.
-- Add a tier/helper decorator to `packages/c1c-coreops/src/c1c_coreops/commands/reload.py` if the command remains active so it inherits access tier and function group metadata.
+- Ensure new commands and aliases include `help_metadata(...)` coverage so the help surface stays descriptive.
 
 Doc last updated: 2025-10-28 (v0.9.6)

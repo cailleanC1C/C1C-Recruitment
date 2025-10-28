@@ -7,10 +7,10 @@ workflows, and post-change validation.
 Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
 
 ## Help overview surfaces
-- `@Bot help` adapts to the caller. Admins receive Overview + Admin / Operational + Staff + User, Staff see Overview + Staff + User, and members see Overview + User.
+- `@Bot help` adapts to the caller but always returns four embeds (Overview, Admin / Operational, Staff, User). Sections collapse when the caller cannot run any commands in that slice unless `SHOW_EMPTY_SECTIONS=1` is set, which swaps in a “Coming soon” placeholder for parity checks.
+- Commands are discovered dynamically via `bot.walk_commands()` and filtered through `command.can_run(ctx)` so permission decorators stay authoritative.
 - Admin covers the operational commands (including `welcome-refresh` and every `refresh*`/`perm*` control), Staff surfaces recruitment flows, Sheet Tools, and milestones, and User lists recruitment, milestones, and the mention-only entry points (`@Bot help`, `@Bot ping`).
-- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`; anything not allowlisted renders as `!ops <command>`.
-- The renderer reads each command’s `access_tier` and `function_group` metadata directly from the registry. Empty sections collapse unless `SHOW_EMPTY_SECTIONS=1`, which swaps in a “Coming soon” placeholder for parity checks.
+- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes.
 
 ## Help diagnostics (temporary)
 - Toggle on with `HELP_DIAGNOSTICS=1` to emit a one-shot summary of discovered commands for each help invocation. The payload includes visible vs discovered totals plus a `yes`/`no` decision per command, and it sanitizes user and guild names before posting.
@@ -64,6 +64,20 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 Both controls record the invoking actor, even when triggered via admin bang aliases.
 Manual refreshes never force a restart; even repeated failures leave the bot online while
 logging the error for follow-up.
+
+### Permissions sync commands
+- **`!perm`** — Entry point for the bot permissions toolkit; points admins at the bot
+  subcommands when invoked bare.
+- **`!perm bot list`** — Summarises the current allow/deny configuration, including totals
+  for each bucket. Supports `--json` to emit a downloadable snapshot.
+- **`!perm bot allow`** — Adds channels or categories to the allow list and trims matching
+  entries from the deny list.
+- **`!perm bot deny`** — Adds channels or categories to the deny list and trims matching
+  entries from the allow list.
+- **`!perm bot remove`** — Removes channels or categories from the stored allow/deny lists
+  without adding new entries.
+- **`!perm bot sync`** — Applies the stored allow/deny state to Discord overwrites. Runs
+  in dry mode by default; pass `--dry false` to persist changes.
 
 ### Welcome template cache
 - **Command:** `!welcome-refresh` (Admin only)

@@ -6,8 +6,8 @@ Each entry supplies the one-line copy that powers the refreshed help index. Use 
 short descriptions in the dynamic `@Bot help` layout; detailed blurbs live in
 [`commands.md`](commands.md).
 
-- **Audience map:** The renderer discovers commands from the registry at runtime and maps them by `access_tier`/`function_group`. Admins see all four embeds (Overview + Admin + Staff + User), Staff see three (Overview + Staff + User), and members see two (Overview + User).
-- **Alias policy:** Bare bang aliases for admin commands come from `COREOPS_ADMIN_BANG_ALLOWLIST`. If a command is allowlisted *and* a bare alias exists, help shows `!command`; otherwise the entry renders as `!ops command`.
+- **Audience map:** The renderer walks `bot.walk_commands()` at runtime and maps commands by `access_tier`/`function_group`. Every reply ships four embeds (Overview, Admin / Operational, Staff, User). Sections without runnable commands collapse automatically unless `SHOW_EMPTY_SECTIONS=1` is set, in which case the header renders with “Coming soon”.
+- **Alias policy:** Bare bang aliases for admin commands come from `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …` entries, and members only see user-tier commands plus the mention routes (`@Bot help`, `@Bot ping`).
 - **Function groups:** Commands declare `function_group` metadata. Valid values are `operational`, `recruitment`, `milestones`, `reminder`, and `general`. The help renderer filters and groups strictly by this map so cross-tier leakage is impossible.
 
 ## Admin — CoreOps & refresh controls
@@ -51,4 +51,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)
