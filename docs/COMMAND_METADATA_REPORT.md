@@ -60,4 +60,4 @@
 - Consider applying a lightweight `help_metadata` decorator (or equivalent helper) to group roots like `perm` and `permbot` so the help system can classify them.
 - Add a tier/helper decorator to `packages/c1c-coreops/src/c1c_coreops/commands/reload.py` if the command remains active so it inherits access tier and function group metadata.
 
-Doc last updated: 2025-11-05 (v0.9.7)
+Doc last updated: 2025-10-28 (v0.9.6)
