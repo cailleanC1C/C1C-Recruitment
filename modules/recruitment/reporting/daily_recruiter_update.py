@@ -202,6 +202,13 @@ def add_fullwidth_field(embed: discord.Embed, *, name: str, value: str) -> None:
     embed.add_field(name=name, value=value, inline=False)
 
 
+def _add_block_divider(embed: discord.Embed) -> None:
+    """Insert the spacer/divider sequence between logical blocks."""
+
+    add_fullwidth_field(embed, name="\u200B", value="﹘﹘﹘")
+    add_fullwidth_field(embed, name="\u200B", value="\u200B")
+
+
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     sheet_id = get_recruitment_sheet_id().strip()
     if not sheet_id:
@@ -228,12 +235,18 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
     )
 
     general_index = _find_row_equals(rows, 0, "general overview")
-    bracket_index = _find_row_equals(rows, 0, "per bracket")
+    per_bracket_index = _find_row_equals(rows, 0, "per bracket")
+    details_index = _find_row_equals(rows, 0, "bracket details")
 
     general_lines: List[str] = []
     if general_index != -1:
         stop_column = 0
-        stop_value = "per bracket"
+        if per_bracket_index != -1:
+            stop_value = "per bracket"
+        elif details_index != -1:
+            stop_value = "bracket details"
+        else:
+            stop_value = "__stop__"
         block = _collect_block(
             rows,
             start_row=general_index,
@@ -254,43 +267,65 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             name="General Overview",
             value="\n".join(general_lines),
         )
+        _add_block_divider(embed)
 
-    if bracket_index != -1:
-        # Section: Per Bracket — one full-width box per bracket, with compact totals in the field title
-        sections, totals = _collect_bracket_sections(rows, start_row=bracket_index + 1)
-        order = [
-            "elite end game",
-            "early end game",
-            "late game",
-            "mid game",
-            "early game",
-            "beginners",
-        ]
-        for key in order:
-            entries = sections.get(key) or []
-            formatted = [line for row in entries if (line := _format_line(headers, row))]
-            if not formatted:
+    per_bracket_lines: List[str] = []
+    if per_bracket_index != -1:
+        stop_value = "bracket details" if details_index != -1 else "__stop__"
+        block = _collect_block(
+            rows,
+            start_row=per_bracket_index,
+            stop_column=0,
+            stop_value=stop_value,
+        )
+        key_index = _resolve_index(headers, "key")
+        for row in block:
+            label = _column(row, key_index).strip() if key_index is not None else ""
+            if not label:
                 continue
-            open_total, inactive_total, reserved_total = totals.get(key, (0, 0, 0))
-            if (open_total, inactive_total, reserved_total) == (0, 0, 0):
-                open_idx = _resolve_index(headers, "open spots")
-                inactive_idx = _resolve_index(headers, "inactives")
-                reserved_idx = _resolve_index(headers, "reserved spots")
-                if None not in {open_idx, inactive_idx, reserved_idx}:
-                    open_total = sum(_parse_int(_column(row, open_idx)) for row in entries)
-                    inactive_total = sum(
-                        _parse_int(_column(row, inactive_idx)) for row in entries
-                    )
-                    reserved_total = sum(
-                        _parse_int(_column(row, reserved_idx)) for row in entries
-                    )
-            field_title = (
-                f"{key.title()} — open {open_total} "
-                f"| inactives {inactive_total} | reserved {reserved_total}"
-            )
+            line = _format_line(headers, row, always=True)
+            if line:
+                per_bracket_lines.append(line)
+
+    if per_bracket_lines:
+        add_fullwidth_field(
+            embed,
+            name="**Per Bracket**",
+            value="\n".join(per_bracket_lines),
+        )
+        _add_block_divider(embed)
+
+    details_start = -1
+    if details_index != -1:
+        details_start = details_index + 1
+    elif per_bracket_index != -1:
+        details_start = per_bracket_index + 1
+
+    sections: Dict[str, List[Sequence[str]]] = {}
+    if details_start > 0 and details_start < len(rows):
+        sections, _ = _collect_bracket_sections(rows, start_row=details_start)
+
+    order = [
+        "elite end game",
+        "early end game",
+        "late game",
+        "mid game",
+        "early game",
+        "beginners",
+    ]
+    detail_blocks: List[Tuple[str, List[str]]] = []
+    for key in order:
+        entries = sections.get(key) or []
+        formatted = [line for row in entries if (line := _format_line(headers, row))]
+        if formatted:
+            detail_blocks.append((key, formatted))
+
+    if detail_blocks:
+        add_fullwidth_field(embed, name="**Bracket Details**", value="\u200B")
+        for key, formatted in detail_blocks:
             add_fullwidth_field(
                 embed,
-                name=field_title,
+                name=key.title(),
                 value="\n".join(formatted),
             )
 

@@ -13,6 +13,9 @@ def _sample_rows():
         ["Ops Summary", "", "3", "1", "0"],
         ["Ops Idle", "", "0", "0", "0"],
         ["Per Bracket", "", "", "", ""],
+        ["Elite End Game", "", "2", "0", "1"],
+        ["Mid Game", "", "0", "0", "0"],
+        ["Bracket Details", "", "", "", ""],
         ["", "Elite End Game", "", "", ""],
         ["Clan Alpha", "", "5", "0", "1"],
         ["Clan Beta", "", "0", "0", "0"],
@@ -28,25 +31,35 @@ def test_build_embed_from_rows_filters_and_groups():
     embed = dru._build_embed_from_rows(rows, headers)
 
     assert isinstance(embed, Embed)
-    # One General Overview field plus one per non-empty bracket section
-    assert len(embed.fields) == 3
+    # Three logical blocks plus dividers and per-bracket detail sections
+    assert len(embed.fields) == 9
 
     general_field = embed.fields[0]
     assert general_field.name == "General Overview"
     assert "Ops Summary" in general_field.value
     assert "Ops Idle" not in general_field.value
 
-    elite_end_game = embed.fields[1]
-    assert (
-        elite_end_game.name
-        == "Elite End Game — open 5 | inactives 0 | reserved 1"
-    )
+    divider_field = embed.fields[1]
+    assert divider_field.name == "\u200B"
+    assert divider_field.value == "﹘﹘﹘"
+
+    per_bracket = embed.fields[3]
+    assert per_bracket.name == "**Per Bracket**"
+    assert "Elite End Game: open 2 | inactives 0 | reserved 1" in per_bracket.value
+    assert "Mid Game: open 0 | inactives 0 | reserved 0" in per_bracket.value
+
+    detail_header = embed.fields[6]
+    assert detail_header.name == "**Bracket Details**"
+    assert detail_header.value == "\u200B"
+
+    elite_end_game = embed.fields[7]
+    assert elite_end_game.name == "Elite End Game"
     assert elite_end_game.inline is False
     assert "Clan Alpha" in elite_end_game.value
     assert "Clan Beta" not in elite_end_game.value
 
-    mid_game = embed.fields[2]
-    assert mid_game.name == "Mid Game — open 2 | inactives 2 | reserved 0"
+    mid_game = embed.fields[8]
+    assert mid_game.name == "Mid Game"
     assert mid_game.inline is False
     assert "Clan Delta" in mid_game.value
 

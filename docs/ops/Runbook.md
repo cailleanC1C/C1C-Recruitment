@@ -101,6 +101,12 @@ tabs.
 5. If any validations fail, double-check Sheet permissions and the Config tab contents
    before escalating.
 
+### Daily recruiter summary embed
+- The “Summary Open Spots” card now renders as three distinct blocks: General Overview,
+  Per Bracket (one line per bracket with totals), and Bracket Details (per-clan rows).
+- Two zero-width divider fields containing `﹘﹘﹘` separate the blocks so desktop and
+  mobile layouts both show clear visual boundaries.
+
 ## Features unexpectedly disabled at startup
 - **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
   match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
@@ -109,4 +115,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)
