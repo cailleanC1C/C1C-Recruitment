@@ -7,7 +7,7 @@ from typing import Any
 import discord
 
 from modules.common import feature_flags
-from packages.c1c_coreops import rbac
+from c1c_coreops import rbac
 
 from . import thread_scopes
 
