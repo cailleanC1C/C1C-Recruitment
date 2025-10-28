@@ -3,10 +3,11 @@
 Legend: ✅ = active command · 🧩 = shared CoreOps surface (available across tiers)
 
 Each entry supplies the one-line copy that powers the refreshed help index. Use these
-short descriptions in the four-embed `@Bot help` layout; detailed blurbs live in
+short descriptions in the dynamic `@Bot help` layout; detailed blurbs live in
 [`commands.md`](commands.md).
 
-- **Audience map:** Admin surfaces operational controls plus the Welcome Templates bucket; Staff lists recruitment flows, Sheet Tools, and milestones; User lists recruitment, milestones, and general member commands (including mention-only entry points).
+- **Audience map:** The renderer discovers commands from the registry at runtime and maps them by `access_tier`/`function_group`. Admins see all four embeds (Overview + Admin + Staff + User), Staff see three (Overview + Staff + User), and members see two (Overview + User).
+- **Alias policy:** Bare bang aliases for admin commands come from `COREOPS_ADMIN_BANG_ALLOWLIST`. If a command is allowlisted *and* a bare alias exists, help shows `!command`; otherwise the entry renders as `!ops command`.
 - **Function groups:** Commands declare `function_group` metadata. Valid values are `operational`, `recruitment`, `milestones`, `reminder`, and `general`. The help renderer filters and groups strictly by this map so cross-tier leakage is impossible.
 
 ## Admin — CoreOps & refresh controls

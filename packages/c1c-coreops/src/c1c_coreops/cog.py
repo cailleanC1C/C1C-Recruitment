@@ -11,7 +11,7 @@ import re
 import sys
 import time
 from importlib import import_module
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 from types import ModuleType
 
@@ -66,7 +66,7 @@ from shared.sheets.async_core import (
 )
 from shared.sheets.recruitment import get_reports_tab_name
 
-from .config import CoreOpsSettings, load_coreops_settings
+from .config import CoreOpsSettings, load_coreops_settings, normalize_command_text
 from .prefix import detect_admin_bang_command
 from .tags import lifecycle_tag
 from .rbac import (
@@ -2592,11 +2592,31 @@ class CoreOpsCog(commands.Cog):
     async def _gather_overview_tiers(
         self, ctx: commands.Context
     ) -> list[HelpTier]:
+        author = getattr(ctx, "author", None)
+        audience_order: list[str] = []
+        if can_view_admin(author):
+            audience_order.append("admin")
+        if can_view_staff(author):
+            audience_order.append("staff")
+        audience_order.append("user")
+
+        ordered_audiences: list[str] = []
+        for key in audience_order:
+            if key not in ordered_audiences and key in self._HELP_AUDIENCE_CONFIGS:
+                ordered_audiences.append(key)
+
+        if not ordered_audiences:
+            return []
+
+        admin_allowlist = self._resolve_admin_allowlist()
+
         commands_iter: list[commands.Command[Any, Any, Any]] = []
         for command in self.bot.walk_commands():
             if not _should_show(command):
                 continue
             if not self._include_in_overview(command):
+                continue
+            if self._is_duplicate_admin_alias(command):
                 continue
             commands_iter.append(command)
 
@@ -2611,7 +2631,11 @@ class CoreOpsCog(commands.Cog):
             seen.add(base_name)
             if not await self._can_display_command(command, ctx):
                 continue
-            infos.append(self._build_help_info(command))
+            info = self._build_help_info(command)
+            info = await self._apply_help_overrides(
+                ctx, command, info, admin_allowlist
+            )
+            infos.append(info)
 
         manual_infos = self._manual_overview_entries(seen, ctx)
         if manual_infos:
@@ -2622,16 +2646,15 @@ class CoreOpsCog(commands.Cog):
             return []
 
         buckets: dict[str, dict[str, list[HelpCommandInfo]]] = {
-            key: {section.key: [] for section in config.sections}
-            for key, config in self._HELP_AUDIENCE_CONFIGS.items()
+            key: {} for key in ordered_audiences
         }
 
         for info in infos:
             tier_key = (info.access_tier or "user").strip().lower()
-            audience = self._HELP_AUDIENCE_CONFIGS.get(tier_key)
-            if audience is None:
+            if tier_key not in buckets:
                 continue
 
+            audience = self._HELP_AUDIENCE_CONFIGS[tier_key]
             function_group = (info.function_group or "general").strip().lower()
             if (
                 audience.allowed_function_groups
@@ -2649,7 +2672,8 @@ class CoreOpsCog(commands.Cog):
             buckets.setdefault(tier_key, {}).setdefault(section.key, []).append(info)
 
         tiers: list[HelpTier] = []
-        for key, config in self._HELP_AUDIENCE_CONFIGS.items():
+        for key in ordered_audiences:
+            config = self._HELP_AUDIENCE_CONFIGS[key]
             section_bucket = buckets.get(key, {})
             tier_sections: list[HelpTierSection] = []
             for section in config.sections:
@@ -2661,6 +2685,97 @@ class CoreOpsCog(commands.Cog):
                 )
             tiers.append(HelpTier(title=config.title, sections=tuple(tier_sections)))
         return tiers
+
+    def _is_duplicate_admin_alias(
+        self, command: commands.Command[Any, Any, Any]
+    ) -> bool:
+        if not getattr(command, "hidden", False):
+            return False
+        if command.parent is not None:
+            return False
+
+        qualified = command.qualified_name.strip().lower()
+        if not qualified:
+            return False
+
+        ops_variant = self.bot.get_command(f"ops {qualified}")
+        return ops_variant is not None
+
+    async def _apply_help_overrides(
+        self,
+        ctx: commands.Context,
+        command: commands.Command[Any, Any, Any],
+        info: HelpCommandInfo,
+        admin_allowlist: Set[str],
+    ) -> HelpCommandInfo:
+        current_tier = (info.access_tier or "user").strip().lower()
+        display_tier = self._resolve_help_tier(command, current_tier)
+        usage_override = info.usage_override
+        section_override = info.section
+
+        qualified = command.qualified_name
+        if display_tier == "admin" and qualified.startswith("ops "):
+            base_name = qualified.split(" ", 1)[1].strip()
+            normalized = normalize_command_text(base_name)
+            usage_override = f"!ops {base_name}" if base_name else "!ops"
+
+            if normalized and normalized in admin_allowlist:
+                bare_command = self.bot.get_command(base_name)
+                if bare_command is not None and bare_command is not command:
+                    if await self._can_display_command(bare_command, ctx):
+                        usage_override = f"!{base_name}"
+
+        if display_tier == "admin":
+            section_key = (info.section or "").strip().lower()
+            if section_key == "sheet_tools":
+                section_override = "sheets_cache"
+
+        if (
+            usage_override != info.usage_override
+            or display_tier != current_tier
+            or section_override != info.section
+        ):
+            return replace(
+                info,
+                usage_override=usage_override,
+                access_tier=display_tier,
+                section=section_override,
+            )
+        return info
+
+    def _resolve_help_tier(
+        self, command: commands.Command[Any, Any, Any], current: str
+    ) -> str:
+        normalized = current if current in {"admin", "staff", "user"} else "user"
+
+        extras = getattr(command, "extras", None)
+        base_tier: str | None = None
+        if isinstance(extras, dict):
+            base_tier = str(extras.get("tier") or extras.get("_tier") or "").strip().lower()
+        if not base_tier:
+            base_tier = str(getattr(command, "_tier", "")).strip().lower()
+
+        if base_tier == "admin":
+            return "admin"
+        if base_tier == "staff" and normalized not in {"admin", "staff"}:
+            return "staff"
+
+        return normalized
+
+    def _resolve_admin_allowlist(self) -> Set[str]:
+        try:
+            settings = load_coreops_settings()
+        except Exception:
+            return set(self._admin_bang_allowlist)
+
+        allowlist = {
+            normalize_command_text(entry)
+            for entry in settings.admin_bang_allowlist
+            if normalize_command_text(entry)
+        }
+        if allowlist:
+            self._admin_bang_allowlist = allowlist
+        return set(self._admin_bang_allowlist)
 
     def _match_section_config(
         self,

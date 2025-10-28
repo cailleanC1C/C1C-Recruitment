@@ -131,6 +131,17 @@ def patch_rbac(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
             or getattr(_resolve_member(target), "_is_admin", False)
         ),
     )
+    monkeypatch.setattr(
+        "cogs.recruitment_welcome.is_staff_member",
+        lambda target: bool(
+            getattr(_resolve_member(target), "_is_staff", False)
+            or getattr(_resolve_member(target), "_is_admin", False)
+        ),
+    )
+    monkeypatch.setattr(
+        "cogs.recruitment_welcome.is_admin_member",
+        lambda target: bool(getattr(_resolve_member(target), "_is_admin", False)),
+    )
     monkeypatch.setattr("c1c_coreops.rbac.discord.Member", DummyMember)
     monkeypatch.setattr("c1c_coreops.cog.discord.Member", DummyMember)
     yield
@@ -141,18 +152,19 @@ async def _gather_help_embeds(
     member: DummyMember,
     *,
     show_empty: bool = False,
+    allowlist: str | None = None,
 ) -> list[discord.Embed]:
     if show_empty:
         monkeypatch.setenv("SHOW_EMPTY_SECTIONS", "1")
     else:
         monkeypatch.delenv("SHOW_EMPTY_SECTIONS", raising=False)
 
-    bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+    if allowlist is None:
+        monkeypatch.delenv("COREOPS_ADMIN_BANG_ALLOWLIST", raising=False)
+    else:
+        monkeypatch.setenv("COREOPS_ADMIN_BANG_ALLOWLIST", allowlist)
 
-    @tier("user")
-    @bot.command(name="placeholder")
-    async def _placeholder(_: commands.Context) -> None:  # pragma: no cover - helper
-        return None
+    bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
 
     await bot.add_cog(CoreOpsCog(bot))
     await bot.add_cog(BotPermissionCog(bot))
@@ -166,7 +178,6 @@ async def _gather_help_embeds(
         assert cog is not None
         ctx = HelpContext(bot, author=member)
         await cog.render_help(ctx)
-        assert len(ctx._replies) == 4, "Help should return four embeds"
         return ctx._replies
     finally:
         await bot.close()
@@ -179,9 +190,14 @@ def _fields(embed: discord.Embed) -> Mapping[str, str]:
     return mapping
 
 
-def test_help_admin_embed_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_help_admin_view_usage_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
-        embeds = await _gather_help_embeds(monkeypatch, DummyMember(is_admin=True, is_staff=True))
+        embeds = await _gather_help_embeds(
+            monkeypatch,
+            DummyMember(is_admin=True, is_staff=True),
+            allowlist="env,health,refresh all",
+        )
+        assert len(embeds) == 4
         titles = {embed.title: embed for embed in embeds}
         admin_embed = titles["Admin / Operational"]
         staff_embed = titles["Staff"]
@@ -191,60 +207,84 @@ def test_help_admin_embed_filters(monkeypatch: pytest.MonkeyPatch) -> None:
         staff_text = " \n ".join(_fields(staff_embed).values())
         user_text = " \n ".join(_fields(user_embed).values())
 
+        assert "`!env`" in admin_text
+        assert "`!health`" in admin_text
+        assert "`!refresh all`" in admin_text
+        assert "`!ops refresh`" in admin_text
+        assert "`!ops reload`" in admin_text
         assert "`!welcome-refresh`" in admin_text
         assert "`!perm bot list`" in admin_text
         assert "`@Bot help`" not in admin_text
         assert "`@Bot ping`" not in admin_text
-        assert "`!clanmatch`" not in admin_text
+        assert "`!clan`" not in admin_text
 
         assert "`!clanmatch`" in staff_text
         assert "`!welcome-refresh`" not in staff_text
-        assert "`@Bot help`" not in staff_text
+        assert "`!refresh all`" not in staff_text
 
         assert "`@Bot help`" in user_text
         assert "`@Bot ping`" in user_text
-        assert "`!welcome-refresh`" not in user_text
+
+        combined_text = " \n ".join(
+            value for embed in embeds for value in _fields(embed).values()
+        )
+        assert "!rec" not in combined_text
 
     asyncio.run(runner())
 
 
-def test_help_staff_embed_excludes_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_help_staff_view(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
-        embeds = await _gather_help_embeds(monkeypatch, DummyMember(is_staff=True))
+        embeds = await _gather_help_embeds(
+            monkeypatch,
+            DummyMember(is_staff=True),
+            allowlist="env,health,refresh all",
+        )
+        assert len(embeds) == 3
         titles = {embed.title: embed for embed in embeds}
-        admin_embed = titles["Admin / Operational"]
+        assert "Admin / Operational" not in titles
+
         staff_embed = titles["Staff"]
         user_embed = titles["User"]
 
-        admin_text = " \n ".join(_fields(admin_embed).values())
         staff_text = " \n ".join(_fields(staff_embed).values())
         user_text = " \n ".join(_fields(user_embed).values())
 
-        assert "`!welcome-refresh`" not in admin_text
-        assert "`!perm bot list`" not in admin_text
         assert "`!clanmatch`" in staff_text
-        assert "`@Bot help`" in user_text
+        assert "`!welcome`" in staff_text
+        assert "`!ops checksheet`" in staff_text
+        assert "`!ops config`" in staff_text
+        assert "`!ops digest`" in staff_text
         assert "`!welcome-refresh`" not in staff_text
+        assert "`!refresh all`" not in staff_text
+        assert "`!perm bot list`" not in staff_text
+
+        assert "`@Bot help`" in user_text
+        assert "`@Bot ping`" in user_text
 
     asyncio.run(runner())
 
 
-def test_help_user_embed_mentions_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_help_user_view(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
-        embeds = await _gather_help_embeds(monkeypatch, DummyMember())
+        embeds = await _gather_help_embeds(
+            monkeypatch,
+            DummyMember(),
+            allowlist="env,health,refresh all",
+        )
+        assert len(embeds) == 2
         titles = {embed.title: embed for embed in embeds}
-        admin_embed = titles["Admin / Operational"]
-        staff_embed = titles["Staff"]
-        user_embed = titles["User"]
+        assert "Admin / Operational" not in titles
+        assert "Staff" not in titles
 
-        admin_text = " \n ".join(_fields(admin_embed).values())
-        staff_text = " \n ".join(_fields(staff_embed).values())
+        user_embed = titles["User"]
         user_text = " \n ".join(_fields(user_embed).values())
 
-        assert "@Bot help" not in admin_text
-        assert "@Bot help" not in staff_text
-        assert "@Bot help" in user_text
-        assert "@Bot ping" in user_text
+        assert "`!clan`" in user_text
+        assert "`!clansearch`" in user_text
+        assert "`@Bot help`" in user_text
+        assert "`@Bot ping`" in user_text
+        assert "!ops" not in user_text
 
     asyncio.run(runner())
 
@@ -254,7 +294,10 @@ def test_help_empty_sections_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
         embeds = await _gather_help_embeds(
             monkeypatch, DummyMember(), show_empty=True
         )
+        assert len(embeds) == 2
         titles = {embed.title: embed for embed in embeds}
+        assert "Staff" not in titles
+        assert "Admin / Operational" not in titles
         user_embed = titles["User"]
         fields = _fields(user_embed)
         assert "Milestones" in fields
