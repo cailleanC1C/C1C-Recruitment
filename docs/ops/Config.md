@@ -9,7 +9,7 @@ Configuration Snapshot — prod
 Guilds: Clash Champs (Recruitment), Clash Champs Lounge (Onboarding)
 Sheets: Recruitment → 1aBCDefGhijKLMnoPqrStuV · Onboarding → 9zYXwvUTsrQpoNMlkJihGFed
 Watchers: welcome✅ promo✅
-Toggles: STRICT_PROBE=off · ENABLE_NOTIFY_FALLBACK=on · SEARCH_RESULTS_SOFT_CAP=25
+Toggles: STRICT_PROBE=off · SEARCH_RESULTS_SOFT_CAP=25
 Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 ```
 
@@ -83,17 +83,13 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
 
-### Feature toggles and runtime flags
+### Runtime flags
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `WELCOME_ENABLED` | bool | `true` | Master switch for the welcome workflow. |
-| `ENABLE_WELCOME_HOOK` | bool | `true` | Enables welcome event listeners; disable to keep tickets offline. |
-| `ENABLE_PROMO_WATCHER` | bool | `true` | Enables promo event listeners. |
-| `ENABLE_NOTIFY_FALLBACK` | bool | `true` | Sends alerts to the fallback channel when true. |
 | `STRICT_PROBE` | bool | `false` | Enforces guild allow-list before startup completes. |
 | `SEARCH_RESULTS_SOFT_CAP` | int | `25` | Soft limit on search results per query. |
 
-> Feature toggle `recruitment_reports` enables the Daily Recruiter Update (UTC scheduler plus `!report recruiters`). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
+> Feature toggles such as `recruitment_reports`, `placement_target_select`, and `placement_reservations` are sourced from the FeatureToggles worksheet.
 
 ### Watchdog, cache, and cleanup
 | Key | Type | Default | Notes |
@@ -123,13 +119,8 @@ sync modules remain available for non-async scripts and cache warmers.
 > The `/emoji-pad` proxy enforces HTTPS-only source URLs. Any HTTP attempt returns `400 invalid source host`.
 
 ## Automation listeners & cron jobs
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `ENABLE_WELCOME_HOOK` | bool | `true` | Event listeners for welcome thread closures that log to Sheets. |
-| `ENABLE_PROMO_WATCHER` | bool | `true` | Event listeners for promo thread closures that log to Sheets. |
 
-> `ENABLE_WELCOME_HOOK` is the only supported welcome toggle. Remove any lingering
-> 'ENABLE_WELCOME_WATCHER' entries from deployment environments.
+Event listeners and watcher availability are controlled by FeatureToggles sheet entries rather than ENV variables.
 
 > Cron cadences are fixed in code today; scheduled jobs refresh the `clans`, `templates`, and `clan_tags` cache buckets, post `[cache]` summaries to the ops channel, and emit the Daily Recruiter Update at `REPORT_DAILY_POST_TIME` (UTC). Update the scheduler directly if the defaults change.
 
