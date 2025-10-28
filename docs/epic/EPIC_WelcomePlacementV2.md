@@ -58,15 +58,15 @@ Missing Config → log channel warning + safe disable.
    If `welcome_dialog` enabled, the bot waits for the Ticket Tool **Close-button message**, reacts 👍, and starts the welcome dialog.
 
 ### Manual Fallback Trigger (Testing & Admin Use)
-If welcome_dialog is enabled and the Ticket Tool Close-button event is unavailable (e.g., on test servers), authorized users with the Recruiter, Staff, or Admin role may manually start the same dialog by reacting with the 🧭 emoji on the first message of a valid welcome or promo thread.
+When welcome_dialog is enabled, the Welcome Dialog can now start through two verified triggers:
 
-Uses the identical dialog flow as the automated Ticket Tool path.
+Automated Trigger (Ticket Tool) – When a welcome or promo thread is closed by Ticket Tool, the bot automatically starts the dialog (source="ticket").
 
-Scope checks: parent channel must be one of the configured welcome/promo parents.
+Manual Trigger (🧭 Reaction) – Recruiters, Staff, or Admins can manually start the same dialog by reacting with 🧭 on the first message of a valid welcome or promo thread (source="emoji").
 
-Idempotent: if the dialog has already started in the thread, additional triggers are ignored.
+Both paths call the shared entrypoint start_welcome_dialog(...), which manages scope checks, deduplication through a pinned marker, and structured logging.
 
-Logging: Start/skip/reject events are logged in the usual structured format for observability.
+The interactive dialog modal and summary embed are scheduled for the next phase.
 
 2. **Questionnaire**
    Multi-page modal (per channel).

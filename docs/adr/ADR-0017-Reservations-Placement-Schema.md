@@ -32,6 +32,9 @@ Every `clan_tag` must exist in **ClanList (B)**.
 Implementation Notes — Manual Fallback Trigger
 A secondary manual trigger exists for environments without Ticket Tool integration. When welcome_dialog is active, a 🧭 reaction on the thread’s first message by a Recruiter, Staff, or Admin starts the same welcome dialog flow.
 
+Phase 7 adds the automated Ticket Tool trigger (source="ticket") and the manual 🧭 reaction trigger (source="emoji").
+Both call start_welcome_dialog, which performs gating, logging, and deduplication before the actual modal launches.
+
 Shares all validation and deduplication with the automated path.
 
 Parent channel must be a configured welcome/promo parent.

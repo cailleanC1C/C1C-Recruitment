@@ -14,6 +14,10 @@
 
 New exception (Phase 7 planning): The onboarding module supports a controlled manual fallback for welcome_dialog: a 🧭 reaction on the first message by Recruiter/Staff/Admin in a valid welcome/promo thread starts the identical dialog flow used by the Ticket Tool path. No additional configuration sources are introduced.
 
+Updated exception (Phase 7 progress):
+Both the Ticket Tool closure trigger and the 🧭 reaction fallback are now implemented for welcome_dialog.
+They share one entrypoint, identical gating, and structured JSON logging; modal functionality remains stubbed.
+
 ## Evidence Table
 | Guardrail | Status | Evidence | Notes |
 |-----------|--------|----------|-------|
