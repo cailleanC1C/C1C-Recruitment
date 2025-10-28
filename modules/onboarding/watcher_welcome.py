@@ -114,12 +114,21 @@ class _ThreadClosureWatcher(commands.Cog):
             return
         if not _transitioned_to_closed(before, after):
             return
+        await self._record_closure(after)
+
         if not feature_flags.is_enabled("welcome_dialog"):
             return
         if not thread_scopes.is_welcome_parent(after):
             return
-        await start_welcome_dialog(after, self.bot.user, "ticket")
-        await self._record_closure(after)
+
+        try:
+            await start_welcome_dialog(after, self.bot.user, "ticket")
+        except Exception:
+            log.exception(
+                "%s watcher failed to launch dialog",
+                self.log_prefix,
+                extra={"thread_id": after.id},
+            )
 
     async def _record_closure(self, thread: discord.Thread) -> None:
         timestamp = dt.datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
