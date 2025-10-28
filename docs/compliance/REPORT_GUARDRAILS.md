@@ -12,6 +12,8 @@
 |7|UTC timestamps|Pass|
 |8|No new env/sheet keys|Pass|
 
+New exception (Phase 7 planning): The onboarding module supports a controlled manual fallback for welcome_dialog: a 🧭 reaction on the first message by Recruiter/Staff/Admin in a valid welcome/promo thread starts the identical dialog flow used by the Ticket Tool path. No additional configuration sources are introduced.
+
 ## Evidence Table
 | Guardrail | Status | Evidence | Notes |
 |-----------|--------|----------|-------|
@@ -67,4 +69,4 @@
 ## Risk scan
 * No blocking risks observed—extension contract, config sourcing, embed parity, and RBAC controls all validate cleanly in the current codebase.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)
