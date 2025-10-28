@@ -3114,9 +3114,15 @@ class CoreOpsCog(commands.Cog):
                 tier_sections.append(
                     HelpTierSection(label=section.label, commands=commands)
                 )
-            has_commands = any(section.commands for section in tier_sections)
-            if not has_commands and (not allow_empty_tiers or not _audience_is_visible(key)):
-                continue
+
+            # Always include a tier embed so the help overview has a stable
+            # shape, even when the viewer cannot access any commands in that
+            # tier.  Tests exercise that the overview always renders the
+            # overview pane plus one pane per audience (admin, staff, user),
+            # relying on empty panes to indicate restricted tiers.  Previously
+            # we dropped tiers with no visible commands, causing the admin and
+            # staff embeds to disappear for non-staff members and the tests to
+            # fail.
             tiers.append(HelpTier(title=config.title, sections=tuple(tier_sections)))
         return tiers
 
