@@ -3114,6 +3114,7 @@ class CoreOpsCog(commands.Cog):
                 tier_sections.append(
                     HelpTierSection(label=section.label, commands=commands)
                 )
+
             has_commands = any(section.commands for section in tier_sections)
             if not has_commands and (not allow_empty_tiers or not _audience_is_visible(key)):
                 continue
