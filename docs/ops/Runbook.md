@@ -7,8 +7,9 @@ workflows, and post-change validation.
 Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
 
 ## Help overview surfaces
-- `@Bot help` renders four embeds in a single response: Overview, Admin / Operational, Staff, and User.
-- Admin only lists operational commands plus the Welcome Templates refresh; Staff surfaces recruitment flows, Sheet Tools, and milestones; User lists recruitment, milestones, and general commands including the mention-only entry points (`@Bot help`, `@Bot ping`).
+- `@Bot help` adapts to the caller. Admins receive Overview + Admin / Operational + Staff + User, Staff see Overview + Staff + User, and members see Overview + User.
+- Admin covers the operational commands (including `welcome-refresh` and every `refresh*`/`perm*` control), Staff surfaces recruitment flows, Sheet Tools, and milestones, and User lists recruitment, milestones, and the mention-only entry points (`@Bot help`, `@Bot ping`).
+- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`; anything not allowlisted renders as `!ops <command>`.
 - The renderer reads each command’s `access_tier` and `function_group` metadata directly from the registry. Empty sections collapse unless `SHOW_EMPTY_SECTIONS=1`, which swaps in a “Coming soon” placeholder for parity checks.
 
 ## Startup preloader

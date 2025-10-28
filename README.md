@@ -7,6 +7,7 @@ The bot keeps clan rosters healthy, helps new friends find their hall, and makes
 
 ### What you can do today
 @Bot help — lists the commands your role can use and tips for each.
+@Bot ping — quick pong reaction so you can confirm the bot is awake.
 !clan <tag> — shows a quick profile for any clan in the cluster.
 !clansearch — opens the member search panel with the latest roster filters.
 !clanmatch — recruiter-only panel to match players with open clans.

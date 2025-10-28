@@ -57,7 +57,8 @@ flowchart TD
 ### Help metadata
 - Commands opt-in to the multi-embed help surface via the `help_metadata` decorator.
 - `@Bot help` dynamically discovers commands from the live registry and filters by
-  `access_tier` + `function_group`. Admin shows operational controls plus Welcome Templates, Staff shows recruitment + Sheet Tools + milestones, and User shows recruitment + milestones + general (including the mention-only `@Bot help` / `@Bot ping`). Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
+  `access_tier` + `function_group`. Admin viewers receive Overview + Admin + Staff + User, Staff see Overview + Staff + User, and members see Overview + User. Admin covers operational controls (including Welcome Templates + refresh/perm suites), Staff shows recruitment + Sheet Tools + milestones, and User shows recruitment + milestones + general (including the mention-only `@Bot help` / `@Bot ping`). Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
+- Bare admin aliases follow `COREOPS_ADMIN_BANG_ALLOWLIST`; non-allowlisted commands display as `!ops <command>`.
 - Empty sections collapse automatically; set `SHOW_EMPTY_SECTIONS=true` to render a
   “Coming soon” placeholder. The footer always reads `Bot v… · CoreOps v… • For details: @Bot help`.
 
