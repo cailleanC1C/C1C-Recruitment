@@ -12,6 +12,11 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 - Admin covers the operational commands (including `welcome-refresh` and every `refresh*`/`perm*` control), Staff surfaces recruitment flows, Sheet Tools, and milestones, and User lists recruitment, milestones, and the mention-only entry points (`@Bot help`, `@Bot ping`).
 - Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes.
 
+## Help diagnostics (temporary)
+- Toggle on with `HELP_DIAGNOSTICS=1` to emit a one-shot summary of discovered commands for each help invocation. The payload includes visible vs discovered totals plus a `yes`/`no` decision per command, and it sanitizes user and guild names before posting.
+- Messages post to the configured log channel resolved by `resolve_ops_log_channel_id`. If that channel is missing, only admins receive a DM copy; staff and members do not get fallbacks.
+- Use `HELP_DIAGNOSTICS_TTL_SEC` (default `60`) to throttle repeat posts per audience + guild so repeated help calls during the window reuse the existing diagnostics.
+
 ## Startup preloader
 1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
    registers commands.
@@ -110,6 +115,12 @@ tabs.
 5. If any validations fail, double-check Sheet permissions and the Config tab contents
    before escalating.
 
+### Daily recruiter summary embed
+- The “Summary Open Spots” card now renders as three distinct blocks: General Overview,
+  Per Bracket (one line per bracket with totals), and Bracket Details (per-clan rows).
+- Two zero-width divider fields containing `﹘﹘﹘` separate the blocks so desktop and
+  mobile layouts both show clear visual boundaries.
+
 ## Features unexpectedly disabled at startup
 - **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
   match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
@@ -118,4 +129,4 @@ tabs.
 - **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)
