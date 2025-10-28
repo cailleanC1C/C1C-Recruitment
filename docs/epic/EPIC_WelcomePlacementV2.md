@@ -53,13 +53,24 @@ Missing Config → log channel warning + safe disable.
 
 ## 5 · Lifecycle
 
-1. **Thread creation**  
-   Ticket Tool opens thread → bot joins.  
+1. **Thread creation**
+   Ticket Tool opens thread → bot joins.
    If `welcome_dialog` enabled, the bot waits for the Ticket Tool **Close-button message**, reacts 👍, and starts the welcome dialog.
 
-2. **Questionnaire**  
-   Multi-page modal (per channel).  
-   On completion, bot posts **summary embed** with recruiter-only controls:  
+### Manual Fallback Trigger (Testing & Admin Use)
+If welcome_dialog is enabled and the Ticket Tool Close-button event is unavailable (e.g., on test servers), authorized users with the Recruiter, Staff, or Admin role may manually start the same dialog by reacting with the 🧭 emoji on the first message of a valid welcome or promo thread.
+
+Uses the identical dialog flow as the automated Ticket Tool path.
+
+Scope checks: parent channel must be one of the configured welcome/promo parents.
+
+Idempotent: if the dialog has already started in the thread, additional triggers are ignored.
+
+Logging: Start/skip/reject events are logged in the usual structured format for observability.
+
+2. **Questionnaire**
+   Multi-page modal (per channel).
+   On completion, bot posts **summary embed** with recruiter-only controls:
    *Reserve Spot*, *Change*, *Cancel*.
 
 3. **Reservation flow** (`placement_reservations`)  
@@ -197,4 +208,4 @@ labels: docs, comp:onboarding, comp:placement, comp:data-sheets, bot:recruitment
 milestone: Harmonize v1.0  
 **[/meta]**
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)

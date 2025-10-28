@@ -27,6 +27,17 @@ Only AF & AC are bot-written; E and AG remain manual.
 All reads start at row 4 (headers = 1–3).
 Every `clan_tag` must exist in **ClanList (B)**.
 
+### Implementation Notes
+
+Implementation Notes — Manual Fallback Trigger
+A secondary manual trigger exists for environments without Ticket Tool integration. When welcome_dialog is active, a 🧭 reaction on the thread’s first message by a Recruiter, Staff, or Admin starts the same welcome dialog flow.
+
+Shares all validation and deduplication with the automated path.
+
+Parent channel must be a configured welcome/promo parent.
+
+Start/skip/reject outcomes are logged in the repository’s usual structured format.
+
 ---
 
 ## 3 · Data Schema
@@ -93,4 +104,4 @@ labels: docs, architecture, comp:onboarding, comp:placement, comp:data-sheets, b
 milestone: Harmonize v1.0
 **[/meta]**
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)

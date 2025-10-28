@@ -25,6 +25,9 @@ Every audit and CI check validates against this document.
 - **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, deprecated shared CoreOps shims, `shared/utils/coreops_*`).
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 
+### Feature Toggles and Config Policy
+- Onboarding emoji fallback: When welcome_dialog is TRUE, a controlled manual reaction trigger (🧭 on the first message in a valid welcome/promo thread) by Recruiter/Staff/Admin is permitted. This does not add new ENV or Sheet keys and must reuse existing channel scope.
+
 ## 3) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
 - **D-02 Footer (exact):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.x)`
@@ -57,4 +60,4 @@ labels: docs, governance, guardrails, ready
 milestone: Harmonize v1.0
 [/meta]
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.7)
