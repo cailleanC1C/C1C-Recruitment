@@ -41,6 +41,7 @@ It exists so that contributors update the correct references after each developm
 * Example: [`REPORT_GUARDRAILS.md`](compliance/REPORT_GUARDRAILS.md) details report formatting and safety guardrail standards.
 
 ### `/docs/_meta/`
+* [`COMMAND_METADATA.md`](_meta/COMMAND_METADATA.md) — canonical command metadata export for Ops and diagnostics.
 * [`DocStyle.md`](_meta/DocStyle.md) — documentation formatting conventions.
 
 ### `/docs/guardrails/`
@@ -84,4 +85,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)

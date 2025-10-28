@@ -27,7 +27,7 @@ def _resolve_member(target):
 
 _ensure_src_on_path()
 
-from c1c_coreops.cog import CoreOpsCog
+from c1c_coreops.cog import CoreOpsCog, _reset_help_diagnostics_cache
 from c1c_coreops.helpers import tier
 from modules.ops.permissions_sync import BotPermissionCog
 from cogs.recruitment_clan_profile import ClanProfileCog
@@ -73,6 +73,7 @@ class HelpContext:
 
 @pytest.fixture(autouse=True)
 def patch_rbac(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
+    _reset_help_diagnostics_cache()
     monkeypatch.setattr("c1c_coreops.rbac.get_admin_role_ids", lambda: set())
     monkeypatch.setattr("c1c_coreops.rbac.get_staff_role_ids", lambda: set())
     monkeypatch.setattr("c1c_coreops.rbac._resolve_member", _resolve_member)
@@ -145,6 +146,7 @@ def patch_rbac(monkeypatch: pytest.MonkeyPatch) -> Iterable[None]:
     monkeypatch.setattr("c1c_coreops.rbac.discord.Member", DummyMember)
     monkeypatch.setattr("c1c_coreops.cog.discord.Member", DummyMember)
     yield
+    _reset_help_diagnostics_cache()
 
 
 async def _gather_help_embeds(
