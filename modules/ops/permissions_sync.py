@@ -929,6 +929,11 @@ class BotPermissionCog(commands.Cog):
         return "\n".join(lines)
 
     @tier("admin")
+    @help_metadata(
+        function_group="operational",
+        section="permissions",
+        access_tier="admin",
+    )
     @commands.group(
         name="perm",
         invoke_without_command=True,
@@ -943,6 +948,11 @@ class BotPermissionCog(commands.Cog):
         )
 
     @tier("admin")
+    @help_metadata(
+        function_group="operational",
+        section="permissions",
+        access_tier="admin",
+    )
     @perm_group.group(
         name="bot",
         invoke_without_command=True,
