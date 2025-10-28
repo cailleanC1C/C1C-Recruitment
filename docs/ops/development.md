@@ -25,8 +25,8 @@
   cleanup; any remaining imports should be replaced with the async facade.
 
 ## Testing commands
-- `!rec refresh all` — verify cache warmers and actor logging.
-- `!rec digest` — confirm public telemetry includes age/next/retries and fallback text.
+- `!ops refresh all` — verify cache warmers and actor logging.
+- `!ops digest` — confirm public telemetry includes age/next/retries and fallback text.
 - `!checksheet --debug` — inspect tab headers and template previews post-refresh.
 
 ## Command routing

@@ -5,7 +5,7 @@
 ## Context
 
 Operators requested clearer separation between cache refreshes and configuration reloads.
-Phase 3b added a soft reboot flag to `!rec reload` and tightened actor logging so ops can
+Phase 3b added a soft reboot flag to `!ops reload` and tightened actor logging so ops can
 trace who initiated reloads.
 
 ## Decision

@@ -79,22 +79,22 @@ def test_multi_bot_alias_behavior(monkeypatch: pytest.MonkeyPatch) -> None:
         try:
             env_command = bot.get_command("env")
             assert env_command is not None
-            rec_env = bot.get_command("rec env")
-            assert rec_env is not None
+            ops_env = bot.get_command("ops env")
+            assert ops_env is not None
 
             non_admin_ctx = DummyContext(author=DummyMember(administrator=False))
             with pytest.raises(commands.CheckFailure):
-                await _run_checks(rec_env, non_admin_ctx)
+                await _run_checks(ops_env, non_admin_ctx)
             with pytest.raises(commands.CheckFailure):
                 await _run_checks(env_command, non_admin_ctx)
 
             admin_ctx = DummyContext(author=DummyMember(administrator=True))
-            await _run_checks(rec_env, admin_ctx)
+            await _run_checks(ops_env, admin_ctx)
             await _run_checks(env_command, admin_ctx)
 
             settings = load_coreops_settings()
             variants = build_command_variants(settings, "env")
-            assert "rec env" in variants
+            assert "ops env" in variants
             assert variants[0] == "env"
         finally:
             await bot.close()
@@ -112,8 +112,8 @@ def test_generic_alias_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
         await bot.add_cog(CoreOpsCog(bot))
 
         try:
-            rec_digest = bot.get_command("rec digest")
-            assert rec_digest is not None
+            ops_digest = bot.get_command("ops digest")
+            assert ops_digest is not None
             digest = bot.get_command("digest")
             assert digest is not None
 
@@ -122,7 +122,7 @@ def test_generic_alias_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
                 await _run_checks(digest, non_admin_ctx)
 
             admin_ctx = DummyContext(author=DummyMember(administrator=True))
-            await _run_checks(rec_digest, admin_ctx)
+            await _run_checks(ops_digest, admin_ctx)
             await _run_checks(digest, admin_ctx)
         finally:
             await bot.close()

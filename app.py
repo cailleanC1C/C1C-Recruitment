@@ -272,16 +272,16 @@ async def on_message(message: discord.Message):
         if command_name == "help":
             cog = bot.get_cog("CoreOpsCog")
             if cog is not None and hasattr(cog, "render_help"):
-                rec_help_command = bot.get_command("rec help")
-                if rec_help_command is not None:
-                    ctx.command = rec_help_command
+                ops_help_command = bot.get_command("ops help")
+                if ops_help_command is not None:
+                    ctx.command = ops_help_command
                     ctx.invoked_with = "help"
                 await cog.render_help(ctx, query=remainder)
             return
         if command_name == "ping":
-            rec_ping_command = bot.get_command("rec ping")
-            if rec_ping_command is not None:
-                ctx.command = rec_ping_command
+            ops_ping_command = bot.get_command("ops ping")
+            if ops_ping_command is not None:
+                ctx.command = ops_ping_command
                 ctx.invoked_with = "ping"
                 await bot.invoke(ctx)
             else:
@@ -305,9 +305,9 @@ async def on_message(message: discord.Message):
         if base_name == "help":
             cog = bot.get_cog("CoreOpsCog")
             if cog is not None and hasattr(cog, "render_help"):
-                rec_help_command = bot.get_command("rec help")
-                if rec_help_command is not None:
-                    ctx.command = rec_help_command
+                ops_help_command = bot.get_command("ops help")
+                if ops_help_command is not None:
+                    ctx.command = ops_help_command
                     ctx.invoked_with = "help"
                 await cog.render_help(ctx, query=remainder)
             return

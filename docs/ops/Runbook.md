@@ -19,7 +19,7 @@ Older GitHub Actions deploy runs may display "skipped by same-file supersession"
 3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
  completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
   result.
-4. **Action:** If any bucket fails to warm, rerun `!rec refresh all` after the bot is
+4. **Action:** If any bucket fails to warm, rerun `!ops refresh all` after the bot is
   online. Escalate to platform on-call if two consecutive startups fail for the same
   bucket.
 
@@ -72,7 +72,7 @@ logging the error for follow-up.
 - Emits the log line `Runtime rebooted via !reload --reboot` once the restart sequence completes.
 
 ## Digest & health telemetry
-When operators run `!rec digest` or `!rec health`, the embeds render the following fields
+When operators run `!ops digest` or `!ops health`, the embeds render the following fields
 from the public telemetry API:
 
 | Field | Meaning | Notes |
@@ -86,7 +86,7 @@ from the public telemetry API:
 `!checksheet` verifies the link between the configuration registry and the Google Sheets
 tabs.
 
-1. Run `!rec reload` after updating Sheet tab names or ranges.
+1. Run `!ops reload` after updating Sheet tab names or ranges.
 2. Trigger `!checksheet`.
 3. Review the embed for **Tabs**, **Named ranges**, and **Headers**. Missing entries show
    as ⚠️ with the key that failed validation.
@@ -100,7 +100,7 @@ tabs.
   match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
 - **Signals:** Startup posts an admin-ping warning in the runtime log channel when the tab,
   headers, or row values are missing or invalid.
-- **Remediation:** Fix the Sheet, run `!rec refresh config` (or the admin bang alias), then
+- **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
 Doc last updated: 2025-10-27 (v0.9.6)

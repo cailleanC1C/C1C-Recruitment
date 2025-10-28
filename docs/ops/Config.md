@@ -195,13 +195,13 @@ Feature Toggles:
 **Operator flow**
 
 1. Edit the `FeatureToggles` worksheet in the environment’s Mirralith Sheet.
-2. Run `!rec refresh config` (or the admin bang alias) to pull the latest worksheet values.
+2. Run `!ops refresh config` (or the admin bang alias) to pull the latest worksheet values.
 3. Confirm the tab and headers with `!checksheet`; resolve any ⚠️ rows before retrying.
 
 **Troubleshooting**
 
 - Warnings mention the first role listed in `ADMIN_ROLE_IDS` and are posted to the runtime log channel.
 - Verify the worksheet name matches the Config key and that headers are spelled correctly.
-- Use `!rec refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
+- Use `!ops refresh config` (or the Ops equivalent) to force the bot to re-read the toggles after a fix.
 
 Doc last updated: 2025-10-26 (v0.9.6)

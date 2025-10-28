@@ -20,7 +20,7 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 | `placement_target_select` | `TRUE` | Stub module for future placement picker. |
 | `placement_reservations` | `TRUE` | Stub module for future reservation workflow. |
 
-Set the desired value in the `FeatureToggles` tab, then run `!rec refresh config`
+Set the desired value in the `FeatureToggles` tab, then run `!ops refresh config`
 to apply it. The runtime logs whether each module was loaded or skipped at boot. See
 [`Config.md`](Config.md#feature-toggles-worksheet) for the worksheet contract.
 
