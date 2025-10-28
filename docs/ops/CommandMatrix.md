@@ -20,7 +20,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!health` | ✅ | Inspect cache/watchdog telemetry pulled from the public API. | `!health` |
 | `!checksheet` | ✅ | Validate Sheets tabs, named ranges, and headers (`--debug` preview optional). | `!checksheet [--debug]` |
 | `!refresh [bucket]` | ✅ | Admin bang alias for single-bucket refresh with the same telemetry. | `!refresh [bucket]` |
-| `!refresh all` | ✅ | Bang alias for the full cache sweep (same cooldown as the `!rec` variant). | `!refresh all` |
+| `!refresh all` | ✅ | Bang alias for the full cache sweep (same cooldown as the `!ops` variant). | `!refresh all` |
 | `!reload [--reboot]` | ✅ | Admin bang alias for config reload plus optional soft reboot. | `!reload [--reboot]` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
 | `!perm bot list` | ✅ | Show the current bot allow/deny lists with counts and IDs. | `!perm bot list [--json]` |
@@ -31,12 +31,12 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 ## Recruiter / Staff — recruitment workflows
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
-| `!rec checksheet` | 🧩 | Staff view of Sheets linkage for recruitment/onboarding tabs (`--debug` prints sample rows). | `!rec checksheet [--debug]` |
-| `!rec config` | 🧩 | Staff summary of guild routing, sheet IDs, env toggles, and watcher states. | `!rec config` |
-| `!rec digest` | ✅ | Post the ops digest with cache age, next run, and retries. | `!rec digest` |
-| `!rec refresh clansinfo` | 🧩 | Refresh clan roster data when Sheets updates land. | `!rec refresh clansinfo` |
-| `!rec refresh all` | 🧩 | Warm every registered cache bucket and emit a consolidated summary (30 s guild cooldown). | `!rec refresh all` |
-| `!rec reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!rec reload [--reboot]` |
+| `!ops checksheet` | 🧩 | Staff view of Sheets linkage for recruitment/onboarding tabs (`--debug` prints sample rows). | `!ops checksheet [--debug]` |
+| `!ops config` | 🧩 | Staff summary of guild routing, sheet IDs, env toggles, and watcher states. | `!ops config` |
+| `!ops digest` | ✅ | Post the ops digest with cache age, next run, and retries. | `!ops digest` |
+| `!ops refresh clansinfo` | 🧩 | Refresh clan roster data when Sheets updates land. | `!ops refresh clansinfo` |
+| `!ops refresh all` | 🧩 | Warm every registered cache bucket and emit a consolidated summary (30 s guild cooldown). | `!ops refresh all` |
+| `!ops reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!ops reload [--reboot]` |
 | `!clanmatch` | 🧩 | Recruiter match workflow (requires recruiter/staff role). [gated: `recruiter_panel`] | `!clanmatch` |
 | `!welcome <clan> [@member] [note]` | ✅ | Post the legacy welcome embed with crest, pings, and general notice routing. [gated: `recruitment_welcome`] | `!welcome <clan> [@member] [note]` |
 

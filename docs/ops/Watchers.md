@@ -50,7 +50,7 @@ All jobs post `[cache]` summaries to the ops channel via `modules.common.runtime
 - `shared.sheets.core` caches worksheet handles (no TTL).
 - `shared.sheets.recruitment` / `shared.sheets.onboarding` keep TTL caches for values.
 - `!reload` reloads config, clears TTL caches, and can optionally evict worksheet handles.
-- Cron refreshes clear TTL caches before warming them; manual `!rec refresh` commands share
+- Cron refreshes clear TTL caches before warming them; manual `!ops refresh` commands share
   the same helpers.
 
 ## Scheduler responsibilities
@@ -61,7 +61,7 @@ All jobs post `[cache]` summaries to the ops channel via `modules.common.runtime
 ## Failure handling & health
 - Watcher read/write failure → log a structured warning (thread, tab, reason) and retry on the next event.
 - Cache refresh failure → `[cache]` summary includes `err=...`; manual refresh commands remain available.
-- `/healthz` reports watchdog metrics and cache timestamps; `!rec config` surfaces the active watcher toggles.
+- `/healthz` reports watchdog metrics and cache timestamps; `!ops config` surfaces the active watcher toggles.
 - `LOG_CHANNEL_ID` receives lifecycle notices plus watcher (`[welcome_watcher]`, `[promo_watcher]`) and `[cache]` refresh messages.
 
 Doc last updated: 2025-10-26 (v0.9.6)

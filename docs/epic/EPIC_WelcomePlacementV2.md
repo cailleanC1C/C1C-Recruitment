@@ -81,7 +81,7 @@ Missing Config → log channel warning + safe disable.
 6. **Refresh & restart**  
    - On boot → rebuild timers from `Reservations`.  
    - Every **3 hours** (existing cron) → batch recompute AF & AI for all clans.  
-   - `!rec refresh clansinfo` / `!rec refresh all` → manual trigger.  
+   - `!ops refresh clansinfo` / `!ops refresh all` → manual trigger.  
 
 ---
 

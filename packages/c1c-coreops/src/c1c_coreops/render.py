@@ -349,7 +349,7 @@ def build_config_embed(
 
 def _maybe_build_tip(entries: Sequence[DigestSheetEntry]) -> str | None:
     if entries:
-        return 'Need latest openings? run "!rec refresh clansinfo" and retry.'
+        return 'Need latest openings? run "!ops refresh clansinfo" and retry.'
     return None
 
 
