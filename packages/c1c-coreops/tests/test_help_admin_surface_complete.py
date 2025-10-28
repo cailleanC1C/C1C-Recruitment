@@ -254,12 +254,10 @@ def test_help_staff_view(monkeypatch: pytest.MonkeyPatch) -> None:
             DummyMember(is_staff=True),
             allowlist="env,health,refresh all",
         )
-        assert len(embeds) == 4
+        assert len(embeds) == 3
         titles = {embed.title: embed for embed in embeds}
 
-        admin_embed = titles.get("Admin / Operational")
-        if admin_embed is not None:
-            assert not getattr(admin_embed, "fields", ())
+        assert "Admin / Operational" not in titles
 
         staff_embed = titles["Staff"]
         user_embed = titles["User"]
@@ -289,16 +287,11 @@ def test_help_user_view(monkeypatch: pytest.MonkeyPatch) -> None:
             DummyMember(),
             allowlist="env,health,refresh all",
         )
-        assert len(embeds) == 4
+        assert len(embeds) == 2
         titles = {embed.title: embed for embed in embeds}
 
-        admin_embed = titles.get("Admin / Operational")
-        if admin_embed is not None:
-            assert not getattr(admin_embed, "fields", ())
-
-        staff_embed = titles.get("Staff")
-        if staff_embed is not None:
-            assert not getattr(staff_embed, "fields", ())
+        assert "Admin / Operational" not in titles
+        assert "Staff" not in titles
 
         user_embed = titles["User"]
         user_text = " \n ".join(_fields(user_embed).values())
@@ -317,18 +310,11 @@ def test_help_empty_sections_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
         embeds = await _gather_help_embeds(
             monkeypatch, DummyMember(), show_empty=True
         )
-        assert len(embeds) == 4
+        assert len(embeds) == 2
         titles = {embed.title: embed for embed in embeds}
 
-        admin_embed = titles.get("Admin / Operational")
-        if admin_embed is not None:
-            admin_fields = _fields(admin_embed)
-            assert all(value == "Coming soon" for value in admin_fields.values())
-
-        staff_embed = titles.get("Staff")
-        if staff_embed is not None:
-            staff_fields = _fields(staff_embed)
-            assert all(value == "Coming soon" for value in staff_fields.values())
+        assert "Admin / Operational" not in titles
+        assert "Staff" not in titles
 
         user_embed = titles["User"]
         fields = _fields(user_embed)
