@@ -17,7 +17,11 @@ class RecruitmentMember(commands.Cog):
     @tier("user")
     @help_metadata(function_group="recruitment", section="recruitment", access_tier="user")
     @commands.cooldown(1, 2, commands.BucketType.user)
-    @commands.command(name="clansearch")
+    @commands.command(
+        name="clansearch",
+        help="Opens the member clan search panel.",
+        brief="Opens the member clan search panel.",
+    )
     async def clansearch(
         self, ctx: commands.Context, *, extra: str | None = None
     ) -> None:

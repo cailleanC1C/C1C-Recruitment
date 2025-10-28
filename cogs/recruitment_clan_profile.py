@@ -64,8 +64,9 @@ class ClanProfileCog(commands.Cog):
     @help_metadata(function_group="recruitment", section="recruitment", access_tier="user")
     @commands.command(
         name="clan",
-        help="Show a clan’s profile and entry criteria by tag.",
+        help="Shows a clan's profile card by tag.",
         usage="clan <tag>",
+        brief="Shows a clan's profile card by tag.",
     )
     async def clan(self, ctx: commands.Context, tag: str) -> None:
         """Render a crest-enabled clan profile with a 💡 reaction toggle."""

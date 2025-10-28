@@ -929,7 +929,12 @@ class BotPermissionCog(commands.Cog):
         return "\n".join(lines)
 
     @tier("admin")
-    @commands.group(name="perm", invoke_without_command=True)
+    @commands.group(
+        name="perm",
+        invoke_without_command=True,
+        help="Manages bot allow/deny configuration.",
+        brief="Manages bot allow/deny configuration.",
+    )
     @admin_only()
     async def perm_group(self, ctx: commands.Context) -> None:
         await ctx.reply(
@@ -938,7 +943,12 @@ class BotPermissionCog(commands.Cog):
         )
 
     @tier("admin")
-    @perm_group.group(name="bot", invoke_without_command=True)
+    @perm_group.group(
+        name="bot",
+        invoke_without_command=True,
+        help="Manages bot allow/deny subcommands.",
+        brief="Manages bot allow/deny subcommands.",
+    )
     @admin_only()
     async def perm_bot(self, ctx: commands.Context) -> None:
         await ctx.reply(
@@ -953,7 +963,11 @@ class BotPermissionCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="permissions", access_tier="admin")
-    @perm_bot.command(name="list")
+    @perm_bot.command(
+        name="list",
+        help="Shows the current allow/deny configuration.",
+        brief="Shows the current allow/deny configuration.",
+    )
     @admin_only()
     async def perm_bot_list(self, ctx: commands.Context, *, flags: ListFlags) -> None:
         guild = ctx.guild
@@ -1031,7 +1045,11 @@ class BotPermissionCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="permissions", access_tier="admin")
-    @perm_bot.command(name="allow")
+    @perm_bot.command(
+        name="allow",
+        help="Adds channels or categories to the allow list.",
+        brief="Adds channels or categories to the allow list.",
+    )
     @admin_only()
     async def perm_bot_allow(self, ctx: commands.Context, *, targets: str) -> None:
         guild = ctx.guild
@@ -1084,7 +1102,11 @@ class BotPermissionCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="permissions", access_tier="admin")
-    @perm_bot.command(name="deny")
+    @perm_bot.command(
+        name="deny",
+        help="Adds channels or categories to the deny list.",
+        brief="Adds channels or categories to the deny list.",
+    )
     @admin_only()
     async def perm_bot_deny(self, ctx: commands.Context, *, targets: str) -> None:
         guild = ctx.guild
@@ -1137,7 +1159,11 @@ class BotPermissionCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="permissions", access_tier="admin")
-    @perm_bot.command(name="remove")
+    @perm_bot.command(
+        name="remove",
+        help="Removes channels or categories from allow/deny lists.",
+        brief="Removes channels or categories from allow/deny lists.",
+    )
     @admin_only()
     async def perm_bot_remove(self, ctx: commands.Context, *, targets: str) -> None:
         guild = ctx.guild
@@ -1170,7 +1196,11 @@ class BotPermissionCog(commands.Cog):
 
     @tier("admin")
     @help_metadata(function_group="operational", section="permissions", access_tier="admin")
-    @perm_bot.command(name="sync")
+    @perm_bot.command(
+        name="sync",
+        help="Applies allow/deny changes to Discord overwrites.",
+        brief="Applies allow/deny changes to Discord overwrites.",
+    )
     @admin_only()
     async def perm_bot_sync(self, ctx: commands.Context, *, flags: SyncFlags) -> None:
         guild = ctx.guild

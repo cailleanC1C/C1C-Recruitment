@@ -58,6 +58,7 @@ They apply to **all phases, PRs, and documentation changes**.
   * Follow the structure in the current documentation tree (see `/docs` layout: `adr/`, `ops/`, `contracts/`, `compliance/`).
   * **Documentation Index (v0.9.6):** This index explains the intent and ownership of every file in the documentation tree. It exists so that contributors update the correct references after each development phase or PR.
   * **Quality gate:** All docs must follow [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md) and pass `scripts/ci/check_docs.py`. Environment keys are authoritative in [`docs/ops/Config.md`](../ops/Config.md); keep `.env.example` synchronized.
+  * **Help surface changes:** When a PR touches help output, call out how the dynamic renderer (registry discovery + `command.can_run(ctx)`) and the admin bang allowlist behave or remain unchanged.
 
     * **`/docs/adr/` — Architectural Decision Records**
       * Each ADR (`ADR-XXXX`) captures an approved architectural or systemic decision.
@@ -253,4 +254,4 @@ AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew l
 * Keep ENV + Sheet config consistent.
 * Stop and ask if unsure.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-28 (v0.9.6)
