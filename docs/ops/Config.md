@@ -49,6 +49,8 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | secret | — | Legacy alias for `GSPREAD_CREDENTIALS`. |
 | `RECRUITMENT_SHEET_ID` | string | — | Google Sheet ID for recruitment data. |
 | `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
+| `REMINDER_SHEET_ID` | string | — | Google Sheet ID for reminders (service-specific). |
+| `MILESTONES_SHEET_ID` | string | — | Google Sheet ID for Milestones (claims, appreciation, shard & mercy, missions) (service-specific). |
 | `GOOGLE_SHEET_ID` | string | — | Back-compat sheet ID used when dedicated IDs are unset. |
 | `GSHEET_ID` | string | — | Legacy alias checked when the other IDs are blank. |
 | `RECRUITMENT_CONFIG_TAB` | string | `Config` | Worksheet name containing recruitment config. |
@@ -191,6 +193,8 @@ Feature Toggles:
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
 - The `recruitment_reports` row powers the Daily Recruiter Update (scheduler + manual command). The `placement_*` rows still control stub modules that only log load state.
+
+Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV variables must not be used for feature flags.
 
 **Operator flow**
 
