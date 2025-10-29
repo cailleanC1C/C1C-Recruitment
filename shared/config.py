@@ -24,6 +24,9 @@ __all__ = [
     "get_allowed_guild_ids",
     "is_guild_allowed",
     "get_log_channel_id",
+    "get_log_dedupe_window_s",
+    "get_log_refresh_render_mode",
+    "get_log_include_numeric_ids",
     "get_notify_channel_id",
     "get_notify_ping_role_id",
     "get_recruiters_thread_id",
@@ -75,6 +78,9 @@ _OPTIONAL_ENV = (
     "PUBLIC_BASE_URL",
     "RENDER_EXTERNAL_URL",
     "LOG_CHANNEL_ID",
+    "LOG_DEDUPE_WINDOW_S",
+    "LOG_REFRESH_RENDER_MODE",
+    "LOG_INCLUDE_NUMERIC_IDS",
     "WATCHDOG_CHECK_SEC",
     "WATCHDOG_STALL_SEC",
     "WATCHDOG_DISCONNECT_GRACE_SEC",
@@ -339,6 +345,10 @@ def _load_config() -> Dict[str, object]:
         "TAG_BADGE_PX": _int_env("TAG_BADGE_PX", 128, min_value=32, max_value=512),
         "TAG_BADGE_BOX": _float_env("TAG_BADGE_BOX", 0.90, min_value=0.2, max_value=0.95),
         "STRICT_EMOJI_PROXY": _env_bool("STRICT_EMOJI_PROXY", True),
+        "LOG_DEDUPE_WINDOW_S": _float_env("LOG_DEDUPE_WINDOW_S", 5.0, min_value=0.0, max_value=60.0),
+        "LOG_REFRESH_RENDER_MODE": (os.getenv("LOG_REFRESH_RENDER_MODE") or "line").strip().lower()
+        or "line",
+        "LOG_INCLUDE_NUMERIC_IDS": _env_bool("LOG_INCLUDE_NUMERIC_IDS", False),
     }
 
     if os.getenv("ENABLE_WELCOME_WATCHER") not in (None, ""):
@@ -474,6 +484,28 @@ def _optional_id(key: str) -> Optional[int]:
 
 def get_log_channel_id() -> Optional[int]:
     return _optional_id("LOG_CHANNEL_ID")
+
+
+def get_log_dedupe_window_s(default: float = 5.0) -> float:
+    value = _CONFIG.get("LOG_DEDUPE_WINDOW_S")
+    try:
+        return float(value) if value is not None else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def get_log_refresh_render_mode(default: str = "line") -> str:
+    value = _CONFIG.get("LOG_REFRESH_RENDER_MODE")
+    if isinstance(value, str) and value.strip():
+        normalized = value.strip().lower()
+        if normalized in {"line", "table"}:
+            return normalized
+    return default
+
+
+def get_log_include_numeric_ids() -> bool:
+    value = _CONFIG.get("LOG_INCLUDE_NUMERIC_IDS")
+    return bool(value) if isinstance(value, bool) else _env_bool("LOG_INCLUDE_NUMERIC_IDS", False)
 
 
 def get_notify_channel_id() -> Optional[int]:

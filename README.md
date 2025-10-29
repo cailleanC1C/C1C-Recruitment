@@ -1,7 +1,7 @@
 <!-- Keep README user-facing -->
 <!-- Dev layout reference: recruitment modules now live in modules/recruitment/, -->
 <!-- shared sheet adapters consolidate under shared/sheets/. See docs/Architecture.md. -->
-# C1C Bot - The Woadkeeper v0.9.6
+# C1C Bot - The Woadkeeper v0.9.7
 
 Welcome to the C1C helper. The bot keeps clan rosters healthy, helps new friends find their hall and makes sure every welcome lands in the right place. It links simple Discord commands to the Mirralith Sheets that power recruitment and describe our cluster, so everyone is working with the same fresh info.
 
@@ -44,4 +44,4 @@ Admins keep an eye on the bigger picture: making sure the bot stays online, cach
 
 ---
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-10-29 (v0.9.7)

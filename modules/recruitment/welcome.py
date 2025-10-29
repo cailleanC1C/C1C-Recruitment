@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,9 +13,18 @@ from discord.abc import Messageable
 from discord.ext import commands
 
 from modules.common import runtime as rt
+from shared.dedupe import EventDeduper
+from shared.logfmt import LogTemplates, channel_label, human_reason, user_label
+from shared.obs.events import (
+    format_refresh_message,
+    refresh_bucket_results,
+    refresh_dedupe_key,
+    refresh_deduper,
+)
 from modules.recruitment import emoji_pipeline
 from shared.cache import telemetry as cache_telemetry
 from shared.config import (
+    get_log_dedupe_window_s,
     get_refresh_timezone,
     get_welcome_general_channel_id,
 )
@@ -33,6 +43,71 @@ _DEFAULT_GENERAL_NOTICE = (
     "A new flame joins the cult — welcome {MENTION} to {CLAN}!\n"
     "Be loud, be nerdy, and maybe even helpful. You know the drill, C1C."
 )
+
+_WELCOME_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
+
+log = logging.getLogger(__name__)
+
+
+class _WelcomeSummary:
+    def __init__(
+        self,
+        *,
+        guild: discord.Guild,
+        tag: str,
+        recruit: discord.Member | discord.User | None,
+        channel: discord.abc.GuildChannel | discord.Thread | None,
+    ) -> None:
+        self.guild = guild
+        self.tag = tag
+        self.recruit = recruit
+        self.channel = channel
+        self._actions: dict[str, tuple[str, Optional[str]]] = {}
+
+    def record(self, action: str, status: str, detail: Optional[str] = None) -> None:
+        self._actions[action] = (status, detail)
+
+    async def emit(self) -> None:
+        recruit_id = getattr(self.recruit, "id", None)
+        key = f"welcome:{self.tag}:{recruit_id or 0}"
+        if not _WELCOME_DEDUPER.should_emit(key):
+            return
+        recruit_label = user_label(self.guild, recruit_id)
+        channel_id = getattr(self.channel, "id", None)
+        channel_text = channel_label(self.guild, channel_id)
+        details: list[str] = []
+        has_error = False
+        has_ok = False
+        for action, (status, detail) in self._actions.items():
+            if status == "error":
+                has_error = True
+                text = f"{action}=error"
+                if detail:
+                    text = f"{text} ({detail})"
+                details.append(text)
+            elif status == "ok":
+                has_ok = True
+        if not self._actions:
+            has_error = True
+            details.append("no_actions")
+        result = "ok"
+        if has_error and has_ok:
+            result = "partial"
+        elif has_error and not has_ok:
+            result = "error"
+        message = LogTemplates.welcome(
+            tag=self.tag,
+            recruit=recruit_label,
+            channel=channel_text,
+            result=result,
+            details=details,
+        )
+        try:
+            await rt.send_log_message(message)
+        except Exception:  # pragma: no cover - log delivery failures shouldn't raise
+            log.exception(
+                "failed to emit welcome summary", extra={"tag": self.tag, "recruit": recruit_id}
+            )
 
 
 @dataclass(frozen=True)
@@ -260,10 +335,12 @@ def _expand_tokens(
 async def _log(level: str, **kv: Any) -> None:
     payload = " ".join(f"{key}={value}" for key, value in kv.items() if value is not None)
     message = f"[welcome/{level}] {payload}" if payload else f"[welcome/{level}]"
-    try:
-        await rt.send_log_message(message)
-    except Exception:  # pragma: no cover - defensive guard
-        pass
+    if level == "error":
+        log.error(message)
+    elif level == "warn":
+        log.warning(message)
+    else:
+        log.info(message)
 
 
 def _extract_note_text(ctx: commands.Context, tail: str) -> str:
@@ -328,6 +405,8 @@ class WelcomeCommandService:
             await ctx.reply("Please provide a clan tag to welcome.")
             return
 
+        summary: Optional[_WelcomeSummary] = None
+
         try:
             templates, default_row = await _load_templates()
         except Exception as exc:
@@ -384,6 +463,18 @@ class WelcomeCommandService:
         target_member = await _resolve_target_member(ctx)
         note_text = _extract_note_text(ctx, tail or "")
 
+        summary_channel: discord.abc.GuildChannel | discord.Thread | None = None
+        if isinstance(channel, (discord.abc.GuildChannel, discord.Thread)):
+            summary_channel = channel
+        elif isinstance(getattr(channel, "channel", None), (discord.abc.GuildChannel, discord.Thread)):
+            summary_channel = getattr(channel, "channel", None)
+        summary = _WelcomeSummary(
+            guild=ctx.guild,
+            tag=tag,
+            recruit=target_member,
+            channel=summary_channel,
+        )
+
         title = _expand_tokens(
             effective.title,
             guild=ctx.guild,
@@ -412,6 +503,10 @@ class WelcomeCommandService:
         if not body.strip():
             await _log("error", actor=getattr(ctx.author, "id", None), tag=tag, cause="empty_body")
             await ctx.reply("Missing welcome text. Please check the **C1C** row in the sheet.")
+            if summary is not None:
+                summary.record("command", "error", "empty_body")
+                await summary.emit()
+                summary = None
             return
 
         description = body
@@ -443,16 +538,25 @@ class WelcomeCommandService:
                 channel_id=getattr(channel, "id", None),
                 error=repr(exc),
             )
+            if summary is not None:
+                summary.record("clan_channel", "error", human_reason(exc))
+                await summary.emit()
+                summary = None
             await ctx.reply("Couldn't post the welcome in the clan channel.")
             return
 
-        await self._post_general_notice(
+        if summary is not None:
+            summary.record("clan_channel", "ok")
+
+        notice_status, notice_detail = await self._post_general_notice(
             guild=ctx.guild,
             text=effective.general_notice or (default_row.general_notice if default_row else ""),
             target=target_member,
             tag=tag,
             template=effective,
         )
+        if summary is not None:
+            summary.record("general_notice", notice_status, notice_detail)
 
         try:
             await _log(
@@ -469,9 +573,31 @@ class WelcomeCommandService:
             if message is not None and hasattr(message, "delete"):
                 asyncio.create_task(_delete_message(message))
 
+        if note_text and summary is not None:
+            summary.record("note", "ok")
+
+        if summary is not None:
+            await summary.emit()
+
     async def refresh_templates(self, ctx: commands.Context) -> None:
         actor = getattr(ctx.author, "mention", None) or getattr(ctx.author, "id", None)
         result = await cache_telemetry.refresh_now("templates", actor=str(actor))
+        bucket_results = refresh_bucket_results([result])
+        deduper = refresh_deduper()
+        bucket_name = getattr(result, "name", "templates") or "templates"
+        key = refresh_dedupe_key("templates", None, [bucket_name])
+        duration_ms = getattr(result, "duration_ms", None)
+        total_s = None
+        if duration_ms is not None:
+            total_s = (duration_ms or 0) / 1000.0
+        if deduper.should_emit(key):
+            await rt.send_log_message(
+                format_refresh_message(
+                    "templates",
+                    bucket_results,
+                    total_s=total_s,
+                )
+            )
         if result.ok:
             await ctx.reply("Welcome templates reloaded. ✅")
         else:
@@ -486,11 +612,11 @@ class WelcomeCommandService:
         target: discord.Member | discord.User | None,
         tag: str,
         template: WelcomeTemplate,
-    ) -> None:
+    ) -> tuple[str, Optional[str]]:
         channel_id = get_welcome_general_channel_id()
         if not channel_id:
             await _log("info", tag=tag, cause="general_notice_skipped", reason="channel_unconfigured")
-            return
+            return "skip", "channel_unconfigured"
         try:
             channel = guild.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
         except Exception as exc:
@@ -501,7 +627,7 @@ class WelcomeCommandService:
                 channel_id=channel_id,
                 error=repr(exc),
             )
-            return
+            return "error", human_reason(exc)
 
         notice_text = text or template.general_notice or _DEFAULT_GENERAL_NOTICE
         expanded = _expand_tokens(
@@ -522,6 +648,9 @@ class WelcomeCommandService:
                 channel_id=channel_id,
                 error=repr(exc),
             )
+            return "error", human_reason(exc)
+
+        return "ok", None
 
 
 __all__ = ["WelcomeCommandService"]

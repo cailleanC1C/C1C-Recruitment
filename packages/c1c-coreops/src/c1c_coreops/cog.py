@@ -57,6 +57,12 @@ from .help import (
 )
 from .helpers import help_metadata, tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
+from shared.obs.events import (
+    format_refresh_message,
+    refresh_bucket_results,
+    refresh_dedupe_key,
+    refresh_deduper,
+)
 from shared.sheets.async_core import (
     aget_worksheet,
     aopen_by_key,
@@ -1528,6 +1534,20 @@ class CoreOpsCog(commands.Cog):
         except asyncio.CancelledError:
             raise
 
+        bucket_results = refresh_bucket_results([result])
+        deduper = refresh_deduper()
+        key = refresh_dedupe_key(target, None, [result.name or target])
+        if deduper.should_emit(key):
+            from modules.common import runtime as runtime_helpers  # local import to avoid cycles
+
+            await runtime_helpers.send_log_message(
+                format_refresh_message(
+                    target,
+                    bucket_results,
+                    total_s=(result.duration_ms or 0) / 1000.0,
+                )
+            )
+
         summary, ok = self._format_refresh_summary(result)
         prefix = "•" if ok else "⚠"
         duration_ms = result.duration_ms if result.duration_ms is not None else 0
@@ -2752,6 +2772,7 @@ class CoreOpsCog(commands.Cog):
         summaries: list[str] = []
         failures: list[str] = []
         embed_rows: list[RefreshEmbedRow] = []
+        refresh_results: list[cache_telemetry.RefreshResult] = []
 
         for name in buckets:
             try:
@@ -2765,6 +2786,7 @@ class CoreOpsCog(commands.Cog):
             if not ok:
                 failures.append(name)
             embed_rows.append(self._build_refresh_row(result))
+            refresh_results.append(result)
 
         total_duration = int((time.monotonic() - overall_start) * 1000)
         header = (
@@ -2780,6 +2802,22 @@ class CoreOpsCog(commands.Cog):
             total_duration=total_duration,
             fallback_message=message,
         )
+
+        if refresh_results:
+            bucket_names = [result.name or name for result, name in zip(refresh_results, buckets)]
+            deduper = refresh_deduper()
+            key = refresh_dedupe_key("all", None, bucket_names)
+            if deduper.should_emit(key):
+                from modules.common import runtime as runtime_helpers  # local import to avoid cycles
+
+                bucket_results = refresh_bucket_results(refresh_results)
+                await runtime_helpers.send_log_message(
+                    format_refresh_message(
+                        "all",
+                        bucket_results,
+                        total_s=total_duration / 1000.0,
+                    )
+                )
 
         log_msg, extra = sanitize_log(
             f"{lifecycle_tag()} cache refresh completed",

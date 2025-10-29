@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.7 — 2025-10-29
+### Added
+- Humanized Discord logging templates with shared emoji map and label helpers for guilds, channels, and users.
+- In-memory dedupe (default 5s window) for refresh, welcome, and permission sync summaries.
+- Standardized cache, report, permission sync, and command error Discord posts via the new helpers.
+- Operator guide covering logging rules, template usage, dedupe policy, and configuration toggles.
+
 ## v0.9.7 — 2025-10-28
 ### Added
 - **Welcome Dialog groundwork (Phase 7):**

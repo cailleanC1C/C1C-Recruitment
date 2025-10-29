@@ -15,6 +15,7 @@ from c1c_coreops.cog import resolve_ops_log_channel_id
 
 from .cache_service import cache
 from modules.common import runtime as rt
+from shared.logfmt import LogTemplates, human_reason
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.cache.scheduler")
@@ -88,35 +89,18 @@ async def _send_ops_message(runtime: "rt.Runtime", message: str) -> None:
         log.warning("[cron] ops channel send failed: %s", _format_exception(exc))
 
 
-def _format_duration(duration_ms: Optional[int]) -> int:
-    if duration_ms is None:
-        return 0
-    try:
-        return int(duration_ms)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _format_retries(value: Optional[int]) -> int:
-    if value is None:
-        return 0
-    try:
-        retries = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return max(0, retries)
-
-
 def _format_cache_message(bucket: str, result: RefreshResult) -> str:
-    status = "OK" if result.ok else "FAIL"
-    duration = _format_duration(result.duration_ms)
-    retries = _format_retries(result.retries)
-    parts = [f"[cache] {bucket} — {status}", f"• {duration}ms", f"• retries={retries}"]
-    if not result.ok:
-        err = (result.error or "").strip()
-        if err:
-            parts.append(f"• err={err}")
-    return " ".join(parts)
+    duration_ms = result.duration_ms or 0
+    duration_s = duration_ms / 1000.0
+    retries = result.retries if (result.retries or 0) > 0 else None
+    reason = human_reason(result.error) if not result.ok else None
+    return LogTemplates.cache(
+        bucket=bucket,
+        ok=result.ok,
+        duration_s=duration_s,
+        retries=retries,
+        reason=reason,
+    )
 
 
 async def _run_refresh(runtime: "rt.Runtime", spec: _JobSpec) -> None:
@@ -129,7 +113,13 @@ async def _run_refresh(runtime: "rt.Runtime", spec: _JobSpec) -> None:
         log.exception("[cron] refresh job crashed", extra={"bucket": bucket})
         await _send_ops_message(
             runtime,
-            f"[cache] {bucket} — FAIL • 0ms • retries=0 • err={_format_exception(exc)}",
+            LogTemplates.cache(
+                bucket=bucket,
+                ok=False,
+                duration_s=0.0,
+                retries=None,
+                reason=human_reason(exc),
+            ),
         )
     else:
         await _send_ops_message(runtime, _format_cache_message(bucket, result))
@@ -216,7 +206,10 @@ async def emit_schedule_log(
     try:
         if failure is not None:
             bucket, exc = failure
-            message = f"[cron] schedule FAIL • job={bucket} • err={_format_exception(exc)}"
+            message = LogTemplates.scheduler_failure(
+                job=bucket,
+                reason=human_reason(exc),
+            )
             log.warning(message)
             await _send_ops_message(runtime, message)
             return
@@ -224,14 +217,9 @@ async def emit_schedule_log(
         if not success_list:
             log.info("[cron] no cache refresh jobs registered")
             return
-        cadence_parts = [f"{spec.bucket}={spec.cadence_label}" for spec, _ in success_list]
-        next_parts = [f"{spec.bucket}={_format_next_run(job)}" for spec, job in success_list]
-        message = (
-            "[cron] scheduled • "
-            + " • ".join(cadence_parts)
-            + " • next: "
-            + ", ".join(next_parts)
-        )
+        intervals = {spec.bucket: spec.cadence_label for spec, _ in success_list}
+        upcoming = {spec.bucket: _format_next_run(job) for spec, job in success_list}
+        message = LogTemplates.scheduler(intervals=intervals, upcoming=upcoming)
         log.info(message)
         await _send_ops_message(runtime, message)
     except asyncio.CancelledError:
