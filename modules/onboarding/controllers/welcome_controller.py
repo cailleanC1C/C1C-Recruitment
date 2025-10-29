@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence
+from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
 
 import discord
 from discord.ext import commands
@@ -12,6 +12,7 @@ from modules.onboarding import rules
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
+from modules.onboarding.ui.summary_embed import build_summary_embed
 from shared.sheets.onboarding_questions import Question
 
 log = logging.getLogger(__name__)
@@ -366,7 +367,29 @@ class BaseWelcomeController:
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
             return
 
-        summary_embed = self._build_summary_embed(thread_id, session)
+        await interaction.response.edit_message(view=None)
+
+        preview_message = self._preview_messages.pop(thread_id, None)
+        if preview_message is not None:
+            try:
+                await preview_message.delete()
+            except Exception:
+                try:
+                    await preview_message.edit(view=None)
+                except Exception:
+                    log.warning("failed to remove preview after confirmation", exc_info=True)
+
+        summary_author = self._resolve_summary_author(thread, interaction)
+        summary_embed = build_summary_embed(
+            self.flow,
+            session.answers,
+            summary_author,
+            session.schema_hash or "",
+        )
+
+        await thread.send(embed=summary_embed)
+        await thread.send("@RecruitmentCoordinator")
+
         log.info(
             "onboarding.welcome.complete %s",
             {
@@ -378,8 +401,6 @@ class BaseWelcomeController:
             },
         )
 
-        await interaction.response.edit_message(view=None)
-        await thread.send(embed=summary_embed)
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
         self._cleanup_session(thread_id)
 
@@ -501,17 +522,39 @@ class BaseWelcomeController:
     def _select_intro_text(self) -> str:
         return "🔽 Choose the options that apply using the menus below."
 
-    def _build_summary_embed(self, thread_id: int, session: SessionData) -> discord.Embed:
-        embed = discord.Embed(title="Thanks! Here's what we captured")
-        for question in self._questions.get(thread_id, []):
-            state = _visible_state(session.visibility, question.qid)
-            if state == "skip":
-                continue
-            value = _preview_value_for_question(question, session.answers.get(question.qid))
-            if not value:
-                value = "*(skipped)*"
-            embed.add_field(name=question.label, value=value, inline=False)
-        return embed
+    def _resolve_summary_author(
+        self, thread: discord.Thread, interaction: discord.Interaction
+    ) -> discord.Member:
+        owner = getattr(thread, "owner", None)
+        if isinstance(owner, discord.Member):
+            return owner
+
+        guild = thread.guild
+        owner_id = getattr(thread, "owner_id", None)
+        if guild and owner_id:
+            member = guild.get_member(owner_id)
+            if member is not None:
+                return member
+
+        user = interaction.user
+        if isinstance(user, discord.Member):
+            return user
+
+        if guild is not None and getattr(user, "id", None):
+            member = guild.get_member(int(user.id))
+            if member is not None:
+                return member
+
+        if guild is not None:
+            me = guild.me
+            if me is not None:
+                return me
+
+        user_obj = interaction.user
+        if isinstance(user_obj, discord.User):
+            return cast(discord.Member, user_obj)
+
+        raise TypeError("Unable to resolve summary author for onboarding thread")
 
 
 class WelcomeController(BaseWelcomeController):
