@@ -62,7 +62,8 @@ When welcome_dialog is enabled, the Welcome Dialog can now start through two ver
 
 Automated Trigger (Ticket Tool) – When a welcome or promo thread is closed by Ticket Tool, the bot automatically starts the dialog (source="ticket").
 
-Manual Trigger (🧭 Reaction) – Recruiters, Staff, or Admins can manually start the same dialog by reacting with 🧭 on the first message of a valid welcome or promo thread (source="emoji").
+Manual fallback:
+Recruiters can react with 🎫 to the Ticket Tool close-button message. The bot starts if that message contains the phrase “by reacting with” (case-insensitive), or the explicit token [#welcome:ticket]. Admins may override if needed. Same gating and pin-based dedupe apply.
 
 Both paths call the shared entrypoint start_welcome_dialog(...), which manages scope checks, deduplication through a pinned marker, and structured logging.
 
@@ -234,4 +235,4 @@ labels: docs, comp:onboarding, comp:placement, comp:data-sheets, bot:recruitment
 milestone: Harmonize v1.0  
 **[/meta]**
 
-Doc last updated: 2025-10-28 (v0.9.7)
+Doc last updated: 2025-10-29 (v0.9.7)
