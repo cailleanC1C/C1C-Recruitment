@@ -117,7 +117,7 @@ class _ThreadClosureWatcher(commands.Cog):
             return
 
         try:
-            await start_welcome_dialog(after, self.bot.user, "ticket")
+            await start_welcome_dialog(after, self.bot.user, "ticket", bot=self.bot)
         except Exception:
             log.exception(
                 "%s watcher failed to launch dialog",

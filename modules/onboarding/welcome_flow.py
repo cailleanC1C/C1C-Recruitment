@@ -5,11 +5,14 @@ import logging
 from typing import Any
 
 import discord
+from discord.ext import commands
 
-from modules.common import feature_flags
 from c1c_coreops import rbac
+from modules.common import feature_flags
 
 from . import thread_scopes
+from .controllers.promo_controller import PromoController
+from .controllers.welcome_controller import WelcomeController
 from shared.sheets import onboarding_questions
 
 __all__ = ["start_welcome_dialog"]
@@ -19,6 +22,8 @@ async def start_welcome_dialog(
     thread: discord.Thread,
     initiator: discord.abc.User | discord.Member | Any,
     source: str,
+    *,
+    bot: commands.Bot | None = None,
 ) -> None:
     """Launch the shared welcome dialog flow when all gates pass."""
 
@@ -116,4 +121,40 @@ async def start_welcome_dialog(
         },
     )
 
-    await thread.send("(stub) dialog would launch here")
+    controller_bot = bot or _resolve_bot(thread)
+    if controller_bot is None:
+        logging.warning(
+            "onboarding.welcome.start missing bot reference",
+            extra={"thread_id": getattr(thread, "id", None)},
+        )
+        return
+
+    if flow == "welcome":
+        controller = WelcomeController(controller_bot)
+    else:
+        controller = PromoController(controller_bot)
+    await controller.run(
+        thread,
+        initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
+        schema_version,
+        questions,
+        source=source,
+    )
+
+
+def _resolve_bot(thread: discord.Thread) -> commands.Bot | None:
+    state = getattr(thread, "_state", None)
+    if state is None:
+        guild = getattr(thread, "guild", None)
+        state = getattr(guild, "_state", None)
+    if state is None:
+        return None
+    client = getattr(state, "_get_client", None)
+    if callable(client):
+        bot = client()
+        if isinstance(bot, commands.Bot):
+            return bot
+    bot = getattr(state, "client", None)
+    if isinstance(bot, commands.Bot):
+        return bot
+    return None
