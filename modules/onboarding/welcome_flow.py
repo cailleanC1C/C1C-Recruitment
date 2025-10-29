@@ -70,6 +70,9 @@ async def start_welcome_dialog(
         async for message in thread.history(limit=10)
         if marker_text in getattr(message, "content", "")
     ]
+
+    flow = "welcome" if thread_scopes.is_welcome_parent(thread) else "promo"
+
     if existing_markers:
         logging.info(
             "onboarding.welcome.start %s",
@@ -77,6 +80,7 @@ async def start_welcome_dialog(
                 "skipped": "already_started",
                 "source": source,
                 "thread_id": getattr(thread, "id", None),
+                "flow": flow,
             },
         )
         return
@@ -89,8 +93,6 @@ async def start_welcome_dialog(
             "onboarding.welcome.start failed to pin marker",
             extra={"thread_id": getattr(thread, "id", None)},
         )
-
-    flow = "welcome" if thread_scopes.is_welcome_parent(thread) else "promo"
     schema_version: str | None = None
     questions = []
     try:
