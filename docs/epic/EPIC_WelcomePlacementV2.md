@@ -110,7 +110,7 @@ Data starts at **row 4** (rows 1–3 = header).
 
 **Important:** `clan_tag` values in Reservations are validated against **Onboarding → ClanList (column B)**, not CLANS_TAB.
 
-### 6.2 Reservations tab  
+### 6.2 Reservations tab
 | Field | Type | Example | Notes |
 | --- | --- | --- | --- |
 | `thread_id` | int | 125839402393 | Discord thread |
@@ -122,6 +122,32 @@ Data starts at **row 4** (rows 1–3 = header).
 | `created_at` | datetime | 2025-10-25 17:02 | auto |
 | `status` | enum | active / expired / cancelled / closed_same_clan / closed_other_clan | |
 | `notes` | str | optional | comments |
+
+### 6.3 OnboardingQuestions tab
+Onboarding dialogs are driven by a shared **OnboardingQuestions** worksheet.
+
+| Column | Required | Description |
+| --- | --- | --- |
+| `flow` | ✅ | `welcome` or `promo`; selects the dialog build |
+| `order` | ✅ | Render order (`7`, `7a`, `8b`, etc.) |
+| `qid` | ✅ | Stable identifier used in answers + rules |
+| `label` | ✅ | Prompt shown to the recruit |
+| `type` | ✅ | `short`, `paragraph`, `number`, `single-select`, or `multi-select-N` |
+| `required` | ✅ | `yes`/`no` toggle; rules may downgrade to optional |
+| `maxlen` | ❌ | Optional text length cap for short/paragraph inputs |
+| `validate` | ❌ | Free-form validator key (UI hook in Phase 7b) |
+| `help` | ❌ | Subtext rendered under the prompt |
+| `note` | ❌ | Select options, comma-separated (e.g. `Beginner, Early Game`) |
+| `rules` | ❌ | Flow control instructions (see below) |
+
+**Select options:** tokens are canonicalized to lowercase + hyphen for stable comparisons (e.g. `"Early Game"` → `early-game`). The display label preserves the sheet text.
+
+**Rules grammar (Phase 7a):**
+
+- `if <token> skip <targets>`
+- `if <token> make <targets> optional`
+
+Where `<token>` is a normalized answer token (e.g. `beginner`, `early game`). Targets accept individual orders, `qid`s, or order prefixes suffixed with `*` to include sub-rows (`7*` → `7`, `7a`, `7b`). Later phases may extend this grammar.
 
 ---
 

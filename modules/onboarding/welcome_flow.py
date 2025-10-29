@@ -10,6 +10,7 @@ from modules.common import feature_flags
 from c1c_coreops import rbac
 
 from . import thread_scopes
+from shared.sheets import onboarding_questions
 
 __all__ = ["start_welcome_dialog"]
 
@@ -84,6 +85,18 @@ async def start_welcome_dialog(
             extra={"thread_id": getattr(thread, "id", None)},
         )
 
+    flow = "welcome" if thread_scopes.is_welcome_parent(thread) else "promo"
+    schema_version: str | None = None
+    questions = []
+    try:
+        questions = onboarding_questions.get_questions(flow)
+        schema_version = onboarding_questions.schema_hash(flow)
+    except Exception:
+        logging.exception(
+            "onboarding.welcome.start failed to load schema",
+            extra={"thread_id": getattr(thread, "id", None), "flow": flow},
+        )
+
     logging.info(
         "onboarding.welcome.start %s",
         {
@@ -97,6 +110,9 @@ async def start_welcome_dialog(
                 else {"id": None, "name": "system"}
             ),
             "dedup": "created",
+            "flow": flow,
+            "schema_hash": schema_version,
+            "questions": len(questions),
         },
     )
 
