@@ -19,6 +19,17 @@ log = logging.getLogger(__name__)
 _QUESTION_TAB = "OnboardingQuestions"
 
 
+def _question_tab() -> str:
+    """Return the configured onboarding question tab name."""
+
+    lookup = getattr(onboarding_sheets, "_config_lookup", None)
+    if callable(lookup):
+        tab = (lookup("onboarding_tab", _QUESTION_TAB) or "").strip()
+        if tab:
+            return tab
+    return _QUESTION_TAB
+
+
 @dataclass(frozen=True, slots=True)
 class Option:
     """Selectable option with a canonical token value."""
@@ -51,7 +62,7 @@ def _sheet_id() -> str:
 
 def _load_rows() -> list[dict[str, str]]:
     sheet_id = _sheet_id()
-    records = core.fetch_records(sheet_id, _QUESTION_TAB)
+    records = core.fetch_records(sheet_id, _question_tab())
     parsed: list[dict[str, str]] = []
     for record in records:
         normalized: dict[str, str] = {}
