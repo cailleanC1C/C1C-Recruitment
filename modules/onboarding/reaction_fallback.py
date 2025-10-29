@@ -15,8 +15,11 @@ from modules.onboarding.welcome_flow import start_welcome_dialog
 
 # Fallback: 🎫 on the Ticket Tool close-button message
 FALLBACK_EMOJI = "🎫"  # :ticket:
-TRIGGER_PHRASE = "poke it awake by reacting with 🎫"
 TRIGGER_TOKEN = "[#welcome:ticket]"
+
+
+def normalize_spaces(value: str) -> str:
+    return " ".join(value.split())
 
 
 class OnboardingReactionFallbackCog(commands.Cog):
@@ -166,14 +169,16 @@ class OnboardingReactionFallbackCog(commands.Cog):
             )
             return
 
-        content = (getattr(message, "content", "") or "").strip()
-        match_details: Optional[dict[str, str]] = None
+        content = (getattr(message, "content", "") or "")
+        content_lower = normalize_spaces(content.lower())
+
+        match: Optional[str] = None
         if TRIGGER_TOKEN in content:
-            match_details = {"match": "token", "token": TRIGGER_TOKEN}
-        elif TRIGGER_PHRASE in content:
-            match_details = {"match": "phrase", "needle": TRIGGER_PHRASE}
+            match = "token"
+        elif "by reacting with" in content_lower:
+            match = "phrase"
         elif rbac.is_admin_member(member):
-            match_details = {"match": "override", "by_role": "admin"}
+            match = "override"
         else:
             logging.info(
                 "welcome.emoji.start %s",
@@ -186,8 +191,6 @@ class OnboardingReactionFallbackCog(commands.Cog):
             )
             return
 
-        assert match_details is not None
-
         logging.info(
             "welcome.emoji.start %s",
             {
@@ -195,7 +198,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 "thread_id": thread.id,
                 "message_id": message.id,
                 "user_id": member.id,
-                **match_details,
+                "match": match,
             },
         )
 

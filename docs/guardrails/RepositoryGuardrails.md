@@ -26,7 +26,7 @@ Every audit and CI check validates against this document.
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 
 ### Feature Toggles and Config Policy
-- Onboarding emoji fallback: When welcome_dialog is TRUE, a controlled manual reaction trigger (🧭 on the first message in a valid welcome/promo thread) by Recruiter/Staff/Admin is permitted. This does not add new ENV or Sheet keys and must reuse existing channel scope.
+- Fallback trigger: 🎫 on the close-button message. Detection keys off the phrase “by reacting with” (case-insensitive) or token [#welcome:ticket]. Do not depend on the first message of a thread.
 - Ticket Tool closure events are now recognized as a valid automated source for welcome_dialog.
 - The same validation and logging policies apply; no additional configuration is introduced.
 
@@ -62,4 +62,4 @@ labels: docs, governance, guardrails, ready
 milestone: Harmonize v1.0
 [/meta]
 
-Doc last updated: 2025-10-28 (v0.9.7)
+Doc last updated: 2025-10-29 (v0.9.7)
