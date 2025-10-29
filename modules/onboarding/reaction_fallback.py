@@ -86,7 +86,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
         if starter_message.id != payload.message_id:
             return
 
-        await start_welcome_dialog(thread, member, source="emoji")
+        await start_welcome_dialog(thread, member, source="emoji", bot=self.bot)
 
 
 async def _resolve_thread_starter_message(
