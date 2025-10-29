@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 import discord
 from discord.utils import utcnow
@@ -34,6 +34,7 @@ def build_summary_embed(
     answers: dict[str, Any],
     author: discord.Member,
     schema_hash: str,
+    visibility: Mapping[str, Mapping[str, str]] | None = None,
 ) -> discord.Embed:
     """Return the C1C-branded summary embed for ``flow``."""
 
@@ -59,6 +60,8 @@ def build_summary_embed(
 
     rendered_qids: set[str] = set()
     for question in questions:
+        if _is_hidden(question.qid, visibility):
+            continue
         value = _format_answer(question.type, answers.get(question.qid))
         if not value:
             continue
@@ -69,6 +72,8 @@ def build_summary_embed(
 
     for qid, stored in answers.items():
         if qid in rendered_qids:
+            continue
+        if _is_hidden(qid, visibility):
             continue
         value = _stringify_collection(stored)
         if not value:
@@ -126,6 +131,13 @@ def _stringify_collection(stored: Any) -> str:
                 parts.append(str(item))
         return ", ".join(parts)
     return str(stored).strip()
+
+
+def _is_hidden(qid: str, visibility: Mapping[str, Mapping[str, str]] | None) -> bool:
+    if not visibility:
+        return False
+    state = visibility.get(qid, {}).get("state")
+    return state == "skip"
 
 
 __all__ = ["build_summary_embed"]

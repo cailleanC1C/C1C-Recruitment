@@ -385,6 +385,7 @@ class BaseWelcomeController:
             session.answers,
             summary_author,
             session.schema_hash or "",
+            session.visibility,
         )
 
         await thread.send(embed=summary_embed)
