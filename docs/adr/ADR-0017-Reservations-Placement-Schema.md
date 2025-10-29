@@ -41,6 +41,12 @@ Parent channel must be a configured welcome/promo parent.
 
 Start/skip/reject outcomes are logged in the repository’s usual structured format.
 
+Implementation Notes — Sheet-driven Schema & Rules
+- Question definitions now live in **OnboardingQuestions** with per-flow rows (`flow`, `order`, `qid`, etc.).
+- Select options are parsed from the `note` column; canonical tokens (lowercase + hyphen) back the display labels for stable matching.
+- Question schemas are cached per flow and surfaced via `schema_hash(flow)` in dialog start logs for traceability.
+- The rules column supports `if <token> skip ...` and `if <token> make ... optional`, with `7*` syntax to target grouped orders; evaluations map to `show`/`optional`/`skip` visibility for downstream UI.
+
 ---
 
 ## 3 · Data Schema
