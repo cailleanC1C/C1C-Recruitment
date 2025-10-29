@@ -102,7 +102,12 @@ class _WelcomeSummary:
             result=result,
             details=details,
         )
-        await rt.send_log_message(message)
+        try:
+            await rt.send_log_message(message)
+        except Exception:  # pragma: no cover - log delivery failures shouldn't raise
+            log.exception(
+                "failed to emit welcome summary", extra={"tag": self.tag, "recruit": recruit_id}
+            )
 
 
 @dataclass(frozen=True)
