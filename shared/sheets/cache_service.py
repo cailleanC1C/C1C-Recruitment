@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from modules.common import runtime as rt
 
 UTC = dt.timezone.utc
+log = logging.getLogger(__name__)
 
 
 def _errtext(exc: BaseException) -> str:
@@ -197,11 +199,7 @@ class CacheService:
             f"result={b.last_result or 'unknown'} retries={retries} "
             f"ttl_expired={ttl_flag} count={count_text} error={error_text}"
         )
-        try:
-            await rt.send_log_message(msg)
-        except Exception:
-            # Avoid cascading failures if logging channel fails
-            pass
+        log.info(msg)
 
 
 def _count_items(value: Any) -> Optional[int]:

@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import logging
 import shlex
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,9 @@ from discord.ext import commands
 from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
 from modules.common import runtime as runtime_helpers
+from shared.config import get_log_dedupe_window_s
+from shared.dedupe import EventDeduper
+from shared.logfmt import LogTemplates
 from shared.permissions.bot_access_profile import (
     DEFAULT_THREADS_ENABLED,
     build_allow_overwrite,
@@ -30,6 +34,8 @@ from shared.redaction import sanitize_embed
 __all__ = ["BotPermissionManager", "BotPermissionCog", "setup"]
 
 log = logging.getLogger(__name__)
+
+_PERM_SYNC_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
 
 DEFAULT_CONFIG_PATH = Path("config/bot_access_lists.json")
 AUDIT_DIR = Path("AUDIT/diagnostics")
@@ -1294,19 +1300,27 @@ class BotPermissionCog(commands.Cog):
             mention_author=False,
         )
         applied = report.counts.get("created", 0) + report.counts.get("updated", 0)
-        errors = report.counts.get("error", 0)
-        error_suffix = ""
-        if errors and report.error_reasons:
-            top_reasons = ", ".join(
-                f"{count}× {reason}"
-                for reason, count in report.error_reasons.most_common(2)
+        error_counts: dict[str, int] = {}
+        error_total = report.counts.get("error", 0)
+        remaining = error_total
+        if report.error_reasons:
+            for reason, count in report.error_reasons.most_common(3):
+                error_counts[reason] = count
+                remaining -= count
+        if remaining > 0:
+            error_counts["other"] = remaining
+        guild_id = getattr(guild, "id", 0)
+        window = max(int(_PERM_SYNC_DEDUPER.window) or 1, 1)
+        ts_bucket = int(time.time() // window)
+        dedupe_key = f"permsync:{guild_id}:{ts_bucket}"
+        if _PERM_SYNC_DEDUPER.should_emit(dedupe_key):
+            await runtime_helpers.send_log_message(
+                LogTemplates.perm_sync(
+                    applied=applied,
+                    errors=error_counts,
+                    threads_on=report.threads_enabled,
+                )
             )
-            error_suffix = f" [{top_reasons}]"
-        await runtime_helpers.send_log_message(
-            "🔐 Bot permission sync applied: "
-            f"{applied} overwrites, errors={errors}, "
-            f"threads={'on' if report.threads_enabled else 'off'}{error_suffix}"
-        )
 
 
 async def setup(bot: commands.Bot) -> None:

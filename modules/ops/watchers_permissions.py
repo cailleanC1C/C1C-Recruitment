@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from modules.common import runtime as runtime_helpers
+from shared.logfmt import channel_label
 from .permissions_sync import BotPermissionManager
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class BotPermissionWatcher(commands.Cog):
         if outcome == "applied":
             await runtime_helpers.send_log_message(
                 "🔐 Bot permissions applied automatically: "
-                f"{getattr(channel, 'name', channel.id)} — matched={plan.matched_by}"
+                f"{channel_label(channel.guild, getattr(channel, 'id', None))} — matched={plan.matched_by}"
             )
         elif outcome == "error":
             log.warning(

@@ -14,6 +14,7 @@ from shared.config import (
     get_recruiter_role_ids,
     get_recruitment_sheet_id,
 )
+from shared.logfmt import LogTemplates, channel_label, guild_label, human_reason, user_label
 from shared.sheets.recruitment import (
     afetch_reports_tab,
     get_reports_tab_name,
@@ -361,28 +362,34 @@ async def _log_event(
 ) -> None:
     dest_id = _destination_channel_id() or 0
     guild_id: Optional[int] = None
+    guild: Optional[discord.Guild] = None
     if dest_id:
-        try:
-            channel = bot.get_channel(dest_id) or await bot.fetch_channel(dest_id)
-        except Exception:
-            channel = None
+        channel = bot.get_channel(dest_id)
         if isinstance(channel, (discord.TextChannel, discord.Thread)) and channel.guild:
             guild_id = channel.guild.id
+            guild = channel.guild
+    if guild is None and guild_id:
+        guild = bot.get_guild(guild_id)
     date_text = datetime.now(UTC).strftime("%Y-%m-%d")
-    parts = [
-        "[report] recruiters",
-        f"actor={actor}",
-        f"guild={guild_id or '-'}",
-        f"dest={dest_id or '-'}",
-        f"date={date_text}",
-        f"result={result}",
-        f"error={error or '-'}",
-    ]
-    if user_id is not None:
-        parts.insert(2, f"user={user_id}")
+    user_text = user_label(guild, user_id) if user_id is not None else "-"
+    guild_text = guild_label(bot, guild_id) if guild_id else "unknown guild"
+    dest_text = channel_label(guild, dest_id) if dest_id else "#unknown"
+    reason_text = human_reason(error)
     if note:
-        parts.append(f"note={note}")
-    message = " \u2022 ".join(parts)
+        reason_text = (
+            f"{reason_text}; note={note}" if reason_text and reason_text != "-" else f"note={note}"
+        )
+    ok = result.lower() == "ok"
+    message = LogTemplates.report(
+        kind="recruiters",
+        actor=actor,
+        user=user_text,
+        guild=guild_text,
+        dest=dest_text,
+        date=date_text,
+        ok=ok,
+        reason=reason_text,
+    )
     try:
         await runtime_helpers.send_log_message(message)
     except Exception:

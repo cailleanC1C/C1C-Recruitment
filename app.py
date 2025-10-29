@@ -16,6 +16,7 @@ from shared.config import (
     is_guild_allowed,
     get_config_snapshot,
 )
+from shared.logfmt import LogTemplates, guild_label, user_label, human_reason
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from modules.common.runtime import Runtime
@@ -119,44 +120,53 @@ async def _enforce_guild_allow_list(
     *, log_when_empty: bool = False, log_success: bool = True
 ) -> bool:
     allowed_guilds = get_allowed_guild_ids()
+    allowed_sorted = sorted(allowed_guilds)
+    connected_guilds = list(bot.guilds)
+    allowed_labels = [guild_label(bot, gid) for gid in allowed_sorted] if allowed_sorted else []
+    connected_labels = [guild_label(bot, g.id) for g in connected_guilds]
     if not allowed_guilds:
         if log_when_empty:
             log.warning("Guild allow-list empty; gating disabled")
-            await runtime.send_log_message("⚠️ Guild allow-list empty; gating disabled")
+            message = LogTemplates.allowlist(
+                allowed=allowed_labels,
+                connected=connected_labels,
+                ok=False,
+            )
+            await runtime.send_log_message(f"{message} • gating=disabled")
         return True
 
-    unauthorized = [g for g in bot.guilds if not is_guild_allowed(g.id)]
+    unauthorized = [g for g in connected_guilds if not is_guild_allowed(g.id)]
     if unauthorized:
-        names = ", ".join(f"{g.name} ({g.id})" for g in unauthorized)
-        allowed_sorted = sorted(allowed_guilds)
+        names = ", ".join(guild_label(bot, g.id) for g in unauthorized)
         log.error(
             "Guild allow-list violation: %s. allowed=%s",
             names,
             allowed_sorted,
         )
         try:
-            await runtime.send_log_message(
-                "🚫 Guild allow-list violation: "
-                f"{names}. allowed={allowed_sorted}"
+            violation = LogTemplates.allowlist_violation(
+                allowed=allowed_labels,
+                offending=[guild_label(bot, g.id) for g in unauthorized],
             )
+            await runtime.send_log_message(violation)
             await bot.close()
         finally:
             return False
 
     if log_success:
-        allowed_sorted = sorted(allowed_guilds)
-        connected_ids = [g.id for g in bot.guilds]
         log.info(
             "Guild allow-list verified",
             extra={
                 "allowed": allowed_sorted,
-                "connected": connected_ids,
+                "connected": [g.id for g in connected_guilds],
             },
         )
-        await runtime.send_log_message(
-            "✅ Guild allow-list verified: "
-            f"allowed={allowed_sorted} connected={connected_ids}"
+        message = LogTemplates.allowlist(
+            allowed=allowed_labels,
+            connected=connected_labels,
+            ok=True,
         )
+        await runtime.send_log_message(message)
     return True
 
 
@@ -185,8 +195,11 @@ async def on_ready():
         async def announce() -> None:
             await asyncio.sleep(5.0)
             await runtime.send_log_message(
-                "✅ Watchdog started — interval="
-                f"{interval}s stall={stall}s disconnect_grace={grace}s"
+                LogTemplates.watchdog(
+                    interval_s=interval,
+                    stall_s=stall,
+                    disconnect_grace_s=grace,
+                )
             )
 
         runtime.scheduler.spawn(announce(), name="watchdog_announce")
@@ -334,8 +347,11 @@ async def on_command_error(ctx: commands.Context, error: Exception):
     )
     try:
         await runtime.send_log_message(
-            "⚠️ Command error: cmd="
-            f"{getattr(ctx.command, 'name', None)} user={getattr(ctx.author, 'id', None)} err={error!r}"
+            LogTemplates.cmd_error(
+                command=getattr(ctx.command, "name", None) or "-",
+                user=user_label(getattr(ctx, "guild", None), getattr(ctx.author, "id", None)),
+                reason=human_reason(error),
+            )
         )
     except Exception:
         log.exception("failed to send command error to log channel")

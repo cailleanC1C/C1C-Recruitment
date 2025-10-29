@@ -33,6 +33,12 @@ from shared.config import (
     get_strict_emoji_proxy,
 )
 from shared.logging.structured import JsonFormatter, get_trace_id, set_trace_id
+from shared.obs.events import (
+    format_refresh_message,
+    refresh_bucket_results,
+    refresh_dedupe_key,
+    refresh_deduper,
+)
 from c1c_coreops.helpers import audit_tiers, rehydrate_tiers
 from shared.web_routes import mount_emoji_pad
 
@@ -192,6 +198,7 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
     rows: list[RefreshEmbedRow] = []
     total_ms = 0
     fallback_lines: list[str] = []
+    refresh_results: list[cache_telemetry.RefreshResult] = []
 
     for name in bucket_names:
         try:
@@ -231,6 +238,8 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
         if snapshot.item_count is not None:
             count_display = str(snapshot.item_count)
 
+        refresh_results.append(result)
+
         rows.append(
             RefreshEmbedRow(
                 bucket=label,
@@ -250,6 +259,15 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
     if not rows:
         log.info("Cache preloader completed with no rows")
         return
+
+    deduper = refresh_deduper()
+    bucket_names_for_key = [res.name or name for res, name in zip(refresh_results, bucket_names)]
+    key = refresh_dedupe_key("startup", None, bucket_names_for_key)
+    if refresh_results and deduper.should_emit(key):
+        buckets_for_message = refresh_bucket_results(refresh_results)
+        await send_log_message(
+            format_refresh_message("startup", buckets_for_message, total_s=total_ms / 1000.0)
+        )
 
     embed = build_refresh_embed(
         scope="all",
