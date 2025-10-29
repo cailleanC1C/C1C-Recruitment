@@ -23,8 +23,8 @@ def evaluate_visibility(
     """Return a visibility map derived from ``questions`` and ``answers``."""
 
     states: VisibilityState = {question.qid: {"state": "show"} for question in questions}
-    answer_tokens = _collect_answer_tokens(answers.values())
-    if not answer_tokens:
+    answer_tokens_by_qid = _collect_answer_tokens_by_qid(answers)
+    if not answer_tokens_by_qid:
         return states
 
     order_map = _build_order_map(questions)
@@ -33,9 +33,13 @@ def evaluate_visibility(
     for question in questions:
         if not question.rules:
             continue
+        qid_key = question.qid
+        question_tokens = answer_tokens_by_qid.get(qid_key) or answer_tokens_by_qid.get(qid_key.lower())
+        if not question_tokens:
+            continue
         for condition, action, targets in _parse_rules(question.rules):
             condition_tokens = _normalise_token_variants(condition)
-            if not answer_tokens.intersection(condition_tokens):
+            if not question_tokens.intersection(condition_tokens):
                 continue
             qids = _resolve_targets(targets, qid_lookup, order_map)
             for qid in qids:
@@ -43,21 +47,34 @@ def evaluate_visibility(
     return states
 
 
-def _collect_answer_tokens(values: IterableABC[Any]) -> set[str]:
+def _collect_answer_tokens_by_qid(answers: MappingABC[str, Any]) -> Dict[str, set[str]]:
+    tokens_by_qid: Dict[str, set[str]] = {}
+    for key, value in answers.items():
+        tokens = _collect_answer_tokens(value)
+        if not tokens:
+            continue
+        tokens_by_qid[key] = tokens
+        tokens_by_qid.setdefault(key.lower(), tokens)
+    return tokens_by_qid
+
+
+def _collect_answer_tokens(value: Any) -> set[str]:
     tokens: set[str] = set()
-    for value in values:
-        if isinstance(value, str):
-            tokens.update(_normalise_token_variants(value))
-        elif isinstance(value, MappingABC):
-            tokens.update(_collect_answer_tokens(value.values()))
-        elif isinstance(value, IterableABC):
-            if isinstance(value, (bytes, bytearray)):
-                tokens.update(_normalise_token_variants(value.decode()))
-                continue
-            for item in value:
-                tokens.update(_normalise_token_variants(str(item)))
+    if value is None:
+        return tokens
+    if isinstance(value, str):
+        tokens.update(_normalise_token_variants(value))
+    elif isinstance(value, MappingABC):
+        for nested in value.values():
+            tokens.update(_collect_answer_tokens(nested))
+    elif isinstance(value, IterableABC):
+        if isinstance(value, (bytes, bytearray)):
+            tokens.update(_normalise_token_variants(value.decode()))
         else:
-            tokens.update(_normalise_token_variants(str(value)))
+            for item in value:
+                tokens.update(_collect_answer_tokens(item))
+    else:
+        tokens.update(_normalise_token_variants(str(value)))
     return {token for token in tokens if token}
 
 
