@@ -10,6 +10,7 @@ from shared.sheets.onboarding_questions import Question
 
 SelectChangeCallback = Callable[[discord.Interaction, Question, list[str]], Awaitable[None]]
 SelectCompleteCallback = Callable[[discord.Interaction], Awaitable[None]]
+InteractionGate = Callable[[discord.Interaction], Awaitable[bool]]
 
 
 class SelectQuestionView(discord.ui.View):
@@ -22,6 +23,7 @@ class SelectQuestionView(discord.ui.View):
         visibility: dict[str, dict[str, str]],
         answers: dict[str, object] | None = None,
         timeout: float = 600,
+        interaction_check: InteractionGate | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.questions = [
@@ -34,12 +36,18 @@ class SelectQuestionView(discord.ui.View):
         self.answers = answers or {}
         self.on_change: SelectChangeCallback | None = None
         self.on_complete: SelectCompleteCallback | None = None
+        self._interaction_gate = interaction_check
 
         for question in self.questions:
             select = _QuestionSelect(question, visibility, self.answers)
             self.add_item(select)
         if self.questions:
             self.add_item(_SelectContinueButton())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - requires Discord
+        if self._interaction_gate is None:
+            return True
+        return await self._interaction_gate(interaction)
 
     async def handle_change(
         self,
@@ -105,10 +113,17 @@ def build_select_view(
     questions: Sequence[Question],
     visibility: dict[str, dict[str, str]],
     answers: dict[str, object] | None,
+    *,
+    interaction_check: InteractionGate | None = None,
 ) -> SelectQuestionView | None:
     """Return a view configured for the visible select questions."""
 
-    view = SelectQuestionView(questions=questions, visibility=visibility, answers=answers or {})
+    view = SelectQuestionView(
+        questions=questions,
+        visibility=visibility,
+        answers=answers or {},
+        interaction_check=interaction_check,
+    )
     if not view.questions:
         return None
     return view

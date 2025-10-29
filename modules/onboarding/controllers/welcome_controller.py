@@ -83,7 +83,15 @@ class BaseWelcomeController:
 
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
         thread_id = int(thread.id)
-        view = build_select_view(self._questions[thread_id], session.visibility, session.answers)
+        async def gate(interaction: discord.Interaction) -> bool:
+            return await self.check_interaction(thread_id, interaction)
+
+        view = build_select_view(
+            self._questions[thread_id],
+            session.visibility,
+            session.answers,
+            interaction_check=gate,
+        )
         if view is None:
             await self._show_preview(thread, session)
             return
@@ -105,12 +113,16 @@ class BaseWelcomeController:
             question: Question,
             values: list[str],
         ) -> None:
+            if not await self.check_interaction(thread_id, interaction):
+                return
             await self._handle_select_change(thread_id, interaction, question, values)
 
         return handler
 
     def _select_completed(self, thread_id: int) -> Callable[[discord.Interaction], Awaitable[None]]:
         async def handler(interaction: discord.Interaction) -> None:
+            if not await self.check_interaction(thread_id, interaction):
+                return
             await self._handle_select_complete(thread_id, interaction)
 
         return handler
@@ -250,10 +262,14 @@ class BaseWelcomeController:
         )
         store.set_pending_step(thread_id, session.pending_step)
 
+        async def gate(interaction: discord.Interaction) -> bool:
+            return await self.check_interaction(thread_id, interaction)
+
         view = build_select_view(
             self._questions[thread_id],
             session.visibility,
             session.answers,
+            interaction_check=gate,
         )
         if view is None:
             store.set_pending_step(thread_id, None)
