@@ -4,7 +4,9 @@ Legend: ✅ = active command · 🧩 = shared CoreOps surface (available
 
 Each entry supplies the one-line copy that powers the refreshed help index. Use these
 short descriptions in the dynamic `@Bot help` layout; detailed blurbs live in
-[`commands.md`](commands.md).
+[`commands.md`](commands.md). Treat [`../_meta/COMMAND_METADATA.md`](../_meta/COMMAND_METADATA.md)
+as the canonical export — regenerate or copy from that sheet when updating this table so
+the help system, matrix, and metadata stay synchronized.
 
 - **Audience map:** The renderer walks `bot.walk_commands()` at runtime and maps commands by `access_tier`/`function_group`. Every reply ships four embeds (Overview, Admin / Operational, Staff, User). Sections without runnable commands collapse automatically unless `SHOW_EMPTY_SECTIONS=1` is set, in which case the header renders with “Coming soon”.
 - **Alias policy:** Bare bang aliases for admin commands come from `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …` entries, and members only see user-tier commands plus the mention routes (`@Bot help`, `@Bot ping`).
@@ -51,4 +53,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-10-31 (v0.9.7)

@@ -18,6 +18,14 @@ flowchart TD
     CoreOpsCog --> Http
 ```
 
+## Flow notes
+- **CoreOps cog funnels every command.** RBAC checks run before cache calls, and shared helpers live exclusively inside the `c1c_coreops` package.
+- **Cache access stays async-safe.** Command handlers import `shared.sheets.async_facade`, which routes any synchronous helper through `asyncio.to_thread` so cache misses do not block the event loop.
+- **Preloader and scheduler coordinate cache health.** Startup warmers emit `[refresh] startup` logs for every bucket, while the scheduler handles recurring refreshes (`clans`, `templates`, `clan_tags`) and posts summaries to the ops channel.
+- **Telemetry powers embed rendering.** Command responses lean on structured telemetry before handing the payload to the embed renderer; version metadata is anchored in the footer (`Bot v… · CoreOps v…`).
+- **HTTP surface mirrors Discord health.** `/` returns a status payload with trace id, `/ready` exposes readiness details, `/health` merges watchdog metrics with component status, and `/healthz` remains the bare liveness probe. Each request carries a UUID trace id echoed in the response headers and structured logs.
+- **Logging stays structured.** Runtime logs emit JSON via `shared.logging.structured.JsonFormatter` with standard keys (`ts`, `level`, `logger`, `msg`, `trace`, `env`, `bot`) plus contextual extras. HTTP access logs land under `aiohttp.access` with `path`, `method`, `status`, and latency in milliseconds.
+
 ## Module map
 - CoreOps extensions load directly from `c1c_coreops`.
 - `packages/c1c-coreops/` — canonical home for the CoreOps cog, RBAC helpers, embed renderers, and prefix utilities.
@@ -43,10 +51,8 @@ Config validation is performed during bot startup (e.g., in `setup()`), not at p
 
 ### CoreOps extraction plan
 1. CoreOps utilities now live in `packages/c1c-coreops` and the bot imports them directly.
-2. Flip imports in `modules/coreops` to consume the packaged helpers once the
-   APIs stabilize.
-3. Deprecate any remaining feature logic living in `shared/` so only
-   infrastructure primitives remain.
+2. Flip imports in `modules/coreops` to consume the packaged helpers once the APIs stabilize.
+3. Deprecate any remaining feature logic living in `shared/` so only infrastructure primitives remain.
 
 _Recruitment Search path (Sheets → Matcher) is integrated backend-only and feature-flagged
 off in production until the panels ship._
@@ -89,12 +95,20 @@ off in production until the panels ship._
 - All commands register under modules in `cogs/*`. Feature modules supply views, embeds,
   and services without performing command registration on import.
 
+## Help metadata
+- Commands opt into the multi-embed help surface via the `help_metadata` decorator.
+- `@Bot help` dynamically discovers commands from the live registry with `bot.walk_commands()` and filters each candidate with `command.can_run(ctx)` so RBAC decorators remain authoritative.
+- Every reply includes Overview + Admin / Operational + Staff + User embeds; sections without runnable commands collapse unless `SHOW_EMPTY_SECTIONS=true` swaps in a “Coming soon” placeholder.
+- Valid `function_group` values: `operational`, `recruitment`, `milestones`, `reminder`, `general`.
+- Bare admin aliases follow `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes.
+
 ## Feature toggles & gating
 - `modules.common.feature_flags.is_enabled(<key>)` runs during module boot; missing worksheets,
   or values fail closed and keep the feature offline.
 - Backbone services (cache, scheduler, health server, RBAC) never consult the toggle
   sheet and always load.
 - Approved keys:
+  - `clan_profile` — public `!clan` command with crest and 💡 reaction toggle.
   - `member_panel` — member search panels.
   - `recruiter_panel` — recruiter dashboards and match tools.
   - `recruitment_welcome` — welcome command.
@@ -113,9 +127,7 @@ off in production until the panels ship._
 
 ## Health & observability
 - `/healthz` aggregates watchdog state, last refresh timestamps, and cache health.
-- Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags
-  with context for quick filtering in Discord.
-- Failures fall back to stale caches when safe and always raise a structured log to
-  `LOG_CHANNEL_ID`.
+- Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags with context for quick filtering in Discord (transitioning from `[watcher|lifecycle]` to `[lifecycle]` during the dual-tag release).
+- Failures fall back to stale caches when safe and always raise a structured log to `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-10-31 (v0.9.7)

@@ -2,7 +2,9 @@
 
 The help surfaces pull from the command matrix and cache registry to render consistent
 copy across tiers. Use the following behavior notes when validating deploys or triaging
-reports from staff and recruiters.
+reports from staff and recruiters. Command copy and usage strings should originate from
+[`../_meta/COMMAND_METADATA.md`](../_meta/COMMAND_METADATA.md); update that export first, then
+mirror the changes here and in the matrix to keep a single source of truth.
 
 ## `@Bot help` — overview layout
 - **Audience:** Everyone; the embed set filters to the caller’s access tier.
@@ -107,4 +109,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-10-27 (v0.9.6)
+Doc last updated: 2025-10-31 (v0.9.7)

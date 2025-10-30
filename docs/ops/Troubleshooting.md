@@ -25,13 +25,13 @@ when adjusting cadences or toggles.
   exists in the recruitment Sheet. Missing tabs fail closed and trigger a single
   admin-ping warning in the runtime log channel.
 - **Headers wrong?** The worksheet must expose `feature_name` and `enabled`. Fix the
-  headers, save, then run `!ops refresh config` and re-verify with `!checksheet`.
+  headers, save, then run `!ops reload` and re-verify with `!checksheet`.
 - **Row missing?** Add the feature row using the approved key and `enabled` value. Rows
   absent from the worksheet evaluate to disabled until present.
 - **Value ignored?** Only `TRUE` (case-insensitive) enables a feature. Any other value —
   including `FALSE`, blanks, or typos — keeps the module off and logs an admin-ping
   warning.
-- **Change not taking effect?** After editing the Sheet, run `!ops refresh config`, then
+- **Change not taking effect?** After editing the Sheet, run `!ops reload`, then
   confirm with `!checksheet` to ensure the worksheet and headers are clean.
 
 ## Redaction policy
@@ -56,4 +56,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-31 (v0.9.7)

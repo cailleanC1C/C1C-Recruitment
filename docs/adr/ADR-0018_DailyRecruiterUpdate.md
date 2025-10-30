@@ -84,6 +84,6 @@ We implemented a new **reporting pipeline** under `modules/recruitment/reporting
 ---
 
 ## Status
-Final. Shipped with **Phase 6 — Reporting v1**. Feature toggle `recruitment_reports` defaults OFF. Once validated in test, the scheduler will be enabled in production.
+Final. Shipped with **Phase 6 — Reporting v1**. Feature toggle `recruitment_reports` defaults ON (`TRUE`) and remains enabled across environments; disable it only when the Sheet or destination is misconfigured.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-31 (v0.9.7)

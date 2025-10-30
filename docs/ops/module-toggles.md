@@ -28,8 +28,8 @@ at startup. Toggle values are case-insensitive; only `TRUE` (`ON`) enables a fea
 | `enable_welcome_hook` | `TRUE` | Enables the welcome thread watcher (`modules.onboarding.watcher_welcome`). |
 | `enable_promo_watcher` | `TRUE` | Enables the promo thread watcher (`modules.onboarding.watcher_promo`). |
 
-Set the desired value in the `FeatureToggles` tab, then run `!rec refresh config`
+Set the desired value in the `FeatureToggles` tab, then run `!ops reload`
 to apply it. The runtime logs whether each module was loaded or skipped at boot. See
 [`Config.md`](Config.md#feature-toggles-worksheet) for the worksheet contract.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-31 (v0.9.7)
