@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -128,15 +129,30 @@ async def _run_event(
     return start_mock, caplog
 
 
+def _record_details(record):
+    details = None
+    if isinstance(record.args, dict):
+        details = record.args
+    elif record.args:
+        candidate = record.args[0]
+        if isinstance(candidate, dict):
+            details = candidate
+
+    if details is not None:
+        return details
+
+    message = getattr(record, "msg", None)
+    if isinstance(message, str):
+        try:
+            return json.loads(message)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
 def _find_log(caplog, key):
     for record in caplog.records:
-        details = None
-        if isinstance(record.args, dict):
-            details = record.args
-        elif record.args:
-            candidate = record.args[0]
-            if isinstance(candidate, dict):
-                details = candidate
+        details = _record_details(record)
         if details and key in details:
             return details
     raise AssertionError(f"log with {key!r} not found")
@@ -152,8 +168,8 @@ def test_phrase_match_starts_dialog(monkeypatch, caplog):
     )
 
     start_mock.assert_awaited_once()
-    details = _find_log(caplog, "match")
-    assert details["match"] == "phrase"
+    details = _find_log(caplog, "trigger")
+    assert details["trigger"] == "phrase_match"
 
 
 def test_token_match_starts_dialog(monkeypatch, caplog):
@@ -166,11 +182,11 @@ def test_token_match_starts_dialog(monkeypatch, caplog):
     )
 
     start_mock.assert_awaited_once()
-    details = _find_log(caplog, "match")
-    assert details["match"] == "token"
+    details = _find_log(caplog, "trigger")
+    assert details["trigger"] == "token_match"
 
 
-def test_admin_override_when_no_phrase(monkeypatch, caplog):
+def test_no_trigger_rejected_even_for_admin(monkeypatch, caplog):
     start_mock, caplog = asyncio.run(
         _run_event(
             monkeypatch,
@@ -181,9 +197,9 @@ def test_admin_override_when_no_phrase(monkeypatch, caplog):
         )
     )
 
-    start_mock.assert_awaited_once()
-    details = _find_log(caplog, "match")
-    assert details["match"] == "override"
+    start_mock.assert_not_called()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "no_trigger"
 
 
 def test_wrong_parent_rejected(monkeypatch, caplog):
@@ -198,8 +214,8 @@ def test_wrong_parent_rejected(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
-    details = _find_log(caplog, "rejected")
-    assert details["rejected"] == "wrong_scope:parent"
+    details = _find_log(caplog, "result")
+    assert details["result"] == "wrong_scope"
 
 
 def test_role_gate_rejected(monkeypatch, caplog):
@@ -214,5 +230,5 @@ def test_role_gate_rejected(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
-    details = _find_log(caplog, "rejected")
-    assert details["rejected"] == "role_gate"
+    details = _find_log(caplog, "result")
+    assert details["result"] == "role_gate"
