@@ -187,8 +187,7 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
         return
 
     from shared.cache import telemetry as cache_telemetry
-    from c1c_coreops.render import build_refresh_embed, RefreshEmbedRow
-    from shared.redaction import sanitize_embed
+    from c1c_coreops.render import RefreshEmbedRow
 
     bucket_names = cache_telemetry.list_buckets()
     if not bucket_names:
@@ -269,36 +268,7 @@ async def _startup_preload(bot: commands.Bot | None = None) -> None:
             format_refresh_message("startup", buckets_for_message, total_s=total_ms / 1000.0)
         )
 
-    embed = build_refresh_embed(
-        scope="all",
-        actor_display="startup",
-        trigger="startup",  # embed-only
-        rows=rows,
-        total_ms=total_ms,
-        bot_version=getattr(bot, "version", None),
-        coreops_version=getattr(bot, "coreops_version", None),
-        now_utc=None,
-    )
-
-    channel_id = get_log_channel_id()
-    if not channel_id:
-        log.info("Cache preloader completed (no log channel configured)")
-        return
-
-    try:
-        await bot.wait_until_ready()
-        channel = bot.get_channel(channel_id)
-        if channel is None:
-            channel = await bot.fetch_channel(channel_id)
-        await channel.send(embed=sanitize_embed(embed))
-    except asyncio.CancelledError:
-        raise
-    except Exception:
-        log.exception("failed to send cache preload embed", extra={"channel_id": channel_id})
-        fallback = "Startup cache preload results:\n" + "\n".join(fallback_lines)
-        await send_log_message(fallback)
-    else:
-        log.info("Cache preloader completed")
+    log.info("Cache preloader completed")
 
 
 def set_active_runtime(runtime: "Runtime | None") -> None:
