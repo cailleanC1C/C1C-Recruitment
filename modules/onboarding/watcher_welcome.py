@@ -14,6 +14,7 @@ from modules.common import feature_flags
 from modules.common import runtime as rt
 from modules.onboarding import thread_scopes
 from modules.onboarding.welcome_flow import start_welcome_dialog
+from modules.onboarding.ui import panels
 from shared.config import get_welcome_channel_id
 from shared.sheets.async_core import acall_with_backoff, aget_worksheet
 from shared.sheets.onboarding import _resolve_onboarding_and_welcome_tab
@@ -190,6 +191,7 @@ async def setup(bot: commands.Bot) -> None:
         _announce(bot, "⚠️ Welcome watcher disabled: WELCOME_CHANNEL_ID missing.")
         return
 
+    panels.register_persistent_views(bot)
     await bot.add_cog(WelcomeWatcher(bot, channel_id=channel_id))
     log.info(
         "welcome watcher enabled",

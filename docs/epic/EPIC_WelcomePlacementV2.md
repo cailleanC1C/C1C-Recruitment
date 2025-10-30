@@ -235,4 +235,4 @@ labels: docs, comp:onboarding, comp:placement, comp:data-sheets, bot:recruitment
 milestone: Harmonize v1.0  
 **[/meta]**
 
-Doc last updated: 2025-10-29 (v0.9.7)
+Doc last updated: 2025-10-30 (v0.9.7)
