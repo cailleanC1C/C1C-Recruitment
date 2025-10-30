@@ -143,7 +143,7 @@ They apply to **all phases, PRs, and documentation changes**.
 ```markdown
 [approval]
 version: vX.Y.Z # include only if a bump is approved
-footer_date: YYYY-MM-DD # or YYYY-MM-DD HH:MM UTC; include only if date update is approved
+footer_date: YYYY-MM-DD ; include only if date update is approved
 [/approval]
 ```
 ---
