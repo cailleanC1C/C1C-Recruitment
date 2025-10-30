@@ -6,9 +6,7 @@ import re
 from pathlib import Path
 from typing import List
 
-RULE_PATTERN = re.compile(
-    r"^- \*\*(?P<identifier>[A-Z]-\d{2})\s+(?P<title>[^*]+?)\*\*(?::\s*(?P<description>.*))?$"
-)
+RULE_PATTERN = re.compile(r"^- \*\*(?P<body>.+?)\*\*(?P<rest>.*)$")
 SECTION_PATTERN = re.compile(r"^## +(?P<section>.+)$")
 
 
@@ -39,9 +37,31 @@ def parse_guardrail_rules(path: Path) -> List[Rule]:
         if not rule_match:
             continue
 
-        identifier = rule_match.group("identifier")
-        title = rule_match.group("title").strip()
-        description = (rule_match.group("description") or "").strip()
+        body = rule_match.group("body").strip()
+        rest = rule_match.group("rest").lstrip()
+
+        if not body:
+            continue
+
+        body_parts = body.split(None, 1)
+        identifier = body_parts[0]
+        title = body_parts[1] if len(body_parts) > 1 else ""
+
+        if not re.fullmatch(r"[A-Z]-\d{2}", identifier):
+            continue
+
+        # Titles may include a trailing colon inside the bold block.
+        if title.endswith(":"):
+            title = title[:-1].rstrip()
+
+        title = title.strip()
+
+        # Descriptions can begin with a colon directly after the bold block.
+        if rest.startswith(":"):
+            rest = rest[1:].lstrip()
+
+        description = rest
+
         rules.append(
             Rule(
                 identifier=identifier,
