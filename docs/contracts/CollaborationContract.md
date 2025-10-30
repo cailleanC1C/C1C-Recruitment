@@ -145,8 +145,8 @@ They apply to **all phases, PRs, and documentation changes**.
 version: vX.Y.Z # include only if a bump is approved
 footer_date: YYYY-MM-DD # or YYYY-MM-DD HH:MM UTC; include only if date update is approved
 [/approval]
+```
 ---
-
 ### 🔹 Codex PR Formatting Rules
 
 All Codex prompts must be in **one fenced code block** for clean copy/paste.
