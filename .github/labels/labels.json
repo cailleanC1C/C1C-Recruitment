@@ -170,6 +170,11 @@
     "description": ""
   },
   {
+    "name": "governance",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "guardrails",
     "color": "e99695",
     "description": "Contract/compliance checks and safety gates"
