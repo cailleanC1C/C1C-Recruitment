@@ -26,9 +26,8 @@ Every audit and CI check validates against this document.
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 
 ### Feature Toggles and Config Policy
-- Fallback trigger: 🎫 on the close-button message. Detection keys off the phrase “by reacting with” (case-insensitive) or token [#welcome:ticket]. Do not depend on the first message of a thread.
-- Ticket Tool closure events are now recognized as a valid automated source for welcome_dialog.
-- The same validation and logging policies apply; no additional configuration is introduced.
+- **F-01 Fallback trigger**: 🎫 on the close-button message. Detection keys off the phrase “by reacting with” (case-insensitive) or token [#welcome:ticket]. Do not depend on the first message of a thread.
+- **F-02 Ticket Tool closure events** are now recognized as a valid automated source for welcome_dialog. The same validation and logging policies apply; no additional configuration is introduced.
 
 ## 3) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
