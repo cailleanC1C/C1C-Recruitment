@@ -1,7 +1,3 @@
-Got it. I folded your two extras into the unified doc: full label table (no “etc.”) and a hard rule for Codex/CI to **ignore `AUDIT/`** for scans/tests (only write results there). Here’s the clean, drop-in Markdown.
-
----
-
 # 🧭 C1C Bot Collaboration Contract (v1.0)
 
 **Purpose**
