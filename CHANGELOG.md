@@ -33,6 +33,7 @@
 ## Unreleased / Next
 
 - Docs: Added EPIC and ADR for Phase 6 (Daily Recruiter Update v1).
+- Audit: Published docs hygiene findings at `AUDIT/20251030_DOCS_CLEANUP/report.md`.
 
 ## v0.9.6 — 2025-10-26
 

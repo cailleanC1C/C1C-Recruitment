@@ -54,7 +54,7 @@ if is_enabled("feature_key"):
 check. If the Sheet or worksheet fails to load, all features default to enabled and a
 single warning is logged at startup.
 
-### 4. Approved Feature Modules (Phase 4)
+### 4. Approved Feature Modules (Rollout Stage 4)
 
 | Key | Description |
 |-----|-------------|
@@ -99,4 +99,4 @@ If a row is missing or the worksheet is unreachable:
 
 **Draft — pending implementation of `modules/common/feature_flags.py` and loader integration.**
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-30 (v0.9.7)

@@ -19,4 +19,4 @@ This document consolidates the guardrail expectations enforced by CI.
 - The legacy **Guardrails Summary** for config/docs parity and Discord token scans
   remains in place; address any listed issues before requesting review.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-30 (v0.9.7)

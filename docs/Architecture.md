@@ -60,7 +60,7 @@ off in production until the panels ship._
 - `[cron]` marks scheduled jobs emitted by the runtime scheduler.
 - Grey callouts describe shared helpers used by multiple features.
 
-## Phase 3 dependency highlights
+## Wave 3 dependency highlights
 - Boot order: config → runtime → shared Sheets core → recruitment/onboarding adapters →
   features → Discord extensions. Abort boot if config or sheets layers fail.
 - Watchdog owns keepalive cadences, stall detection, reconnect timers, and feeds its
@@ -118,4 +118,4 @@ off in production until the panels ship._
 - Failures fall back to stale caches when safe and always raise a structured log to
   `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-10-30 (v0.9.7)

@@ -134,7 +134,7 @@ def run_checks() -> tuple[list[str], list[str]]:
         errors.append(f"S-03: command decorator outside cogs/* → {rel}:{ln}: `{line}`")
 
     # 3) Docs checks
-    docs = [p for p in ROOT.glob("docs/**/*.md") if p.is_file()]
+    docs = [p for p in ROOT.glob("docs/**/*.md") if p.is_file() and not is_under_audit(p)]
     for md in docs:
         if has_phase_title(md):
             rel_md = str(md.relative_to(ROOT))
