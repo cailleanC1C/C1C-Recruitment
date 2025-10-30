@@ -205,6 +205,11 @@
     "description": "Contract/compliance checks and safety gates"
   },
   {
+    "name": "harmonize",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "help wanted",
     "color": "008672",
     "description": "Community contributions welcome"
