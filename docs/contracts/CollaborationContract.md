@@ -226,4 +226,109 @@ milestone: Harmonize v1.0
 
 ---
 
+## Appendix A — Codex Operating Standards (Phase 7, v0.9.7)
+
+> **This appendix is the single source of truth for ChatGPT/Codex when drafting PRs.**  
+> If any other doc conflicts, follow this appendix for PR content and behavior.
+
+### A1. PR Prompt Format (required)
+
+- One fenced code block for the entire Codex prompt (clean copy/paste).
+- PR body sections first; **meta block must be the final lines**.
+- Include screenshots or captured sample outputs when modifying user-visible text.
+- **Meta block syntax:**
+
+```markdown
+[meta]
+labels: <comma-separated labels>
+milestone: Harmonize v1.0
+[/meta]
+```
+
+### A2. Docs Footer Standard
+
+Every Markdown file touched by a PR must end with:
+
+```markdown
+Doc last updated: YYYY-MM-DD (vX.Y.Z)
+```
+
+For this phase: **v0.9.7**. Use the current date in **UTC** unless specified.
+
+### A3. Logging Standard (Discord-posted, humanized)
+
+**Golden pattern**
+`<emoji> <Event> — <scope> • <k1>=<v1> • <k2>=<v2> … [• details: …]`
+
+Rules:
+- **Names over IDs.** Translate IDs using cache-only helpers (no fetch).
+- Hide zero/false/“-” fields. Human units (`1.3s`, `5m`, `3h`). Thousands separators.
+- Only show `reason=` on non-OK outcomes.
+
+**Emoji map:** ✅ success • 🛈 neutral • ♻️ refresh/cache • 🐶 watchdog • 🔐 permissions • 🧭 scheduler • ⚠️ partial/warn • ❌ error
+
+**Display (confirmed)**
+- Channels: `#category › channel-name`
+- Threads: `#parent › thread-name`
+- **No DMs** in this system.
+
+**Label helpers (must use; cache-only)**
+- `channel_label(guild, channel_id)` → `#category › channel` / `#channel` / `#unknown (id)`
+- `user_label(guild, user_id)` → display name / `unknown (id)`
+- `guild_label(bot, guild_id)` → name / `unknown guild (id)`
+- **Never call** `fetch_*` from log paths.
+
+**Dedupe**
+- Window: **5s**
+- Keys:  
+  - `refresh:{scope}:{snapshot}`  
+  - `welcome:{tag}:{recruit_id}`  
+  - `permsync:{guild_id}:{ts_bucket}`  
+- Emit one grouped line; suppress siblings.
+
+**Canonical templates (examples)**
+- 🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • next: clans=2025-10-29 00:00 UTC • templates=2025-10-30 00:00 UTC • clan_tags=2025-10-30 00:00 UTC  
+- ✅ **Guild allow-list** — verified • allowed=[C1C Cluster] • connected=[C1C Cluster]  
+- 🐶 **Watchdog started** — interval=300s • stall=1200s • disconnect_grace=6000s  
+- ♻️ **Refresh** — scope=startup • clan_tags ok (2.7s, 31, ttl) • clans ok (1.0s, 24, ttl) • templates ok (1.3s, 25, ttl) • total=5.8s  
+  *(If you render the pretty table, don’t also emit per-bucket lines.)*  
+- ✅ **Report: recruiters** — actor=manual • user=Caillean • guild=C1C Cluster • dest=#ops › recruiters-log • date=2025-10-28  
+- ♻️ **Cache: clans** — OK • 3.7s  
+- ⚠️ **Command error** — cmd=help • user=Caillean • reason=TypeError: unexpected kwarg `log_failures`  
+- 🔐 **Permission sync** — applied=0 • errors=57 • threads=on • details: 50× Missing Access (403/50001) • 7× Missing Permissions (403/50013)  
+- **Welcome (aggregated, preferred):**  
+  - ✅ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall  
+  - ⚠️ **Welcome** — tag=C1CE • recruit=Eir • channel=#clans › titans-hall • details: general_notice=error (Missing Access)
+
+**Bad → Good (what to stop)**
+- **Stop:** `[welcome/info] actor=<id>@<name> … thread=<id> parent=<id>`  
+- **Do:** `✅ **Welcome** — tag=C1CM • recruit=Caillean • channel=#clans › martyrs-hall`
+
+### A4. Guardrails Codex must honor
+
+- **No hard-coded IDs** (guilds, channels, users, roles). Read from config/sheets/env where specified.
+- Use existing modules/files when present; do not invent new top-level packages without an ADR.
+- Respect `ENV` vs `Sheets` source of truth as documented (feature toggles live in Sheets where specified).
+- For docs/PRs: follow label taxonomy and meta block exactly; no ad-hoc labels.
+- When changing visible text, **update screenshots or paste example output** in the PR body.
+
+### A5. Acceptance checklists Codex must satisfy
+
+**When touching logs**
+- [ ] Discord-posted logs use templates in A3.  
+- [ ] Name resolution uses cache-only helpers; no `fetch_*`.  
+- [ ] Dedupe window **5s** enforced.  
+- [ ] Refresh emits **either** line **or** table, not both.  
+- [ ] Welcome aggregated per `tag+recruit`.  
+
+**For any docs change**
+- [ ] Footer in each touched MD: `Doc last updated: YYYY-MM-DD (v0.9.7)`.
+
+**For any PR**
+- [ ] One fenced code block; meta block last; milestone `Harmonize v1.0`.  
+- [ ] No hard-coded IDs; references to config/sheets where needed.  
+- [ ] If tests/docs/CI guardrails mention this area, update them for parity.
+
+---
+
 Doc last updated: 2025-10-30 (v0.9.7)
