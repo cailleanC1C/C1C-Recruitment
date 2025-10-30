@@ -140,6 +140,11 @@
     "description": "Shared libraries and utilities used across bots"
   },
   {
+    "name": "comp:welcomecrew",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "config",
     "color": "006b75",
     "description": "Env vars, toggles, YAML/JSON config, secrets"
