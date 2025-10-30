@@ -1,9 +1,7 @@
 """Fallback handler for onboarding reaction triggers."""
 from __future__ import annotations
 
-import json
-import logging
-from typing import Optional
+from typing import Any, Optional
 
 import discord
 from discord import RawReactionActionEvent
@@ -11,8 +9,7 @@ from discord.ext import commands
 
 from c1c_coreops import rbac
 from modules.common import feature_flags
-from modules.onboarding import logs
-from modules.onboarding import thread_scopes
+from modules.onboarding import logs, thread_scopes
 from modules.onboarding.ui import panels
 from modules.onboarding.welcome_flow import start_welcome_dialog
 
@@ -25,6 +22,24 @@ def normalize_spaces(value: str) -> str:
     return " ".join(value.split())
 
 
+def _base_context(
+    *,
+    member: discord.abc.User | discord.Member | None = None,
+    thread: discord.Thread | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
+    context = logs.thread_context(thread)
+    if member is not None:
+        context["actor"] = logs.format_actor(member)
+        actor_name = logs.format_actor_handle(member)
+        if actor_name:
+            context["actor_name"] = actor_name
+    else:
+        context["actor"] = f"<{user_id}>" if user_id else logs.format_actor(None)
+    context["emoji"] = FALLBACK_EMOJI
+    return context
+
+
 async def _log_reject(
     reason: str,
     *,
@@ -32,16 +47,16 @@ async def _log_reject(
     thread: discord.Thread | None = None,
     parent_id: int | None = None,
     trigger: str | None = None,
+    result: str = "rejected",
+    level: str = "warn",
 ) -> None:
-    await logs.send_welcome_log(
-        "warn",
-        actor=logs.format_actor(member),
-        trigger=trigger or "phrase_match",
-        emoji=FALLBACK_EMOJI,
-        reason=reason,
-        thread=logs.format_thread(getattr(thread, "id", None)),
-        parent=logs.format_parent(parent_id),
-    )
+    context = _base_context(member=member, thread=thread)
+    if parent_id and "parent" not in context:
+        context["parent"] = logs.format_parent(parent_id)
+    context["result"] = result
+    context["reason"] = reason
+    context["trigger"] = trigger or "phrase_match"
+    await logs.send_welcome_log(level, **context)
 
 
 async def _find_panel_message(
@@ -75,16 +90,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: RawReactionActionEvent) -> None:
         if not feature_flags.is_enabled("welcome_dialog"):
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "disabled",
-                        "emoji": str(payload.emoji),
-                    }
-                )
+            await _log_reject(
+                "disabled",
+                trigger="feature_disabled",
+                result="feature_disabled",
+                level="info",
             )
-            await _log_reject("disabled", trigger="feature_disabled")
             return
 
         if str(payload.emoji) != FALLBACK_EMOJI:
@@ -107,35 +118,22 @@ class OnboardingReactionFallbackCog(commands.Cog):
         if member is None:
             try:
                 member = await guild.fetch_member(payload.user_id)
-            except Exception:
-                logging.info(
-                    "welcome.emoji.start %s",
-                    {
-                        "rejected": "member_fetch_failed",
-                        "emoji": FALLBACK_EMOJI,
-                        "user_id": payload.user_id,
-                    },
-                )
+            except Exception as exc:
+                context = _base_context(user_id=payload.user_id)
+                context.update({"result": "member_fetch_failed", "trigger": "member_lookup"})
+                await logs.send_welcome_exception("warn", exc, **context)
                 return
 
         if not isinstance(member, discord.Member):
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "member_type",
-                        "emoji": FALLBACK_EMOJI,
-                        "user_id": payload.user_id,
-                    }
-                )
-            )
+            context = _base_context(user_id=payload.user_id)
+            context.update({"result": "member_type", "trigger": "member_lookup"})
+            await logs.send_welcome_log("warn", **context)
             return
 
         if getattr(member, "bot", False):
-            logging.info(
-                "welcome.emoji.start %s",
-                {"rejected": "bot_member", "emoji": FALLBACK_EMOJI, "user_id": member.id},
-            )
+            context = _base_context(member=member, user_id=payload.user_id)
+            context.update({"result": "bot_member", "trigger": "member_lookup"})
+            await logs.send_welcome_log("info", **context)
             return
 
         thread: Optional[discord.Thread] = guild.get_thread(payload.channel_id)
@@ -146,15 +144,10 @@ class OnboardingReactionFallbackCog(commands.Cog):
             else:
                 try:
                     channel = await self.bot.fetch_channel(payload.channel_id)
-                except Exception:
-                    logging.info(
-                        "welcome.emoji.start %s",
-                        {
-                            "rejected": "channel_fetch_failed",
-                            "emoji": FALLBACK_EMOJI,
-                            "channel_id": payload.channel_id,
-                        },
-                    )
+                except Exception as exc:
+                    context = _base_context(member=member, user_id=payload.user_id)
+                    context.update({"result": "channel_fetch_failed", "trigger": "channel_lookup"})
+                    await logs.send_welcome_exception("warn", exc, **context)
                     return
                 if isinstance(channel, discord.Thread):
                     thread = channel
@@ -162,67 +155,33 @@ class OnboardingReactionFallbackCog(commands.Cog):
             return
 
         if not thread_scopes.is_welcome_parent(thread):
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "wrong_scope",
-                        "emoji": FALLBACK_EMOJI,
-                        "thread_id": thread.id,
-                    }
-                )
-            )
             await _log_reject(
                 "wrong_scope",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
                 trigger="scope_gate",
+                result="wrong_scope",
             )
             return
 
         if not (rbac.is_admin_member(member) or rbac.is_recruiter(member)):
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "role_gate",
-                        "emoji": FALLBACK_EMOJI,
-                        "user_id": member.id,
-                        "thread_id": thread.id,
-                    }
-                )
-            )
             await _log_reject(
                 "role_gate",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
                 trigger="role_gate",
+                result="role_gate",
             )
             return
 
         try:
             message = await thread.fetch_message(payload.message_id)
-        except Exception:
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "fetch_failed",
-                        "emoji": FALLBACK_EMOJI,
-                        "thread_id": thread.id,
-                        "message_id": payload.message_id,
-                    }
-                )
-            )
-            await _log_reject(
-                "fetch_failed",
-                member=member,
-                thread=thread,
-                parent_id=getattr(thread, "parent_id", None),
-                trigger="message_lookup_failed",
-            )
+        except Exception as exc:
+            context = _base_context(member=member, thread=thread)
+            context.update({"result": "message_lookup_failed", "trigger": "message_lookup"})
+            await logs.send_welcome_exception("warn", exc, **context)
             return
 
         content = (getattr(message, "content", "") or "")
@@ -233,86 +192,49 @@ class OnboardingReactionFallbackCog(commands.Cog):
         eligible = phrase_match or token_match
 
         if not eligible:
-            logging.info(
-                json.dumps(
-                    {
-                        "event": "welcome.emoji.start",
-                        "result": "no_trigger",
-                        "emoji": FALLBACK_EMOJI,
-                        "thread_id": thread.id,
-                        "message_id": message.id,
-                    }
-                )
-            )
             await _log_reject(
                 "no_trigger",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
+                result="no_trigger",
+                level="warn",
             )
             return
 
         trigger = "token_match" if token_match and not phrase_match else "phrase_match"
 
-        logging.info(
-            json.dumps(
-                {
-                    "event": "welcome.emoji.start",
-                    "trigger": trigger,
-                    "emoji": getattr(payload.emoji, "name", str(payload.emoji)),
-                    "thread_id": thread.id,
-                    "message_id": message.id,
-                    "user_id": member.id,
-                    "scope": "welcome",
-                }
-            )
-        )
+        context = _base_context(member=member, thread=thread)
+        context.update({"trigger": trigger, "result": "emoji_received"})
+        await logs.send_welcome_log("info", **context)
 
         bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
         existing_panel = await _find_panel_message(thread, bot_user_id=bot_user_id)
         if existing_panel is not None:
             if panels.is_panel_live(existing_panel.id):
-                await logs.send_welcome_log(
-                    "warn",
-                    actor=logs.format_actor(member),
-                    trigger=trigger,
-                    reason="deduped",
-                    thread=logs.format_thread(thread.id),
-                )
+                dedup_context = _base_context(member=member, thread=thread)
+                dedup_context.update({"trigger": trigger, "result": "deduped"})
+                await logs.send_welcome_log("warn", **dedup_context)
                 return
-            await logs.send_welcome_log(
-                "info",
-                actor=logs.format_actor(member),
-                trigger=trigger,
-                emoji=FALLBACK_EMOJI,
-                flow="welcome",
-                result="restarted",
-                thread=logs.format_thread(thread.id),
-                parent=logs.format_parent(getattr(thread, "parent_id", None)),
-            )
+            restart_context = _base_context(member=member, thread=thread)
+            restart_context.update({"trigger": trigger, "result": "restarted"})
+            await logs.send_welcome_log("info", **restart_context)
             try:
                 await existing_panel.delete()
-            except Exception:
-                logging.warning(
-                    "failed to delete expired welcome panel",
-                    exc_info=True,
-                    extra={"thread_id": thread.id},
-                )
+            except Exception as exc:
+                await logs.send_welcome_exception("warn", exc, **restart_context)
             panels.mark_panel_inactive_by_message(existing_panel.id)
         else:
-            await logs.send_welcome_log(
-                "info",
-                actor=logs.format_actor(member),
-                trigger=trigger,
-                emoji=FALLBACK_EMOJI,
-                flow="welcome",
-                scope="welcome",
-                result="started",
-                thread=logs.format_thread(thread.id),
-                parent=logs.format_parent(getattr(thread, "parent_id", None)),
-            )
+            start_context = _base_context(member=member, thread=thread)
+            start_context.update({"trigger": trigger, "result": "started"})
+            await logs.send_welcome_log("info", **start_context)
 
-        await start_welcome_dialog(thread, member, source="emoji", bot=self.bot)
+        try:
+            await start_welcome_dialog(thread, member, source="emoji", bot=self.bot)
+        except Exception as exc:
+            failure_context = _base_context(member=member, thread=thread)
+            failure_context.update({"trigger": trigger, "result": "launch_failed"})
+            await logs.send_welcome_exception("error", exc, **failure_context)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -1,14 +1,14 @@
 """Shared entrypoint for onboarding welcome flows."""
 from __future__ import annotations
 
-import logging
-from typing import Any
+from typing import Any, cast
 
 import discord
 from discord.ext import commands
 
 from c1c_coreops import rbac
 from modules.common import feature_flags
+from modules.onboarding import logs
 
 from . import thread_scopes
 from .controllers.promo_controller import PromoController
@@ -27,74 +27,81 @@ async def start_welcome_dialog(
 ) -> None:
     """Launch the shared welcome dialog flow when all gates pass."""
 
+    flow = (
+        "welcome"
+        if thread_scopes.is_welcome_parent(thread)
+        else "promo"
+        if thread_scopes.is_promo_parent(thread)
+        else "unknown"
+    )
+    actor = initiator if isinstance(initiator, (discord.Member, discord.User)) else None
+
+    def _context(
+        extra: dict[str, Any] | None = None,
+        *,
+        actor_override: discord.abc.User | discord.Member | None | object = ...,
+    ) -> dict[str, Any]:
+        resolved_actor = actor if actor_override is ... else cast(
+            discord.abc.User | discord.Member | None, actor_override
+        )
+        payload = logs.thread_context(thread)
+        payload["flow"] = flow
+        payload["source"] = source
+        payload["actor"] = logs.format_actor(resolved_actor)
+        handle = logs.format_actor_handle(resolved_actor)
+        if handle:
+            payload["actor_name"] = handle
+        if extra:
+            payload.update(extra)
+        return payload
+
     if not feature_flags.is_enabled("welcome_dialog"):
-        logging.info("onboarding.welcome.start %s", {"skipped": "feature_disabled"})
+        await logs.send_welcome_log("info", **_context({"result": "feature_disabled"}))
         return
 
     if source != "ticket":
         if not initiator or not (
             rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator)
         ):
-            logging.info(
-                "onboarding.welcome.start %s",
-                {
-                    "rejected": "scope_or_role",
-                    "source": source,
-                    "thread_id": getattr(thread, "id", None),
-                },
+            await logs.send_welcome_log(
+                "warn",
+                **_context(
+                    {"result": "role_gate", "reason": "scope_or_role"},
+                    actor_override=initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
+                ),
             )
             return
 
-    if not (
-        thread_scopes.is_welcome_parent(thread)
-        or thread_scopes.is_promo_parent(thread)
-    ):
-        logging.info(
-            "onboarding.welcome.start %s",
-            {
-                "rejected": "scope_or_role",
-                "source": source,
-                "thread_id": getattr(thread, "id", None),
-            },
+    if flow == "unknown":
+        await logs.send_welcome_log(
+            "warn",
+            **_context({"result": "scope_gate", "reason": "scope_or_role"}),
         )
         return
 
-    flow = "welcome" if thread_scopes.is_welcome_parent(thread) else "promo"
     schema_version: str | None = None
-    questions = []
+    questions: list[Any] = []
     try:
         questions = onboarding_questions.get_questions(flow)
         schema_version = onboarding_questions.schema_hash(flow)
-    except Exception:
-        logging.exception(
-            "onboarding.welcome.start failed to load schema",
-            extra={"thread_id": getattr(thread, "id", None), "flow": flow},
+    except Exception as exc:
+        await logs.send_welcome_exception(
+            "error",
+            exc,
+            **_context({"result": "schema_load_failed"}),
         )
+        return
 
-    logging.info(
-        "onboarding.welcome.start %s",
-        {
-            "mode": source,
-            "guild_id": getattr(getattr(thread, "guild", None), "id", None),
-            "parent_id": getattr(getattr(thread, "parent", None), "id", None),
-            "thread_id": getattr(thread, "id", None),
-            "by": (
-                {"id": getattr(initiator, "id", None), "name": str(initiator)}
-                if initiator
-                else {"id": None, "name": "system"}
-            ),
-            "dedup": "created",
-            "flow": flow,
-            "schema_hash": schema_version,
-            "questions": len(questions),
-        },
+    await logs.send_welcome_log(
+        "info",
+        **_context({"result": "started", "schema": schema_version, "questions": len(questions)}),
     )
 
     controller_bot = bot or _resolve_bot(thread)
     if controller_bot is None:
-        logging.warning(
-            "onboarding.welcome.start missing bot reference",
-            extra={"thread_id": getattr(thread, "id", None)},
+        await logs.send_welcome_log(
+            "warn",
+            **_context({"result": "missing_bot"}),
         )
         return
 
@@ -104,7 +111,7 @@ async def start_welcome_dialog(
         controller = PromoController(controller_bot)
     await controller.run(
         thread,
-        initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
+        actor,
         schema_version,
         questions,
         source=source,

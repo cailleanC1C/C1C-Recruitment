@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
 
 import discord
 from discord.ext import commands
 
-from modules.onboarding import rules
-from modules.onboarding import logs
+from modules.onboarding import logs, rules
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
@@ -18,6 +18,8 @@ from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
 
 log = logging.getLogger(__name__)
+
+_PANEL_RETRY_DELAYS = (0.5, 1.0, 2.0)
 
 TEXT_TYPES = {"short", "paragraph", "number"}
 SELECT_TYPES = {"single-select", "multi-select"}
@@ -38,6 +40,58 @@ class BaseWelcomeController:
         self._allowed_users: Dict[int, set[int]] = {}
         self._panel_messages: Dict[int, int] = {}
         self._initiators: Dict[int, discord.abc.User | discord.Member | None] = {}
+
+    def _thread_for(self, thread_id: int) -> discord.Thread | None:
+        return self._threads.get(thread_id)
+
+    def _log_fields(
+        self,
+        thread_id: int,
+        *,
+        actor: discord.abc.User | discord.Member | None | object = ...,
+    ) -> dict[str, Any]:
+        thread = self._thread_for(thread_id)
+        context = logs.thread_context(thread)
+        context["flow"] = self.flow
+        resolved_actor: discord.abc.User | discord.Member | None
+        if actor is ...:
+            resolved_actor = self._initiators.get(thread_id)
+        else:
+            resolved_actor = cast(discord.abc.User | discord.Member | None, actor)
+        context["actor"] = logs.format_actor(resolved_actor)
+        handle = logs.format_actor_handle(resolved_actor)
+        if handle:
+            context["actor_name"] = handle
+        return context
+
+    async def _send_panel_with_retry(
+        self,
+        thread: discord.Thread,
+        *,
+        content: str,
+        view: discord.ui.View,
+    ) -> discord.Message:
+        last_error: Exception | None = None
+        for delay in (0.0, *_PANEL_RETRY_DELAYS):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                message = await thread.send(content, view=view)
+                if getattr(message, "pinned", False):
+                    try:
+                        await message.unpin()
+                    except Exception:
+                        log.warning("failed to unpin welcome panel", exc_info=True)
+                return message
+            except Exception as exc:  # pragma: no cover - network
+                last_error = exc
+        assert last_error is not None  # for mypy
+        await logs.send_welcome_exception(
+            "error",
+            last_error,
+            **self._log_fields(int(thread.id), result="panel_failed"),
+        )
+        raise last_error
 
     async def run(
         self,
@@ -91,20 +145,41 @@ class BaseWelcomeController:
         if message_id:
             try:
                 message = await thread.fetch_message(message_id)
-            except Exception:
+            except Exception as exc:
+                await logs.send_welcome_exception(
+                    "warn",
+                    exc,
+                    view="panel",
+                    result="stale_panel",
+                    **self._log_fields(thread_id),
+                )
                 message = None
         if message is not None:
             await message.edit(content=intro, view=view)
+            if getattr(message, "pinned", False):
+                try:
+                    await message.unpin()
+                except Exception:
+                    log.warning("failed to unpin welcome panel", exc_info=True)
+            await logs.send_welcome_log(
+                "debug",
+                view="panel",
+                result="refreshed",
+                source=self._sources.get(thread_id),
+                **self._log_fields(thread_id),
+            )
         else:
-            message = await thread.send(intro, view=view)
+            try:
+                message = await self._send_panel_with_retry(thread, content=intro, view=view)
+            except Exception:
+                return
             self._panel_messages[thread_id] = message.id
             await logs.send_welcome_log(
                 "info",
-                actor=logs.format_actor(self._initiators.get(thread_id)),
-                trigger="panel",
-                action="posted",
-                flow=self.flow,
-                thread=logs.format_thread(thread_id),
+                view="panel",
+                result="posted",
+                source=self._sources.get(thread_id),
+                **self._log_fields(thread_id),
             )
         panels.register_panel_message(thread_id, message.id)
 
@@ -133,6 +208,12 @@ class BaseWelcomeController:
         else:
             message = await thread.send(content, view=view)
             self._select_messages[thread_id] = message
+        await logs.send_welcome_log(
+            "debug",
+            view="select",
+            result="ready",
+            **self._log_fields(thread_id),
+        )
 
     def _select_changed(self, thread_id: int) -> Callable[[discord.Interaction, Question, list[str]], Awaitable[None]]:
         async def handler(
@@ -162,6 +243,12 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="panel",
+                result="inactive",
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
             return
 
@@ -183,6 +270,13 @@ class BaseWelcomeController:
         modal.submit_callback = self._modal_submitted(thread_id, modal.questions, index)
         store.set_pending_step(thread_id, {"kind": "modal", "index": index})
         await interaction.response.send_modal(modal)
+        await logs.send_welcome_log(
+            "debug",
+            view="modal",
+            result="launched",
+            index=index,
+            **self._log_fields(thread_id, actor=interaction.user),
+        )
 
     def _modal_submitted(
         self,
@@ -209,6 +303,13 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="modal",
+                result="inactive",
+                index=index,
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
             return
 
@@ -258,6 +359,13 @@ class BaseWelcomeController:
             interaction,
             "✅ Saved! Use the button in the thread if more questions remain.",
         )
+        await logs.send_welcome_log(
+            "debug",
+            view="modal",
+            result="saved",
+            index=index,
+            **self._log_fields(thread_id, actor=interaction.user),
+        )
 
         modals = build_modals(
             self._questions[thread_id],
@@ -279,6 +387,13 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="select",
+                result="inactive",
+                question=question.qid,
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
             return
 
@@ -301,12 +416,26 @@ class BaseWelcomeController:
         if view is None:
             store.set_pending_step(thread_id, None)
             await interaction.response.edit_message(view=None)
+            await logs.send_welcome_log(
+                "debug",
+                view="select",
+                result="completed",
+                question=question.qid,
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await self._show_preview(thread, session)
             return
 
         view.on_change = self._select_changed(thread_id)
         view.on_complete = self._select_completed(thread_id)
         await interaction.response.edit_message(view=view)
+        await logs.send_welcome_log(
+            "debug",
+            view="select",
+            result="changed",
+            question=question.qid,
+            **self._log_fields(thread_id, actor=interaction.user),
+        )
 
     async def _handle_select_complete(
         self,
@@ -316,6 +445,12 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="select",
+                result="inactive",
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
             return
 
@@ -334,6 +469,12 @@ class BaseWelcomeController:
 
         store.set_pending_step(thread_id, None)
         await interaction.response.edit_message(view=None)
+        await logs.send_welcome_log(
+            "info",
+            view="select",
+            result="submitted",
+            **self._log_fields(thread_id, actor=interaction.user),
+        )
         await self._show_preview(thread, session)
 
     async def _show_preview(
@@ -358,14 +499,13 @@ class BaseWelcomeController:
         store.set_pending_step(thread_id, None)
         if thread_id not in self._preview_logged:
             self._preview_logged.add(thread_id)
-            log.info(
-                "onboarding.welcome.preview %s",
-                {
-                    "mode": self._sources.get(thread_id, "unknown"),
-                    "flow": self.flow,
-                    "thread_id": thread_id,
-                    "schema_hash": session.schema_hash,
-                },
+            await logs.send_welcome_log(
+                "debug",
+                view="preview",
+                result="rendered",
+                source=self._sources.get(thread_id, "unknown"),
+                schema=session.schema_hash,
+                **self._log_fields(thread_id),
             )
 
     def _build_preview_embed(self, thread_id: int, session: SessionData) -> discord.Embed:
@@ -390,6 +530,12 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="preview",
+                result="inactive",
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
             return
 
@@ -417,23 +563,14 @@ class BaseWelcomeController:
         await thread.send(embed=summary_embed)
         await thread.send("@RecruitmentCoordinator")
 
-        log.info(
-            "onboarding.welcome.complete %s",
-            {
-                "mode": self._sources.get(thread_id, "unknown"),
-                "flow": self.flow,
-                "thread_id": thread_id,
-                "schema_hash": session.schema_hash,
-                "fields": _final_fields(self._questions[thread_id], session.answers),
-            },
-        )
         await logs.send_welcome_log(
             "info",
-            actor=logs.format_actor(interaction.user),
-            trigger="panel",
-            action="complete",
-            flow=self.flow,
-            thread=logs.format_thread(thread_id),
+            result="completed",
+            view="preview",
+            source=self._sources.get(thread_id, "unknown"),
+            schema=session.schema_hash,
+            details=_final_fields(self._questions[thread_id], session.answers),
+            **self._log_fields(thread_id, actor=interaction.user),
         )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
@@ -447,6 +584,12 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
+            await logs.send_welcome_log(
+                "warn",
+                view="preview",
+                result="inactive",
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
             return
 
@@ -454,6 +597,12 @@ class BaseWelcomeController:
         await _safe_followup(
             interaction,
             "🛠️ Re-opening the form so you can make changes.",
+        )
+        await logs.send_welcome_log(
+            "info",
+            view="preview",
+            result="reopened",
+            **self._log_fields(thread_id, actor=interaction.user),
         )
         await self._start_modal_step(thread, session)
 
@@ -482,13 +631,11 @@ class BaseWelcomeController:
             await thread.send("⏱️ Onboarding dialog timed out. Please react again to restart.")
         except Exception:
             log.warning("failed to send timeout message", exc_info=True)
-        log.info(
-            "onboarding.welcome.complete %s",
-            {
-                "flow": self.flow,
-                "thread_id": thread_id,
-                "cancelled": "timeout",
-            },
+        await logs.send_welcome_log(
+            "warn",
+            view="panel",
+            result="timeout",
+            **self._log_fields(thread_id),
         )
 
     def _cleanup_session(self, thread_id: int) -> None:
@@ -513,6 +660,13 @@ class BaseWelcomeController:
         allowed = self._allowed_users.get(thread_id)
         user_id = getattr(interaction.user, "id", None)
         if allowed and user_id not in allowed:
+            await logs.send_welcome_log(
+                "warn",
+                view="access",
+                result="denied",
+                reason="not_assigned",
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
             await _safe_ephemeral(
                 interaction,
                 "⚠️ This dialog is reserved for the assigned recruiter.",
@@ -612,10 +766,38 @@ class _PreviewView(discord.ui.View):
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success, custom_id="ob.confirm")
     async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:  # pragma: no cover - network
+        if getattr(interaction, "_c1c_claimed", False):
+            return
+        setattr(interaction, "_c1c_claimed", True)
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        context = {
+            **logs.thread_context(thread if isinstance(thread, discord.Thread) else None),
+            "actor": logs.format_actor(interaction.user),
+            "view": "preview",
+            "view_id": "ob.confirm",
+        }
+        actor_name = logs.format_actor_handle(interaction.user)
+        if actor_name:
+            context["actor_name"] = actor_name
+        await logs.send_welcome_log("debug", result="clicked", **context)
         await self.controller._handle_confirm(self.thread_id, interaction)
 
     @discord.ui.button(label="Edit", style=discord.ButtonStyle.secondary, custom_id="ob.edit")
     async def edit(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:  # pragma: no cover - network
+        if getattr(interaction, "_c1c_claimed", False):
+            return
+        setattr(interaction, "_c1c_claimed", True)
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        context = {
+            **logs.thread_context(thread if isinstance(thread, discord.Thread) else None),
+            "actor": logs.format_actor(interaction.user),
+            "view": "preview",
+            "view_id": "ob.edit",
+        }
+        actor_name = logs.format_actor_handle(interaction.user)
+        if actor_name:
+            context["actor_name"] = actor_name
+        await logs.send_welcome_log("debug", result="clicked", **context)
         await self.controller._handle_edit(self.thread_id, interaction)
 
     async def on_timeout(self) -> None:  # pragma: no cover - network
@@ -628,7 +810,8 @@ async def _safe_ephemeral(interaction: discord.Interaction, message: str) -> Non
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)
         else:
-            await interaction.response.send_message(message, ephemeral=True)
+            await interaction.response.defer(ephemeral=True)
+            await interaction.followup.send(message, ephemeral=True)
     except Exception:  # pragma: no cover - defensive network handling
         log.warning("failed to send ephemeral response", exc_info=True)
 
@@ -737,6 +920,8 @@ def _convert_to_labels(value: Any, mapping: dict[str, str]) -> Any:
 def _safe_followup(interaction: discord.Interaction, message: str) -> Awaitable[None]:
     async def runner() -> None:
         try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
             await interaction.followup.send(message, ephemeral=True)
         except Exception:
             log.warning("failed to send follow-up", exc_info=True)

@@ -38,6 +38,13 @@ _PANEL_MESSAGES: Dict[int, int] = {}
 _ACTIVE_PANEL_MESSAGE_IDS: set[int] = set()
 
 
+def _claim_interaction(interaction: discord.Interaction) -> bool:
+    if getattr(interaction, "_c1c_claimed", False):
+        return False
+    setattr(interaction, "_c1c_claimed", True)
+    return True
+
+
 def bind_controller(thread_id: int, controller: _ControllerProtocol) -> None:
     _CONTROLLERS[thread_id] = controller
 
@@ -106,25 +113,39 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not _claim_interaction(interaction):
+            return
+
+        channel = getattr(interaction, "channel", None)
+        thread = channel if isinstance(channel, discord.Thread) else None
+        base_context = {
+            **logs.thread_context(thread),
+            "actor": logs.format_actor(interaction.user),
+            "view": "panel",
+            "view_id": OPEN_QUESTIONS_CUSTOM_ID,
+        }
+        actor_name = logs.format_actor_handle(interaction.user)
+        if actor_name:
+            base_context["actor_name"] = actor_name
+
+        await logs.send_welcome_log("debug", result="clicked", **base_context)
+
         controller, thread_id = self._resolve(interaction)
+        if thread_id is not None:
+            base_context.setdefault("thread", logs.format_thread(thread_id))
         if controller is None or thread_id is None:
+            await logs.send_welcome_log("warn", result="stale", **base_context)
             await self._notify_expired(interaction)
             return
 
-        allowed = await controller.check_interaction(thread_id, interaction)
-        if not allowed:
-            return
-
-        await logs.send_welcome_log(
-            "info",
-            actor=logs.format_actor(interaction.user),
-            trigger="panel",
-            action="open",
-            flow="welcome",
-            thread=logs.format_thread(thread_id),
-        )
-
-        await controller._handle_modal_launch(thread_id, interaction)
+        try:
+            allowed = await controller.check_interaction(thread_id, interaction)
+            if not allowed:
+                return
+            await controller._handle_modal_launch(thread_id, interaction)
+        except Exception as exc:  # pragma: no cover - defensive path
+            await logs.send_welcome_exception("error", exc, **base_context)
+            await self._notify_error(interaction)
 
     async def _notify_expired(self, interaction: discord.Interaction) -> None:
         message = "⚠️ This onboarding panel expired. Please react again to restart."
@@ -135,3 +156,13 @@ class OpenQuestionsPanelView(discord.ui.View):
                 await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send expired panel notice", exc_info=True)
+
+    async def _notify_error(self, interaction: discord.Interaction) -> None:
+        message = "⚠️ Something went wrong while opening the onboarding panel. Please try again."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except Exception:  # pragma: no cover - defensive logging
+            log.warning("failed to send error notice", exc_info=True)

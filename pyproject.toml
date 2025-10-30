@@ -1,2 +1,2 @@
 [tool.ruff]
-exclude = ["AUDIT/"]
+extend-exclude = ["AUDIT/"]
