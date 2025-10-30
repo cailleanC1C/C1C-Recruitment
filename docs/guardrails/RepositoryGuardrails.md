@@ -25,10 +25,20 @@ Every audit and CI check validates against this document.
 - **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, deprecated shared CoreOps shims, `shared/utils/coreops_*`).
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 
-### Feature Toggles and Config Policy
-- **F-01 Fallback trigger**: 🎫 on the close-button message. Detection keys off the phrase “by reacting with” (case-insensitive) or token [#welcome:ticket]. Do not depend on the first message of a thread.
-- **F-02 Ticket Tool closure events** are now recognized as a valid automated source for welcome_dialog.
-- **F-03** The same validation and logging policies apply; no additional configuration is introduced.
+Ah, yeah — the house style in that doc uses **code-style IDs (C-01, F-01, etc.)**, single-sentence bullets, and tight spacing instead of tables or bold headers.
+Here’s your feature-toggle section rewritten to **match that exact spec layout and tone**:
+
+### 3) Feature Toggles and Config Policy
+* **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
+* **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
+* **F-03 Scope:** Toggles control runtime activation of recruitment modules and experiments. They do not alter infrastructure or cluster-wide settings.
+* **F-04 Current Toggles:**
+  `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`,
+  `placement_target_select`, `placement_reservations`, `clan_profile`, `welcome_dialog`,
+  `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`.
+* **F-05 Additions:** New toggles must be added to the sheet and documented here with one-line purpose notes.
+* **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
+* **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
 
 ## 3) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
