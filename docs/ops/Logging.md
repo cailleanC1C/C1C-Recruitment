@@ -91,7 +91,6 @@ templates ok 25 yes 1.3s
 ## Operational rules
 - Do not call Discord `fetch_*` APIs purely for logging; the helpers rely on cached objects and gracefully degrade to `#unknown` placeholders.
 - Continue emitting structured logs (JSON/stdout) for auditability—only the human-facing Discord posts use the templates above.
-
 ---
 
 Doc last updated: 2025-10-30 (v0.9.7)
