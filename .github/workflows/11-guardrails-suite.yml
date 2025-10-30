@@ -20,8 +20,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           status_file=guardrails_status.txt
-          python scripts/ci/guardrails_suite.py --pr "${{ github.event.pull_request.number }}" --status-file "$status_file"
-          exit_code=$?
+          exit_code=0
+          python scripts/ci/guardrails_suite.py --pr "${{ github.event.pull_request.number }}" --status-file "$status_file" || exit_code=$?
           if [ -f "$status_file" ]; then
             echo "guardrails_status=$(cat "$status_file")" >> "$GITHUB_OUTPUT"
           else
