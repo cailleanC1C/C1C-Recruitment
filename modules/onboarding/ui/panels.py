@@ -10,6 +10,7 @@ from modules.onboarding import logs
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
+    "WELCOME_PANEL_TAG",
     "OpenQuestionsPanelView",
     "bind_controller",
     "get_panel_message_id",
@@ -23,6 +24,7 @@ __all__ = [
 log = logging.getLogger("c1c.onboarding.ui.panels")
 
 OPEN_QUESTIONS_CUSTOM_ID = "welcome.panel.open"
+WELCOME_PANEL_TAG = "welcome_panel"
 
 
 class _ControllerProtocol:
@@ -56,11 +58,13 @@ def _app_permission_snapshot(
         bool(getattr(perms, "send_messages_in_threads", False)) if perms is not None else False
     )
     embed_links = bool(getattr(perms, "embed_links", False)) if perms is not None else False
+    read_history = bool(getattr(perms, "read_message_history", False)) if perms is not None else False
 
     snapshot = {
         "send_messages": send_messages,
         "send_messages_in_threads": send_in_threads,
         "embed_links": embed_links,
+        "read_message_history": read_history,
     }
     formatted = ", ".join(f"{key}={value}" for key, value in snapshot.items())
 
@@ -152,14 +156,15 @@ class OpenQuestionsPanelView(discord.ui.View):
         message_id = getattr(message, "id", None)
         actor_id = getattr(interaction.user, "id", None)
 
-        _, permissions_text, missing = _app_permission_snapshot(interaction)
+        snapshot, permissions_text, missing = _app_permission_snapshot(interaction)
 
         controller_context: dict[str, Any] = {
             "view": "panel",
-            "view_tag": "welcome_panel",
+            "view_tag": WELCOME_PANEL_TAG,
             "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
             "app_permissions": permissions_text,
+            "app_permissions_snapshot": snapshot,
         }
         if thread_id is not None:
             try:
@@ -176,15 +181,25 @@ class OpenQuestionsPanelView(discord.ui.View):
                 controller_context["actor_id"] = int(actor_id)
             except (TypeError, ValueError):
                 pass
+        if isinstance(thread, discord.Thread):
+            parent_id = getattr(thread, "parent_id", None)
+            if parent_id is not None:
+                try:
+                    controller_context["parent_channel_id"] = int(parent_id)
+                except (TypeError, ValueError):
+                    pass
+        else:
+            parent_id = None
 
         log_context: dict[str, Any] = {
             **logs.thread_context(thread),
             "view": "panel",
-            "view_tag": "welcome_panel",
+            "view_tag": WELCOME_PANEL_TAG,
             "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
             "actor": logs.format_actor(interaction.user),
             "app_permissions": permissions_text,
+            "app_permissions_snapshot": snapshot,
         }
         actor_name = logs.format_actor_handle(interaction.user)
         if actor_name:
@@ -206,11 +221,16 @@ class OpenQuestionsPanelView(discord.ui.View):
                 log_context["actor_id"] = int(actor_id)
             except (TypeError, ValueError):
                 pass
+        if parent_id is not None:
+            try:
+                log_context["parent_channel_id"] = int(parent_id)
+            except (TypeError, ValueError):
+                pass
 
         if controller is None or thread_id is None:
             await logs.send_welcome_log(
                 "warn",
-                result="error",
+                result="stale",
                 reason="stale_controller",
                 **log_context,
             )

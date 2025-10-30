@@ -29,6 +29,24 @@ def _base_context(
     user_id: int | None = None,
 ) -> dict[str, Any]:
     context = logs.thread_context(thread)
+    context["view"] = "panel"
+    context["view_tag"] = panels.WELCOME_PANEL_TAG
+    context["custom_id"] = "fallback.emoji"
+    context["app_permissions"] = "-"
+    context["app_permissions_snapshot"] = "-"
+    if thread is not None:
+        thread_id = getattr(thread, "id", None)
+        if thread_id is not None:
+            try:
+                context["thread_id"] = int(thread_id)
+            except (TypeError, ValueError):
+                pass
+        parent_id = getattr(thread, "parent_id", None)
+        if parent_id is not None:
+            try:
+                context["parent_channel_id"] = int(parent_id)
+            except (TypeError, ValueError):
+                pass
     if member is not None:
         context["actor"] = logs.format_actor(member)
         actor_name = logs.format_actor_handle(member)

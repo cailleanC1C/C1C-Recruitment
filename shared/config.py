@@ -494,18 +494,26 @@ def get_log_dedupe_window_s(default: float = 5.0) -> float:
         return float(default)
 
 
-def get_log_refresh_render_mode(default: str = "line") -> str:
+def get_log_refresh_render_mode(default: str = "plain") -> str:
     value = _CONFIG.get("LOG_REFRESH_RENDER_MODE")
     if isinstance(value, str) and value.strip():
         normalized = value.strip().lower()
-        if normalized in {"line", "table"}:
+        if normalized in {"line", "table", "plain"}:
             return normalized
     return default
 
 
 def get_log_include_numeric_ids() -> bool:
     value = _CONFIG.get("LOG_INCLUDE_NUMERIC_IDS")
-    return bool(value) if isinstance(value, bool) else _env_bool("LOG_INCLUDE_NUMERIC_IDS", False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip():
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return _env_bool("LOG_INCLUDE_NUMERIC_IDS", True)
 
 
 def get_notify_channel_id() -> Optional[int]:

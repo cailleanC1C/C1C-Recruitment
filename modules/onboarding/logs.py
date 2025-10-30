@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 import discord
 
 from modules.common import runtime as rt
 from shared import logfmt
+from shared.config import get_log_dedupe_window_s
+from shared.dedupe import EventDeduper
 
 __all__ = [
     "format_actor",
@@ -27,6 +29,7 @@ __all__ = [
 log = logging.getLogger("c1c.onboarding.logs")
 
 _LOG_METHODS: dict[str, Callable[[str, Any], None]] = {}
+_PANEL_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
 
 
 def _resolve_logger(level: str) -> Callable[[str, Any], None]:
@@ -44,39 +47,18 @@ def _resolve_logger(level: str) -> Callable[[str, Any], None]:
         )
     return _LOG_METHODS.get(level, _LOG_METHODS["info"])
 
-_ORDER = (
-    "actor",
-    "actor_name",
-    "tag",
-    "channel",
-    "thread",
-    "parent",
-    "view",
-    "result",
-    "trigger",
-    "flow",
-    "source",
-    "emoji",
-    "reason",
-    "schema",
-    "questions",
-    "details",
-    "error",
-)
-
-
-def _format_payload(payload: Mapping[str, Any]) -> str:
-    parts: list[str] = []
-    seen: set[str] = set()
-    for key in _ORDER:
-        if key in payload and payload[key] is not None:
-            parts.append(f"{key}={payload[key]}")
-            seen.add(key)
-    for key, value in payload.items():
-        if key in seen or value is None:
-            continue
-        parts.append(f"{key}={value}")
-    return " ".join(parts)
+def _stringify(value: Any) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, str):
+        text = " ".join(value.split())
+        return text or "-"
+    if isinstance(value, Mapping):
+        inner = ", ".join(f"{key}={_stringify(inner_value)}" for key, inner_value in value.items())
+        return inner or "-"
+    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+        return ", ".join(_stringify(item) for item in value) or "-"
+    return str(value)
 
 
 def format_actor(actor: discord.abc.User | discord.Member | None) -> str:
@@ -170,10 +152,18 @@ async def send_welcome_log(level: str, **kv: Any) -> None:
     """Send a formatted welcome log message to the shared log channel."""
 
     payload_map = dict(kv)
-    payload = _format_payload(payload_map)
-    message = f"[welcome/{level}] {payload}" if payload else f"[welcome/{level}]"
     logger = _resolve_logger(level)
     logger("%s", payload_map)
+
+    message = _render_payload(payload_map)
+    if not message:
+        return
+
+    dedupe_key = _dedupe_key(payload_map)
+    should_emit = True if dedupe_key is None else _PANEL_DEDUPER.should_emit(dedupe_key)
+    if not should_emit:
+        return
+
     try:
         await rt.send_log_message(message)
     except Exception:  # pragma: no cover - defensive logging path
@@ -188,3 +178,116 @@ async def send_welcome_exception(level: str, error: BaseException, **kv: Any) ->
     details["error"] = f"{error.__class__.__name__}: {error}"
     details["trace"] = trace
     await send_welcome_log(level, **details)
+
+
+def _dedupe_key(payload: Mapping[str, Any]) -> str | None:
+    if "tag" in payload and "recruit" in payload:
+        return ":".join(
+            str(part)
+            for part in (
+                "welcome_summary",
+                payload.get("tag") or "-",
+                payload.get("recruit") or "-",
+                payload.get("result") or "-",
+            )
+        )
+    thread_id = payload.get("thread_id") or payload.get("thread")
+    message_id = payload.get("message_id")
+    actor_id = payload.get("actor_id") or payload.get("actor")
+    view_tag = payload.get("view_tag") or payload.get("view") or "welcome_panel"
+    result = payload.get("result")
+    if not result:
+        return None
+    return ":".join(
+        str(part)
+        for part in (
+            view_tag,
+            thread_id or "unknown",
+            message_id or "-",
+            actor_id or "-",
+            result,
+        )
+    )
+
+
+def _render_payload(payload: Mapping[str, Any]) -> str | None:
+    if "tag" in payload and "recruit" in payload and "channel" in payload:
+        details = payload.get("details")
+        detail_items: list[str] = []
+        if isinstance(details, Mapping):
+            detail_items = [f"{key}={_stringify(value)}" for key, value in details.items()]
+        elif isinstance(details, Iterable) and not isinstance(details, (str, bytes, bytearray)):
+            detail_items = [_stringify(details)]
+        elif details is not None:
+            detail_items = [_stringify(details)]
+        return logfmt.LogTemplates.welcome(
+            tag=_stringify(payload.get("tag")),
+            recruit=_stringify(payload.get("recruit")),
+            channel=_stringify(payload.get("channel")),
+            result=_stringify(payload.get("result")),
+            details=detail_items,
+        )
+
+    actor = _stringify(payload.get("actor"))
+    actor_display = payload.get("actor_name")
+    thread = _stringify(payload.get("channel") or payload.get("thread"))
+    parent = payload.get("parent")
+    result = _stringify(payload.get("result"))
+
+    detail_items: list[str] = []
+    detail_fields = [
+        ("view", ("view_tag", "view")),
+        ("custom_id", ("custom_id",)),
+        ("view_id", ("view_id",)),
+        ("message", ("message_id",)),
+        ("thread_id", ("thread_id",)),
+        ("parent_id", ("parent_channel_id",)),
+        ("actor_id", ("actor_id",)),
+        ("target_user_id", ("target_user_id",)),
+        ("target_message", ("target_message_id",)),
+        ("app_perms", ("app_permissions",)),
+        ("missing", ("missing",)),
+        ("trigger", ("trigger",)),
+        ("source", ("source",)),
+        ("reason", ("reason",)),
+        ("schema", ("schema",)),
+        ("questions", ("questions",)),
+        ("emoji", ("emoji",)),
+    ]
+    for name, keys in detail_fields:
+        value = None
+        for key in keys:
+            candidate = payload.get(key)
+            if candidate is not None:
+                value = candidate
+                break
+        if value is None:
+            continue
+        detail_items.append(f"{name}={_stringify(value)}")
+
+    permissions_snapshot = payload.get("app_permissions_snapshot")
+    if permissions_snapshot:
+        detail_items.append(f"app_perms_flags={_stringify(permissions_snapshot)}")
+
+    extra_details = payload.get("details")
+    if isinstance(extra_details, Mapping):
+        detail_items.extend(
+            f"{key}={_stringify(value)}" for key, value in extra_details.items()
+        )
+    elif isinstance(extra_details, Iterable) and not isinstance(extra_details, (str, bytes, bytearray)):
+        detail_items.append(_stringify(extra_details))
+    elif extra_details is not None:
+        detail_items.append(_stringify(extra_details))
+
+    error_text = payload.get("error")
+    if error_text:
+        detail_items.append(f"error={_stringify(error_text)}")
+
+    return logfmt.LogTemplates.welcome_panel(
+        actor=actor,
+        actor_display=str(actor_display) if actor_display else None,
+        thread=thread,
+        parent=_stringify(parent) if parent else None,
+        result=result,
+        details=detail_items,
+    )

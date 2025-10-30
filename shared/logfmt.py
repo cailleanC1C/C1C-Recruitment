@@ -374,6 +374,52 @@ class LogTemplates:
         )
 
     @staticmethod
+    def welcome_panel(
+        *,
+        actor: str,
+        actor_display: str | None,
+        thread: str,
+        parent: str | None,
+        result: str,
+        details: Sequence[str] | None = None,
+    ) -> str:
+        palette = {
+            "allowed": LOG_EMOJI["success"],
+            "launched": LOG_EMOJI["success"],
+            "saved": LOG_EMOJI["success"],
+            "submitted": LOG_EMOJI["success"],
+            "completed": LOG_EMOJI["success"],
+            "started": LOG_EMOJI["success"],
+            "reopened": LOG_EMOJI["success"],
+            "refreshed": LOG_EMOJI["success"],
+            "restarted": LOG_EMOJI["info"],
+            "emoji_received": LOG_EMOJI["info"],
+            "deduped": LOG_EMOJI["info"],
+            "feature_disabled": LOG_EMOJI["warning"],
+            "role_gate": LOG_EMOJI["warning"],
+            "scope_gate": LOG_EMOJI["warning"],
+            "denied_role": LOG_EMOJI["warning"],
+            "denied_perms": LOG_EMOJI["warning"],
+            "ambiguous_target": LOG_EMOJI["warning"],
+            "timeout": LOG_EMOJI["warning"],
+            "inactive": LOG_EMOJI["warning"],
+            "no_trigger": LOG_EMOJI["warning"],
+            "wrong_scope": LOG_EMOJI["warning"],
+            "panel_failed": LOG_EMOJI["error"],
+            "launch_failed": LOG_EMOJI["error"],
+            "error": LOG_EMOJI["error"],
+        }
+        emoji = palette.get(result, LOG_EMOJI["info"])
+        actor_text = actor_display or actor or "<unknown>"
+        thread_text = thread or "#unknown"
+        detail_text = "; ".join(details or []) if details else "-"
+        parent_text = f" • parent={parent}" if parent else ""
+        return (
+            f"{emoji} **Welcome panel** — actor={actor_text} • thread={thread_text}"
+            f"{parent_text} • result={result} • details: {detail_text}"
+        )
+
+    @staticmethod
     def select_refresh_template(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
         mode = get_log_refresh_render_mode()
         if mode == "table":
