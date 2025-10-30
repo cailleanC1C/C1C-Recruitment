@@ -29,19 +29,9 @@ Each template lives in `shared/logfmt.LogTemplates` and is consumed by the relev
 ```
 
 ### Refresh
-Line mode (default):
+Line mode:
 ```
 ♻️ **Refresh** — scope=startup • clan_tags ok (2.7s, 31, ttl) • clans ok (1.0s, 24, ttl) • templates ok (1.3s, 25, ttl) • total=5.8s
-```
-Table mode (`LOG_REFRESH_RENDER_MODE=table`):
-```
-♻️ Refresh • startup — total 5.8s
-```text
-bucket result items ttl duration
-clan_tags ok 31 yes 2.7s
-clans ok 24 yes 1.0s
-templates ok 25 yes 1.3s
-```
 ```
 
 ### Reports
@@ -69,13 +59,9 @@ templates ok 25 yes 1.3s
 ### Welcome
 ```
 ✅ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall • result=ok • details: -
-
 ⚠️ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall • result=partial • details: general_notice=error (Missing Access)
-
 ⚠️ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 • result=denied_role • details: recruit_only
-
 ⚠️ **Welcome panel** — actor=@Member • thread=#welcome › ticket-123 • result=denied_perms • details: missing send_messages_in_threads
-
 ⚠️ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 • result=ambiguous_target • details: greeting_missing_mention
 ```
 
