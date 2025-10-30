@@ -14,25 +14,31 @@ import re
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 DOC_SPEC = ROOT / "docs" / "guardrails" / "RepositoryGuardrails.md"
-ALLOWED_LABELS = ROOT / ".github" / "labels" / "labels.json"
 
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from utils.md_rules import parse_guardrail_rules  # type: ignore  # noqa: E402
-import label_compliance  # type: ignore  # noqa: E402
+import guardrails_labels  # type: ignore  # noqa: E402
+import guardrails_report  # type: ignore  # noqa: E402
 
 
 @dataclass(slots=True)
 class CheckResult:
     area: str
     rule: str
-    passed: bool
-    details: str = ""
+    status: str
+    details: List[str]
     gating: bool = True
 
-    def status_cell(self) -> str:
-        return "✅ Pass" if self.passed else "❌ Fail"
+    def is_failure(self) -> bool:
+        return self.status == "FAIL" and self.gating
+
+    def identifier(self) -> str:
+        if ":" in self.rule:
+            prefix, _ = self.rule.split(":", 1)
+            return prefix.strip()
+        return self.rule
 
 
 def _iter_python_files() -> Iterable[Path]:
@@ -312,45 +318,41 @@ def evaluate_guardrail_rules() -> List[CheckResult]:
         results[rule.identifier] = CheckResult(
             area="Guardrails Doc",
             rule=f"{rule.identifier}: {rule.title}",
-            passed=False,
-            details="scanner missing",
+            status="NA",
+            details=["scanner missing"],
         )
 
     for identifier, scanner in SCANNERS.items():
         if identifier not in results:
             continue
         passed, details = scanner()
-        results[identifier].passed = passed
-        results[identifier].details = ", ".join(details) if details else ""
+        results[identifier].status = "PASS" if passed else "FAIL"
+        results[identifier].details = details
 
     ordered = [results[rule.identifier] for rule in rules]
     return ordered
 
 
 def evaluate_docs_contract() -> CheckResult:
-    passed = True
     messages: List[str] = []
 
     s01, details01 = scan_d01()
     if not s01:
-        passed = False
         messages.extend(details01)
 
     s02, details02 = scan_d02()
     if not s02:
-        passed = False
         messages.extend(details02)
 
     s04, details04 = scan_d04()
     if not s04:
-        passed = False
         messages.extend(details04)
 
     return CheckResult(
         area="Docs",
         rule="Documentation contract",
-        passed=passed,
-        details="; ".join(messages),
+        status="PASS" if not messages else "FAIL",
+        details=messages,
     )
 
 
@@ -359,56 +361,44 @@ def evaluate_config_and_secrets() -> Tuple[CheckResult, CheckResult]:
     config_result = CheckResult(
         area="Config",
         rule="Docs ↔ .env.template parity",
-        passed=parity_passed,
-        details="; ".join(parity_details),
+        status="PASS" if parity_passed else "FAIL",
+        details=parity_details,
     )
 
     offenders = run_secret_scan()
     secrets_result = CheckResult(
         area="Secrets",
         rule="Discord token patterns",
-        passed=len(offenders) == 0,
-        details=", ".join(offenders),
+        status="PASS" if len(offenders) == 0 else "FAIL",
+        details=offenders,
     )
     return config_result, secrets_result
 
 
-def evaluate_labels(pr_number: int, repo: str, token: str | None) -> CheckResult:
-    result = label_compliance.evaluate_labels(
+def evaluate_labels(pr_number: int, repo: str, token: str | None) -> Tuple[CheckResult, bool]:
+    evaluation = guardrails_labels.evaluate_labels(
         repo=repo,
         number=pr_number,
-        allowed_path=ALLOWED_LABELS,
         token=token,
     )
-    details: List[str] = []
-    passed = True
-    if result.error:
-        return CheckResult(
+
+    if evaluation.error:
+        result = CheckResult(
             area="Labels",
-            rule=".github/labels/labels.json",
-            passed=False,
-            details=result.error,
+            rule="Approved label set",
+            status="FAIL",
+            details=[evaluation.error],
         )
-    if result.unknown:
-        passed = False
-        details.append("Unknown: " + ", ".join(result.unknown))
-    if result.missing:
-        passed = False
-        details.append("Missing: at least one label")
-    return CheckResult(
+        return result, False
+
+    status = "PASS" if evaluation.labels_ok else "FAIL"
+    result = CheckResult(
         area="Labels",
-        rule=".github/labels/labels.json",
-        passed=passed,
-        details="; ".join(details),
+        rule="Approved label set",
+        status=status,
+        details=evaluation.details,
     )
-
-
-def build_table(rows: List[CheckResult]) -> str:
-    lines = ["| Area | Rule/Section | Status | Details |", "|---|---|---|---|"]
-    for row in rows:
-        details = row.details.replace("|", "\\|")
-        lines.append(f"| {row.area} | {row.rule} | {row.status_cell()} | {details} |")
-    return "\n".join(lines)
+    return result, evaluation.labels_ok
 
 
 def upsert_comment(*, repo: str, pr_number: int, body: str, token: str | None) -> None:
@@ -450,32 +440,44 @@ def upsert_comment(*, repo: str, pr_number: int, body: str, token: str | None) -
         raise RuntimeError(f"Unable to reach GitHub API: {exc.reason}") from exc
 
 
-def run_suite(pr_number: int, repo: str, token: str | None) -> int:
+def run_suite(
+    pr_number: int,
+    repo: str,
+    token: str | None,
+    *,
+    status_path: Path | None = None,
+) -> int:
     guardrail_results = evaluate_guardrail_rules()
     docs_result = evaluate_docs_contract()
     config_result, secrets_result = evaluate_config_and_secrets()
-    labels_result = evaluate_labels(pr_number, repo, token)
+    labels_result, _ = evaluate_labels(pr_number, repo, token)
 
-    rows = guardrail_results + [docs_result, config_result, secrets_result, labels_result]
-    table = build_table(rows)
+    core_results = guardrail_results + [docs_result, config_result, secrets_result]
+    all_results = core_results + [labels_result]
+    job_failed = any(result.is_failure() for result in all_results)
 
-    comment_body = "\n".join([
-        "## Repository Guardrails",
-        "",
-        table,
-        "",
-        "<!-- repository-guardrails -->",
-    ])
+    comment_body = guardrails_report.render_report(
+        results=core_results,
+        label_result=labels_result,
+        job_failed=job_failed,
+    )
 
     upsert_comment(repo=repo, pr_number=pr_number, body=comment_body, token=token)
 
-    exit_code = 0 if all(row.passed for row in rows if row.gating) else 1
-    return exit_code
+    status_value = "pass" if not job_failed else "fail"
+    if status_path is not None:
+        try:
+            status_path.write_text(status_value, encoding="utf-8")
+        except Exception:
+            pass
+
+    return 0 if status_value == "pass" else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run guardrails suite and post aggregated results.")
     parser.add_argument("--pr", type=int, required=True, help="Pull request number")
+    parser.add_argument("--status-file", type=Path, help="Optional path to write guardrails status", default=None)
     args = parser.parse_args(argv)
 
     repo = os.getenv("GITHUB_REPOSITORY")
@@ -485,7 +487,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     token = os.getenv("GITHUB_TOKEN")
 
-    return run_suite(args.pr, repo, token)
+    return run_suite(args.pr, repo, token, status_path=args.status_file)
 
 
 if __name__ == "__main__":

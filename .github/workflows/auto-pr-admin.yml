@@ -11,9 +11,27 @@ permissions:
   issues: write
 
 jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    outputs:
+      guardrails_status: ${{ steps.extract.outputs.guardrails_status }}
+    steps:
+      - name: Determine guardrails status
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run || {};
+            let status = run.outputs && run.outputs.guardrails_status;
+            if (!status) {
+              status = run.conclusion === 'success' ? 'pass' : 'fail';
+            }
+            core.setOutput('guardrails_status', status || 'fail');
   run-admin:
+    needs: guardrails
     if: >-
       ${{
+        needs.guardrails.outputs.guardrails_status == 'pass' &&
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'pull_request' &&
         github.event.workflow_run.pull_requests[0] &&
