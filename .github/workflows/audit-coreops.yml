@@ -1,4 +1,4 @@
-name: audit-coreops
+name: old-audit-coreops
 
 on:
   workflow_dispatch:
