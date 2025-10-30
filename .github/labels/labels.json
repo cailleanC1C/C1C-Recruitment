@@ -25,11 +25,6 @@
     "description": "Matchmaker bot"
   },
   {
-    "name": "bot:onboarding",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "bot:reminder",
     "color": "1d76db",
     "description": "Reminder bot"
@@ -140,11 +135,6 @@
     "description": "Shared libraries and utilities used across bots"
   },
   {
-    "name": "comp:welcomecrew",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "config",
     "color": "006b75",
     "description": "Env vars, toggles, YAML/JSON config, secrets"
@@ -160,24 +150,9 @@
     "description": "Developer experience, tooling friction"
   },
   {
-    "name": "diagnostics",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
-    "name": "doc",
-    "color": "cccccc",
-    "description": ""
-  },
-  {
     "name": "docs",
     "color": "0b75a8",
     "description": "README, guides, runbooks"
-  },
-  {
-    "name": "documentation",
-    "color": "cccccc",
-    "description": ""
   },
   {
     "name": "duplicate",
@@ -193,11 +168,6 @@
     "name": "fix",
     "color": "cccccc",
     "description": ""
-  },
-  {
-    "name": "good first issue",
-    "color": "7057ff",
-    "description": "Low-risk starter task"
   },
   {
     "name": "guardrails",
