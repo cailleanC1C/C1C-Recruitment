@@ -5,6 +5,7 @@ on:
       - "**/*.py"
       - "docs/**"
       - ".env.example"
+      - "!AUDIT/**"
 
 jobs:
   guardrails:

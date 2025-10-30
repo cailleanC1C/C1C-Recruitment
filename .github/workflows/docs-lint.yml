@@ -6,6 +6,7 @@ on:
       - 'docs/**'
       - '**/.env.example'
       - '.github/workflows/docs-lint.yml'
+      - '!AUDIT/**'
 
 jobs:
   lint:
