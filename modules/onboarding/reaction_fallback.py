@@ -1,6 +1,7 @@
 """Fallback handler for onboarding reaction triggers."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import Optional
 
@@ -30,11 +31,12 @@ async def _log_reject(
     member: discord.abc.User | discord.Member | None = None,
     thread: discord.Thread | None = None,
     parent_id: int | None = None,
+    trigger: str | None = None,
 ) -> None:
     await logs.send_welcome_log(
         "warn",
         actor=logs.format_actor(member),
-        trigger="emoji",
+        trigger=trigger or "phrase_match",
         emoji=FALLBACK_EMOJI,
         reason=reason,
         thread=logs.format_thread(getattr(thread, "id", None)),
@@ -74,10 +76,15 @@ class OnboardingReactionFallbackCog(commands.Cog):
     async def on_raw_reaction_add(self, payload: RawReactionActionEvent) -> None:
         if not feature_flags.is_enabled("welcome_dialog"):
             logging.info(
-                "welcome.emoji.start %s",
-                {"rejected": "disabled", "emoji": str(payload.emoji)},
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "disabled",
+                        "emoji": str(payload.emoji),
+                    }
+                )
             )
-            await _log_reject("disabled")
+            await _log_reject("disabled", trigger="feature_disabled")
             return
 
         if str(payload.emoji) != FALLBACK_EMOJI:
@@ -113,12 +120,14 @@ class OnboardingReactionFallbackCog(commands.Cog):
 
         if not isinstance(member, discord.Member):
             logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "member_type",
-                    "emoji": FALLBACK_EMOJI,
-                    "user_id": payload.user_id,
-                },
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "member_type",
+                        "emoji": FALLBACK_EMOJI,
+                        "user_id": payload.user_id,
+                    }
+                )
             )
             return
 
@@ -152,41 +161,44 @@ class OnboardingReactionFallbackCog(commands.Cog):
         if thread is None:
             return
 
-        if not (
-            thread_scopes.is_welcome_parent(thread)
-            or thread_scopes.is_promo_parent(thread)
-        ):
+        if not thread_scopes.is_welcome_parent(thread):
             logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "wrong_scope:parent",
-                    "emoji": FALLBACK_EMOJI,
-                    "thread_id": thread.id,
-                },
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "wrong_scope",
+                        "emoji": FALLBACK_EMOJI,
+                        "thread_id": thread.id,
+                    }
+                )
             )
             await _log_reject(
                 "wrong_scope",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
+                trigger="scope_gate",
             )
             return
 
         if not (rbac.is_admin_member(member) or rbac.is_recruiter(member)):
             logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "role_gate",
-                    "emoji": FALLBACK_EMOJI,
-                    "user_id": member.id,
-                    "thread_id": thread.id,
-                },
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "role_gate",
+                        "emoji": FALLBACK_EMOJI,
+                        "user_id": member.id,
+                        "thread_id": thread.id,
+                    }
+                )
             )
             await _log_reject(
                 "role_gate",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
+                trigger="role_gate",
             )
             return
 
@@ -194,59 +206,66 @@ class OnboardingReactionFallbackCog(commands.Cog):
             message = await thread.fetch_message(payload.message_id)
         except Exception:
             logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "fetch_failed",
-                    "emoji": FALLBACK_EMOJI,
-                    "thread_id": thread.id,
-                    "message_id": payload.message_id,
-                },
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "fetch_failed",
+                        "emoji": FALLBACK_EMOJI,
+                        "thread_id": thread.id,
+                        "message_id": payload.message_id,
+                    }
+                )
             )
             await _log_reject(
                 "fetch_failed",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
+                trigger="message_lookup_failed",
             )
             return
 
         content = (getattr(message, "content", "") or "")
         content_lower = normalize_spaces(content.lower())
 
-        match: Optional[str] = None
-        if TRIGGER_TOKEN in content:
-            match = "token"
-        elif "by reacting with" in content_lower:
-            match = "phrase"
-        elif rbac.is_admin_member(member):
-            match = "override"
-        else:
+        phrase_match = "by reacting with" in content_lower
+        token_match = TRIGGER_TOKEN in content
+        eligible = phrase_match or token_match
+
+        if not eligible:
             logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "no_token_or_phrase",
-                    "emoji": FALLBACK_EMOJI,
-                    "thread_id": thread.id,
-                    "message_id": message.id,
-                },
+                json.dumps(
+                    {
+                        "event": "welcome.emoji.start",
+                        "result": "no_trigger",
+                        "emoji": FALLBACK_EMOJI,
+                        "thread_id": thread.id,
+                        "message_id": message.id,
+                    }
+                )
             )
             await _log_reject(
-                "no_token_or_phrase",
+                "no_trigger",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
             )
             return
 
+        trigger = "token_match" if token_match and not phrase_match else "phrase_match"
+
         logging.info(
-            "welcome.emoji.start %s",
-            {
-                "emoji": FALLBACK_EMOJI,
-                "thread_id": thread.id,
-                "message_id": message.id,
-                "user_id": member.id,
-                "match": match,
-            },
+            json.dumps(
+                {
+                    "event": "welcome.emoji.start",
+                    "trigger": trigger,
+                    "emoji": getattr(payload.emoji, "name", str(payload.emoji)),
+                    "thread_id": thread.id,
+                    "message_id": message.id,
+                    "user_id": member.id,
+                    "scope": "welcome",
+                }
+            )
         )
 
         bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
@@ -256,7 +275,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 await logs.send_welcome_log(
                     "warn",
                     actor=logs.format_actor(member),
-                    trigger="emoji",
+                    trigger=trigger,
                     reason="deduped",
                     thread=logs.format_thread(thread.id),
                 )
@@ -264,7 +283,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
             await logs.send_welcome_log(
                 "info",
                 actor=logs.format_actor(member),
-                trigger="emoji",
+                trigger=trigger,
                 emoji=FALLBACK_EMOJI,
                 flow="welcome",
                 result="restarted",
@@ -284,11 +303,10 @@ class OnboardingReactionFallbackCog(commands.Cog):
             await logs.send_welcome_log(
                 "info",
                 actor=logs.format_actor(member),
-                trigger="emoji",
+                trigger=trigger,
                 emoji=FALLBACK_EMOJI,
                 flow="welcome",
-                scope="close_message",
-                match=logs.format_match(match),
+                scope="welcome",
                 result="started",
                 thread=logs.format_thread(thread.id),
                 parent=logs.format_parent(getattr(thread, "parent_id", None)),

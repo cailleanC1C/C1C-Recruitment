@@ -63,7 +63,7 @@ When welcome_dialog is enabled, the Welcome Dialog can now start through two ver
 Automated Trigger (Ticket Tool) – When a welcome or promo thread is closed by Ticket Tool, the bot automatically starts the dialog (source="ticket").
 
 Manual fallback:
-Recruiters can react with 🎫 to the Ticket Tool close-button message. The bot starts if that message contains the phrase “by reacting with” (case-insensitive), or the explicit token [#welcome:ticket]. Admins may override if needed. Same gating and pin-based dedupe apply.
+Recruiters can react with 🎫 to any message in the welcome parent scope. The bot starts when that message contains the phrase “by reacting with” (case-insensitive) or the explicit token [#welcome:ticket]. Same gating and pin-based dedupe apply.
 
 Both paths call the shared entrypoint start_welcome_dialog(...), which manages scope checks, deduplication through a pinned marker, and structured logging.
 
