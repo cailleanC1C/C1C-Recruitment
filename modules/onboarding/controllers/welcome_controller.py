@@ -16,6 +16,7 @@ from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
+from shared.config import get_admin_role_ids, get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ class BaseWelcomeController:
         self._allowed_users: Dict[int, set[int]] = {}
         self._panel_messages: Dict[int, int] = {}
         self._initiators: Dict[int, discord.abc.User | discord.Member | None] = {}
+        self._target_users: Dict[int, int | None] = {}
+        self._target_message_ids: Dict[int, int | None] = {}
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
@@ -114,14 +117,12 @@ class BaseWelcomeController:
         panels.bind_controller(thread_id, self)
 
         allowed_ids: set[int] = set()
-        if initiator and getattr(initiator, "id", None):
-            allowed_ids.add(int(initiator.id))
-        owner_id = getattr(thread, "owner_id", None)
-        if owner_id:
-            allowed_ids.add(int(owner_id))
-        if not allowed_ids and thread.guild is not None and thread.owner_id:
-            allowed_ids.add(int(thread.owner_id))
         self._allowed_users[thread_id] = allowed_ids
+
+        await self._ensure_target_cached(thread_id)
+        target_id = self._target_users.get(thread_id)
+        if target_id is not None:
+            allowed_ids.add(int(target_id))
 
         await self._start_modal_step(thread, session)
 
@@ -186,7 +187,8 @@ class BaseWelcomeController:
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
         thread_id = int(thread.id)
         async def gate(interaction: discord.Interaction) -> bool:
-            return await self.check_interaction(thread_id, interaction)
+            allowed, _ = await self.check_interaction(thread_id, interaction)
+            return allowed
 
         view = build_select_view(
             self._questions[thread_id],
@@ -221,7 +223,8 @@ class BaseWelcomeController:
             question: Question,
             values: list[str],
         ) -> None:
-            if not await self.check_interaction(thread_id, interaction):
+            allowed, _ = await self.check_interaction(thread_id, interaction)
+            if not allowed:
                 return
             await self._handle_select_change(thread_id, interaction, question, values)
 
@@ -229,7 +232,8 @@ class BaseWelcomeController:
 
     def _select_completed(self, thread_id: int) -> Callable[[discord.Interaction], Awaitable[None]]:
         async def handler(interaction: discord.Interaction) -> None:
-            if not await self.check_interaction(thread_id, interaction):
+            allowed, _ = await self.check_interaction(thread_id, interaction)
+            if not allowed:
                 return
             await self._handle_select_complete(thread_id, interaction)
 
@@ -405,7 +409,8 @@ class BaseWelcomeController:
         store.set_pending_step(thread_id, session.pending_step)
 
         async def gate(interaction: discord.Interaction) -> bool:
-            return await self.check_interaction(thread_id, interaction)
+            allowed, _ = await self.check_interaction(thread_id, interaction)
+            return allowed
 
         view = build_select_view(
             self._questions[thread_id],
@@ -646,33 +651,197 @@ class BaseWelcomeController:
         self._preview_messages.pop(thread_id, None)
         self._sources.pop(thread_id, None)
         self._allowed_users.pop(thread_id, None)
+        self._target_users.pop(thread_id, None)
+        self._target_message_ids.pop(thread_id, None)
         self._preview_logged.discard(thread_id)
         panel_message_id = self._panel_messages.pop(thread_id, None)
         if panel_message_id is not None:
             panels.mark_panel_inactive_by_message(panel_message_id)
         panels.unbind_controller(thread_id)
 
+    async def _ensure_target_cached(self, thread_id: int) -> None:
+        if thread_id in self._target_users:
+            return
+
+        thread = self._threads.get(thread_id)
+        if thread is None:
+            self._target_users[thread_id] = None
+            return
+
+        target_id: int | None = None
+        message_id: int | None = None
+
+        message = await self._locate_welcome_message(thread)
+        if message is not None:
+            raw_message_id = getattr(message, "id", None)
+            if raw_message_id is not None:
+                try:
+                    message_id = int(raw_message_id)
+                except (TypeError, ValueError):
+                    message_id = None
+            for user in getattr(message, "mentions", []) or []:
+                if getattr(user, "bot", False):
+                    continue
+                user_id = getattr(user, "id", None)
+                if user_id is None:
+                    continue
+                try:
+                    target_id = int(user_id)
+                except (TypeError, ValueError):
+                    continue
+                break
+
+        self._target_users[thread_id] = target_id
+        if message_id is not None:
+            self._target_message_ids[thread_id] = message_id
+
+    async def _locate_welcome_message(
+        self, thread: discord.Thread
+    ) -> discord.Message | None:
+        starter = getattr(thread, "starter_message", None)
+        if starter is not None:
+            return starter
+
+        fetch_message = getattr(thread, "fetch_message", None)
+        if callable(fetch_message):
+            try:
+                return await fetch_message(int(thread.id))
+            except Exception:
+                pass
+
+        parent = getattr(thread, "parent", None)
+        if parent is not None:
+            parent_fetch = getattr(parent, "fetch_message", None)
+            if callable(parent_fetch):
+                try:
+                    return await parent_fetch(int(thread.id))
+                except Exception:
+                    pass
+
+        history = getattr(thread, "history", None)
+        if callable(history):
+            try:
+                async for candidate in history(limit=5, oldest_first=True):
+                    return candidate
+            except Exception:
+                pass
+
+        return None
+
+    @staticmethod
+    def _member_role_ids(member: discord.abc.User | discord.Member | None) -> set[int]:
+        if not isinstance(member, discord.Member):
+            return set()
+        role_ids: set[int] = set()
+        for role in getattr(member, "roles", []) or []:
+            role_id = getattr(role, "id", None)
+            if role_id is None:
+                continue
+            try:
+                role_ids.add(int(role_id))
+            except (TypeError, ValueError):
+                continue
+        return role_ids
+
+    async def _log_access(
+        self,
+        level: str,
+        result: str,
+        thread_id: int,
+        interaction: discord.Interaction,
+        context: dict[str, Any],
+        **extra: Any,
+    ) -> None:
+        payload = self._log_fields(thread_id, actor=interaction.user)
+        payload.update(context)
+        payload["result"] = result
+        if extra:
+            payload.update(extra)
+        await logs.send_welcome_log(level, **payload)
+
     async def check_interaction(
         self,
         thread_id: int,
         interaction: discord.Interaction,
-    ) -> bool:
-        allowed = self._allowed_users.get(thread_id)
-        user_id = getattr(interaction.user, "id", None)
-        if allowed and user_id not in allowed:
-            await logs.send_welcome_log(
-                "warn",
-                view="access",
-                result="denied",
-                reason="not_assigned",
-                **self._log_fields(thread_id, actor=interaction.user),
-            )
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> tuple[bool, str | None]:
+        allowed_cache = self._allowed_users.setdefault(thread_id, set())
+        actor = interaction.user
+        actor_id = getattr(actor, "id", None)
+
+        log_context: dict[str, Any] | None = None
+        if context is not None:
+            log_context = dict(context)
+            if actor_id is not None:
+                log_context.setdefault("actor_id", int(actor_id))
+            target_message_id = self._target_message_ids.get(thread_id)
+            if target_message_id is not None:
+                log_context.setdefault("target_message_id", int(target_message_id))
+
+        if actor_id is not None and actor_id in allowed_cache:
+            if log_context is not None:
+                await self._log_access("info", "allowed", thread_id, interaction, log_context)
+            return True, None
+
+        if thread_id not in self._target_users:
+            await self._ensure_target_cached(thread_id)
+
+        target_id = self._target_users.get(thread_id)
+        if target_id is None:
+            if log_context is not None:
+                await self._log_access(
+                    "warn",
+                    "ambiguous_target",
+                    thread_id,
+                    interaction,
+                    log_context,
+                )
             await _safe_ephemeral(
                 interaction,
-                "⚠️ This dialog is reserved for the assigned recruiter.",
+                "⚠️ I couldn't identify the recruit for this ticket. Please update the welcome greeting and try again.",
             )
-            return False
-        return True
+            return False, "ambiguous_target"
+
+        if actor_id is not None and int(actor_id) == int(target_id):
+            allowed_cache.add(int(actor_id))
+            if log_context is not None:
+                await self._log_access("info", "allowed", thread_id, interaction, log_context)
+            return True, None
+
+        member_roles = self._member_role_ids(actor)
+        admin_roles = get_admin_role_ids()
+        recruiter_roles = get_recruiter_role_ids()
+
+        allowed_by_role = False
+        if member_roles:
+            if admin_roles and member_roles.intersection(admin_roles):
+                allowed_by_role = True
+            elif recruiter_roles and member_roles.intersection(recruiter_roles):
+                allowed_by_role = True
+
+        if allowed_by_role:
+            if actor_id is not None:
+                allowed_cache.add(int(actor_id))
+            if log_context is not None:
+                await self._log_access("info", "allowed", thread_id, interaction, log_context)
+            return True, None
+
+        if log_context is not None:
+            reason = "role_config_empty" if not admin_roles and not recruiter_roles else "missing_roles"
+            await self._log_access(
+                "warn",
+                "denied_role",
+                thread_id,
+                interaction,
+                log_context,
+                reason=reason,
+            )
+        await _safe_ephemeral(
+            interaction,
+            "⚠️ This panel is reserved for the recruit and authorized recruiters.",
+        )
+        return False, "denied_role"
 
     def _store_select_answer(
         self,
@@ -762,7 +931,8 @@ class _PreviewView(discord.ui.View):
         self.thread_id = thread_id
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network
-        return await self.controller.check_interaction(self.thread_id, interaction)
+        allowed, _ = await self.controller.check_interaction(self.thread_id, interaction)
+        return allowed
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success, custom_id="ob.confirm")
     async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:  # pragma: no cover - network
@@ -810,8 +980,7 @@ async def _safe_ephemeral(interaction: discord.Interaction, message: str) -> Non
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)
         else:
-            await interaction.response.defer(ephemeral=True)
-            await interaction.followup.send(message, ephemeral=True)
+            await interaction.response.send_message(message, ephemeral=True)
     except Exception:  # pragma: no cover - defensive network handling
         log.warning("failed to send ephemeral response", exc_info=True)
 

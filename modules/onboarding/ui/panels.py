@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import discord
 
@@ -26,7 +26,9 @@ OPEN_QUESTIONS_CUSTOM_ID = "welcome.panel.open"
 
 
 class _ControllerProtocol:
-    async def check_interaction(self, thread_id: int, interaction: discord.Interaction) -> bool:  # pragma: no cover - protocol
+    async def check_interaction(
+        self, thread_id: int, interaction: discord.Interaction, *, context: dict[str, Any] | None = None
+    ) -> tuple[bool, str | None]:  # pragma: no cover - protocol
         ...
 
     async def _handle_modal_launch(self, thread_id: int, interaction: discord.Interaction) -> None:  # pragma: no cover - protocol
@@ -43,6 +45,33 @@ def _claim_interaction(interaction: discord.Interaction) -> bool:
         return False
     setattr(interaction, "_c1c_claimed", True)
     return True
+
+
+def _app_permission_snapshot(
+    interaction: discord.Interaction,
+) -> tuple[dict[str, bool], str, set[str]]:
+    perms = getattr(interaction, "app_permissions", None)
+    send_messages = bool(getattr(perms, "send_messages", False)) if perms is not None else False
+    send_in_threads = (
+        bool(getattr(perms, "send_messages_in_threads", False)) if perms is not None else False
+    )
+    embed_links = bool(getattr(perms, "embed_links", False)) if perms is not None else False
+
+    snapshot = {
+        "send_messages": send_messages,
+        "send_messages_in_threads": send_in_threads,
+        "embed_links": embed_links,
+    }
+    formatted = ", ".join(f"{key}={value}" for key, value in snapshot.items())
+
+    missing: set[str] = set()
+    if not send_messages:
+        missing.add("send_messages")
+    channel = getattr(interaction, "channel", None)
+    if isinstance(channel, discord.Thread) and not send_in_threads:
+        missing.add("send_messages_in_threads")
+
+    return snapshot, formatted, missing
 
 
 def bind_controller(thread_id: int, controller: _ControllerProtocol) -> None:
@@ -118,33 +147,98 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         channel = getattr(interaction, "channel", None)
         thread = channel if isinstance(channel, discord.Thread) else None
-        base_context = {
-            **logs.thread_context(thread),
-            "actor": logs.format_actor(interaction.user),
+        controller, thread_id = self._resolve(interaction)
+        message = getattr(interaction, "message", None)
+        message_id = getattr(message, "id", None)
+        actor_id = getattr(interaction.user, "id", None)
+
+        _, permissions_text, missing = _app_permission_snapshot(interaction)
+
+        controller_context: dict[str, Any] = {
             "view": "panel",
+            "view_tag": "welcome_panel",
+            "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
+            "app_permissions": permissions_text,
+        }
+        if thread_id is not None:
+            try:
+                controller_context["thread_id"] = int(thread_id)
+            except (TypeError, ValueError):
+                pass
+        if message_id is not None:
+            try:
+                controller_context["message_id"] = int(message_id)
+            except (TypeError, ValueError):
+                pass
+        if actor_id is not None:
+            try:
+                controller_context["actor_id"] = int(actor_id)
+            except (TypeError, ValueError):
+                pass
+
+        log_context: dict[str, Any] = {
+            **logs.thread_context(thread),
+            "view": "panel",
+            "view_tag": "welcome_panel",
+            "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
+            "view_id": OPEN_QUESTIONS_CUSTOM_ID,
+            "actor": logs.format_actor(interaction.user),
+            "app_permissions": permissions_text,
         }
         actor_name = logs.format_actor_handle(interaction.user)
         if actor_name:
-            base_context["actor_name"] = actor_name
-
-        await logs.send_welcome_log("debug", result="clicked", **base_context)
-
-        controller, thread_id = self._resolve(interaction)
+            log_context["actor_name"] = actor_name
+        if thread_id is not None and "thread" not in log_context:
+            log_context["thread"] = logs.format_thread(thread_id)
         if thread_id is not None:
-            base_context.setdefault("thread", logs.format_thread(thread_id))
+            try:
+                log_context["thread_id"] = int(thread_id)
+            except (TypeError, ValueError):
+                pass
+        if message_id is not None:
+            try:
+                log_context["message_id"] = int(message_id)
+            except (TypeError, ValueError):
+                pass
+        if actor_id is not None:
+            try:
+                log_context["actor_id"] = int(actor_id)
+            except (TypeError, ValueError):
+                pass
+
         if controller is None or thread_id is None:
-            await logs.send_welcome_log("warn", result="stale", **base_context)
+            await logs.send_welcome_log(
+                "warn",
+                result="error",
+                reason="stale_controller",
+                **log_context,
+            )
             await self._notify_expired(interaction)
             return
 
+        if missing:
+            await logs.send_welcome_log(
+                "warn",
+                result="denied_perms",
+                missing=";".join(sorted(missing)),
+                **log_context,
+            )
+            await self._notify_missing_permissions(interaction)
+            return
+
         try:
-            allowed = await controller.check_interaction(thread_id, interaction)
+            allowed, _ = await controller.check_interaction(
+                thread_id,
+                interaction,
+                context=controller_context,
+            )
             if not allowed:
                 return
             await controller._handle_modal_launch(thread_id, interaction)
         except Exception as exc:  # pragma: no cover - defensive path
-            await logs.send_welcome_exception("error", exc, **base_context)
+            error_context = dict(log_context)
+            await logs.send_welcome_exception("error", exc, **error_context)
             await self._notify_error(interaction)
 
     async def _notify_expired(self, interaction: discord.Interaction) -> None:
@@ -166,3 +260,15 @@ class OpenQuestionsPanelView(discord.ui.View):
                 await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send error notice", exc_info=True)
+
+    async def _notify_missing_permissions(self, interaction: discord.Interaction) -> None:
+        message = (
+            "⚠️ I can't send messages in this thread yet. Please adjust the ticket permissions and try again."
+        )
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except Exception:  # pragma: no cover - defensive logging
+            log.warning("failed to send permission notice", exc_info=True)

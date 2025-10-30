@@ -70,6 +70,9 @@ templates ok 25 yes 1.3s
 ```
 ✅ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall • result=ok • details: -
 ⚠️ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall • result=partial • details: general_notice=error (Missing Access)
+⚠️ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 • result=denied_role • details: recruit_only
+⚠️ **Welcome panel** — actor=@Member • thread=#welcome › ticket-123 • result=denied_perms • details: missing send_messages_in_threads
+⚠️ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 • result=ambiguous_target • details: greeting_missing_mention
 ```
 
 ## Dedupe policy
@@ -91,4 +94,4 @@ templates ok 25 yes 1.3s
 
 ---
 
-Doc last updated: 2025-10-29 (v0.9.7)
+Doc last updated: 2025-10-30 (v0.9.7)
