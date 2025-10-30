@@ -27,7 +27,8 @@ Every audit and CI check validates against this document.
 
 ### Feature Toggles and Config Policy
 - **F-01 Fallback trigger**: 🎫 on the close-button message. Detection keys off the phrase “by reacting with” (case-insensitive) or token [#welcome:ticket]. Do not depend on the first message of a thread.
-- **F-02 Ticket Tool closure events** are now recognized as a valid automated source for welcome_dialog. The same validation and logging policies apply; no additional configuration is introduced.
+- **F-02 Ticket Tool closure events** are now recognized as a valid automated source for welcome_dialog.
+- **F-03** The same validation and logging policies apply; no additional configuration is introduced.
 
 ## 3) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
@@ -53,12 +54,5 @@ Every audit and CI check validates against this document.
 
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
-
----
-
-[meta]
-labels: docs, governance, guardrails, ready
-milestone: Harmonize v1.0
-[/meta]
 
 Doc last updated: 2025-10-30 (v0.9.7)
