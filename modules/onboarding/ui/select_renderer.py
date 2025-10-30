@@ -6,6 +6,8 @@ from typing import Awaitable, Callable, Iterable, Sequence
 
 import discord
 
+from modules.onboarding import logs
+
 from shared.sheets.onboarding_questions import Question
 
 SelectChangeCallback = Callable[[discord.Interaction, Question, list[str]], Awaitable[None]]
@@ -104,6 +106,19 @@ class _SelectContinueButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:  # pragma: no cover - requires Discord
+        if not _claim_interaction(interaction):
+            return
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        context = {
+            **logs.thread_context(thread if isinstance(thread, discord.Thread) else None),
+            "actor": logs.format_actor(interaction.user),
+            "view": "select",
+            "view_id": self.custom_id,
+        }
+        actor_name = logs.format_actor_handle(interaction.user)
+        if actor_name:
+            context["actor_name"] = actor_name
+        await logs.send_welcome_log("debug", result="clicked", **context)
         view: SelectQuestionView | None = self.view  # type: ignore[assignment]
         if view is not None:
             await view.handle_complete(interaction)
@@ -175,3 +190,8 @@ __all__ = [
     "build_select_view",
 ]
 
+def _claim_interaction(interaction: discord.Interaction) -> bool:
+    if getattr(interaction, "_c1c_claimed", False):
+        return False
+    setattr(interaction, "_c1c_claimed", True)
+    return True

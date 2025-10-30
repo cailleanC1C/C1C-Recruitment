@@ -255,4 +255,4 @@ AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/WC   → WelcomeCrew l
 * Keep ENV + Sheet config consistent.
 * Stop and ask if unsure.
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-10-30 (v0.9.7)
