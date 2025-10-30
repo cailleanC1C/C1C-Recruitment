@@ -7,13 +7,24 @@ on:
 jobs:
   suite:
     runs-on: ubuntu-latest
+    outputs:
+      guardrails_status: ${{ steps.guardrails.outputs.guardrails_status }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Run Repository Guardrails suite
+        id: guardrails
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python scripts/ci/guardrails_suite.py --pr "${{ github.event.pull_request.number }}"
+          status_file=guardrails_status.txt
+          python scripts/ci/guardrails_suite.py --pr "${{ github.event.pull_request.number }}" --status-file "$status_file"
+          exit_code=$?
+          if [ -f "$status_file" ]; then
+            echo "guardrails_status=$(cat "$status_file")" >> "$GITHUB_OUTPUT"
+          else
+            echo "guardrails_status=fail" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$exit_code"
