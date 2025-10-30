@@ -73,4 +73,4 @@ They share one entrypoint, identical gating, and structured JSON logging; modal 
 ## Risk scan
 * No blocking risks observed—extension contract, config sourcing, embed parity, and RBAC controls all validate cleanly in the current codebase.
 
-Doc last updated: 2025-10-28 (v0.9.7)
+Doc last updated: 2025-10-30 (v0.9.7)

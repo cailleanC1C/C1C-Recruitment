@@ -10,7 +10,9 @@ from discord.ext import commands
 
 from c1c_coreops import rbac
 from modules.common import feature_flags
+from modules.onboarding import logs
 from modules.onboarding import thread_scopes
+from modules.onboarding.ui import panels
 from modules.onboarding.welcome_flow import start_welcome_dialog
 
 # Fallback: 🎫 on the Ticket Tool close-button message
@@ -20,6 +22,46 @@ TRIGGER_TOKEN = "[#welcome:ticket]"
 
 def normalize_spaces(value: str) -> str:
     return " ".join(value.split())
+
+
+async def _log_reject(
+    reason: str,
+    *,
+    member: discord.abc.User | discord.Member | None = None,
+    thread: discord.Thread | None = None,
+    parent_id: int | None = None,
+) -> None:
+    await logs.send_welcome_log(
+        "warn",
+        actor=logs.format_actor(member),
+        trigger="emoji",
+        emoji=FALLBACK_EMOJI,
+        reason=reason,
+        thread=logs.format_thread(getattr(thread, "id", None)),
+        parent=logs.format_parent(parent_id),
+    )
+
+
+async def _find_panel_message(
+    thread: discord.Thread,
+    *,
+    bot_user_id: int | None,
+) -> Optional[discord.Message]:
+    history = getattr(thread, "history", None)
+    if bot_user_id is None or history is None or not callable(history):
+        return None
+    async for message in history(limit=20):
+        author = getattr(message, "author", None)
+        if author is None or getattr(author, "id", None) != bot_user_id:
+            continue
+        for row in getattr(message, "components", []) or []:
+            for component in getattr(row, "children", []) or []:
+                if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                    return message
+        for component in getattr(message, "components", []) or []:
+            if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                return message
+    return None
 
 
 class OnboardingReactionFallbackCog(commands.Cog):
@@ -35,6 +77,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 "welcome.emoji.start %s",
                 {"rejected": "disabled", "emoji": str(payload.emoji)},
             )
+            await _log_reject("disabled")
             return
 
         if str(payload.emoji) != FALLBACK_EMOJI:
@@ -42,25 +85,13 @@ class OnboardingReactionFallbackCog(commands.Cog):
 
         bot_user = getattr(self.bot, "user", None)
         if bot_user and payload.user_id == bot_user.id:
-            logging.info(
-                "welcome.emoji.start %s",
-                {"rejected": "self_reaction", "emoji": FALLBACK_EMOJI},
-            )
             return
 
         if payload.guild_id is None:
-            logging.info(
-                "welcome.emoji.start %s",
-                {"rejected": "no_guild_id", "emoji": FALLBACK_EMOJI},
-            )
             return
 
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
-            logging.info(
-                "welcome.emoji.start %s",
-                {"rejected": "no_guild", "emoji": FALLBACK_EMOJI},
-            )
             return
 
         member: Optional[discord.Member] = payload.member
@@ -119,14 +150,6 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 if isinstance(channel, discord.Thread):
                     thread = channel
         if thread is None:
-            logging.info(
-                "welcome.emoji.start %s",
-                {
-                    "rejected": "wrong_scope:not_thread",
-                    "emoji": FALLBACK_EMOJI,
-                    "channel_id": payload.channel_id,
-                },
-            )
             return
 
         if not (
@@ -141,6 +164,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
                     "thread_id": thread.id,
                 },
             )
+            await _log_reject(
+                "wrong_scope",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
+            )
             return
 
         if not (rbac.is_admin_member(member) or rbac.is_recruiter(member)):
@@ -152,6 +181,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
                     "user_id": member.id,
                     "thread_id": thread.id,
                 },
+            )
+            await _log_reject(
+                "role_gate",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
             )
             return
 
@@ -166,6 +201,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
                     "thread_id": thread.id,
                     "message_id": payload.message_id,
                 },
+            )
+            await _log_reject(
+                "fetch_failed",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
             )
             return
 
@@ -189,6 +230,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
                     "message_id": message.id,
                 },
             )
+            await _log_reject(
+                "no_token_or_phrase",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
+            )
             return
 
         logging.info(
@@ -201,6 +248,51 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 "match": match,
             },
         )
+
+        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
+        existing_panel = await _find_panel_message(thread, bot_user_id=bot_user_id)
+        if existing_panel is not None:
+            if panels.is_panel_live(existing_panel.id):
+                await logs.send_welcome_log(
+                    "warn",
+                    actor=logs.format_actor(member),
+                    trigger="emoji",
+                    reason="deduped",
+                    thread=logs.format_thread(thread.id),
+                )
+                return
+            await logs.send_welcome_log(
+                "info",
+                actor=logs.format_actor(member),
+                trigger="emoji",
+                emoji=FALLBACK_EMOJI,
+                flow="welcome",
+                result="restarted",
+                thread=logs.format_thread(thread.id),
+                parent=logs.format_parent(getattr(thread, "parent_id", None)),
+            )
+            try:
+                await existing_panel.delete()
+            except Exception:
+                logging.warning(
+                    "failed to delete expired welcome panel",
+                    exc_info=True,
+                    extra={"thread_id": thread.id},
+                )
+            panels.mark_panel_inactive_by_message(existing_panel.id)
+        else:
+            await logs.send_welcome_log(
+                "info",
+                actor=logs.format_actor(member),
+                trigger="emoji",
+                emoji=FALLBACK_EMOJI,
+                flow="welcome",
+                scope="close_message",
+                match=logs.format_match(match),
+                result="started",
+                thread=logs.format_thread(thread.id),
+                parent=logs.format_parent(getattr(thread, "parent_id", None)),
+            )
 
         await start_welcome_dialog(thread, member, source="emoji", bot=self.bot)
 

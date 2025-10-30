@@ -59,40 +59,7 @@ async def start_welcome_dialog(
         )
         return
 
-    display_name = (
-        getattr(initiator, "display_name", None)
-        or getattr(initiator, "name", None)
-        or ("system" if initiator is None else str(initiator))
-    )
-    marker_text = f"🧭 Dialog initiated by {display_name} via {source}"
-    existing_markers = [
-        message
-        async for message in thread.history(limit=10)
-        if marker_text in getattr(message, "content", "")
-    ]
-
     flow = "welcome" if thread_scopes.is_welcome_parent(thread) else "promo"
-
-    if existing_markers:
-        logging.info(
-            "onboarding.welcome.start %s",
-            {
-                "skipped": "already_started",
-                "source": source,
-                "thread_id": getattr(thread, "id", None),
-                "flow": flow,
-            },
-        )
-        return
-
-    message = await thread.send(marker_text)
-    try:
-        await message.pin()
-    except Exception:
-        logging.exception(
-            "onboarding.welcome.start failed to pin marker",
-            extra={"thread_id": getattr(thread, "id", None)},
-        )
     schema_version: str | None = None
     questions = []
     try:

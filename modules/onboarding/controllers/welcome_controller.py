@@ -9,10 +9,12 @@ import discord
 from discord.ext import commands
 
 from modules.onboarding import rules
+from modules.onboarding import logs
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
+from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,8 @@ class BaseWelcomeController:
         self._preview_logged: set[int] = set()
         self._sources: Dict[int, str] = {}
         self._allowed_users: Dict[int, set[int]] = {}
+        self._panel_messages: Dict[int, int] = {}
+        self._initiators: Dict[int, discord.abc.User | discord.Member | None] = {}
 
     async def run(
         self,
@@ -52,6 +56,8 @@ class BaseWelcomeController:
         self._questions[thread_id] = list(questions)
         self._sources[thread_id] = source
         store.register_timeout_callback(thread_id, self._handle_timeout)
+        self._initiators[thread_id] = initiator
+        panels.bind_controller(thread_id, self)
 
         allowed_ids: set[int] = set()
         if initiator and getattr(initiator, "id", None):
@@ -79,8 +85,28 @@ class BaseWelcomeController:
 
         store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
         intro = self._modal_intro_text()
-        view = _ModalLauncherView(self, thread_id)
-        await thread.send(intro, view=view)
+        view = panels.OpenQuestionsPanelView(controller=self, thread_id=thread_id)
+        message_id = self._panel_messages.get(thread_id)
+        message: discord.Message | None = None
+        if message_id:
+            try:
+                message = await thread.fetch_message(message_id)
+            except Exception:
+                message = None
+        if message is not None:
+            await message.edit(content=intro, view=view)
+        else:
+            message = await thread.send(intro, view=view)
+            self._panel_messages[thread_id] = message.id
+            await logs.send_welcome_log(
+                "info",
+                actor=logs.format_actor(self._initiators.get(thread_id)),
+                trigger="panel",
+                action="posted",
+                flow=self.flow,
+                thread=logs.format_thread(thread_id),
+            )
+        panels.register_panel_message(thread_id, message.id)
 
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
         thread_id = int(thread.id)
@@ -401,6 +427,14 @@ class BaseWelcomeController:
                 "fields": _final_fields(self._questions[thread_id], session.answers),
             },
         )
+        await logs.send_welcome_log(
+            "info",
+            actor=logs.format_actor(interaction.user),
+            trigger="panel",
+            action="complete",
+            flow=self.flow,
+            thread=logs.format_thread(thread_id),
+        )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
         self._cleanup_session(thread_id)
@@ -466,6 +500,10 @@ class BaseWelcomeController:
         self._sources.pop(thread_id, None)
         self._allowed_users.pop(thread_id, None)
         self._preview_logged.discard(thread_id)
+        panel_message_id = self._panel_messages.pop(thread_id, None)
+        if panel_message_id is not None:
+            panels.mark_panel_inactive_by_message(panel_message_id)
+        panels.unbind_controller(thread_id)
 
     async def check_interaction(
         self,
@@ -561,28 +599,6 @@ class BaseWelcomeController:
 class WelcomeController(BaseWelcomeController):
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__(bot, flow="welcome")
-
-
-class _ModalLauncherView(discord.ui.View):
-    def __init__(self, controller: BaseWelcomeController, thread_id: int) -> None:
-        super().__init__(timeout=600)
-        self.controller = controller
-        self.thread_id = thread_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network
-        return await self.controller.check_interaction(self.thread_id, interaction)
-
-    @discord.ui.button(
-        label="Open questions",
-        style=discord.ButtonStyle.primary,
-        custom_id="ob.modal.open",
-    )
-    async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:  # pragma: no cover - network
-        await self.controller._handle_modal_launch(self.thread_id, interaction)
-
-    async def on_timeout(self) -> None:  # pragma: no cover - network
-        for child in self.children:
-            child.disabled = True
 
 
 class _PreviewView(discord.ui.View):
