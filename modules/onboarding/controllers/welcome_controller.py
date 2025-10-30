@@ -782,6 +782,10 @@ class BaseWelcomeController:
             target_message_id = self._target_message_ids.get(thread_id)
             if target_message_id is not None:
                 log_context.setdefault("target_message_id", int(target_message_id))
+            thread = self._thread_for(thread_id)
+            parent_id = getattr(thread, "parent_id", None)
+            if parent_id is not None:
+                log_context.setdefault("parent_channel_id", int(parent_id))
 
         if actor_id is not None and actor_id in allowed_cache:
             if log_context is not None:
@@ -791,6 +795,11 @@ class BaseWelcomeController:
         await self._ensure_target_cached(thread_id, refresh_if_none=True)
 
         target_id = self._target_users.get(thread_id)
+        if target_id is not None and log_context is not None:
+            log_context.setdefault("target_user_id", int(target_id))
+            target_message_id = self._target_message_ids.get(thread_id)
+            if target_message_id is not None:
+                log_context.setdefault("target_message_id", int(target_message_id))
         if target_id is None:
             if log_context is not None:
                 await self._log_access(
@@ -1092,9 +1101,10 @@ def _convert_to_labels(value: Any, mapping: dict[str, str]) -> Any:
 def _safe_followup(interaction: discord.Interaction, message: str) -> Awaitable[None]:
     async def runner() -> None:
         try:
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True)
-            await interaction.followup.send(message, ephemeral=True)
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
         except Exception:
             log.warning("failed to send follow-up", exc_info=True)
 
