@@ -1,7 +1,7 @@
 # 🧭 C1C Bot Collaboration Contract (v1.0)
 
 **Purpose**
-Single source of truth for how we work (you ↔ ChatGPT ↔ Codex), how pull requests are prepared, and where Codex finds guardrails/CI policy. This file is the only thing you need to hand me.
+Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requests are prepared, and where Codex finds guardrails/CI policy. This file is the only thing you need to hand me.
 
 ---
 
