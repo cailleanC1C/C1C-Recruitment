@@ -152,9 +152,7 @@ milestone: Harmonize v1.0
 | docs              | `#0b75a8` | README, guides, runbooks                       |
 | duplicate         | `#cfd3d7` | This issue or pull request already exists      |
 | enhancement       | `#a2eeef` | New feature or request                         |
-| good first issue  | `#7057ff` | Low-risk starter task                          |
 | guardrails        | `#e99695` | Guardrail specs & checks                       |
-| help wanted       | `#008672` | Community contributions welcome                |
 | infra             | `#6f42c1` | Hosting, deployment, CI/CD, runtime            |
 | invalid           | `#e4e669` | This doesn't seem right                        |
 | lint              | `#000000` | Ruff/formatting cleanups                       |
