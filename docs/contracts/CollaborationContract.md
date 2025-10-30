@@ -55,7 +55,7 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 | `docs/compliance/` | Audit and guardrail reports (e.g., `REPORT_GUARDRAILS.md`).                 |
 
 ### 3.3 ADR template
-
+Ask for current number if unsure! 
 ```
 ADR-0000 — Title
 Date: YYYY-MM-DD
