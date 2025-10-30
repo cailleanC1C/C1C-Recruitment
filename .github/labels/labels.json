@@ -25,6 +25,11 @@
     "description": "Matchmaker bot"
   },
   {
+    "name": "bot:onboarding",
+    "color": "cccccc",
+    "description": ""
+  },
+  {
     "name": "bot:reminder",
     "color": "1d76db",
     "description": "Reminder bot"
