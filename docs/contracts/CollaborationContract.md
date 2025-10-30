@@ -126,7 +126,7 @@ They apply to **all phases, PRs, and documentation changes**.
 **Footer Date**
 - Do **not** set any footer date later than *today (UTC)*.
 - Only update a footer date if you changed substantive content in that file.
-- When updating, use **today’s UTC date** in `YYYY-MM-DD` or `YYYY-MM-DD HH:MM UTC`.
+- When updating, use **today’s UTC date** in `YYYY-MM-DD`.
 - If unsure, leave the existing date unchanged.
 
 **Version Strings**
