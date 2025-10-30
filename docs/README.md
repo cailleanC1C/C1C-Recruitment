@@ -71,6 +71,7 @@ It exists so that contributors update the correct references after each developm
 * Update this index whenever documentation files are added, renamed, or removed.
 * Any PR that modifies documentation must reflect its changes here and, if structural, call them out in the CollaborationContract.
 * Ensure the version shown in this index (currently v0.9.7) matches the bot version in the root `README.md`.
+* CI/linters/type-checks/tests ignore `AUDIT/`; audits write results into `AUDIT/<YYYYMMDD>_*` and add a pointer in `CHANGELOG.md`.
 
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
