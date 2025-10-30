@@ -32,7 +32,7 @@ from shared.config import (
     get_refresh_timezone,
     get_strict_emoji_proxy,
 )
-from shared.logging.structured import JsonFormatter, get_trace_id, set_trace_id
+from shared.logging import get_trace_id, set_trace_id, setup_logging
 from shared.obs.events import (
     format_refresh_message,
     refresh_bucket_results,
@@ -53,33 +53,11 @@ async def create_app(*, runtime: "Runtime | None" = None) -> web.Application:
     """Create and configure the aiohttp application used by the runtime."""
 
     static_fields = {"env": get_env_name(), "bot": get_bot_name()}
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    has_stream_handler = False
-    for handler in root_logger.handlers:
-        if isinstance(handler, logging.StreamHandler):
-            handler.setFormatter(JsonFormatter(static=static_fields))
-            has_stream_handler = True
-    if not has_stream_handler:
-        handler = logging.StreamHandler()
-        handler.setFormatter(JsonFormatter(static=static_fields))
-        root_logger.addHandler(handler)
-
-    access_logger = logging.getLogger("aiohttp.access")
-    access_logger.propagate = False
-    access_logger.handlers.clear()
-    access_handler = logging.StreamHandler()
-    access_handler.setFormatter(
-        JsonFormatter(
-            static={
-                "env": static_fields["env"],
-                "bot": static_fields["bot"],
-                "logger": "aiohttp.access",
-            }
-        )
+    access_logger = setup_logging(
+        static_fields=static_fields,
+        access_logger_name="aiohttp.access",
+        access_static_fields={"env": static_fields["env"], "bot": static_fields["bot"]},
     )
-    access_logger.addHandler(access_handler)
-    access_logger.setLevel(logging.INFO)
 
     healthmod.set_component("runtime", True)
 
