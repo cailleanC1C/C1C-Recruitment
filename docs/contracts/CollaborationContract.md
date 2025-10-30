@@ -140,6 +140,7 @@ They apply to **all phases, PRs, and documentation changes**.
 4. **End of file** — no text after `[meta]`.
 
 **[approval] block (only when approved)**
+```markdown
 [approval]
 version: vX.Y.Z # include only if a bump is approved
 footer_date: YYYY-MM-DD # or YYYY-MM-DD HH:MM UTC; include only if date update is approved
