@@ -659,9 +659,13 @@ class BaseWelcomeController:
             panels.mark_panel_inactive_by_message(panel_message_id)
         panels.unbind_controller(thread_id)
 
-    async def _ensure_target_cached(self, thread_id: int) -> None:
-        if thread_id in self._target_users:
-            return
+    async def _ensure_target_cached(
+        self, thread_id: int, *, refresh_if_none: bool = False
+    ) -> None:
+        cached = self._target_users.get(thread_id, ...)
+        if cached is not ...:
+            if not (cached is None and refresh_if_none):
+                return
 
         thread = self._threads.get(thread_id)
         if thread is None:
@@ -784,8 +788,7 @@ class BaseWelcomeController:
                 await self._log_access("info", "allowed", thread_id, interaction, log_context)
             return True, None
 
-        if thread_id not in self._target_users:
-            await self._ensure_target_cached(thread_id)
+        await self._ensure_target_cached(thread_id, refresh_if_none=True)
 
         target_id = self._target_users.get(thread_id)
         if target_id is None:
