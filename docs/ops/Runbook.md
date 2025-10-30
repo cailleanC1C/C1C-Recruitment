@@ -126,7 +126,7 @@ tabs.
   match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
 - **Signals:** Startup posts an admin-ping warning in the runtime log channel when the tab,
   headers, or row values are missing or invalid.
-- **Remediation:** Fix the Sheet, run `!ops refresh config` (or the admin bang alias), then
+- **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-10-28 (v0.9.7)
+Doc last updated: 2025-10-31 (v0.9.7)
