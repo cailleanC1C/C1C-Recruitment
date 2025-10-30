@@ -7,8 +7,8 @@ This guide defines the documentation rules enforced by `scripts/ci/check_docs.py
 - H1 titles **must not** include delivery phases or transient project codes.
 
 ## Footer contract
-- The final line of every doc is the exact footer: `Doc last updated: 2025-10-26 (v0.9.6)`.
-- Do not append extra whitespace or commentary after the footer.
+- The final line of every doc is the exact footer: `Doc last updated: yyyy-mm-dd (v0.9.x)`.
+- Do not append extra whitespace or commentary after the footer. yyyy-mm-dd is always todays date for all changd documents.  v0.9.x look up correct version in README.md
 
 ## Environment source of truth
 - Reference environment variables exclusively through [`docs/ops/Config.md`](../ops/Config.md#environment-keys).
