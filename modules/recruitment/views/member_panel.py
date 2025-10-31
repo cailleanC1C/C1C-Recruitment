@@ -11,9 +11,9 @@ import discord
 from discord import Message
 from discord.ext import commands
 
-from .. import search as roster_search
-from ..search_helpers import format_filters_footer
-from .shared import MemberSearchPagedView
+from modules.recruitment import search as roster_search
+from modules.recruitment.search_helpers import format_filters_footer
+from modules.recruitment.views.shared import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.recruitment import RecruitmentClanRecord
 

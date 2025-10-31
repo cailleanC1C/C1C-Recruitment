@@ -27,7 +27,7 @@ from config.runtime import (
     get_watchdog_stall_sec,
 )
 from shared import socket_heartbeat as hb
-from .render import (
+from c1c_coreops.render import (
     ChecksheetEmbedData,
     ChecksheetSheetEntry,
     ChecksheetTabEntry,
@@ -46,7 +46,7 @@ from shared.cache import telemetry as cache_telemetry
 from shared.cache.telemetry import get_snapshot as cache_get_snapshot
 from shared.cache.telemetry import humanize_duration as cache_humanize_duration
 from shared.cache.telemetry import list_buckets as cache_list_buckets
-from .help import (
+from c1c_coreops.help import (
     COREOPS_VERSION,
     HelpCommandInfo,
     HelpTier,
@@ -55,7 +55,7 @@ from .help import (
     build_help_detail_embed,
     build_help_overview_embeds,
 )
-from .helpers import help_metadata, tier
+from c1c_coreops.helpers import help_metadata, tier
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.obs.events import (
     format_refresh_message,
@@ -71,10 +71,10 @@ from shared.sheets.async_core import (
 )
 from shared.sheets.recruitment import get_reports_tab_name
 
-from .config import CoreOpsSettings, load_coreops_settings, normalize_command_text
-from .prefix import detect_admin_bang_command
-from .tags import lifecycle_tag
-from .rbac import (
+from c1c_coreops.config import CoreOpsSettings, load_coreops_settings, normalize_command_text
+from c1c_coreops.prefix import detect_admin_bang_command
+from c1c_coreops.tags import lifecycle_tag
+from c1c_coreops.rbac import (
     admin_only,
     can_view_admin,
     can_view_staff,
@@ -612,7 +612,7 @@ def _admin_roles_configured() -> bool:
     """Return True when admin roles are configured (defaults to True)."""
 
     try:
-        from .rbac import admin_roles_configured  # type: ignore
+        from c1c_coreops.rbac import admin_roles_configured  # type: ignore
     except Exception:
         return True
     try:

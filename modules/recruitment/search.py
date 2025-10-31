@@ -15,8 +15,8 @@ from shared.sheets.recruitment import (
     RecruitmentClanRecord,
 )
 
-from . import search_helpers
-from .search_helpers import (
+from modules.recruitment import search_helpers
+from modules.recruitment.search_helpers import (
     parse_inactives_num,
     parse_spots_num,
     row_matches,

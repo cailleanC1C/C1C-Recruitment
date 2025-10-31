@@ -10,14 +10,14 @@ from c1c_coreops import rbac
 from modules.common import feature_flags
 from modules.onboarding import logs
 
-from . import thread_scopes
-from .controllers.promo_controller import PromoController
-from .controllers.welcome_controller import (
+from modules.onboarding import thread_scopes
+from modules.onboarding.controllers.promo_controller import PromoController
+from modules.onboarding.controllers.welcome_controller import (
     WelcomeController,
     extract_target_from_message,
     locate_welcome_message,
 )
-from .ui import panels
+from modules.onboarding.ui import panels
 from shared.sheets import onboarding_questions
 
 __all__ = ["start_welcome_dialog"]

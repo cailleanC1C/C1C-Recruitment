@@ -7,7 +7,7 @@ from typing import Callable, Mapping, Sequence
 
 import discord
 
-from .. import cards, emoji_pipeline
+from modules.recruitment import cards, emoji_pipeline
 from shared.sheets.recruitment import RecruitmentClanRecord
 
 PAGE_SIZE = 5
@@ -113,7 +113,7 @@ class MemberSearchPagedView(discord.ui.View):
         files: list[discord.File] = []
 
         if not self.rows:
-            from .member_panel import _build_empty_embed
+            from modules.recruitment.views.member_panel import _build_empty_embed
 
             return [_build_empty_embed(self.filters_text)], []
 
