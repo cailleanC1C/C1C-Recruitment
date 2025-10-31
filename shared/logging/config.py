@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Mapping
 
-from .structured import JsonFormatter
+from shared.logging.structured import JsonFormatter
 
 __all__ = ["setup_logging"]
 

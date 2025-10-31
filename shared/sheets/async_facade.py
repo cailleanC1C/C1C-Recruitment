@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, ParamSpec, TypeVar
 
-from shared.sheets import core as _core_sync
-from shared.sheets import recruitment as _recruitment_sync
-from . import async_adapter as _adapter
+import shared.sheets.async_adapter as _adapter
+import shared.sheets.core as _core_sync
+import shared.sheets.recruitment as _recruitment_sync
 
 P = ParamSpec("P")
 T = TypeVar("T")
