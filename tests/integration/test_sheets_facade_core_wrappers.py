@@ -22,13 +22,48 @@ def test_core_read_wrapper_uses_async_adapter(monkeypatch):
     async def runner() -> None:
         called = {"n": 0}
 
-        def fake_read(*args, **kwargs):
+        from shared.sheets import core as _sync_core
+
+        def fake_client():
+            called["client"] = True
+            return object()
+
+        async def fake_open_spreadsheet(_client, _sheet_id, **_kwargs):
+            class _Workbook:
+                sheet1 = object()
+
+            return _Workbook()
+
+        async def fake_by_title(_workbook, _name, **_kwargs):
+            return object()
+
+        async def fake_by_index(_workbook, _index, **_kwargs):
+            return object()
+
+        async def fake_values_get(_worksheet, _range, **_kwargs):
             called["n"] += 1
             return {"ok": True}
 
-        from shared.sheets import core as _sync_core
+        async def fake_values_all(_worksheet, **_kwargs):
+            called["n"] += 1
+            return {"ok": True}
 
-        monkeypatch.setattr(_sync_core, "sheets_read", fake_read, raising=True)
+        monkeypatch.setattr(_sync_core, "get_service_account_client", fake_client, raising=True)
+        monkeypatch.setattr(
+            sheets._adapter, "aopen_spreadsheet", fake_open_spreadsheet, raising=True
+        )
+        monkeypatch.setattr(
+            sheets._adapter, "aworksheet_by_title", fake_by_title, raising=True
+        )
+        monkeypatch.setattr(
+            sheets._adapter, "aworksheet_by_index", fake_by_index, raising=True
+        )
+        monkeypatch.setattr(
+            sheets._adapter, "aworksheet_values_get", fake_values_get, raising=True
+        )
+        monkeypatch.setattr(
+            sheets._adapter, "aworksheet_values_all", fake_values_all, raising=True
+        )
 
         with patch("shared.sheets.async_facade._adapter.arun") as arun:
             async def passthrough(fn, *args, **kwargs):
