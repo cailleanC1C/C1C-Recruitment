@@ -6,8 +6,7 @@ from typing import Any, Dict, Optional
 
 import discord
 
-from c1c_coreops import rbac
-
+from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
 
 __all__ = [
@@ -290,29 +289,7 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         actor = interaction.user
         actor_id = getattr(actor, "id", None)
-        actor_is_target = (
-            target_user_id is not None
-            and actor_id is not None
-            and int(actor_id) == int(target_user_id)
-        )
-        actor_is_privileged = bool(rbac.is_admin_member(actor) or rbac.is_recruiter(actor))
-        can_use = actor_is_target or actor_is_privileged
-
-        if not can_use:
-            notice = "⚠️ This panel is reserved for the recruit and authorized recruiters."
-            result = "ambiguous_target" if target_user_id is None else "denied_role"
-            extra: dict[str, Any] = {}
-            if result == "denied_role":
-                extra["reason"] = "missing_roles"
-            await logs.send_welcome_log("warn", result=result, **log_context, **extra)
-            try:
-                if interaction.response.is_done():
-                    await interaction.followup.send(notice, ephemeral=True)
-                else:
-                    await interaction.response.send_message(notice, ephemeral=True)
-            except Exception:  # pragma: no cover - defensive logging
-                log.warning("failed to send panel access notice", exc_info=True)
-            return
+        # UI no longer pre-authorizes; controller enforces the permission rule.
 
         if missing:
             await logs.send_welcome_log(
