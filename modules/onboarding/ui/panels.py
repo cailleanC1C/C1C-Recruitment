@@ -126,6 +126,8 @@ def register_persistent_views(bot: discord.Client) -> None:
 class OpenQuestionsPanelView(discord.ui.View):
     """Persistent panel view that launches the welcome modal flow."""
 
+    CUSTOM_ID = OPEN_QUESTIONS_CUSTOM_ID
+
     def __init__(
         self,
         *,
@@ -257,6 +259,20 @@ class OpenQuestionsPanelView(discord.ui.View):
                 log_context["parent_channel_id"] = int(parent_id)
             except (TypeError, ValueError):
                 pass
+
+        flow_name = getattr(controller, "flow", None) if controller is not None else None
+        if flow_name:
+            log_context["flow"] = flow_name
+            log_context.setdefault("diag", f"{flow_name}_flow")
+        else:
+            log_context.setdefault("diag", "welcome_flow")
+
+        button_log_context = dict(log_context)
+        button_log_context.setdefault("event", "panel_button_clicked")
+        button_log_context.setdefault("result", "clicked")
+        button_log_context.setdefault("view_tag", WELCOME_PANEL_TAG)
+
+        await logs.send_welcome_log("info", **button_log_context)
 
         if controller is None or thread_id is None:
             await self._restart_from_view(interaction, log_context)
