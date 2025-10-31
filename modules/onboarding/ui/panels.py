@@ -82,8 +82,12 @@ async def _edit_original_response(
         await interaction.edit_original_response(content=content)
     except Exception as exc:  # pragma: no cover - defensive fallback
         _log_followup_fallback(interaction, action="edit_original", error=exc)
+        followup = getattr(interaction, "followup", None)
+        if followup is None:
+            log.debug("followup handler missing; skipping deferred notice")
+            return
         try:
-            await interaction.followup.send(content, ephemeral=True)
+            await followup.send(content, ephemeral=True)
         except Exception:  # pragma: no cover - final guard
             log.warning("failed to send followup notice", exc_info=True)
 
