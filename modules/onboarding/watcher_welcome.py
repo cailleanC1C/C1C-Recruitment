@@ -272,5 +272,3 @@ async def setup(bot: commands.Bot) -> None:
         bot,
         f"✅ Welcome watcher enabled — channel_id={int(channel_id)}",
     )
-
-*** End of File ***
