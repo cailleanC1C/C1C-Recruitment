@@ -24,7 +24,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
 
-**Optional (warn once when unset):** `ONBOARDING_SHEET_ID`, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+**Optional:** `ONBOARDING_SHEET_ID`, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
 Missing any **Required** key causes the bot to exit with an error at startup. If `LOG_CHANNEL_ID` is empty, Discord channel logging is disabled and a one-time startup warning is emitted.
 
@@ -105,7 +105,7 @@ sync modules remain available for non-async scripts and cache warmers.
 ### Media rendering
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `PUBLIC_BASE_URL` | url | — | External base URL for `/emoji-pad`; falls back to `RENDER_EXTERNAL_URL` when unset. |
+| `PUBLIC_BASE_URL` | url | — | External base URL for `/emoji-pad`; falls back silently to `RENDER_EXTERNAL_URL` when unset. |
 | `RENDER_EXTERNAL_URL` | url | — | Render.com external hostname used when `PUBLIC_BASE_URL` is not provided. |
 | `EMOJI_MAX_BYTES` | int | `2000000` | Maximum emoji payload size accepted by `/emoji-pad`. |
 | `EMOJI_PAD_SIZE` | int | `256` | Square canvas dimension for padded emoji PNGs. |

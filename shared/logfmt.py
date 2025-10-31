@@ -7,11 +7,6 @@ from typing import Mapping, Optional, Sequence
 
 import discord
 
-from shared.config import (
-    get_log_include_numeric_ids,
-    get_log_refresh_render_mode,
-)
-
 __all__ = [
     "LOG_EMOJI",
     "BucketResult",
@@ -39,9 +34,7 @@ LOG_EMOJI = {
 def _append_id(label: str, numeric_id: Optional[int]) -> str:
     if not numeric_id:
         return label
-    if not get_log_include_numeric_ids():
-        return label
-    return f"{label} ({numeric_id})"
+    return label
 
 
 def _clean_name(name: Optional[str], default: str) -> str:
@@ -421,7 +414,4 @@ class LogTemplates:
 
     @staticmethod
     def select_refresh_template(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
-        mode = get_log_refresh_render_mode()
-        if mode == "table":
-            return LogTemplates.refresh_table(scope, buckets, total_s)
         return LogTemplates.refresh(scope, buckets, total_s)

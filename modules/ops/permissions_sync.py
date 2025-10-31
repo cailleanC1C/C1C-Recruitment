@@ -20,7 +20,6 @@ from discord.ext import commands
 from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
 from modules.common import runtime as runtime_helpers
-from shared.config import get_log_dedupe_window_s
 from shared.dedupe import EventDeduper
 from shared.logfmt import LogTemplates
 from shared.permissions.bot_access_profile import (
@@ -35,7 +34,7 @@ __all__ = ["BotPermissionManager", "BotPermissionCog", "setup"]
 
 log = logging.getLogger(__name__)
 
-_PERM_SYNC_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
+_PERM_SYNC_DEDUPER = EventDeduper()
 
 DEFAULT_CONFIG_PATH = Path("config/bot_access_lists.json")
 AUDIT_DIR = Path("AUDIT/diagnostics")
