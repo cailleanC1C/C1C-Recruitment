@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, ParamSpec, TypeVar
 
-from . import core as _core
+import shared.sheets.core as _core
 
 P = ParamSpec("P")
 T = TypeVar("T")

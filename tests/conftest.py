@@ -23,7 +23,7 @@ def _ensure_project_root_on_path(source_file: Path) -> None:
 
 _ensure_project_root_on_path(Path(__file__).resolve())
 
-from shared.testing import apply_required_test_environment
+from shared.testing.environment import apply_required_test_environment
 
 apply_required_test_environment()
 

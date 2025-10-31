@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from modules.common import runtime as runtime_helpers
 from shared.logfmt import channel_label
-from .permissions_sync import BotPermissionManager
+from modules.ops.permissions_sync import BotPermissionManager
 
 log = logging.getLogger(__name__)
 

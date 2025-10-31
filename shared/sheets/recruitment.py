@@ -475,8 +475,15 @@ async def _load_templates_async() -> List[Dict[str, Any]]:
     return await afetch_records(sheet_id, tab)
 
 
-cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
-cache.register("templates", _TTL_TEMPLATES_SEC, _load_templates_async)
+
+
+def register_cache_buckets() -> None:
+    """Register recruitment cache buckets if they are not already present."""
+
+    if cache.get_bucket("clans") is None:
+        cache.register("clans", _TTL_CLANS_SEC, _load_clans_async)
+    if cache.get_bucket("templates") is None:
+        cache.register("templates", _TTL_TEMPLATES_SEC, _load_templates_async)
 
 
 def _normalize_tag(tag: str | None) -> str:

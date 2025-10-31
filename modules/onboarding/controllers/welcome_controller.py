@@ -34,13 +34,6 @@ async def locate_welcome_message(thread: discord.Thread) -> discord.Message | No
     if starter is not None:
         return starter
 
-    fetch_message = getattr(thread, "fetch_message", None)
-    if callable(fetch_message):
-        try:
-            return await fetch_message(int(thread.id))
-        except Exception:
-            pass
-
     parent = getattr(thread, "parent", None)
     if parent is not None:
         parent_fetch = getattr(parent, "fetch_message", None)
@@ -108,6 +101,7 @@ class BaseWelcomeController:
         self._sources: Dict[int, str] = {}
         self._allowed_users: Dict[int, set[int]] = {}
         self._panel_messages: Dict[int, int] = {}
+        self._prefetched_panels: Dict[int, discord.Message] = {}
         self._initiators: Dict[int, discord.abc.User | discord.Member | None] = {}
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
@@ -185,7 +179,6 @@ class BaseWelcomeController:
         self._threads[thread_id] = thread
         self._questions[thread_id] = list(questions)
         self._sources[thread_id] = source
-        store.register_timeout_callback(thread_id, self._handle_timeout)
         self._initiators[thread_id] = initiator
         panels.bind_controller(thread_id, self)
 
@@ -199,8 +192,16 @@ class BaseWelcomeController:
 
         await self._start_modal_step(thread, session)
 
-    async def _start_modal_step(self, thread: discord.Thread, session: SessionData) -> None:
+    async def _start_modal_step(
+        self,
+        thread: discord.Thread,
+        session: SessionData,
+        *,
+        anchor: discord.Message | None = None,
+    ) -> None:
         thread_id = int(thread.id)
+        if anchor is None:
+            anchor = self._prefetched_panels.pop(thread_id, None)
         modals = build_modals(
             self._questions[thread_id],
             session.visibility,
@@ -216,9 +217,41 @@ class BaseWelcomeController:
         view = panels.OpenQuestionsPanelView(controller=self, thread_id=thread_id)
         message_id = self._panel_messages.get(thread_id)
         message: discord.Message | None = None
-        if message_id:
+        if anchor is not None:
+            message = anchor
+            anchor_id = getattr(anchor, "id", None)
+            if anchor_id is not None:
+                try:
+                    self._panel_messages[thread_id] = int(anchor_id)
+                except (TypeError, ValueError):
+                    pass
+        if message is None and message_id:
             try:
                 message = await thread.fetch_message(message_id)
+            except discord.NotFound as exc:
+                code = getattr(exc, "code", None)
+                if code == 10008:
+                    parent = getattr(thread, "parent", None)
+                    fetch_parent = getattr(parent, "fetch_message", None)
+                    if callable(fetch_parent):
+                        try:
+                            message = await fetch_parent(message_id)
+                        except Exception as parent_exc:
+                            await logs.send_welcome_exception(
+                                "warn",
+                                parent_exc,
+                                view="panel",
+                                result="stale_panel",
+                                **self._log_fields(thread_id),
+                            )
+                if message is None and code != 10008:
+                    await logs.send_welcome_exception(
+                        "warn",
+                        exc,
+                        view="panel",
+                        result="stale_panel",
+                        **self._log_fields(thread_id),
+                    )
             except Exception as exc:
                 await logs.send_welcome_exception(
                     "warn",
@@ -227,7 +260,13 @@ class BaseWelcomeController:
                     result="stale_panel",
                     **self._log_fields(thread_id),
                 )
-                message = None
+        if message is None and message_id:
+            await logs.send_welcome_log(
+                "warn",
+                view="panel",
+                result="stale_panel",
+                **self._log_fields(thread_id),
+            )
         if message is not None:
             await message.edit(content=intro, view=view)
             if getattr(message, "pinned", False):
@@ -454,12 +493,20 @@ class BaseWelcomeController:
         try:
             from modules.onboarding.welcome_flow import start_welcome_dialog
 
+            panel_message = message if isinstance(message, discord.Message) else None
+            panel_id = None
+            if message_id is not None:
+                try:
+                    panel_id = int(message_id)
+                except (TypeError, ValueError):
+                    panel_id = None
             await start_welcome_dialog(
                 thread,
                 interaction.user,
                 "panel_restart",
                 bot=self.bot,
-                panel_message_id=int(message_id) if message_id is not None else None,
+                panel_message_id=panel_id,
+                panel_message=panel_message,
             )
         except Exception as exc:  # pragma: no cover - network restart errors
             error_payload = dict(log_payload)
@@ -793,39 +840,8 @@ class BaseWelcomeController:
             result="reopened",
             **self._log_fields(thread_id, actor=interaction.user),
         )
-        await self._start_modal_step(thread, session)
-
-    async def _handle_timeout(self, thread_id: int) -> None:
-        thread = self._threads.get(thread_id)
-        if thread is None:
-            return
-        preview = self._preview_messages.pop(thread_id, None)
-        if preview is not None:
-            try:
-                await preview.delete()
-            except Exception:
-                try:
-                    await preview.edit(view=None)
-                except Exception:
-                    log.warning("failed to remove preview on timeout", exc_info=True)
-        select_message = self._select_messages.pop(thread_id, None)
-        if select_message is not None:
-            try:
-                await select_message.edit(view=None)
-            except Exception:
-                log.warning("failed to disable select view on timeout", exc_info=True)
-        store.set_preview_message(thread_id, message_id=None, channel_id=None)
-        self._cleanup_session(thread_id)
-        try:
-            await thread.send("⏱️ Onboarding dialog timed out. Please react again to restart.")
-        except Exception:
-            log.warning("failed to send timeout message", exc_info=True)
-        await logs.send_welcome_log(
-            "warn",
-            view="panel",
-            result="timeout",
-            **self._log_fields(thread_id),
-        )
+        anchor = getattr(interaction, "message", None)
+        await self._start_modal_step(thread, session, anchor=anchor)
 
     def _cleanup_session(self, thread_id: int) -> None:
         store.end(thread_id)
@@ -841,6 +857,7 @@ class BaseWelcomeController:
         panel_message_id = self._panel_messages.pop(thread_id, None)
         if panel_message_id is not None:
             panels.mark_panel_inactive_by_message(panel_message_id)
+        self._prefetched_panels.pop(thread_id, None)
         panels.unbind_controller(thread_id)
 
     async def _ensure_target_cached(

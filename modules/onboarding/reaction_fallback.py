@@ -308,7 +308,6 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 member,
                 source="emoji",
                 bot=self.bot,
-                panel_message_id=target_message_id,
             )
         except Exception as exc:
             failure_context = _base_context(member=member, thread=thread)
