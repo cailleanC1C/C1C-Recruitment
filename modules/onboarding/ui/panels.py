@@ -44,6 +44,82 @@ _ACTIVE_PANEL_MESSAGE_IDS: set[int] = set()
 _REGISTRATION_COUNTS: Dict[str, int] = {}
 
 
+def _display_name(user: discord.abc.User | discord.Member | None) -> str:
+    if user is None:
+        return "<unknown>"
+    return getattr(user, "display_name", None) or getattr(user, "global_name", None) or getattr(user, "name", None) or "<unknown>"
+
+
+def _channel_path(channel: discord.abc.GuildChannel | discord.Thread | None) -> str:
+    if isinstance(channel, discord.Thread):
+        parent = getattr(channel, "parent", None)
+        parent_label = f"#{getattr(parent, 'name', 'unknown')}" if parent else "#unknown"
+        return f"{parent_label} › {getattr(channel, 'name', 'thread')}"
+    if isinstance(channel, discord.abc.GuildChannel):
+        return f"#{getattr(channel, 'name', 'channel')}"
+    return "#unknown"
+
+
+def _log_followup_fallback(
+    interaction: discord.Interaction,
+    *,
+    action: str,
+    error: Exception,
+) -> None:
+    user_name = _display_name(getattr(interaction, "user", None))
+    channel = _channel_path(getattr(interaction, "channel", None))
+    why = getattr(error, "__class__", type(error)).__name__
+    message = f"⚠️ Welcome — followup fallback • action={action} • user={user_name} • channel={channel} • why={why}"
+    log.warning(message)
+
+
+async def _edit_original_response(
+    interaction: discord.Interaction,
+    *,
+    content: str,
+) -> None:
+    try:
+        await interaction.edit_original_response(content=content)
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        _log_followup_fallback(interaction, action="edit_original", error=exc)
+        try:
+            await interaction.followup.send(content, ephemeral=True)
+        except Exception:  # pragma: no cover - final guard
+            log.warning("failed to send followup notice", exc_info=True)
+
+
+async def _defer_interaction(interaction: discord.Interaction) -> None:
+    try:
+        await interaction.response.defer(ephemeral=True)
+    except discord.Forbidden:
+        await interaction.response.defer()
+    except discord.InteractionResponded:
+        return
+
+
+def _restart_context_from_state(
+    interaction: discord.Interaction,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    context = {"view": "panel", "view_tag": WELCOME_PANEL_TAG, "custom_id": "welcome.panel.restart"}
+    channel = getattr(interaction, "channel", None)
+    thread = channel if isinstance(channel, discord.Thread) else None
+    context.update(logs.thread_context(thread))
+    message = getattr(interaction, "message", None)
+    if message is not None:
+        message_id = getattr(message, "id", None)
+        if message_id is not None:
+            try:
+                context["message_id"] = int(message_id)
+            except (TypeError, ValueError):
+                context["message_id"] = message_id
+    actor_name = logs.format_actor_handle(getattr(interaction, "user", None))
+    if actor_name:
+        context["actor_name"] = actor_name
+    context["state_view"] = state.get("view")
+    return context
+
+
 def _claim_interaction(interaction: discord.Interaction) -> bool:
     if getattr(interaction, "_c1c_claimed", False):
         return False
@@ -120,6 +196,8 @@ def register_persistent_views(bot: discord.Client) -> None:
                 if stacksite:
                     fields["stacksite"] = stacksite
             diag.log_event_sync("info", "persistent_view_registered", **fields)
+    if registered:
+        log.info("✅ Welcome — persistent-view • view=%s", view.__class__.__name__)
 
 
 class OpenQuestionsPanelView(discord.ui.View):
@@ -163,8 +241,22 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await _defer_interaction(interaction)
         try:
             await self._handle_launch(interaction)
+        except Exception:
+            await self._ensure_error_notice(interaction)
+            raise
+
+    @discord.ui.button(
+        label="Restart",
+        style=discord.ButtonStyle.secondary,
+        custom_id="welcome.panel.restart",
+    )
+    async def restart(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await _defer_interaction(interaction)
+        try:
+            await self._handle_restart(interaction)
         except Exception:
             await self._ensure_error_notice(interaction)
             raise
@@ -322,6 +414,31 @@ class OpenQuestionsPanelView(discord.ui.View):
             await self._ensure_error_notice(interaction)
             raise
 
+    async def _handle_restart(self, interaction: discord.Interaction) -> None:
+        state = diag.interaction_state(interaction)
+        controller = self._controller
+        thread_id = state.get("thread_id")
+        if not _claim_interaction(interaction):
+            return
+        if controller is None or thread_id is None:
+            await self._restart_from_view(interaction, _restart_context_from_state(interaction, state))
+            return
+
+        controller_context = {"view": "panel", "view_tag": WELCOME_PANEL_TAG, "custom_id": "welcome.panel.restart"}
+        try:
+            allowed, _ = await controller.check_interaction(
+                thread_id,
+                interaction,
+                context=controller_context,
+            )
+            if not allowed:
+                return
+        except Exception:
+            await self._ensure_error_notice(interaction)
+            raise
+
+        await self._restart_from_view(interaction, _restart_context_from_state(interaction, state))
+
     async def on_timeout(self) -> None:  # pragma: no cover - network
         if diag.is_enabled():
             disabled_components = all(getattr(child, "disabled", False) for child in self.children)
@@ -388,11 +505,11 @@ class OpenQuestionsPanelView(discord.ui.View):
         if getattr(interaction, "_c1c_error_notified", False):
             return
         setattr(interaction, "_c1c_error_notified", True)
+        if interaction.response.is_done():
+            await _edit_original_response(interaction, content=self.ERROR_NOTICE)
+            return
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(self.ERROR_NOTICE, ephemeral=True)
-            else:
-                await interaction.response.send_message(self.ERROR_NOTICE, ephemeral=True)
+            await interaction.response.send_message(self.ERROR_NOTICE, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send error notice", exc_info=True)
 
@@ -477,11 +594,11 @@ class OpenQuestionsPanelView(discord.ui.View):
 
     async def _notify_restart(self, interaction: discord.Interaction) -> None:
         message = "♻️ Restarting the onboarding form…"
+        if interaction.response.is_done():
+            await _edit_original_response(interaction, content=message)
+            return
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
+            await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send restart notice", exc_info=True)
 
@@ -489,10 +606,10 @@ class OpenQuestionsPanelView(discord.ui.View):
         message = (
             "⚠️ I can't send messages in this thread yet. Please adjust the ticket permissions and try again."
         )
+        if interaction.response.is_done():
+            await _edit_original_response(interaction, content=message)
+            return
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
+            await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send permission notice", exc_info=True)
