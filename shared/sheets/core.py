@@ -146,10 +146,14 @@ async def aopen_by_key(sheet_id: str | None = None, *, timeout: float | None = N
     if resolved in _WorkbookCache:
         return _WorkbookCache[resolved]
 
-    client = get_service_account_client()
-    kwargs: dict[str, Any] = {}
+    # ``get_service_account_client`` performs OAuth credential initialisation which
+    # may block while ``gspread`` loads service account data. Run it in the Sheets
+    # executor so the event loop stays responsive on first use.
+    run_kwargs: dict[str, Any] = {}
     if timeout is not None:
-        kwargs["timeout"] = timeout
+        run_kwargs["timeout"] = timeout
+    client = await async_adapter.arun(get_service_account_client, **run_kwargs)
+    kwargs: dict[str, Any] = dict(run_kwargs)
 
     workbook = await _retry_with_backoff_async(
         async_adapter.aopen_spreadsheet, client, resolved, **kwargs

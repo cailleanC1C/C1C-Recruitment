@@ -42,6 +42,17 @@ async def afetch_values(
     return await _core.afetch_values(sheet_id, worksheet, timeout=timeout)
 
 
+async def asheets_read(
+    sheet_id: str,
+    a1_range: str,
+    *,
+    timeout: float | None = None,
+) -> Any:
+    """Read an arbitrary ``a1_range`` without blocking the event loop."""
+
+    return await _core.asheets_read(sheet_id, a1_range, timeout=timeout)
+
+
 async def acall_with_backoff(
     func: Callable[P, T],
     *args: P.args,
@@ -69,5 +80,6 @@ __all__ = [
     "aget_worksheet",
     "afetch_records",
     "afetch_values",
+    "asheets_read",
     "acall_with_backoff",
 ]
