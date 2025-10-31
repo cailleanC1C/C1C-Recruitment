@@ -7,13 +7,19 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Sequence, Tuple, Union
 from urllib import error, request
 import re
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 DOC_SPEC = ROOT / "docs" / "guardrails" / "RepositoryGuardrails.md"
+
+ALLOWED_PATHS_C09 = {
+    "scripts/ci/guardrails_suite.py",
+    "scripts/ci/guardrails_report.py",
+    "scripts/ci/guardrails_labels.py",
+}
 
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -288,13 +294,47 @@ def scan_c03() -> Tuple[bool, List[str]]:
     return (len(violations) == 0, violations)
 
 
-def scan_c09() -> Tuple[bool, List[str]]:
-    patterns = [re.compile(r"shared\.utils\.coreops_"), re.compile(r"recruitment/"), re.compile(r"onboarding/")]
-    violations = _scan_patterns(_iter_python_files(), patterns)
-    return (len(violations) == 0, violations)
+def scan_c09() -> Tuple[Union[bool, str], List[str]]:
+    patterns = [
+        re.compile(r"shared\.utils\.coreops_"),
+        re.compile(r"recruitment/"),
+        re.compile(r"onboarding/"),
+    ]
+    allowed_hits: List[str] = []
+    violations: List[str] = []
+
+    for file_path in _iter_python_files():
+        rel = file_path.relative_to(ROOT).as_posix()
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+
+        for idx, line in enumerate(lines, 1):
+            for pattern in patterns:
+                if pattern.search(line):
+                    entry = f"{rel}:{idx}"
+                    if rel in ALLOWED_PATHS_C09:
+                        allowed_hits.append(entry)
+                    else:
+                        violations.append(entry)
+
+    if violations:
+        return (False, violations)
+
+    if allowed_hits:
+        details = [
+            f"{hit} (allowed by policy - C-09 whitelist)" for hit in allowed_hits
+        ]
+        return ("NA", details)
+
+    return (True, [])
 
 
-SCANNERS: Dict[str, Callable[[], Tuple[bool, List[str]]]] = {
+ScannerResult = Tuple[Union[bool, str], List[str]]
+
+
+SCANNERS: Dict[str, Callable[[], ScannerResult]] = {
     "S-01": scan_s01,
     "S-02": scan_s02,
     "S-03": scan_s03,
@@ -325,8 +365,12 @@ def evaluate_guardrail_rules() -> List[CheckResult]:
     for identifier, scanner in SCANNERS.items():
         if identifier not in results:
             continue
-        passed, details = scanner()
-        results[identifier].status = "PASS" if passed else "FAIL"
+        status_or_passed, details = scanner()
+        if isinstance(status_or_passed, str):
+            status = status_or_passed
+        else:
+            status = "PASS" if status_or_passed else "FAIL"
+        results[identifier].status = status
         results[identifier].details = details
 
     ordered = [results[rule.identifier] for rule in rules]
