@@ -90,7 +90,7 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
     asyncio.run(runner())
 
 
-def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_panel_button_launch_allows_ambiguous_target(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         logs_mock = AsyncMock()
         monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)
@@ -100,14 +100,14 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
 
         controller = MagicMock()
         controller.diag_target_user_id = MagicMock(return_value=None)
-        controller.check_interaction = AsyncMock(return_value=(False, "denied"))
+        controller.check_interaction = AsyncMock(return_value=(True, None))
         controller._handle_modal_launch = AsyncMock()
 
         thread_id = 4242
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
 
         response = SimpleNamespace(
-            is_done=MagicMock(return_value=True),
+            is_done=MagicMock(return_value=False),
             send_modal=AsyncMock(),
             send_message=AsyncMock(),
         )
@@ -131,12 +131,8 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.check_interaction.assert_not_awaited()
-        controller._handle_modal_launch.assert_not_awaited()
-        followup.send.assert_awaited_once()
-        _, followup_kwargs = followup.send.await_args
-        assert followup_kwargs.get("ephemeral") is True
-        assert logs_mock.await_count == 1
-        assert logs_mock.await_args.kwargs.get("result") == "ambiguous_target"
+        controller.check_interaction.assert_awaited_once()
+        controller._handle_modal_launch.assert_awaited_once()
+        followup.send.assert_not_awaited()
 
     asyncio.run(runner())

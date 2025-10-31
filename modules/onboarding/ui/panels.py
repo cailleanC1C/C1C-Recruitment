@@ -179,27 +179,36 @@ class OpenQuestionsPanelView(discord.ui.View):
             getter = getattr(controller, "diag_target_user_id", None)
             if callable(getter):
                 target_user_id = getter(int(thread_id))
+        channel = getattr(interaction, "channel", None)
+        thread = channel if isinstance(channel, discord.Thread) else None
+        if target_user_id is None and thread is not None:
+            owner_id = getattr(thread, "owner_id", None) or getattr(thread, "starter_id", None)
+            if owner_id is not None:
+                try:
+                    target_user_id = int(owner_id)
+                except (TypeError, ValueError):
+                    target_user_id = None
+        ambiguous_target = target_user_id is None
         if diag.is_enabled():
             await diag.log_event(
                 "info",
                 "panel_button_clicked",
                 custom_id=OPEN_QUESTIONS_CUSTOM_ID,
                 target_user_id=target_user_id,
-                ambiguous_target=target_user_id is None,
+                ambiguous_target=ambiguous_target,
                 **state,
             )
 
         if not _claim_interaction(interaction):
             return
 
-        channel = getattr(interaction, "channel", None)
-        thread = channel if isinstance(channel, discord.Thread) else None
         controller, thread_id = self._resolve(interaction)
         message = getattr(interaction, "message", None)
         message_id = getattr(message, "id", None)
         actor_id = getattr(interaction.user, "id", None)
 
         snapshot, permissions_text, missing = diag.permission_snapshot(interaction)
+        interaction_details = logs.interaction_snapshot(interaction)
 
         controller_context: dict[str, Any] = {
             "view": "panel",
@@ -209,6 +218,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             "app_permissions": permissions_text,
             "app_perms_text": permissions_text,
             "app_permissions_snapshot": snapshot,
+            "ambiguous_target": ambiguous_target,
         }
         if thread_id is not None:
             try:
@@ -223,6 +233,11 @@ class OpenQuestionsPanelView(discord.ui.View):
         if actor_id is not None:
             try:
                 controller_context["actor_id"] = int(actor_id)
+            except (TypeError, ValueError):
+                pass
+        if target_user_id is not None:
+            try:
+                controller_context["target_user_id"] = int(target_user_id)
             except (TypeError, ValueError):
                 pass
         if isinstance(thread, discord.Thread):
@@ -242,9 +257,10 @@ class OpenQuestionsPanelView(discord.ui.View):
             "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
             "actor": logs.format_actor(interaction.user),
-            "app_permissions": permissions_text,
-            "app_perms_text": permissions_text,
+            "app_permissions": interaction_details.get("app_permissions"),
+            "app_perms_text": interaction_details.get("app_perms_text"),
             "app_permissions_snapshot": snapshot,
+            "ambiguous_target": ambiguous_target,
         }
         actor_name = logs.format_actor_handle(interaction.user)
         if actor_name:
@@ -266,6 +282,11 @@ class OpenQuestionsPanelView(discord.ui.View):
                 log_context["actor_id"] = int(actor_id)
             except (TypeError, ValueError):
                 pass
+        if target_user_id is not None:
+            try:
+                log_context["target_user_id"] = int(target_user_id)
+            except (TypeError, ValueError):
+                pass
         if parent_id is not None:
             try:
                 log_context["parent_channel_id"] = int(parent_id)
@@ -283,6 +304,12 @@ class OpenQuestionsPanelView(discord.ui.View):
         button_log_context.setdefault("event", "panel_button_clicked")
         button_log_context.setdefault("result", "clicked")
         button_log_context.setdefault("view_tag", WELCOME_PANEL_TAG)
+        button_log_context.setdefault("ambiguous_target", ambiguous_target)
+        if target_user_id is not None and "target_user_id" not in button_log_context:
+            try:
+                button_log_context["target_user_id"] = int(target_user_id)
+            except (TypeError, ValueError):
+                pass
 
         if controller is None or thread_id is None:
             await self._restart_from_view(interaction, log_context)
@@ -296,11 +323,11 @@ class OpenQuestionsPanelView(discord.ui.View):
             and int(actor_id) == int(target_user_id)
         )
         actor_is_privileged = bool(rbac.is_admin_member(actor) or rbac.is_recruiter(actor))
-        can_use = actor_is_target or actor_is_privileged
+        can_use = actor_is_target or actor_is_privileged or ambiguous_target
 
         if not can_use:
             notice = "⚠️ This panel is reserved for the recruit and authorized recruiters."
-            result = "ambiguous_target" if target_user_id is None else "denied_role"
+            result = "ambiguous_target" if ambiguous_target else "denied_role"
             extra: dict[str, Any] = {}
             if result == "denied_role":
                 extra["reason"] = "missing_roles"

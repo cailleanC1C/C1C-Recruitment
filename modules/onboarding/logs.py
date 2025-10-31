@@ -22,6 +22,7 @@ __all__ = [
     "format_parent",
     "format_thread",
     "thread_context",
+    "interaction_snapshot",
     "send_welcome_log",
     "send_welcome_exception",
     "log_view_error",
@@ -94,6 +95,33 @@ def format_channel(channel: discord.abc.GuildChannel | discord.Thread | None) ->
     guild = getattr(channel, "guild", None)
     identifier = getattr(channel, "id", None)
     return logfmt.channel_label(guild, identifier)
+
+
+def _format_permissions_text(perms: discord.Permissions | None) -> str:
+    if perms is None:
+        return "-"
+    flags = {
+        "send_messages": getattr(perms, "send_messages", None) is True,
+        "send_messages_in_threads": getattr(perms, "send_messages_in_threads", None) is True,
+        "embed_links": getattr(perms, "embed_links", None) is True,
+        "read_message_history": getattr(perms, "read_message_history", None) is True,
+    }
+    return ", ".join(f"{name}={value}" for name, value in flags.items())
+
+
+def interaction_snapshot(interaction: discord.Interaction) -> dict[str, Any]:
+    """Return a defensive snapshot for ``interaction`` suitable for logging."""
+
+    user = getattr(interaction, "user", None)
+    perms = getattr(interaction, "app_permissions", None)
+    actor_id = getattr(user, "id", None)
+    actor_name = getattr(user, "mention", None)
+    return {
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "app_permissions": perms,
+        "app_perms_text": _format_permissions_text(perms),
+    }
 
 
 def _extract_thread_tag(thread: discord.Thread | None) -> str | None:

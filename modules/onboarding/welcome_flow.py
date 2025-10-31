@@ -75,6 +75,14 @@ async def start_welcome_dialog(
     else:
         target_user_id, target_message_id = extract_target_from_message(welcome_message)
 
+    if target_user_id is None:
+        owner_id = getattr(thread, "owner_id", None) or getattr(thread, "starter_id", None)
+        if owner_id is not None:
+            try:
+                target_user_id = int(owner_id)
+            except (TypeError, ValueError):
+                target_user_id = None
+
     context_defaults: dict[str, Any] = {}
     if target_user_id is not None:
         context_defaults["target_user_id"] = target_user_id
@@ -93,6 +101,9 @@ async def start_welcome_dialog(
             anchor_message_id = panel_message_id
     elif anchor_message_id is not None:
         context_defaults["message_id"] = anchor_message_id
+
+    ambiguous_target = target_user_id is None
+    context_defaults["ambiguous_target"] = ambiguous_target
 
     if flow == "welcome" and not feature_flags.is_enabled("recruitment_welcome"):
         await logs.send_welcome_log(
@@ -130,17 +141,7 @@ async def start_welcome_dialog(
             and (rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator))
         )
 
-        if target_user_id is None and not actor_is_privileged:
-            await logs.send_welcome_log(
-                "warn",
-                **_context(
-                    {"result": "ambiguous_target", **context_defaults},
-                    actor_override=initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
-                ),
-            )
-            return
-
-        if not (actor_is_target or actor_is_privileged):
+        if not ambiguous_target and not (actor_is_target or actor_is_privileged):
             await logs.send_welcome_log(
                 "warn",
                 **_context(
@@ -149,6 +150,15 @@ async def start_welcome_dialog(
                 ),
             )
             return
+
+        if ambiguous_target and not actor_is_privileged:
+            await logs.send_welcome_log(
+                "info",
+                **_context(
+                    {"result": "ambiguous_target", **context_defaults},
+                    actor_override=initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
+                ),
+            )
 
     schema_version: str | None = None
     questions: list[Any] = []
