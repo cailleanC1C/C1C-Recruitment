@@ -23,6 +23,8 @@ No target-user resolution is required. Recruiter/Admin roles are not needed to k
 - Access is granted solely by `view_channel` in the active ticket thread. If the user cannot see the thread, the deferred response is edited with a denial notice.
 - The Restart button uses the same access gate and re-triggers the full onboarding flow in place.
 
+Buttons that open modals must respond with the modal (no defer).
+
 ## Restart rules
 - Sessions survive restarts thanks to the persistent view ID. If the modal flow is already in progress, pressing the button offers a resume/restart choice. Losing in-memory state is harmless—the recruit can simply start over.
 

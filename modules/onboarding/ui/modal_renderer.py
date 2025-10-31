@@ -11,7 +11,7 @@ from shared.sheets.onboarding_questions import Question
 TEXT_TYPES = {"short", "paragraph", "number"}
 
 
-class QuestionModal(discord.ui.Modal):
+class WelcomeQuestionnaireModal(discord.ui.Modal):
     """Modal that renders a slice of onboarding questions."""
 
     def __init__(
@@ -23,6 +23,7 @@ class QuestionModal(discord.ui.Modal):
         title_prefix: str = "Onboarding",
         answers: dict[str, object] | None = None,
         visibility: dict[str, dict[str, str]] | None = None,
+        on_submit: Callable[[discord.Interaction, dict[str, str]], Awaitable[None]] | None = None,
     ) -> None:
         title = f"{title_prefix} ({step_index + 1}/{max(total_steps, 1)})"
         super().__init__(title=title, timeout=600)
@@ -31,9 +32,7 @@ class QuestionModal(discord.ui.Modal):
         self.total_steps = total_steps
         self.answers = answers or {}
         self.visibility = visibility or {}
-        self.submit_callback: (
-            Callable[[discord.Interaction, dict[str, str]], Awaitable[None]] | None
-        ) = None
+        self.submit_callback = on_submit
 
         for question in self.questions:
             default = _coerce_answer_to_default(self.answers.get(question.qid))
@@ -55,6 +54,10 @@ class QuestionModal(discord.ui.Modal):
             self.add_item(text_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:  # pragma: no cover - event handler
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.InteractionResponded:
+            pass
         payload: dict[str, str] = {}
         for child in self.children:
             if isinstance(child, discord.ui.TextInput):
@@ -69,7 +72,7 @@ def build_modals(
     answers: dict[str, object] | None,
     *,
     title_prefix: str = "Onboarding",
-) -> list[QuestionModal]:
+) -> list[WelcomeQuestionnaireModal]:
     """Return modal pages for the visible text/number questions."""
 
     relevant = [
@@ -82,9 +85,9 @@ def build_modals(
         return []
     grouped = _chunk(relevant, 5)
     total = len(grouped)
-    modals: list[QuestionModal] = []
+    modals: list[WelcomeQuestionnaireModal] = []
     for idx, chunk in enumerate(grouped):
-        modal = QuestionModal(
+        modal = WelcomeQuestionnaireModal(
             questions=chunk,
             step_index=idx,
             total_steps=total,
@@ -121,5 +124,5 @@ def _coerce_answer_to_default(value: object | None) -> str | None:
         return None
 
 
-__all__ = ["QuestionModal", "build_modals"]
+__all__ = ["WelcomeQuestionnaireModal", "build_modals"]
 

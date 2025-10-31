@@ -245,7 +245,6 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await _defer_interaction(interaction)
         try:
             await self._handle_launch(interaction)
         except Exception:
@@ -294,7 +293,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         message_id = getattr(message, "id", None)
         actor_id = getattr(interaction.user, "id", None)
 
-        snapshot, permissions_text, missing = diag.permission_snapshot(interaction)
+        snapshot, permissions_text, _missing = diag.permission_snapshot(interaction)
 
         controller_context: dict[str, Any] = {
             "view": "panel",
@@ -387,18 +386,6 @@ class OpenQuestionsPanelView(discord.ui.View):
         actor_id = getattr(actor, "id", None)
         # UI no longer pre-authorizes; controller enforces the permission rule.
 
-        if missing:
-            await logs.send_welcome_log(
-                "warn",
-                result="denied_perms",
-                missing=";".join(sorted(missing)),
-                **log_context,
-            )
-            await self._notify_missing_permissions(interaction)
-            return
-
-        await logs.send_welcome_log("info", **button_log_context)
-
         try:
             allowed, _ = await controller.check_interaction(
                 thread_id,
@@ -417,6 +404,11 @@ class OpenQuestionsPanelView(discord.ui.View):
             await logs.send_welcome_exception("error", exc, **error_context)
             await self._ensure_error_notice(interaction)
             raise
+        finally:
+            try:
+                await logs.send_welcome_log("info", **button_log_context)
+            except Exception:  # pragma: no cover - defensive guard
+                log.warning("failed to emit welcome panel button log", exc_info=True)
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
@@ -605,15 +597,3 @@ class OpenQuestionsPanelView(discord.ui.View):
             await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send restart notice", exc_info=True)
-
-    async def _notify_missing_permissions(self, interaction: discord.Interaction) -> None:
-        message = (
-            "⚠️ I can't send messages in this thread yet. Please adjust the ticket permissions and try again."
-        )
-        if interaction.response.is_done():
-            await _edit_original_response(interaction, content=message)
-            return
-        try:
-            await interaction.response.send_message(message, ephemeral=True)
-        except Exception:  # pragma: no cover - defensive logging
-            log.warning("failed to send permission notice", exc_info=True)
