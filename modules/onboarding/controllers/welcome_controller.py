@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
 
 import discord
 from discord.ext import commands
 
-from modules.onboarding import logs, rules
+from modules.onboarding import diag, logs, rules
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
@@ -113,6 +114,11 @@ class BaseWelcomeController:
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
+
+    def diag_target_user_id(self, thread_id: int) -> int | None:
+        """Return the cached target recruit identifier for diagnostics."""
+
+        return self._target_users.get(thread_id)
 
     def _log_fields(
         self,
@@ -250,6 +256,26 @@ class BaseWelcomeController:
                 **self._log_fields(thread_id),
             )
         panels.register_panel_message(thread_id, message.id)
+        if diag.is_enabled():
+            parent_id = getattr(thread, "parent_id", None)
+            try:
+                parent_id_int = int(parent_id) if parent_id is not None else None
+            except (TypeError, ValueError):
+                parent_id_int = None
+            target_user_id = self._target_users.get(thread_id)
+            await diag.log_event(
+                "info",
+                "panel_posted",
+                message_id=int(message.id),
+                thread_id=thread_id,
+                parent_id=parent_id_int,
+                schema_id=session.schema_hash,
+                custom_id=panels.OPEN_QUESTIONS_CUSTOM_ID,
+                view_timeout=view.timeout,
+                disable_on_timeout=getattr(view, "disable_on_timeout", None),
+                target_user_id=target_user_id,
+                ambiguous_target=target_user_id is None,
+            )
 
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
         thread_id = int(thread.id)
@@ -319,6 +345,13 @@ class BaseWelcomeController:
             await self._restart_from_interaction(thread_id, interaction, context=context)
             return
 
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        target_user_id = self._target_users.get(thread_id)
+        diag_state["target_user_id"] = target_user_id
+        diag_state["ambiguous_target"] = target_user_id is None
+        diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
+
         modals = build_modals(
             self._questions[thread_id],
             session.visibility,
@@ -336,7 +369,34 @@ class BaseWelcomeController:
         modal = modals[index]
         modal.submit_callback = self._modal_submitted(thread_id, modal.questions, index)
         store.set_pending_step(thread_id, {"kind": "modal", "index": index})
-        await interaction.response.send_modal(modal)
+        diag_state["modal_index"] = index
+        diag_state["schema_id"] = session.schema_hash
+        diag_state["about_to_send_modal"] = True
+        if diag.is_enabled():
+            await diag.log_event("info", "modal_launch_pre", **diag_state)
+            if diag_state.get("response_is_done"):
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="response_is_done",
+                    **diag_state,
+                )
+                return
+        try:
+            await interaction.response.send_modal(modal)
+        except Exception as exc:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "error",
+                    "modal_launch_error",
+                    exception_type=exc.__class__.__name__,
+                    exception_message=str(exc),
+                    **diag_state,
+                )
+            raise
+        else:
+            if diag.is_enabled():
+                await diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
         await logs.send_welcome_log(
             "debug",
             view="modal",
@@ -1062,12 +1122,47 @@ class _PreviewView(discord.ui.View):
 
 
 async def _safe_ephemeral(interaction: discord.Interaction, message: str) -> None:
+    diag_state = diag.interaction_state(interaction)
+    response_done = False
     try:
-        if interaction.response.is_done():
+        response_done = bool(interaction.response.is_done())
+    except Exception:  # pragma: no cover - defensive guard
+        response_done = False
+    deny_path = "followup" if response_done else "initial_response"
+    diag_state["deny_path"] = deny_path
+    diag_state["response_is_done"] = response_done
+    if diag.is_enabled():
+        await diag.log_event("info", "deny_notice_pre", **diag_state)
+    try:
+        if response_done:
             await interaction.followup.send(message, ephemeral=True)
         else:
             await interaction.response.send_message(message, ephemeral=True)
+        if diag.is_enabled():
+            await diag.log_event("info", "deny_notice_sent", **diag_state)
     except Exception:  # pragma: no cover - defensive network handling
+        if diag.is_enabled():
+            error_type = None
+            status = None
+            code = None
+            if isinstance(exc := sys.exc_info()[1], discord.Forbidden):
+                error_type = "Forbidden"
+                status = getattr(exc, "status", None)
+                code = getattr(exc, "code", None)
+            elif isinstance(exc, discord.HTTPException):
+                error_type = "HTTPException"
+                status = getattr(exc, "status", None)
+                code = getattr(exc, "code", None)
+            else:
+                error_type = exc.__class__.__name__ if exc else None
+            await diag.log_event(
+                "error",
+                "deny_notice_error",
+                error_type=error_type,
+                status=status,
+                code=code,
+                **diag_state,
+            )
         log.warning("failed to send ephemeral response", exc_info=True)
 
 

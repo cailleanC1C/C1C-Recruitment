@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 import discord
 
-from modules.onboarding import logs
+from modules.onboarding import diag, logs
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -40,6 +40,7 @@ class _ControllerProtocol:
 _CONTROLLERS: Dict[int, _ControllerProtocol] = {}
 _PANEL_MESSAGES: Dict[int, int] = {}
 _ACTIVE_PANEL_MESSAGE_IDS: set[int] = set()
+_REGISTRATION_COUNTS: Dict[str, int] = {}
 
 
 def _claim_interaction(interaction: discord.Interaction) -> bool:
@@ -47,35 +48,6 @@ def _claim_interaction(interaction: discord.Interaction) -> bool:
         return False
     setattr(interaction, "_c1c_claimed", True)
     return True
-
-
-def _app_permission_snapshot(
-    interaction: discord.Interaction,
-) -> tuple[dict[str, bool], str, set[str]]:
-    perms = getattr(interaction, "app_permissions", None)
-    send_messages = bool(getattr(perms, "send_messages", False)) if perms is not None else False
-    send_in_threads = (
-        bool(getattr(perms, "send_messages_in_threads", False)) if perms is not None else False
-    )
-    embed_links = bool(getattr(perms, "embed_links", False)) if perms is not None else False
-    read_history = bool(getattr(perms, "read_message_history", False)) if perms is not None else False
-
-    snapshot = {
-        "send_messages": send_messages,
-        "send_messages_in_threads": send_in_threads,
-        "embed_links": embed_links,
-        "read_message_history": read_history,
-    }
-    formatted = ", ".join(f"{key}={value}" for key, value in snapshot.items())
-
-    missing: set[str] = set()
-    if not send_messages:
-        missing.add("send_messages")
-    channel = getattr(interaction, "channel", None)
-    if isinstance(channel, discord.Thread) and not send_in_threads:
-        missing.add("send_messages_in_threads")
-
-    return snapshot, formatted, missing
 
 
 def bind_controller(thread_id: int, controller: _ControllerProtocol) -> None:
@@ -114,10 +86,39 @@ def mark_panel_inactive_by_message(message_id: int | None) -> None:
 
 
 def register_persistent_views(bot: discord.Client) -> None:
+    view = OpenQuestionsPanelView()
+    registered = False
+    duplicate = False
+    stacksite: str | None = None
     try:
-        bot.add_view(OpenQuestionsPanelView())
+        bot.add_view(view)
+        registered = True
     except Exception:  # pragma: no cover - defensive logging
         log.warning("failed to register persistent welcome panel view", exc_info=True)
+    finally:
+        if diag.is_enabled():
+            key = view.__class__.__name__
+            _REGISTRATION_COUNTS[key] = _REGISTRATION_COUNTS.get(key, 0) + 1
+            duplicate = _REGISTRATION_COUNTS[key] > 1
+            if duplicate:
+                stacksite = diag.relative_stack_site(frame_level=2)
+            custom_ids = [
+                child.custom_id
+                for child in view.children
+                if isinstance(child, discord.ui.Button) and child.custom_id
+            ]
+            fields = {
+                "view": key,
+                "registered": registered,
+                "timeout": view.timeout,
+                "disable_on_timeout": getattr(view, "disable_on_timeout", None),
+                "custom_ids": custom_ids,
+            }
+            if duplicate:
+                fields["duplicate_registration"] = True
+                if stacksite:
+                    fields["stacksite"] = stacksite
+            diag.log_event_sync("info", "persistent_view_registered", **fields)
 
 
 class OpenQuestionsPanelView(discord.ui.View):
@@ -133,6 +134,15 @@ class OpenQuestionsPanelView(discord.ui.View):
         self._controller = controller
         self._thread_id = thread_id
         self.disable_on_timeout = False
+        if diag.is_enabled():
+            diag.log_event_sync(
+                "debug",
+                "panel_view_initialized",
+                view=self.__class__.__name__,
+                timeout=self.timeout,
+                disable_on_timeout=self.disable_on_timeout,
+                thread_id=int(thread_id) if thread_id is not None else None,
+            )
 
     def _resolve(self, interaction: discord.Interaction) -> tuple[_ControllerProtocol | None, int | None]:
         thread_id = self._thread_id or getattr(interaction.channel, "id", None) or interaction.channel_id
@@ -147,6 +157,24 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        state = diag.interaction_state(interaction)
+        controller = self._controller
+        thread_id = state.get("thread_id")
+        target_user_id: int | None = None
+        if controller is not None and thread_id is not None:
+            getter = getattr(controller, "diag_target_user_id", None)
+            if callable(getter):
+                target_user_id = getter(int(thread_id))
+        if diag.is_enabled():
+            await diag.log_event(
+                "info",
+                "panel_button_clicked",
+                custom_id=OPEN_QUESTIONS_CUSTOM_ID,
+                target_user_id=target_user_id,
+                ambiguous_target=target_user_id is None,
+                **state,
+            )
+
         if not _claim_interaction(interaction):
             return
 
@@ -157,7 +185,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         message_id = getattr(message, "id", None)
         actor_id = getattr(interaction.user, "id", None)
 
-        snapshot, permissions_text, missing = _app_permission_snapshot(interaction)
+        snapshot, permissions_text, missing = diag.permission_snapshot(interaction)
 
         controller_context: dict[str, Any] = {
             "view": "panel",
@@ -259,6 +287,23 @@ class OpenQuestionsPanelView(discord.ui.View):
             error_context = dict(log_context)
             await logs.send_welcome_exception("error", exc, **error_context)
             await self._notify_error(interaction)
+
+    async def on_timeout(self) -> None:  # pragma: no cover - network
+        if diag.is_enabled():
+            disabled_components = all(getattr(child, "disabled", False) for child in self.children)
+            await diag.log_event(
+                "warning",
+                "panel_view_timeout",
+                view=self.__class__.__name__,
+                timeout=self.timeout,
+                disable_on_timeout=getattr(self, "disable_on_timeout", None),
+                thread_id=int(self._thread_id) if self._thread_id is not None else None,
+                on_timeout_called=True,
+                disabled_components=disabled_components,
+                edit_attempted=False,
+                post_attempted=False,
+            )
+        await super().on_timeout()
 
     async def _restart_from_view(
         self,
