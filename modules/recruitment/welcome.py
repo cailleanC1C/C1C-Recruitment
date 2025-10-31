@@ -24,7 +24,6 @@ from shared.obs.events import (
 from modules.recruitment import emoji_pipeline
 from shared.cache import telemetry as cache_telemetry
 from shared.config import (
-    get_log_dedupe_window_s,
     get_refresh_timezone,
     get_welcome_general_channel_id,
 )
@@ -44,7 +43,7 @@ _DEFAULT_GENERAL_NOTICE = (
     "Be loud, be nerdy, and maybe even helpful. You know the drill, C1C."
 )
 
-_WELCOME_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
+_WELCOME_DEDUPER = EventDeduper()
 
 log = logging.getLogger(__name__)
 

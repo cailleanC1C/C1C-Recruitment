@@ -10,7 +10,6 @@ import discord
 
 from modules.common import runtime as rt
 from shared import logfmt
-from shared.config import get_log_dedupe_window_s
 from shared.dedupe import EventDeduper
 
 __all__ = [
@@ -30,7 +29,7 @@ __all__ = [
 log = logging.getLogger("c1c.onboarding.logs")
 
 _LOG_METHODS: dict[str, Callable[[str, Any], None]] = {}
-_PANEL_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
+_PANEL_DEDUPER = EventDeduper()
 
 
 def _resolve_logger(level: str) -> Callable[[str, Any], None]:

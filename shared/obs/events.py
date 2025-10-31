@@ -6,7 +6,6 @@ import hashlib
 import time
 from typing import Iterable, Sequence, TYPE_CHECKING
 
-from shared.config import get_log_dedupe_window_s
 from shared.dedupe import EventDeduper
 from shared.logfmt import BucketResult, LogTemplates, human_reason
 
@@ -21,7 +20,7 @@ __all__ = [
 ]
 
 
-_REFRESH_DEDUPER = EventDeduper(window_s=get_log_dedupe_window_s())
+_REFRESH_DEDUPER = EventDeduper()
 
 
 def refresh_deduper() -> EventDeduper:

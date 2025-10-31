@@ -66,7 +66,7 @@ Line mode:
 ```
 
 ## Dedupe policy
-- Window: configurable via `LOG_DEDUPE_WINDOW_S` (default 5s). All dedupe is in-memory and process-local.
+- Window: fixed at 5 seconds. All dedupe is in-memory and process-local.
 - Keys:
   - Refresh summaries: `refresh:{scope}:{snapshot_id}` (snapshot ID optional; falls back to a timestamp bucket hash of the bucket list).
   - Welcome summaries: `welcome:{tag}:{recruit_id}` (recruit ID falls back to `0` when unavailable).
@@ -74,9 +74,7 @@ Line mode:
 - Within the window, only the first event is emitted; later duplicates are ignored to keep the Discord channel readable.
 
 ## Configuration knobs
-- `LOG_DEDUPE_WINDOW_S` (float, default `5`): adjusts the shared dedupe horizon for refresh, welcome, and permission sync events.
-- `LOG_REFRESH_RENDER_MODE` (`plain`, `line`, or `table`, default `plain`): toggles between the compact one-line refresh summary and the code-block table layout.
-- `LOG_INCLUDE_NUMERIC_IDS` (`true`/`false`, default `true`): appends the raw numeric ID in parentheses after each label when enabled.
+No runtime environment flags affect logging templates. Numeric snowflake IDs stay hidden, and refresh summaries always use the concise inline layout.
 
 ## Operational rules
 - Do not call Discord `fetch_*` APIs purely for logging; the helpers rely on cached objects and gracefully degrade to `#unknown` placeholders.
