@@ -14,10 +14,9 @@ The welcome questionnaire now runs entirely inside the ticket thread. Recruits (
 - **Greeting phrase:** When a message in the welcome thread contains `"awake by reacting with"` (case-insensitive) the bot reacts 👍 and posts the panel.
 - **🎫 emoji:** When the recruit, a RecruitmentCoordinator, or a GuardianKnight adds 🎫 in the welcome thread the bot posts another panel message. The watcher never edits existing panels—each trigger posts a new one to avoid stale-message errors.
 
-## Eligibility
-- **Recruit:** The thread owner can always launch or resume the modal flow.
-- **Staff:** Members with RecruitmentCoordinator or GuardianKnight roles can start the flow on behalf of the recruit.
-- **Others:** Everyone else receives an ephemeral notice that the panel is restricted, and the watcher logs the blocked attempt.
+### Authorization
+A user may open and complete the onboarding questionnaire if they can read the welcome thread.
+No target-user resolution is required. Recruiter/Admin roles are not needed to kick off or complete the flow.
 
 ## Restart rules
 - Sessions survive restarts thanks to the persistent view ID. If the modal flow is already in progress, pressing the button offers a resume/restart choice. Losing in-memory state is harmless—the recruit can simply start over.

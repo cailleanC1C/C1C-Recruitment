@@ -17,7 +17,6 @@ from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
-from shared.config import get_admin_role_ids, get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
 
@@ -992,74 +991,70 @@ class BaseWelcomeController:
             parent_id = getattr(thread, "parent_id", None)
             if parent_id is not None:
                 log_context.setdefault("parent_channel_id", int(parent_id))
+        target_id = self._target_users.get(thread_id)
+        if target_id is not None and log_context is not None:
+            log_context.setdefault("target_user_id", int(target_id))
 
         if actor_id is not None and actor_id in allowed_cache:
             if log_context is not None:
                 await self._log_access("info", "allowed", thread_id, interaction, log_context)
             return True, None
 
-        await self._ensure_target_cached(thread_id, refresh_if_none=True)
+        channel = interaction.channel
+        thread = self._thread_for(thread_id)
+        subject: discord.Thread | discord.TextChannel | None
+        if isinstance(channel, (discord.Thread, discord.TextChannel)):
+            subject = channel
+        else:
+            subject = thread if isinstance(thread, (discord.Thread, discord.TextChannel)) else None
 
-        target_id = self._target_users.get(thread_id)
-        if target_id is not None and log_context is not None:
-            log_context.setdefault("target_user_id", int(target_id))
-            target_message_id = self._target_message_ids.get(thread_id)
-            if target_message_id is not None:
-                log_context.setdefault("target_message_id", int(target_message_id))
-        if target_id is None:
+        if subject is None:
+            if log_context is not None:
+                await self._log_access("warn", "denied_scope", thread_id, interaction, log_context)
+            await _safe_ephemeral(
+                interaction,
+                "⚠️ I couldn't verify the permissions for this interaction.",
+            )
+            return False, "wrong_scope"
+
+        perms = subject.permissions_for(cast(discord.abc.Snowflake, actor))
+        if not perms.read_messages:
             if log_context is not None:
                 await self._log_access(
                     "warn",
-                    "ambiguous_target",
+                    "denied_permission",
                     thread_id,
                     interaction,
                     log_context,
+                    reason="no_read",
                 )
             await _safe_ephemeral(
                 interaction,
-                "⚠️ I couldn't identify the recruit for this ticket. Please update the welcome greeting and try again.",
+                "⚠️ You need read access to this thread before starting the onboarding form.",
             )
-            return False, "ambiguous_target"
+            return False, "no_read"
 
-        if actor_id is not None and int(actor_id) == int(target_id):
-            allowed_cache.add(int(actor_id))
+        if isinstance(subject, discord.Thread) and not perms.send_messages_in_threads:
             if log_context is not None:
-                await self._log_access("info", "allowed", thread_id, interaction, log_context)
-            return True, None
-
-        member_roles = self._member_role_ids(actor)
-        admin_roles = get_admin_role_ids()
-        recruiter_roles = get_recruiter_role_ids()
-
-        allowed_by_role = False
-        if member_roles:
-            if admin_roles and member_roles.intersection(admin_roles):
-                allowed_by_role = True
-            elif recruiter_roles and member_roles.intersection(recruiter_roles):
-                allowed_by_role = True
-
-        if allowed_by_role:
-            if actor_id is not None:
-                allowed_cache.add(int(actor_id))
-            if log_context is not None:
-                await self._log_access("info", "allowed", thread_id, interaction, log_context)
-            return True, None
-
-        if log_context is not None:
-            reason = "role_config_empty" if not admin_roles and not recruiter_roles else "missing_roles"
-            await self._log_access(
-                "warn",
-                "denied_role",
-                thread_id,
+                await self._log_access(
+                    "warn",
+                    "denied_permission",
+                    thread_id,
+                    interaction,
+                    log_context,
+                    reason="no_thread_send",
+                )
+            await _safe_ephemeral(
                 interaction,
-                log_context,
-                reason=reason,
+                "⚠️ I need permission to reply in this thread before opening the onboarding form.",
             )
-        await _safe_ephemeral(
-            interaction,
-            "⚠️ This panel is reserved for the recruit and authorized recruiters.",
-        )
-        return False, "denied_role"
+            return False, "no_thread_send"
+
+        if actor_id is not None:
+            allowed_cache.add(int(actor_id))
+        if log_context is not None:
+            await self._log_access("info", "allowed", thread_id, interaction, log_context)
+        return True, None
 
     def _store_select_answer(
         self,

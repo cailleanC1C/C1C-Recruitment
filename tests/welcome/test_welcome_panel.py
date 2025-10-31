@@ -131,12 +131,10 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.check_interaction.assert_not_awaited()
+        controller.check_interaction.assert_awaited_once()
         controller._handle_modal_launch.assert_not_awaited()
-        followup.send.assert_awaited_once()
-        _, followup_kwargs = followup.send.await_args
-        assert followup_kwargs.get("ephemeral") is True
+        followup.send.assert_not_awaited()
         assert logs_mock.await_count == 1
-        assert logs_mock.await_args.kwargs.get("result") == "ambiguous_target"
+        assert logs_mock.await_args.kwargs.get("result") == "clicked"
 
     asyncio.run(runner())
