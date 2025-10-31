@@ -1,4 +1,4 @@
-"""CoreOps reload command helpers."""
+"""CoreOps reload command helpers kept import-safe for C-03 guardrail."""
 
 from __future__ import annotations
 
@@ -7,10 +7,9 @@ import logging
 
 from discord.ext import commands
 
+from c1c_coreops.helpers import help_metadata
 from modules.common import runtime
 from shared import config as cfg
-
-from c1c_coreops.helpers import help_metadata
 
 logger = logging.getLogger("c1c.coreops.commands.reload")
 

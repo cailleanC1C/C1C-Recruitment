@@ -1,4 +1,5 @@
-# shared/coreops_render.py
+"""Embed rendering helpers kept import-safe for C-03 compliance."""
+
 from __future__ import annotations
 
 import datetime as dt
@@ -10,8 +11,8 @@ from typing import Sequence
 import discord
 
 from c1c_coreops.help import COREOPS_VERSION, build_coreops_footer
-from shared.utils import humanize_duration
 from c1c_coreops.tags import lifecycle_tag
+from shared.utils import humanize_duration
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))

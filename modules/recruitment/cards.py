@@ -1,4 +1,4 @@
-"""Embed builders for recruitment-related commands and views."""
+"""Embed builders for recruitment flows kept import-safe for C-03."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from shared.sheets.recruitment import (
     RecruitmentClanRecord,
 )
 
-from . import emoji_pipeline
+from modules.recruitment import emoji_pipeline
 
 
 def _coerce_entry(
