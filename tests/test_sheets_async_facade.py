@@ -13,15 +13,15 @@ class _Dummy:
         return 42
 
 
-def test_facade_uses_to_thread(monkeypatch):
+def test_facade_uses_async_adapter(monkeypatch):
     async def runner() -> None:
         dummy = _Dummy()
 
-        with patch("asyncio.to_thread") as mocked_to_thread:
+        with patch("shared.sheets.async_facade._adapter.arun") as mocked_arun:
             async def passthrough(func, *args, **kwargs):
                 return func(*args, **kwargs)
 
-            mocked_to_thread.side_effect = passthrough
+            mocked_arun.side_effect = passthrough
 
             from shared.sheets import recruitment as sync_recruitment
 
@@ -30,7 +30,7 @@ def test_facade_uses_to_thread(monkeypatch):
             result = await sheets.fetch_clans(force=False)
 
             assert result == 42
-            assert mocked_to_thread.called
+            assert mocked_arun.called
             assert dummy.called == 1
 
     asyncio.run(runner())

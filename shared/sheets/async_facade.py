@@ -1,27 +1,27 @@
 """Async facade for Google Sheets helpers.
 
 This module mirrors the synchronous APIs exposed by ``shared.sheets.recruitment``
-and ``shared.sheets.core``. Each wrapper executes the synchronous helper in a
-worker thread via :func:`asyncio.to_thread` so that async callers never block the
-event loop.
+and ``shared.sheets.core``. Each wrapper executes the synchronous helper using
+the bounded executor managed by :mod:`shared.sheets.async_adapter` so that async
+callers never block the event loop.
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Callable, ParamSpec, TypeVar
 
 from shared.sheets import core as _core_sync
 from shared.sheets import recruitment as _recruitment_sync
+from . import async_adapter as _adapter
 
 P = ParamSpec("P")
 T = TypeVar("T")
 
 
 async def _to_thread(func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
-    """Run ``func`` in a worker thread using :func:`asyncio.to_thread`."""
+    """Run ``func`` in the shared Sheets executor."""
 
-    return await asyncio.to_thread(func, *args, **kwargs)
+    return await _adapter.arun(func, *args, **kwargs)
 
 
 # === Recruitment-facing async wrappers ===
