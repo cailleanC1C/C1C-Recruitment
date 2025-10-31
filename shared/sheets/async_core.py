@@ -1,94 +1,45 @@
 from __future__ import annotations
 
-"""
-Async wrappers for Google Sheets access.
+"""Async wrappers for Google Sheets access built on :mod:`shared.sheets.core`."""
 
-This module mirrors the sync API in shared.sheets.core, but routes every call
-through :mod:`shared.sheets.async_adapter` and uses async-friendly retry
-backoff so the Discord event loop never blocks.
-
-Non-breaking: existing callers can keep using shared.sheets.core.
-New/ported code should import from shared.sheets.async_core.
-"""
-
-import asyncio
-from typing import Any, Callable, TypeVar, ParamSpec
+from typing import Any, Callable, ParamSpec, TypeVar
 
 from . import core as _core
-from . import async_adapter
 
 P = ParamSpec("P")
 T = TypeVar("T")
 
-# Defaults mirror shared.sheets.core.
-_DEFAULT_ATTEMPTS = 6
-_DEFAULT_BASE = 0.25  # seconds
-_DEFAULT_FACTOR = 1.8  # multiplier
+
+async def aopen_by_key(
+    sheet_id: str | None = None, *, timeout: float | None = None
+) -> Any:
+    """Open a spreadsheet by key without blocking the event loop."""
+
+    return await _core.aopen_by_key(sheet_id, timeout=timeout)
 
 
-async def _retry_with_backoff_async(
-    func: Callable[P, T],
-    *args: P.args,
-    attempts: int | None = None,
-    base_delay: float | None = None,
-    factor: float | None = None,
-    **kwargs: P.kwargs,
-) -> T:
-    """
-    Async retry wrapper: runs the sync func in a worker thread and backs off with
-    await asyncio.sleep(...). Never blocks the event loop.
-    """
-    max_attempts, base, mult = _DEFAULT_ATTEMPTS, _DEFAULT_BASE, _DEFAULT_FACTOR
-    if attempts is not None:
-        max_attempts = attempts
-    if base_delay is not None:
-        base = base_delay
-    if factor is not None:
-        mult = factor
+async def aget_worksheet(
+    sheet_id: str, name: str, *, timeout: float | None = None
+) -> Any:
+    """Fetch a worksheet handle using the shared cache without blocking."""
 
-    last_exc: BaseException | None = None
-    delay = base
-    for attempt in range(1, max_attempts + 1):
-        try:
-            # Execute the sync function in a worker managed by the adapter
-            return await async_adapter.arun(func, *args, **kwargs)
-        except BaseException as e:  # gspread raises various exceptions
-            # Respect task cancellation — don't swallow CancelledError
-            if isinstance(e, asyncio.CancelledError):
-                raise
-            last_exc = e
-            if attempt >= max_attempts:
-                break
-            # Jitter-friendly exponential backoff (cap reasonable upper bound)
-            await asyncio.sleep(min(delay, 10.0))
-            delay *= mult
-
-    assert last_exc is not None
-    raise last_exc
+    return await _core.aget_worksheet(sheet_id, name, timeout=timeout)
 
 
-# -------------------------
-# Async mirrors of core API
-# -------------------------
+async def afetch_records(
+    sheet_id: str, worksheet: str, *, timeout: float | None = None
+) -> list[dict[str, Any]]:
+    """Return worksheet records asynchronously with retry semantics."""
 
-async def aopen_by_key(sheet_id: str | None = None):
-    """Async: open spreadsheet by key (handle cached in core)."""
-    return await async_adapter.arun(_core.open_by_key, sheet_id)
-
-
-async def aget_worksheet(sheet_id: str, name: str):
-    """Async: get worksheet handle by (sheet_id, tab name) using core cache."""
-    return await async_adapter.arun(_core.get_worksheet, sheet_id, name)
+    return await _core.afetch_records(sheet_id, worksheet, timeout=timeout)
 
 
-async def afetch_records(sheet_id: str, worksheet: str) -> list[dict[str, Any]]:
-    """Async: get_all_records() with core's caching and retry, off the loop."""
-    return await async_adapter.arun(_core.fetch_records, sheet_id, worksheet)
+async def afetch_values(
+    sheet_id: str, worksheet: str, *, timeout: float | None = None
+) -> list[list[Any]]:
+    """Return worksheet values asynchronously with retry semantics."""
 
-
-async def afetch_values(sheet_id: str, worksheet: str) -> list[list[Any]]:
-    """Async: get_all_values() with core's caching and retry, off the loop."""
-    return await async_adapter.arun(_core.fetch_values, sheet_id, worksheet)
+    return await _core.afetch_values(sheet_id, worksheet, timeout=timeout)
 
 
 async def acall_with_backoff(
@@ -97,15 +48,19 @@ async def acall_with_backoff(
     attempts: int | None = None,
     base_delay: float | None = None,
     factor: float | None = None,
+    timeout: float | None = None,
     **kwargs: P.kwargs,
 ) -> T:
-    """
-    Async retry wrapper for write/update helpers. Callers pass a sync gspread
-    function (e.g., ws.update) plus args/kwargs. We invoke it in a thread and
-    back off with await asyncio.sleep between attempts.
-    """
-    return await _retry_with_backoff_async(
-        func, *args, attempts=attempts, base_delay=base_delay, factor=factor, **kwargs
+    """Execute ``func`` in the Sheets executor with async backoff."""
+
+    return await _core.acall_with_backoff(
+        func,
+        *args,
+        attempts=attempts,
+        base_delay=base_delay,
+        factor=factor,
+        timeout=timeout,
+        **kwargs,
     )
 
 
