@@ -59,10 +59,14 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         thread_id = 7777
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
 
-        response = SimpleNamespace(
-            is_done=MagicMock(return_value=False),
-            send_modal=AsyncMock(),
-        )
+        response = SimpleNamespace()
+        response.is_done = MagicMock(return_value=False)
+
+        async def _defer(*_, **__):
+            response.is_done.return_value = True
+
+        response.defer = AsyncMock(side_effect=_defer)
+        response.send_modal = AsyncMock()
         followup = SimpleNamespace(send=AsyncMock())
         app_permissions = SimpleNamespace(
             send_messages=True,
@@ -73,7 +77,8 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         interaction = SimpleNamespace(
             response=response,
             followup=followup,
-            user=SimpleNamespace(id=5555, roles=[]),
+            edit_original_response=AsyncMock(),
+            user=SimpleNamespace(id=5555, roles=[], display_name="Guardian"),
             channel=None,
             channel_id=thread_id,
             message=_DummyMessage(id=3333),
@@ -84,8 +89,8 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         await button.callback(interaction)
 
         controller._handle_modal_launch.assert_awaited_once()
-        response.send_modal.assert_awaited_once()
-        assert response.send_modal.await_args.args[0] == "sentinel"
+        response.defer.assert_awaited_once()
+        assert response.defer.await_args.kwargs.get("ephemeral") is True
 
     asyncio.run(runner())
 
@@ -106,11 +111,15 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         thread_id = 4242
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
 
-        response = SimpleNamespace(
-            is_done=MagicMock(return_value=True),
-            send_modal=AsyncMock(),
-            send_message=AsyncMock(),
-        )
+        response = SimpleNamespace()
+        response.is_done = MagicMock(return_value=False)
+
+        async def _defer(*_, **__):
+            response.is_done.return_value = True
+
+        response.defer = AsyncMock(side_effect=_defer)
+        response.send_modal = AsyncMock()
+        response.send_message = AsyncMock()
         followup = SimpleNamespace(send=AsyncMock())
         app_permissions = SimpleNamespace(
             send_messages=True,
@@ -121,7 +130,8 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         interaction = SimpleNamespace(
             response=response,
             followup=followup,
-            user=SimpleNamespace(id=9999, roles=[]),
+            edit_original_response=AsyncMock(),
+            user=SimpleNamespace(id=9999, roles=[], display_name="Member"),
             channel=None,
             channel_id=thread_id,
             message=_DummyMessage(id=2222),
@@ -134,6 +144,7 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         controller.check_interaction.assert_awaited_once()
         controller._handle_modal_launch.assert_not_awaited()
         followup.send.assert_not_awaited()
+        response.defer.assert_awaited_once()
         assert logs_mock.await_count == 1
         assert logs_mock.await_args.kwargs.get("result") == "clicked"
 

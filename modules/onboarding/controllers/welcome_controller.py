@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
 
 import discord
 from discord.ext import commands
+from discord.http import Route
 
 from modules.onboarding import diag, logs, rules
 from modules.onboarding.session_store import SessionData, store
@@ -19,6 +20,111 @@ from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
 
 log = logging.getLogger(__name__)
+gate_log = logging.getLogger("c1c.onboarding.gate")
+
+
+def _display_name(user: discord.abc.User | discord.Member | None) -> str:
+    if user is None:
+        return "<unknown>"
+    return (
+        getattr(user, "display_name", None)
+        or getattr(user, "global_name", None)
+        or getattr(user, "name", None)
+        or "<unknown>"
+    )
+
+
+def _channel_path(channel: discord.abc.GuildChannel | discord.Thread | None) -> str:
+    if isinstance(channel, discord.Thread):
+        parent = getattr(channel, "parent", None)
+        parent_label = f"#{getattr(parent, 'name', 'unknown')}" if parent else "#unknown"
+        return f"{parent_label} › {getattr(channel, 'name', 'thread')}"
+    if isinstance(channel, discord.abc.GuildChannel):
+        return f"#{getattr(channel, 'name', 'channel')}"
+    return "#unknown"
+
+
+def _log_gate(
+    interaction: discord.Interaction,
+    *,
+    allowed: bool,
+    reason: str,
+    fallback_thread: discord.Thread | None = None,
+) -> None:
+    channel_obj: discord.abc.GuildChannel | discord.Thread | None
+    channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else fallback_thread
+    emoji = "✅" if allowed else "🔐"
+    status = "ok" if allowed else "deny"
+    gate_log.info(
+        "%s Welcome — gate=%s • user=%s • channel=%s • reason=%s",
+        emoji,
+        status,
+        _display_name(getattr(interaction, "user", None)),
+        _channel_path(channel_obj),
+        reason,
+    )
+
+
+def _log_followup_fallback(
+    interaction: discord.Interaction,
+    *,
+    action: str,
+    error: Exception,
+) -> None:
+    gate_log.warning(
+        "⚠️ Welcome — followup fallback • action=%s • user=%s • channel=%s • why=%s",
+        action,
+        _display_name(getattr(interaction, "user", None)),
+        _channel_path(getattr(interaction, "channel", None)),
+        getattr(error, "__class__", type(error)).__name__,
+    )
+
+
+async def _edit_deferred_response(interaction: discord.Interaction, message: str) -> None:
+    try:
+        await interaction.edit_original_response(content=message)
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        _log_followup_fallback(interaction, action="edit_original", error=exc)
+        try:
+            await interaction.followup.send(message, ephemeral=True)
+        except Exception:  # pragma: no cover - final guard
+            log.warning("failed to deliver followup message", exc_info=True)
+
+
+async def _send_modal_response(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.send_modal(modal)
+            return
+    except Exception:  # pragma: no cover - diagnostics only
+        log.debug("modal send pre-check failed", exc_info=True)
+    await _send_modal_followup(interaction, modal)
+
+
+async def _send_modal_followup(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
+    client = getattr(interaction, "client", None)
+    if client is None:
+        raise RuntimeError("Missing client for modal follow-up send")
+    http = getattr(client, "http", None)
+    if http is None:
+        raise RuntimeError("Missing HTTP client for modal follow-up send")
+    payload = {
+        "type": discord.InteractionResponseType.modal.value,
+        "data": modal.to_dict(),
+    }
+    route = Route(
+        "POST",
+        "/interactions/{interaction_id}/{interaction_token}/callback",
+        interaction_id=interaction.id,
+        interaction_token=interaction.token,
+    )
+    await http.request(route, json=payload)
+    store = getattr(client, "_connection", None)
+    if store is not None:
+        try:
+            store.store_view(modal)
+        except Exception:  # pragma: no cover - defensive guard
+            log.warning("failed to register modal view", exc_info=True)
 
 _PANEL_RETRY_DELAYS = (0.5, 1.0, 2.0)
 
@@ -450,14 +556,13 @@ class BaseWelcomeController:
             await diag.log_event("info", "modal_launch_pre", **diag_state)
             if diag_state.get("response_is_done"):
                 await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="response_is_done",
+                    "info",
+                    "modal_launch_followup",
+                    followup_path=True,
                     **diag_state,
                 )
-                return
         try:
-            await interaction.response.send_modal(modal)
+            await _send_modal_response(interaction, modal)
         except Exception as exc:
             if diag.is_enabled():
                 await diag.log_event(
@@ -996,29 +1101,28 @@ class BaseWelcomeController:
             log_context.setdefault("target_user_id", int(target_id))
 
         if actor_id is not None and actor_id in allowed_cache:
+            fallback_thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else self._thread_for(thread_id)
+            _log_gate(interaction, allowed=True, reason="cached", fallback_thread=fallback_thread)
             if log_context is not None:
                 await self._log_access("info", "allowed", thread_id, interaction, log_context)
             return True, None
 
-        channel = interaction.channel
         thread = self._thread_for(thread_id)
-        subject: discord.Thread | discord.TextChannel | None
-        if isinstance(channel, (discord.Thread, discord.TextChannel)):
-            subject = channel
-        else:
-            subject = thread if isinstance(thread, (discord.Thread, discord.TextChannel)) else None
+        subject = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
 
         if subject is None:
+            _log_gate(interaction, allowed=False, reason="no_thread", fallback_thread=thread)
             if log_context is not None:
                 await self._log_access("warn", "denied_scope", thread_id, interaction, log_context)
             await _safe_ephemeral(
                 interaction,
-                "⚠️ I couldn't verify the permissions for this interaction.",
+                "⚠️ This onboarding panel only works inside ticket threads.",
             )
-            return False, "wrong_scope"
+            return False, "no_thread"
 
         perms = subject.permissions_for(cast(discord.abc.Snowflake, actor))
-        if not perms.read_messages:
+        if not perms.view_channel:
+            _log_gate(interaction, allowed=False, reason="no_view_channel", fallback_thread=subject)
             if log_context is not None:
                 await self._log_access(
                     "warn",
@@ -1026,18 +1130,19 @@ class BaseWelcomeController:
                     thread_id,
                     interaction,
                     log_context,
-                    reason="no_read",
+                    reason="no_view_channel",
                 )
             await _safe_ephemeral(
                 interaction,
-                "⚠️ You need read access to this thread before starting the onboarding form.",
+                "⚠️ You need view access to this thread before starting the onboarding form.",
             )
-            return False, "no_read"
+            return False, "no_view_channel"
 
         if actor_id is not None:
             allowed_cache.add(int(actor_id))
         if log_context is not None:
             await self._log_access("info", "allowed", thread_id, interaction, log_context)
+        _log_gate(interaction, allowed=True, reason="view_channel", fallback_thread=subject)
         return True, None
 
     def _store_select_answer(
@@ -1186,7 +1291,7 @@ async def _safe_ephemeral(interaction: discord.Interaction, message: str) -> Non
         await diag.log_event("info", "deny_notice_pre", **diag_state)
     try:
         if response_done:
-            await interaction.followup.send(message, ephemeral=True)
+            await _edit_deferred_response(interaction, message)
         else:
             await interaction.response.send_message(message, ephemeral=True)
         if diag.is_enabled():
@@ -1214,7 +1319,7 @@ async def _safe_ephemeral(interaction: discord.Interaction, message: str) -> Non
                 code=code,
                 **diag_state,
             )
-        log.warning("failed to send ephemeral response", exc_info=True)
+        log.warning("failed to send denial response", exc_info=True)
 
 
 def _visible_state(visibility: dict[str, dict[str, str]], qid: str) -> str:
