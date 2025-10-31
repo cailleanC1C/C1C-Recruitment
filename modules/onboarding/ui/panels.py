@@ -127,6 +127,9 @@ class OpenQuestionsPanelView(discord.ui.View):
     """Persistent panel view that launches the welcome modal flow."""
 
     CUSTOM_ID = OPEN_QUESTIONS_CUSTOM_ID
+    ERROR_NOTICE = (
+        "Couldn\u2019t open the questions just now. A recruiter has been pinged. Please try again in a moment."
+    )
 
     def __init__(
         self,
@@ -161,6 +164,13 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        try:
+            await self._handle_launch(interaction)
+        except Exception:
+            await self._ensure_error_notice(interaction)
+            raise
+
+    async def _handle_launch(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
         controller = self._controller
         thread_id = state.get("thread_id")
@@ -332,7 +342,8 @@ class OpenQuestionsPanelView(discord.ui.View):
         except Exception as exc:  # pragma: no cover - defensive path
             error_context = dict(log_context)
             await logs.send_welcome_exception("error", exc, **error_context)
-            await self._notify_error(interaction)
+            await self._ensure_error_notice(interaction)
+            raise
 
     async def on_timeout(self) -> None:  # pragma: no cover - network
         if diag.is_enabled():
@@ -396,15 +407,96 @@ class OpenQuestionsPanelView(discord.ui.View):
             error_context["result"] = "error"
             await logs.send_welcome_exception("error", exc, **error_context)
 
-    async def _notify_error(self, interaction: discord.Interaction) -> None:
-        message = "⚠️ Something went wrong while opening the onboarding panel. Please try again."
+    async def _ensure_error_notice(self, interaction: discord.Interaction) -> None:
+        if getattr(interaction, "_c1c_error_notified", False):
+            return
+        setattr(interaction, "_c1c_error_notified", True)
         try:
             if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
+                await interaction.followup.send(self.ERROR_NOTICE, ephemeral=True)
             else:
-                await interaction.response.send_message(message, ephemeral=True)
+                await interaction.response.send_message(self.ERROR_NOTICE, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send error notice", exc_info=True)
+
+    async def _notify_error(self, interaction: discord.Interaction) -> None:
+        await self._ensure_error_notice(interaction)
+
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item,
+    ) -> None:
+        try:
+            snapshot, perms_text, _ = diag.permission_snapshot(interaction)
+        except Exception:
+            snapshot = None
+            perms_text = None
+
+        channel = getattr(interaction, "channel", None)
+        thread = channel if isinstance(channel, discord.Thread) else None
+        parent_channel = getattr(thread, "parent", None) if thread is not None else None
+
+        extra: dict[str, Any] = {
+            "diag": "welcome_flow",
+            "event": "view_error",
+            "view": self.__class__.__name__,
+            "view_tag": WELCOME_PANEL_TAG,
+            "custom_id": getattr(item, "custom_id", None),
+            "component_type": item.__class__.__name__ if item is not None else None,
+            "message_id": getattr(interaction.message, "id", None)
+            if interaction.message
+            else None,
+            "interaction_id": getattr(interaction, "id", None),
+            "actor": logs.format_actor(interaction.user),
+            "actor_id": getattr(interaction.user, "id", None),
+            "actor_name": logs.format_actor_handle(interaction.user),
+            "response_is_done": getattr(interaction.response, "is_done", lambda: None)(),
+            "app_permissions": perms_text,
+            "app_perms_text": perms_text,
+            "app_permissions_snapshot": snapshot,
+        }
+
+        guild = getattr(interaction, "guild", None)
+        guild_id = getattr(guild, "id", None) or getattr(interaction, "guild_id", None)
+        if guild_id is not None:
+            try:
+                extra["guild_id"] = int(guild_id)
+            except (TypeError, ValueError):
+                extra["guild_id"] = guild_id
+
+        if thread is not None:
+            extra.update(logs.thread_context(thread))
+            thread_id = getattr(thread, "id", None)
+            if thread_id is not None:
+                try:
+                    extra["thread_id"] = int(thread_id)
+                except (TypeError, ValueError):
+                    extra["thread_id"] = thread_id
+            parent_id = getattr(parent_channel, "id", None)
+            if parent_id is not None:
+                try:
+                    extra["parent_channel_id"] = int(parent_id)
+                except (TypeError, ValueError):
+                    extra["parent_channel_id"] = parent_id
+        elif channel is not None:
+            channel_id = getattr(channel, "id", None)
+            if channel_id is not None:
+                try:
+                    extra["channel_id"] = int(channel_id)
+                except (TypeError, ValueError):
+                    extra["channel_id"] = channel_id
+            formatted = None
+            try:
+                formatted = logs.format_channel(channel)  # type: ignore[arg-type]
+            except Exception:
+                formatted = None
+            if formatted:
+                extra.setdefault("channel", formatted)
+
+        await self._ensure_error_notice(interaction)
+        logs.log_view_error(extra, error)
 
     async def _notify_restart(self, interaction: discord.Interaction) -> None:
         message = "♻️ Restarting the onboarding form…"
