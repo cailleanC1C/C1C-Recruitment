@@ -18,6 +18,8 @@ except Exception as exc:  # pragma: no cover - optional dependency at import tim
 else:
     _IMPORT_ERROR = None
 
+from . import async_adapter
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 _WorksheetT = TypeVar("_WorksheetT")
@@ -95,7 +97,9 @@ def open_by_key(sheet_id: str | None = None):
     if resolved in _WorkbookCache:
         return _WorkbookCache[resolved]
     client = get_service_account_client()
-    workbook = _retry_with_backoff(client.open_by_key, resolved)
+    workbook = _retry_with_backoff(
+        async_adapter.open_spreadsheet, client, resolved
+    )
     _WorkbookCache[resolved] = workbook
     return workbook
 
@@ -107,19 +111,21 @@ def get_worksheet(sheet_id: str, name: str):
     if key in _WorksheetCache:
         return _WorksheetCache[key]
     workbook = open_by_key(sheet_id)
-    worksheet = _retry_with_backoff(workbook.worksheet, name)
+    worksheet = _retry_with_backoff(
+        async_adapter.worksheet_by_title, workbook, name
+    )
     _WorksheetCache[key] = worksheet
     return worksheet
 
 
 def fetch_records(sheet_id: str, worksheet: str):
     ws = get_worksheet(sheet_id, worksheet)
-    return _retry_with_backoff(ws.get_all_records)
+    return _retry_with_backoff(async_adapter.worksheet_records_all, ws)
 
 
 def fetch_values(sheet_id: str, worksheet: str):
     ws = get_worksheet(sheet_id, worksheet)
-    return _retry_with_backoff(ws.get_all_values)
+    return _retry_with_backoff(async_adapter.worksheet_values_all, ws)
 
 
 def sheets_read(sheet_id: str, a1_range: str):
@@ -132,18 +138,24 @@ def sheets_read(sheet_id: str, a1_range: str):
         worksheet_name, cell_range = a1_range.split("!", 1)
         worksheet_name = worksheet_name.strip()
         if worksheet_name:
-            worksheet = _retry_with_backoff(workbook.worksheet, worksheet_name)
+            worksheet = _retry_with_backoff(
+                async_adapter.worksheet_by_title, workbook, worksheet_name
+            )
         else:
             worksheet = getattr(workbook, "sheet1", None)
     else:
         worksheet = getattr(workbook, "sheet1", None)
 
     if worksheet is None:
-        worksheet = _retry_with_backoff(workbook.get_worksheet, 0)
+        worksheet = _retry_with_backoff(
+            async_adapter.worksheet_by_index, workbook, 0
+        )
 
     if not cell_range:
-        return _retry_with_backoff(worksheet.get_all_values)
-    return _retry_with_backoff(worksheet.get, cell_range)
+        return _retry_with_backoff(async_adapter.worksheet_values_all, worksheet)
+    return _retry_with_backoff(
+        async_adapter.worksheet_values_get, worksheet, cell_range
+    )
 
 
 def call_with_backoff(func: Callable[..., _WorksheetT], *args: Any, **kwargs: Any) -> _WorksheetT:

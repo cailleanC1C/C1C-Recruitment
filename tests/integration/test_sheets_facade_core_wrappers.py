@@ -14,7 +14,7 @@ if ROOT_STR not in sys.path:
 from shared.sheets import async_facade as sheets
 
 
-def test_core_read_wrapper_uses_to_thread(monkeypatch):
+def test_core_read_wrapper_uses_async_adapter(monkeypatch):
     # Skip if wrapper not present (keep test non-brittle across modules)
     if not hasattr(sheets, "sheets_read"):
         pytest.skip("sheets_read wrapper not exported")
@@ -30,15 +30,15 @@ def test_core_read_wrapper_uses_to_thread(monkeypatch):
 
         monkeypatch.setattr(_sync_core, "sheets_read", fake_read, raising=True)
 
-        with patch("asyncio.to_thread") as tt:
+        with patch("shared.sheets.async_facade._adapter.arun") as arun:
             async def passthrough(fn, *args, **kwargs):
                 return fn(*args, **kwargs)
 
-            tt.side_effect = passthrough
+            arun.side_effect = passthrough
             out = await sheets.sheets_read("Sheet1", "A1:B2")
 
         assert out == {"ok": True}
-        assert tt.called
+        assert arun.called
         assert called["n"] == 1
 
     asyncio.run(runner())
