@@ -9,11 +9,10 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
 
 import discord
 from discord.ext import commands
-from discord.http import Route
 
 from modules.onboarding import diag, logs, rules
 from modules.onboarding.session_store import SessionData, store
-from modules.onboarding.ui.modal_renderer import build_modals
+from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui import panels
@@ -93,54 +92,6 @@ async def _edit_deferred_response(interaction: discord.Interaction, message: str
             await followup.send(message, ephemeral=True)
         except Exception:  # pragma: no cover - final guard
             log.warning("failed to deliver followup message", exc_info=True)
-
-
-async def _send_modal_response(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
-    try:
-        if not interaction.response.is_done():
-            await interaction.response.send_modal(modal)
-            return
-    except Exception:  # pragma: no cover - diagnostics only
-        log.debug("modal send pre-check failed", exc_info=True)
-    await _send_modal_followup(interaction, modal)
-
-
-async def _send_modal_followup(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
-    client = getattr(interaction, "client", None)
-    if client is None:
-        log.debug("missing client on interaction; skipping modal follow-up send")
-        if diag.is_enabled():
-            state = diag.interaction_state(interaction)
-            state["followup_path"] = True
-            state["skip_reason"] = "missing_client"
-            await diag.log_event("warning", "modal_launch_skipped", **state)
-        return
-    http = getattr(client, "http", None)
-    if http is None:
-        log.debug("missing http client on interaction; skipping modal follow-up send")
-        if diag.is_enabled():
-            state = diag.interaction_state(interaction)
-            state["followup_path"] = True
-            state["skip_reason"] = "missing_http"
-            await diag.log_event("warning", "modal_launch_skipped", **state)
-        return
-    payload = {
-        "type": discord.InteractionResponseType.modal.value,
-        "data": modal.to_dict(),
-    }
-    route = Route(
-        "POST",
-        "/interactions/{interaction_id}/{interaction_token}/callback",
-        interaction_id=interaction.id,
-        interaction_token=interaction.token,
-    )
-    await http.request(route, json=payload)
-    store = getattr(client, "_connection", None)
-    if store is not None:
-        try:
-            store.store_view(modal)
-        except Exception:  # pragma: no cover - defensive guard
-            log.warning("failed to register modal view", exc_info=True)
 
 _PANEL_RETRY_DELAYS = (0.5, 1.0, 2.0)
 
@@ -562,8 +513,16 @@ class BaseWelcomeController:
             await self._start_select_step(thread, session)
             return
 
-        modal = modals[index]
-        modal.submit_callback = self._modal_submitted(thread_id, modal.questions, index)
+        questions_for_step = list(modals[index].questions)
+        modal = WelcomeQuestionnaireModal(
+            questions=questions_for_step,
+            step_index=index,
+            total_steps=len(modals),
+            title_prefix=self._modal_title_prefix(),
+            answers=session.answers,
+            visibility=session.visibility,
+            on_submit=self._modal_submitted(thread_id, questions_for_step, index),
+        )
         store.set_pending_step(thread_id, {"kind": "modal", "index": index})
         diag_state["modal_index"] = index
         diag_state["schema_id"] = session.schema_hash
@@ -577,8 +536,26 @@ class BaseWelcomeController:
                     followup_path=True,
                     **diag_state,
                 )
+        display_name = _display_name(getattr(interaction, "user", None))
+        channel_obj: discord.abc.GuildChannel | discord.Thread | None
+        channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else thread
         try:
-            await _send_modal_response(interaction, modal)
+            await interaction.response.send_modal(modal)
+        except discord.InteractionResponded:
+            channel_label = _channel_path(channel_obj)
+            log.warning(
+                "⚠️ Welcome — modal_already_responded • user=%s • channel=%s",
+                display_name,
+                channel_label,
+            )
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            return
         except Exception as exc:
             if diag.is_enabled():
                 await diag.log_event(
@@ -592,6 +569,12 @@ class BaseWelcomeController:
         else:
             if diag.is_enabled():
                 await diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
+            channel_label = _channel_path(channel_obj)
+            log.info(
+                "✅ Welcome — modal_open • user=%s • channel=%s",
+                display_name,
+                channel_label,
+            )
         await logs.send_welcome_log(
             "debug",
             view="modal",
@@ -756,6 +739,15 @@ class BaseWelcomeController:
             result="saved",
             index=index,
             **self._log_fields(thread_id, actor=interaction.user),
+        )
+
+        display_name = _display_name(getattr(interaction, "user", None))
+        channel_obj: discord.abc.GuildChannel | discord.Thread | None
+        channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else thread
+        log.info(
+            "✅ Welcome — modal_submit_ok • user=%s • channel=%s",
+            display_name,
+            _channel_path(channel_obj),
         )
 
         modals = build_modals(
