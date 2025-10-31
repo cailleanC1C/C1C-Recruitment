@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import sys
@@ -77,6 +78,89 @@ def _scan_patterns(paths: Iterable[Path], patterns: Sequence[re.Pattern[str]], *
                 if pattern.search(line):
                     violations.append(f"{rel}:{idx}")
     return violations
+
+
+def _scan_shared_sheets_async_client_usage() -> List[str]:
+    """Flag direct client usage inside async defs in ``shared/sheets``."""
+
+    base = ROOT / "shared" / "sheets"
+    if not base.exists():
+        return []
+
+    target_modules = {"gspread", "googleapiclient"}
+    offenders: List[str] = []
+
+    for file_path in base.rglob("*.py"):
+        rel = file_path.relative_to(ROOT).as_posix()
+        try:
+            source = file_path.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except Exception:
+            continue
+
+        imported_names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".")[0]
+                    if root in target_modules:
+                        imported_names.add(alias.asname or root)
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                root = module.split(".")[0]
+                if root in target_modules:
+                    for alias in node.names:
+                        imported_names.add(alias.asname or alias.name)
+
+        if not imported_names:
+            continue
+
+        class _AsyncClientVisitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.matches: List[int] = []
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802 - ast API
+                line = self._find_usage(node)
+                if line is not None:
+                    self.matches.append(line)
+                self.generic_visit(node)
+
+            def _find_usage(self, node: ast.AsyncFunctionDef) -> int | None:
+                class _BodyVisitor(ast.NodeVisitor):
+                    def __init__(self) -> None:
+                        self.line: int | None = None
+
+                    def visit_Name(self, inner: ast.Name) -> None:  # noqa: N802 - ast API
+                        if self.line is None and inner.id in imported_names:
+                            self.line = inner.lineno
+
+                    def visit_Attribute(self, inner: ast.Attribute) -> None:  # noqa: N802 - ast API
+                        if self.line is not None:
+                            return
+                        if isinstance(inner.value, ast.Name) and inner.value.id in imported_names:
+                            self.line = inner.lineno
+                            return
+                        self.generic_visit(inner)
+
+                    def visit_FunctionDef(self, inner: ast.FunctionDef) -> None:  # noqa: N802 - ast API
+                        return
+
+                    def visit_AsyncFunctionDef(self, inner: ast.AsyncFunctionDef) -> None:  # noqa: N802 - ast API
+                        return
+
+                visitor = _BodyVisitor()
+                for stmt in node.body:
+                    if visitor.line is not None:
+                        break
+                    visitor.visit(stmt)
+                return visitor.line
+
+        visitor = _AsyncClientVisitor()
+        visitor.visit(tree)
+        for line in visitor.matches:
+            offenders.append(f"{rel}:{line}")
+
+    return offenders
 
 
 def scan_s01() -> Tuple[bool, List[str]]:
@@ -269,6 +353,8 @@ def scan_c01() -> Tuple[bool, List[str]]:
         if not str(path.relative_to(ROOT)).startswith("tests/")
     ]
     violations = _scan_patterns(paths, patterns)
+    violations.extend(_scan_shared_sheets_async_client_usage())
+    violations = sorted(set(violations))
     return (len(violations) == 0, violations)
 
 

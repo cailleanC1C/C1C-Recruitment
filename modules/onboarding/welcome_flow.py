@@ -30,6 +30,7 @@ async def start_welcome_dialog(
     *,
     bot: commands.Bot | None = None,
     panel_message_id: int | None = None,
+    panel_message: discord.Message | None = None,
 ) -> None:
     """Launch the shared welcome dialog flow when all gates pass."""
 
@@ -79,8 +80,19 @@ async def start_welcome_dialog(
         context_defaults["target_user_id"] = target_user_id
     if target_message_id is not None:
         context_defaults["target_message_id"] = target_message_id
+    anchor_message_id: int | None = None
+    if panel_message is not None:
+        raw_id = getattr(panel_message, "id", None)
+        try:
+            anchor_message_id = int(raw_id) if raw_id is not None else None
+        except (TypeError, ValueError):
+            anchor_message_id = None
     if panel_message_id is not None:
         context_defaults["message_id"] = panel_message_id
+        if anchor_message_id is None:
+            anchor_message_id = panel_message_id
+    elif anchor_message_id is not None:
+        context_defaults["message_id"] = anchor_message_id
 
     if not feature_flags.is_enabled("welcome_dialog"):
         await logs.send_welcome_log(
@@ -162,12 +174,14 @@ async def start_welcome_dialog(
         controller = WelcomeController(controller_bot)
     else:
         controller = PromoController(controller_bot)
-    if panel_message_id is not None:
+    if anchor_message_id is not None:
         try:
-            controller._panel_messages[int(thread.id)] = int(panel_message_id)
-            panels.register_panel_message(int(thread.id), int(panel_message_id))
+            controller._panel_messages[int(thread.id)] = int(anchor_message_id)
+            panels.register_panel_message(int(thread.id), int(anchor_message_id))
         except (TypeError, ValueError):
-            pass
+            anchor_message_id = None
+    if panel_message is not None and anchor_message_id is not None:
+        controller._prefetched_panels[int(thread.id)] = panel_message
     await controller.run(
         thread,
         actor,
