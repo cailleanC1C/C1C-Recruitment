@@ -85,8 +85,12 @@ async def _edit_deferred_response(interaction: discord.Interaction, message: str
         await interaction.edit_original_response(content=message)
     except Exception as exc:  # pragma: no cover - defensive fallback
         _log_followup_fallback(interaction, action="edit_original", error=exc)
+        followup = getattr(interaction, "followup", None)
+        if followup is None:
+            log.debug("followup handler missing; skipping deferred notice")
+            return
         try:
-            await interaction.followup.send(message, ephemeral=True)
+            await followup.send(message, ephemeral=True)
         except Exception:  # pragma: no cover - final guard
             log.warning("failed to deliver followup message", exc_info=True)
 
@@ -104,10 +108,22 @@ async def _send_modal_response(interaction: discord.Interaction, modal: discord.
 async def _send_modal_followup(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
     client = getattr(interaction, "client", None)
     if client is None:
-        raise RuntimeError("Missing client for modal follow-up send")
+        log.debug("missing client on interaction; skipping modal follow-up send")
+        if diag.is_enabled():
+            state = diag.interaction_state(interaction)
+            state["followup_path"] = True
+            state["skip_reason"] = "missing_client"
+            await diag.log_event("warning", "modal_launch_skipped", **state)
+        return
     http = getattr(client, "http", None)
     if http is None:
-        raise RuntimeError("Missing HTTP client for modal follow-up send")
+        log.debug("missing http client on interaction; skipping modal follow-up send")
+        if diag.is_enabled():
+            state = diag.interaction_state(interaction)
+            state["followup_path"] = True
+            state["skip_reason"] = "missing_http"
+            await diag.log_event("warning", "modal_launch_skipped", **state)
+        return
     payload = {
         "type": discord.InteractionResponseType.modal.value,
         "data": modal.to_dict(),
