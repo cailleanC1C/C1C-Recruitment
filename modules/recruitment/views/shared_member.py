@@ -8,7 +8,7 @@ from typing import Iterable, Sequence
 import discord
 from discord import InteractionResponded
 
-from .. import cards, emoji_pipeline
+from modules.recruitment import cards, emoji_pipeline
 from shared.sheets.recruitment import RecruitmentClanRecord
 
 PAGE_SIZE = 5

@@ -10,11 +10,11 @@ import discord
 from discord import InteractionResponded
 from discord.ext import commands
 
-from .. import search as roster_search
-from ..search_helpers import format_filters_footer
-from .filters_member import MemberFiltersView
-from .interaction_utils import defer_once
-from .shared_member import MemberSearchPagedView
+from modules.recruitment import search as roster_search
+from modules.recruitment.search_helpers import format_filters_footer
+from modules.recruitment.views.filters_member import MemberFiltersView
+from modules.recruitment.views.interaction_utils import defer_once
+from modules.recruitment.views.shared_member import MemberSearchPagedView
 from shared import config as shared_config
 from shared.sheets.recruitment import RecruitmentClanRecord
 

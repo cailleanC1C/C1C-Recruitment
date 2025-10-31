@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from discord.ext import commands
 
-from .welcome_controller import BaseWelcomeController
+from modules.onboarding.controllers.welcome_controller import BaseWelcomeController
 
 
 class PromoController(BaseWelcomeController):

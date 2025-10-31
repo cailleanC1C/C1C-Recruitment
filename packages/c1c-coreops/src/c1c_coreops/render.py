@@ -9,9 +9,9 @@ from typing import Sequence
 
 import discord
 
-from .help import COREOPS_VERSION, build_coreops_footer
+from c1c_coreops.help import COREOPS_VERSION, build_coreops_footer
 from shared.utils import humanize_duration
-from .tags import lifecycle_tag
+from c1c_coreops.tags import lifecycle_tag
 
 def _hms(seconds: float) -> str:
     s = int(max(0, seconds))

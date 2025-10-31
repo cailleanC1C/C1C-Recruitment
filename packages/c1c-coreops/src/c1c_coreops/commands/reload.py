@@ -10,7 +10,7 @@ from discord.ext import commands
 from modules.common import runtime
 from shared import config as cfg
 
-from ..helpers import help_metadata
+from c1c_coreops.helpers import help_metadata
 
 logger = logging.getLogger("c1c.coreops.commands.reload")
 

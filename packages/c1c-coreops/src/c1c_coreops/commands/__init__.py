@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import reload
+from c1c_coreops.commands import reload
 
 __all__ = ["reload"]

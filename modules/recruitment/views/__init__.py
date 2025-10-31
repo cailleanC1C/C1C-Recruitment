@@ -1,6 +1,9 @@
 """Recruitment view helpers."""
 
-from .member_panel_legacy import MemberPanelControllerLegacy, MemberPanelState
+from modules.recruitment.views.member_panel_legacy import (
+    MemberPanelControllerLegacy,
+    MemberPanelState,
+)
 
 __all__ = [
     "MemberPanelControllerLegacy",

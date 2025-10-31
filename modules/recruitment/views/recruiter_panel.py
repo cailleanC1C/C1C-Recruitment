@@ -16,12 +16,14 @@ from typing import TYPE_CHECKING, Optional, Sequence
 import discord
 from discord import InteractionResponded
 
-from .. import cards
-from .. import search as roster_search
-from ..search_helpers import format_filters_footer as _format_filters_footer
+from modules.recruitment import cards
+from modules.recruitment import search as roster_search
+from modules.recruitment.search_helpers import (
+    format_filters_footer as _format_filters_footer,
+)
 from modules.common import config_access as config
 from shared.sheets.recruitment import RecruitmentClanRecord
-from .results_pager import ResultsPagerView
+from modules.recruitment.views.results_pager import ResultsPagerView
 
 if TYPE_CHECKING:
     from cogs.recruitment_recruiter import RecruiterPanelCog

@@ -8,9 +8,12 @@ import discord
 from discord import InteractionResponded
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .member_panel_legacy import MemberPanelControllerLegacy, MemberPanelState
+    from modules.recruitment.views.member_panel_legacy import (
+        MemberPanelControllerLegacy,
+        MemberPanelState,
+    )
 
-from .interaction_utils import defer_once
+from modules.recruitment.views.interaction_utils import defer_once
 
 
 CB_CHOICES = ["Easy", "Normal", "Hard", "Brutal", "NM", "UNM"]
