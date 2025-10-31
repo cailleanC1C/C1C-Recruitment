@@ -94,6 +94,19 @@ async def start_welcome_dialog(
     elif anchor_message_id is not None:
         context_defaults["message_id"] = anchor_message_id
 
+    if flow == "welcome" and not feature_flags.is_enabled("recruitment_welcome"):
+        await logs.send_welcome_log(
+            "info",
+            **_context(
+                {
+                    "result": "feature_disabled",
+                    "reason": "recruitment_welcome",
+                    **context_defaults,
+                }
+            ),
+        )
+        return
+
     if not feature_flags.is_enabled("welcome_dialog"):
         await logs.send_welcome_log(
             "info", **_context({"result": "feature_disabled", **context_defaults})

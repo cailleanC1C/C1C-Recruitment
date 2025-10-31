@@ -41,6 +41,8 @@ __all__ = [
     "get_admin_role_ids",
     "get_staff_role_ids",
     "get_recruiter_role_ids",
+    "get_recruitment_coordinator_role_ids",
+    "get_guardian_knight_role_ids",
     "get_lead_role_ids",
     "get_feature_toggles",
     "get_strict_probe",
@@ -594,6 +596,14 @@ def get_staff_role_ids() -> Set[int]:
 
 def get_recruiter_role_ids() -> Set[int]:
     return _role_set("RECRUITER_ROLE_IDS")
+
+
+def get_recruitment_coordinator_role_ids() -> Set[int]:
+    return _role_set("RECRUITMENT_COORDINATOR_ROLE_IDS")
+
+
+def get_guardian_knight_role_ids() -> Set[int]:
+    return _role_set("GUARDIAN_KNIGHT_ROLE_IDS")
 
 
 def get_lead_role_ids() -> Set[int]:

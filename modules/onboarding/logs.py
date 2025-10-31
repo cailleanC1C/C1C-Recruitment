@@ -140,12 +140,21 @@ def format_match(match: str | None) -> str | None:
 def thread_context(thread: discord.Thread | None) -> dict[str, Any]:
     if thread is None:
         return {}
-    return {
+    context: dict[str, Any] = {
         "tag": format_tag(thread),
         "channel": format_channel(thread),
         "thread": format_thread(getattr(thread, "id", None)),
         "parent": format_channel(getattr(thread, "parent", None)),
     }
+    guild = getattr(thread, "guild", None)
+    thread_id = getattr(thread, "id", None)
+    parent = getattr(thread, "parent", None)
+    parent_id = getattr(parent, "id", None)
+    if thread_id is not None:
+        context["thread_label"] = logfmt.channel_label(guild, thread_id)
+    if parent_id is not None:
+        context["channel_label"] = logfmt.channel_label(guild, parent_id)
+    return context
 
 
 async def send_welcome_log(level: str, **kv: Any) -> None:
@@ -228,10 +237,13 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
             details=detail_items,
         )
 
-    actor = _stringify(payload.get("actor"))
-    actor_display = payload.get("actor_name")
-    thread = _stringify(payload.get("channel") or payload.get("thread"))
-    parent = payload.get("parent")
+    actor_display = payload.get("actor_name") or _stringify(payload.get("actor"))
+    thread_label = _stringify(
+        payload.get("thread_label") or payload.get("channel") or payload.get("thread")
+    )
+    parent_label = _stringify(
+        payload.get("channel_label") or payload.get("parent") or payload.get("parent_channel")
+    )
     result = _stringify(payload.get("result"))
 
     detail_items: list[str] = []
@@ -245,7 +257,7 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
         ("actor_id", ("actor_id",)),
         ("target_user_id", ("target_user_id",)),
         ("target_message", ("target_message_id",)),
-        ("app_perms", ("app_permissions",)),
+        ("app_perms_text", ("app_perms_text", "app_permissions")),
         ("missing", ("missing",)),
         ("trigger", ("trigger",)),
         ("source", ("source",)),
@@ -284,10 +296,9 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
         detail_items.append(f"error={_stringify(error_text)}")
 
     return logfmt.LogTemplates.welcome_panel(
-        actor=actor,
-        actor_display=str(actor_display) if actor_display else None,
-        thread=thread,
-        parent=_stringify(parent) if parent else None,
+        actor=str(actor_display) if actor_display else "-",
+        thread=thread_label,
+        parent=parent_label if parent_label != "-" else None,
         result=result,
         details=detail_items,
     )

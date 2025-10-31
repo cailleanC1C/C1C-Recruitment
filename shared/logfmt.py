@@ -377,7 +377,6 @@ class LogTemplates:
     def welcome_panel(
         *,
         actor: str,
-        actor_display: str | None,
         thread: str,
         parent: str | None,
         result: str,
@@ -410,14 +409,15 @@ class LogTemplates:
             "error": LOG_EMOJI["error"],
         }
         emoji = palette.get(result, LOG_EMOJI["info"])
-        actor_text = actor_display or actor or "<unknown>"
+        actor_text = actor or "-"
         thread_text = thread or "#unknown"
         detail_text = "; ".join(details or []) if details else "-"
-        parent_text = f" • parent={parent}" if parent else ""
-        return (
-            f"{emoji} **Welcome panel** — actor={actor_text} • thread={thread_text}"
-            f"{parent_text} • result={result} • details: {detail_text}"
-        )
+        segments = [f"actor={actor_text}", f"thread={thread_text}"]
+        if parent:
+            segments.append(f"channel={parent}")
+        segments.append(f"result={result}")
+        segments.append(f"details: {detail_text}")
+        return f"{emoji} Welcome panel — " + " • ".join(segments)
 
     @staticmethod
     def select_refresh_template(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
