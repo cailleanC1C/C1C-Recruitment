@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
 from functools import lru_cache
 from typing import Any, Awaitable, Callable, Dict, Tuple, TypeVar
 
@@ -77,7 +76,7 @@ def _retry_with_backoff(
             last_exc = exc
             if attempt >= tries - 1:
                 raise
-            time.sleep(max(0.0, delay))
+            _sleep_with_new_loop(max(0.0, delay))
             delay *= multiplier if multiplier > 1 else 1
     if last_exc is not None:  # pragma: no cover - defensive
         raise last_exc
@@ -116,6 +115,20 @@ async def _retry_with_backoff_async(
     if last_exc is not None:  # pragma: no cover - defensive
         raise last_exc
     raise RuntimeError("_retry_with_backoff_async exhausted without executing")
+
+
+def _sleep_with_new_loop(delay: float) -> None:
+    """Sleep for ``delay`` seconds without relying on ``time.sleep``."""
+
+    if delay <= 0:
+        return
+
+    try:
+        asyncio.run(asyncio.sleep(delay))
+    except RuntimeError as exc:  # pragma: no cover - unexpected event loop reuse
+        raise RuntimeError(
+            "_retry_with_backoff must not run inside an active event loop; use the async variant"
+        ) from exc
 
 
 def _resolve_sheet_id(sheet_id: str | None) -> str:
@@ -289,10 +302,6 @@ async def asheets_read(
             worksheet = await _retry_with_backoff_async(
                 async_adapter.aworksheet_by_title, workbook, worksheet_name, **kwargs
             )
-        else:
-            worksheet = getattr(workbook, "sheet1", None)
-    else:
-        worksheet = getattr(workbook, "sheet1", None)
 
     if worksheet is None:
         worksheet = await _retry_with_backoff_async(
