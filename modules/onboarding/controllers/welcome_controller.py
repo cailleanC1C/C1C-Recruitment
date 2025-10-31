@@ -1034,22 +1034,6 @@ class BaseWelcomeController:
             )
             return False, "no_read"
 
-        if isinstance(subject, discord.Thread) and not perms.send_messages_in_threads:
-            if log_context is not None:
-                await self._log_access(
-                    "warn",
-                    "denied_permission",
-                    thread_id,
-                    interaction,
-                    log_context,
-                    reason="no_thread_send",
-                )
-            await _safe_ephemeral(
-                interaction,
-                "⚠️ I need permission to reply in this thread before opening the onboarding form.",
-            )
-            return False, "no_thread_send"
-
         if actor_id is not None:
             allowed_cache.add(int(actor_id))
         if log_context is not None:
