@@ -19,7 +19,7 @@ except Exception as exc:  # pragma: no cover - optional dependency at import tim
 else:
     _IMPORT_ERROR = None
 
-from . import async_adapter
+import shared.sheets.async_adapter as async_adapter
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
@@ -149,10 +149,12 @@ async def aopen_by_key(sheet_id: str | None = None, *, timeout: float | None = N
     # ``get_service_account_client`` performs OAuth credential initialisation which
     # may block while ``gspread`` loads service account data. Run it in the Sheets
     # executor so the event loop stays responsive on first use.
-    client = await async_adapter.arun(get_service_account_client)
+    client = await async_adapter.arun(get_service_account_client, timeout=timeout)
     kwargs: dict[str, Any] = {}
     if timeout is not None:
-        kwargs["timeout"] = timeout
+        run_kwargs["timeout"] = timeout
+    client = await async_adapter.arun(get_service_account_client, **run_kwargs)
+    kwargs: dict[str, Any] = dict(run_kwargs)
 
     workbook = await _retry_with_backoff_async(
         async_adapter.aopen_spreadsheet, client, resolved, **kwargs

@@ -19,7 +19,7 @@ from cogs.recruitment_member import RecruitmentMember
 from cogs.recruitment_recruiter import RecruiterPanelCog
 from cogs.recruitment_welcome import WelcomeBridge
 from modules.ops.permissions_sync import BotPermissionCog
-from shared.testing import apply_required_test_environment
+from shared.testing.environment import apply_required_test_environment
 
 __all__ = [
     "HelpCommandSummary",

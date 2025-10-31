@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .bot_access_profile import (
+from shared.permissions.bot_access_profile import (
     BOT_PERMISSION_MATRIX,
     DEFAULT_THREADS_ENABLED,
     build_allow_overwrite,
