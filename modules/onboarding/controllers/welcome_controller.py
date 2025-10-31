@@ -556,12 +556,11 @@ class BaseWelcomeController:
             await diag.log_event("info", "modal_launch_pre", **diag_state)
             if diag_state.get("response_is_done"):
                 await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="response_is_done",
+                    "info",
+                    "modal_launch_followup",
+                    followup_path=True,
                     **diag_state,
                 )
-                return
         try:
             await _send_modal_response(interaction, modal)
         except Exception as exc:
