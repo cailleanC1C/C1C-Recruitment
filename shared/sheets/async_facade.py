@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, ParamSpec, TypeVar
 
-from shared.sheets import core as _core_sync
+from shared.sheets import async_core as _core_async
 from shared.sheets import recruitment as _recruitment_sync
 from . import async_adapter as _adapter
 
@@ -65,27 +65,27 @@ async def get_clan_by_tag(*args: Any, **kwargs: Any) -> Any:
 
 # === Core helpers that touch network/files ===
 async def open_by_key(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.open_by_key, *args, **kwargs)
+    return await _core_async.aopen_by_key(*args, **kwargs)
 
 
 async def get_worksheet(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.get_worksheet, *args, **kwargs)
+    return await _core_async.aget_worksheet(*args, **kwargs)
 
 
 async def fetch_records(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.fetch_records, *args, **kwargs)
+    return await _core_async.afetch_records(*args, **kwargs)
 
 
 async def fetch_values(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.fetch_values, *args, **kwargs)
+    return await _core_async.afetch_values(*args, **kwargs)
 
 
 async def sheets_read(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.sheets_read, *args, **kwargs)
+    return await _core_async.asheets_read(*args, **kwargs)
 
 
 async def call_with_backoff(*args: Any, **kwargs: Any) -> Any:
-    return await _to_thread(_core_sync.call_with_backoff, *args, **kwargs)
+    return await _core_async.acall_with_backoff(*args, **kwargs)
 
 
 __all__ = [
