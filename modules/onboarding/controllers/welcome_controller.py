@@ -225,76 +225,108 @@ class BaseWelcomeController:
                     self._panel_messages[thread_id] = int(anchor_id)
                 except (TypeError, ValueError):
                     pass
+
+        parent_channel = getattr(thread, "parent", None)
+        try:
+            parent_id_int = int(parent_channel.id) if parent_channel is not None else None
+        except (TypeError, ValueError, AttributeError):
+            parent_id_int = None
+
+        base_log = self._log_fields(thread_id)
+        base_log.update(
+            {
+                "view": "panel",
+                "view_tag": panels.WELCOME_PANEL_TAG,
+                "custom_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+                "diag": base_log.get("diag") or f"{self.flow}_flow",
+                "flow": self.flow,
+                "thread_id": thread_id,
+            }
+        )
+        if parent_id_int is not None:
+            base_log.setdefault("parent_id", parent_id_int)
+            base_log.setdefault("parent_channel_id", parent_id_int)
+
+        posted_new_message = False
+
         if message is None and message_id:
             try:
                 message = await thread.fetch_message(message_id)
             except discord.NotFound as exc:
-                code = getattr(exc, "code", None)
-                if code == 10008:
-                    parent = getattr(thread, "parent", None)
-                    fetch_parent = getattr(parent, "fetch_message", None)
-                    if callable(fetch_parent):
-                        try:
-                            message = await fetch_parent(message_id)
-                        except Exception as parent_exc:
-                            await logs.send_welcome_exception(
-                                "warn",
-                                parent_exc,
-                                view="panel",
-                                result="stale_panel",
-                                **self._log_fields(thread_id),
-                            )
-                if message is None and code != 10008:
-                    await logs.send_welcome_exception(
-                        "warn",
-                        exc,
-                        view="panel",
-                        result="stale_panel",
-                        **self._log_fields(thread_id),
-                    )
-            except Exception as exc:
-                await logs.send_welcome_exception(
-                    "warn",
-                    exc,
-                    view="panel",
-                    result="stale_panel",
-                    **self._log_fields(thread_id),
-                )
-        if message is None and message_id:
-            await logs.send_welcome_log(
-                "warn",
-                view="panel",
-                result="stale_panel",
-                **self._log_fields(thread_id),
-            )
-        if message is not None:
-            await message.edit(content=intro, view=view)
-            if getattr(message, "pinned", False):
+                error_text = f"{exc.__class__.__name__}: {exc}"
                 try:
-                    await message.unpin()
+                    stale_message_id = int(message_id)
+                except (TypeError, ValueError):
+                    stale_message_id = None
+                stale_context = dict(base_log)
+                stale_context.update(
+                    {
+                        "event": "stale_panel",
+                        "result": "stale_panel",
+                        "message_id": stale_message_id,
+                        "error": error_text,
+                        "details": "view=panel; source=emoji",
+                    }
+                )
+                await logs.send_welcome_log("warn", **stale_context)
+
+                try:
+                    message = await self._send_panel_with_retry(thread, content=intro, view=view)
                 except Exception:
-                    log.warning("failed to unpin welcome panel", exc_info=True)
-            await logs.send_welcome_log(
-                "debug",
-                view="panel",
-                result="refreshed",
-                source=self._sources.get(thread_id),
-                **self._log_fields(thread_id),
-            )
-        else:
+                    return
+                posted_new_message = True
+                message_id = int(message.id)
+                self._panel_messages[thread_id] = message_id
+            except Exception as exc:
+                error_context = dict(base_log)
+                try:
+                    error_context.setdefault("message_id", int(message_id))
+                except (TypeError, ValueError):
+                    pass
+                error_context.update(
+                    {
+                        "event": "stale_panel",
+                        "result": "stale_panel",
+                    }
+                )
+                await logs.send_welcome_exception("warn", exc, **error_context)
+
+        if message is None:
             try:
                 message = await self._send_panel_with_retry(thread, content=intro, view=view)
             except Exception:
                 return
+            posted_new_message = True
             self._panel_messages[thread_id] = message.id
-            await logs.send_welcome_log(
-                "info",
-                view="panel",
-                result="posted",
-                source=self._sources.get(thread_id),
-                **self._log_fields(thread_id),
-            )
+            message_id = int(message.id)
+        else:
+            message_id = int(getattr(message, "id", message_id))
+            if not posted_new_message:
+                await message.edit(content=intro, view=view)
+                if getattr(message, "pinned", False):
+                    try:
+                        await message.unpin()
+                    except Exception:
+                        log.warning("failed to unpin welcome panel", exc_info=True)
+
         panels.register_panel_message(thread_id, message.id)
+
+        panel_log_context = dict(base_log)
+        panel_log_context.update(
+            {
+                "event": "panel_posted",
+                "result": "posted" if posted_new_message else "refreshed",
+                "source": self._sources.get(thread_id),
+                "message_id": int(message.id),
+                "custom_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+                "view_timeout": view.timeout,
+                "disable_on_timeout": getattr(view, "disable_on_timeout", None),
+            }
+        )
+        await logs.send_welcome_log(
+            "info" if posted_new_message else "debug",
+            **panel_log_context,
+        )
         if diag.is_enabled():
             parent_id = getattr(thread, "parent_id", None)
             try:
