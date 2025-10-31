@@ -628,9 +628,9 @@ class BaseWelcomeController:
         log_payload.setdefault("custom_id", panels.OPEN_QUESTIONS_CUSTOM_ID)
         log_payload["result"] = "restarted"
 
-        await logs.send_welcome_log("info", **log_payload)
-
         await _safe_ephemeral(interaction, "♻️ Restarting the onboarding form…")
+
+        await logs.send_welcome_log("info", **log_payload)
 
         self._cleanup_session(thread_id)
 
