@@ -130,11 +130,11 @@ def check_env_parity(errors: list[str]) -> None:
         extra = sorted(env_keys - config_keys)
         if missing:
             errors.append(
-                "ENV parity: keys missing from .env.example -> " + ", ".join(missing)
+                "ENV parity: .env.example is missing keys -> " + ", ".join(missing)
             )
         if extra:
             errors.append(
-                "ENV parity: extra keys in .env.example -> " + ", ".join(extra)
+                "ENV parity: .env.example has extra keys -> " + ", ".join(extra)
             )
 
 
