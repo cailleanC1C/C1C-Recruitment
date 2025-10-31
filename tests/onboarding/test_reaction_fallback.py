@@ -231,4 +231,4 @@ def test_role_gate_rejected(monkeypatch, caplog):
 
     start_mock.assert_not_called()
     details = _find_log(caplog, "result")
-    assert details["result"] == "role_gate"
+    assert details["result"] == "ambiguous_target"

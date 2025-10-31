@@ -10,6 +10,10 @@ from discord.ext import commands
 from c1c_coreops import rbac
 from modules.common import feature_flags
 from modules.onboarding import logs, thread_scopes
+from modules.onboarding.controllers.welcome_controller import (
+    extract_target_from_message,
+    locate_welcome_message,
+)
 from modules.onboarding.ui import panels
 from modules.onboarding.welcome_flow import start_welcome_dialog
 
@@ -27,6 +31,7 @@ def _base_context(
     member: discord.abc.User | discord.Member | None = None,
     thread: discord.Thread | None = None,
     user_id: int | None = None,
+    message_id: int | None = None,
 ) -> dict[str, Any]:
     context = logs.thread_context(thread)
     context["view"] = "panel"
@@ -55,6 +60,11 @@ def _base_context(
     else:
         context["actor"] = f"<{user_id}>" if user_id else logs.format_actor(None)
     context["emoji"] = FALLBACK_EMOJI
+    if message_id is not None:
+        try:
+            context["message_id"] = int(message_id)
+        except (TypeError, ValueError):
+            pass
     return context
 
 
@@ -67,6 +77,7 @@ async def _log_reject(
     trigger: str | None = None,
     result: str = "rejected",
     level: str = "warn",
+    extra: dict[str, Any] | None = None,
 ) -> None:
     context = _base_context(member=member, thread=thread)
     if parent_id and "parent" not in context:
@@ -74,6 +85,8 @@ async def _log_reject(
     context["result"] = result
     context["reason"] = reason
     context["trigger"] = trigger or "phrase_match"
+    if extra:
+        context.update(extra)
     await logs.send_welcome_log(level, **context)
 
 
@@ -183,14 +196,51 @@ class OnboardingReactionFallbackCog(commands.Cog):
             )
             return
 
-        if not (rbac.is_admin_member(member) or rbac.is_recruiter(member)):
+        target_user_id: int | None = None
+        target_message_id: int | None = None
+        target_extra: dict[str, Any] = {}
+        try:
+            welcome_message = await locate_welcome_message(thread)
+        except Exception as exc:
+            lookup_context = _base_context(member=member, thread=thread)
+            lookup_context.update({"result": "target_lookup_failed", "trigger": "target_lookup"})
+            await logs.send_welcome_exception("warn", exc, **lookup_context)
+        else:
+            target_user_id, target_message_id = extract_target_from_message(welcome_message)
+            if target_user_id is not None:
+                target_extra["target_user_id"] = target_user_id
+            if target_message_id is not None:
+                target_extra["target_message_id"] = target_message_id
+        if payload.message_id:
+            try:
+                target_extra.setdefault("message_id", int(payload.message_id))
+            except (TypeError, ValueError):
+                pass
+
+        actor_is_privileged = rbac.is_admin_member(member) or rbac.is_recruiter(member)
+        actor_is_target = target_user_id is not None and int(member.id) == int(target_user_id)
+
+        if target_user_id is None and not actor_is_privileged:
+            await _log_reject(
+                "ambiguous_target",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
+                trigger="role_gate",
+                result="ambiguous_target",
+                extra=target_extra,
+            )
+            return
+
+        if not (actor_is_target or actor_is_privileged):
             await _log_reject(
                 "role_gate",
                 member=member,
                 thread=thread,
                 parent_id=getattr(thread, "parent_id", None),
                 trigger="role_gate",
-                result="role_gate",
+                result="denied_role",
+                extra=target_extra,
             )
             return
 
@@ -217,13 +267,15 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 parent_id=getattr(thread, "parent_id", None),
                 result="no_trigger",
                 level="warn",
+                extra={**target_extra, "message_id": payload.message_id},
             )
             return
 
         trigger = "token_match" if token_match and not phrase_match else "phrase_match"
 
-        context = _base_context(member=member, thread=thread)
+        context = _base_context(member=member, thread=thread, message_id=payload.message_id)
         context.update({"trigger": trigger, "result": "emoji_received"})
+        context.update(target_extra)
         await logs.send_welcome_log("info", **context)
 
         bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
@@ -232,10 +284,12 @@ class OnboardingReactionFallbackCog(commands.Cog):
             if panels.is_panel_live(existing_panel.id):
                 dedup_context = _base_context(member=member, thread=thread)
                 dedup_context.update({"trigger": trigger, "result": "deduped"})
+                dedup_context.update(target_extra)
                 await logs.send_welcome_log("warn", **dedup_context)
                 return
             restart_context = _base_context(member=member, thread=thread)
             restart_context.update({"trigger": trigger, "result": "restarted"})
+            restart_context.update(target_extra)
             await logs.send_welcome_log("info", **restart_context)
             try:
                 await existing_panel.delete()
@@ -245,13 +299,21 @@ class OnboardingReactionFallbackCog(commands.Cog):
         else:
             start_context = _base_context(member=member, thread=thread)
             start_context.update({"trigger": trigger, "result": "started"})
+            start_context.update(target_extra)
             await logs.send_welcome_log("info", **start_context)
 
         try:
-            await start_welcome_dialog(thread, member, source="emoji", bot=self.bot)
+            await start_welcome_dialog(
+                thread,
+                member,
+                source="emoji",
+                bot=self.bot,
+                panel_message_id=target_message_id,
+            )
         except Exception as exc:
             failure_context = _base_context(member=member, thread=thread)
             failure_context.update({"trigger": trigger, "result": "launch_failed"})
+            failure_context.update(target_extra)
             await logs.send_welcome_exception("error", exc, **failure_context)
 
 

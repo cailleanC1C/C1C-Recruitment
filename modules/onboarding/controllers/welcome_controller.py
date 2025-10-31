@@ -26,6 +26,73 @@ TEXT_TYPES = {"short", "paragraph", "number"}
 SELECT_TYPES = {"single-select", "multi-select"}
 
 
+async def locate_welcome_message(thread: discord.Thread) -> discord.Message | None:
+    """Return the welcome greeting message for ``thread`` when available."""
+
+    starter = getattr(thread, "starter_message", None)
+    if starter is not None:
+        return starter
+
+    fetch_message = getattr(thread, "fetch_message", None)
+    if callable(fetch_message):
+        try:
+            return await fetch_message(int(thread.id))
+        except Exception:
+            pass
+
+    parent = getattr(thread, "parent", None)
+    if parent is not None:
+        parent_fetch = getattr(parent, "fetch_message", None)
+        if callable(parent_fetch):
+            try:
+                return await parent_fetch(int(thread.id))
+            except Exception:
+                pass
+
+    history = getattr(thread, "history", None)
+    if callable(history):
+        try:
+            async for candidate in history(limit=5, oldest_first=True):
+                return candidate
+        except Exception:
+            pass
+
+    return None
+
+
+def extract_target_from_message(
+    message: discord.Message | None,
+) -> tuple[int | None, int | None]:
+    """Return ``(target_user_id, message_id)`` extracted from ``message``."""
+
+    target_id: int | None = None
+    message_id: int | None = None
+
+    if message is None:
+        return target_id, message_id
+
+    raw_message_id = getattr(message, "id", None)
+    if raw_message_id is not None:
+        try:
+            message_id = int(raw_message_id)
+        except (TypeError, ValueError):
+            message_id = None
+
+    for user in getattr(message, "mentions", []) or []:
+        if getattr(user, "bot", False):
+            continue
+        user_id = getattr(user, "id", None)
+        if user_id is None:
+            continue
+        try:
+            target_id = int(user_id)
+        except (TypeError, ValueError):
+            continue
+        break
+
+    return target_id, message_id
+
+
 class BaseWelcomeController:
     """Shared orchestration logic for welcome/promo onboarding flows."""
 
@@ -243,17 +310,13 @@ class BaseWelcomeController:
         self,
         thread_id: int,
         interaction: discord.Interaction,
+        *,
+        context: dict[str, Any] | None = None,
     ) -> None:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
         if session is None or thread is None:
-            await logs.send_welcome_log(
-                "warn",
-                view="panel",
-                result="inactive",
-                **self._log_fields(thread_id, actor=interaction.user),
-            )
-            await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
+            await self._restart_from_interaction(thread_id, interaction, context=context)
             return
 
         modals = build_modals(
@@ -281,6 +344,67 @@ class BaseWelcomeController:
             index=index,
             **self._log_fields(thread_id, actor=interaction.user),
         )
+
+    async def _restart_from_interaction(
+        self,
+        thread_id: int,
+        interaction: discord.Interaction,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        channel = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        thread = self._threads.get(thread_id) or channel
+        message = getattr(interaction, "message", None)
+        message_id = getattr(message, "id", None)
+
+        log_payload = self._log_fields(thread_id, actor=interaction.user)
+        if context is not None:
+            log_payload.update(context)
+        if thread is not None:
+            log_payload.setdefault("thread", logs.format_thread(getattr(thread, "id", None)))
+            parent_id = getattr(thread, "parent_id", None)
+            if parent_id is not None:
+                try:
+                    log_payload.setdefault("parent_channel_id", int(parent_id))
+                except (TypeError, ValueError):
+                    pass
+        if message_id is not None:
+            try:
+                log_payload.setdefault("message_id", int(message_id))
+            except (TypeError, ValueError):
+                pass
+        log_payload["view"] = "panel"
+        log_payload.setdefault("view_tag", panels.WELCOME_PANEL_TAG)
+        log_payload.setdefault("custom_id", panels.OPEN_QUESTIONS_CUSTOM_ID)
+        log_payload["result"] = "restarted"
+
+        await logs.send_welcome_log("info", **log_payload)
+
+        await _safe_ephemeral(interaction, "♻️ Restarting the onboarding form…")
+
+        self._cleanup_session(thread_id)
+
+        if thread is None:
+            failure = dict(log_payload)
+            failure["result"] = "error"
+            failure["reason"] = "thread_missing"
+            await logs.send_welcome_log("error", **failure)
+            return
+
+        try:
+            from modules.onboarding.welcome_flow import start_welcome_dialog
+
+            await start_welcome_dialog(
+                thread,
+                interaction.user,
+                "panel_restart",
+                bot=self.bot,
+                panel_message_id=int(message_id) if message_id is not None else None,
+            )
+        except Exception as exc:  # pragma: no cover - network restart errors
+            error_payload = dict(log_payload)
+            error_payload["result"] = "error"
+            await logs.send_welcome_exception("error", exc, **error_payload)
 
     def _modal_submitted(
         self,
@@ -675,62 +799,12 @@ class BaseWelcomeController:
         target_id: int | None = None
         message_id: int | None = None
 
-        message = await self._locate_welcome_message(thread)
-        if message is not None:
-            raw_message_id = getattr(message, "id", None)
-            if raw_message_id is not None:
-                try:
-                    message_id = int(raw_message_id)
-                except (TypeError, ValueError):
-                    message_id = None
-            for user in getattr(message, "mentions", []) or []:
-                if getattr(user, "bot", False):
-                    continue
-                user_id = getattr(user, "id", None)
-                if user_id is None:
-                    continue
-                try:
-                    target_id = int(user_id)
-                except (TypeError, ValueError):
-                    continue
-                break
+        message = await locate_welcome_message(thread)
+        target_id, message_id = extract_target_from_message(message)
 
         self._target_users[thread_id] = target_id
         if message_id is not None:
             self._target_message_ids[thread_id] = message_id
-
-    async def _locate_welcome_message(
-        self, thread: discord.Thread
-    ) -> discord.Message | None:
-        starter = getattr(thread, "starter_message", None)
-        if starter is not None:
-            return starter
-
-        fetch_message = getattr(thread, "fetch_message", None)
-        if callable(fetch_message):
-            try:
-                return await fetch_message(int(thread.id))
-            except Exception:
-                pass
-
-        parent = getattr(thread, "parent", None)
-        if parent is not None:
-            parent_fetch = getattr(parent, "fetch_message", None)
-            if callable(parent_fetch):
-                try:
-                    return await parent_fetch(int(thread.id))
-                except Exception:
-                    pass
-
-        history = getattr(thread, "history", None)
-        if callable(history):
-            try:
-                async for candidate in history(limit=5, oldest_first=True):
-                    return candidate
-            except Exception:
-                pass
-
-        return None
 
     @staticmethod
     def _member_role_ids(member: discord.abc.User | discord.Member | None) -> set[int]:
