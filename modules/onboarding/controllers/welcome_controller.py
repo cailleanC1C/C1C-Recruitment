@@ -527,49 +527,61 @@ class BaseWelcomeController:
         diag_state["modal_index"] = index
         diag_state["schema_id"] = session.schema_hash
         diag_state["about_to_send_modal"] = True
-        if diag.is_enabled():
-            await diag.log_event("info", "modal_launch_pre", **diag_state)
+        diag_enabled = diag.is_enabled()
+        diag_tasks: list[Awaitable[None]] = []
+        if diag_enabled:
+            diag_tasks.append(diag.log_event("info", "modal_launch_pre", **diag_state))
             if diag_state.get("response_is_done"):
-                await diag.log_event(
-                    "info",
-                    "modal_launch_followup",
-                    followup_path=True,
-                    **diag_state,
+                diag_tasks.append(
+                    diag.log_event(
+                        "info",
+                        "modal_launch_followup",
+                        followup_path=True,
+                        **diag_state,
+                    )
                 )
         display_name = _display_name(getattr(interaction, "user", None))
         channel_obj: discord.abc.GuildChannel | discord.Thread | None
         channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else thread
+        channel_label = _channel_path(channel_obj)
         try:
             await interaction.response.send_modal(modal)
         except discord.InteractionResponded:
-            channel_label = _channel_path(channel_obj)
             log.warning(
                 "⚠️ Welcome — modal_already_responded • user=%s • channel=%s",
                 display_name,
                 channel_label,
             )
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
+            if diag_enabled:
+                diag_tasks.append(
+                    diag.log_event(
+                        "warning",
+                        "modal_launch_skipped",
+                        skip_reason="interaction_already_responded",
+                        **diag_state,
+                    )
                 )
+                await asyncio.gather(*diag_tasks, return_exceptions=True)
             return
         except Exception as exc:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "error",
-                    "modal_launch_error",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
+            if diag_enabled:
+                diag_tasks.append(
+                    diag.log_event(
+                        "error",
+                        "modal_launch_error",
+                        exception_type=exc.__class__.__name__,
+                        exception_message=str(exc),
+                        **diag_state,
+                    )
                 )
+                await asyncio.gather(*diag_tasks, return_exceptions=True)
             raise
         else:
-            if diag.is_enabled():
-                await diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
-            channel_label = _channel_path(channel_obj)
+            if diag_enabled:
+                diag_tasks.append(
+                    diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
+                )
+                await asyncio.gather(*diag_tasks, return_exceptions=True)
             log.info(
                 "✅ Welcome — modal_open • user=%s • channel=%s",
                 display_name,

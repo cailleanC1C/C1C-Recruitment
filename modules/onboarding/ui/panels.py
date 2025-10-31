@@ -386,8 +386,6 @@ class OpenQuestionsPanelView(discord.ui.View):
         actor_id = getattr(actor, "id", None)
         # UI no longer pre-authorizes; controller enforces the permission rule.
 
-        await logs.send_welcome_log("info", **button_log_context)
-
         try:
             allowed, _ = await controller.check_interaction(
                 thread_id,
@@ -406,6 +404,11 @@ class OpenQuestionsPanelView(discord.ui.View):
             await logs.send_welcome_exception("error", exc, **error_context)
             await self._ensure_error_notice(interaction)
             raise
+        finally:
+            try:
+                await logs.send_welcome_log("info", **button_log_context)
+            except Exception:  # pragma: no cover - defensive guard
+                log.warning("failed to emit welcome panel button log", exc_info=True)
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
