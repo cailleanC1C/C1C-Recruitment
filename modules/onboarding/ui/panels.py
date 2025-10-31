@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 
 import discord
 
+from c1c_coreops import rbac
+
 from modules.onboarding import diag, logs
 
 __all__ = [
@@ -260,6 +262,32 @@ class OpenQuestionsPanelView(discord.ui.View):
             await self._restart_from_view(interaction, log_context)
             return
 
+        actor = interaction.user
+        actor_id = getattr(actor, "id", None)
+        actor_is_target = (
+            target_user_id is not None
+            and actor_id is not None
+            and int(actor_id) == int(target_user_id)
+        )
+        actor_is_privileged = bool(rbac.is_admin_member(actor) or rbac.is_recruiter(actor))
+        can_use = actor_is_target or actor_is_privileged
+
+        if not can_use:
+            notice = "⚠️ This panel is reserved for the recruit and authorized recruiters."
+            result = "ambiguous_target" if target_user_id is None else "denied_role"
+            extra: dict[str, Any] = {}
+            if result == "denied_role":
+                extra["reason"] = "missing_roles"
+            await logs.send_welcome_log("warn", result=result, **log_context, **extra)
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(notice, ephemeral=True)
+                else:
+                    await interaction.response.send_message(notice, ephemeral=True)
+            except Exception:  # pragma: no cover - defensive logging
+                log.warning("failed to send panel access notice", exc_info=True)
+            return
+
         if missing:
             await logs.send_welcome_log(
                 "warn",
@@ -330,12 +358,20 @@ class OpenQuestionsPanelView(discord.ui.View):
         try:
             from modules.onboarding.welcome_flow import start_welcome_dialog
 
+            panel_id = None
+            if message_id is not None:
+                try:
+                    panel_id = int(message_id)
+                except (TypeError, ValueError):
+                    panel_id = None
+            panel_message = message if isinstance(message, discord.Message) else None
             await start_welcome_dialog(
                 thread,
                 interaction.user,
                 "panel_restart",
                 bot=interaction.client,
-                panel_message_id=int(message_id) if message_id is not None else None,
+                panel_message_id=panel_id,
+                panel_message=panel_message,
             )
         except Exception as exc:  # pragma: no cover - defensive logging path
             error_context = dict(restart_context)

@@ -135,6 +135,10 @@ class SessionStore:
         if session._timeout_handle is not None:
             session._timeout_handle.cancel()
 
+        if session._timeout_callback is None:
+            session._timeout_handle = None
+            return
+
         delay = max(1.0, self._timeout)
 
         def _runner() -> None:
@@ -145,6 +149,9 @@ class SessionStore:
     async def _maybe_timeout(self, thread_id: int) -> None:
         session = self._sessions.get(thread_id)
         if not session:
+            return
+        if session._timeout_callback is None:
+            session._timeout_handle = None
             return
         now = time.monotonic()
         if now - session.last_active < self._timeout:
