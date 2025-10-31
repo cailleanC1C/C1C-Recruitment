@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .events import (
+from shared.obs.events import (
     format_refresh_message,
     refresh_bucket_results,
     refresh_dedupe_key,

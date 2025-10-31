@@ -1,7 +1,7 @@
 """Cache helpers shared across the bot runtime."""
 from __future__ import annotations
 
-from .telemetry import (
+from shared.cache.telemetry import (
     CacheSnapshot,
     RefreshResult,
     get_all_snapshots,

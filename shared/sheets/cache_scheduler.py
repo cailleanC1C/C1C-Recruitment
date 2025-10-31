@@ -12,8 +12,9 @@ from shared.cache import telemetry as cache_telemetry
 from shared.cache.telemetry import RefreshResult
 from shared.config import get_config_snapshot
 from c1c_coreops.cog import resolve_ops_log_channel_id
+from shared.sheets.runtime import register_default_cache_buckets
 
-from .cache_service import cache
+from shared.sheets.cache_service import cache
 from modules.common import runtime as rt
 from shared.logfmt import LogTemplates, human_reason
 
@@ -40,11 +41,9 @@ def _format_exception(exc: BaseException) -> str:
 
 
 def ensure_cache_registration() -> None:
-    if cache.get_bucket("clans") is None or cache.get_bucket("templates") is None:
-        from shared.sheets import recruitment  # noqa: F401  # ensures cache registration
+    """Ensure cache buckets from Sheets modules are registered."""
 
-    if cache.get_bucket("clan_tags") is None:
-        from shared.sheets import onboarding  # noqa: F401  # ensures cache registration
+    register_default_cache_buckets()
  
 
 def _safe_bucket(name: str) -> str:

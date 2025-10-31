@@ -19,7 +19,7 @@ except Exception as exc:  # pragma: no cover - optional dependency at import tim
 else:
     _IMPORT_ERROR = None
 
-from . import async_adapter
+import shared.sheets.async_adapter as async_adapter
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 

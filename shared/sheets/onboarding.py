@@ -430,4 +430,10 @@ async def _load_clan_tags_async() -> List[str]:
     return tags
 
 
-cache.register("clan_tags", _TTL_CLAN_TAGS_SEC, _load_clan_tags_async)
+
+
+def register_cache_buckets() -> None:
+    """Register onboarding cache buckets if they are not already present."""
+
+    if cache.get_bucket("clan_tags") is None:
+        cache.register("clan_tags", _TTL_CLAN_TAGS_SEC, _load_clan_tags_async)
