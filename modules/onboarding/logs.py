@@ -24,6 +24,7 @@ __all__ = [
     "thread_context",
     "send_welcome_log",
     "send_welcome_exception",
+    "log_view_error",
 ]
 
 log = logging.getLogger("c1c.onboarding.logs")
@@ -187,6 +188,15 @@ async def send_welcome_exception(level: str, error: BaseException, **kv: Any) ->
     details["error"] = f"{error.__class__.__name__}: {error}"
     details["trace"] = trace
     await send_welcome_log(level, **details)
+
+
+def log_view_error(extra: Mapping[str, Any] | None, err: BaseException) -> None:
+    payload = dict(extra or {})
+    log.error(
+        "welcome view error",
+        exc_info=(err.__class__, err, err.__traceback__),
+        extra=payload,
+    )
 
 
 def _dedupe_key(payload: Mapping[str, Any]) -> str | None:
