@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Awaitable, Callable, Iterable, Sequence
 
 import discord
@@ -13,6 +14,7 @@ from shared.sheets.onboarding_questions import Question
 SelectChangeCallback = Callable[[discord.Interaction, Question, list[str]], Awaitable[None]]
 SelectCompleteCallback = Callable[[discord.Interaction], Awaitable[None]]
 InteractionGate = Callable[[discord.Interaction], Awaitable[bool]]
+SelectPageChangeCallback = Callable[[discord.Interaction, int], Awaitable[None]]
 
 
 class SelectQuestionView(discord.ui.View):
@@ -26,25 +28,49 @@ class SelectQuestionView(discord.ui.View):
         answers: dict[str, object] | None = None,
         timeout: float = 600,
         interaction_check: InteractionGate | None = None,
+        page: int = 0,
     ) -> None:
         super().__init__(timeout=timeout)
-        self.questions = [
-            question
-            for question in questions
-            if question.type in {"single-select", "multi-select"}
-            and _visible_state(visibility, question.qid) != "skip"
-        ]
+        self.questions = list(questions)
         self.visibility = visibility
         self.answers = answers or {}
         self.on_change: SelectChangeCallback | None = None
         self.on_complete: SelectCompleteCallback | None = None
+        self.on_page_change: SelectPageChangeCallback | None = None
         self._interaction_gate = interaction_check
 
-        for question in self.questions:
+        self._page_size = 4
+        total_pages = math.ceil(len(self.questions) / self._page_size) if self.questions else 0
+        self.page_count = total_pages
+        if total_pages == 0:
+            self.page = 0
+            self._page_questions: list[Question] = []
+            return
+
+        self.page = max(0, min(page, total_pages - 1))
+        start = self.page * self._page_size
+        end = start + self._page_size
+        self._page_questions = self.questions[start:end]
+
+        for index, question in enumerate(self._page_questions):
             select = _QuestionSelect(question, visibility, self.answers)
+            select.row = index
             self.add_item(select)
-        if self.questions:
-            self.add_item(_SelectContinueButton())
+
+        button_row = min(len(self._page_questions), 4)
+        continue_button = _SelectContinueButton()
+        continue_button.row = button_row
+        self.add_item(continue_button)
+
+        if self.page > 0:
+            prev_button = _SelectPageButton(direction=-1)
+            prev_button.row = button_row
+            self.add_item(prev_button)
+
+        if self.page < total_pages - 1:
+            next_button = _SelectPageButton(direction=1)
+            next_button.row = button_row
+            self.add_item(next_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - requires Discord
         if self._interaction_gate is None:
@@ -63,6 +89,32 @@ class SelectQuestionView(discord.ui.View):
     async def handle_complete(self, interaction: discord.Interaction) -> None:
         if self.on_complete is not None:
             await self.on_complete(interaction)
+
+    async def change_page(self, interaction: discord.Interaction, delta: int) -> None:
+        target = self.page + delta
+        if self.page_count == 0:
+            return
+        target = max(0, min(target, self.page_count - 1))
+        if target == self.page:
+            await interaction.response.defer()
+            return
+
+        new_view = SelectQuestionView(
+            questions=self.questions,
+            visibility=self.visibility,
+            answers=self.answers,
+            timeout=self.timeout,
+            interaction_check=self._interaction_gate,
+            page=target,
+        )
+        new_view.on_change = self.on_change
+        new_view.on_complete = self.on_complete
+        new_view.on_page_change = self.on_page_change
+
+        if self.on_page_change is not None:
+            await self.on_page_change(interaction, target)
+
+        await interaction.response.edit_message(view=new_view)
 
 
 class _QuestionSelect(discord.ui.Select):
@@ -124,22 +176,50 @@ class _SelectContinueButton(discord.ui.Button):
             await view.handle_complete(interaction)
 
 
+class _SelectPageButton(discord.ui.Button):
+    def __init__(self, *, direction: int) -> None:
+        label = "◀ Prev" if direction < 0 else "Next ▶"
+        style = discord.ButtonStyle.secondary if direction < 0 else discord.ButtonStyle.primary
+        target_token = "prev" if direction < 0 else "next"
+        super().__init__(
+            label=label,
+            style=style,
+            custom_id=f"ob.select.page.{target_token}",
+        )
+        self._direction = direction
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # pragma: no cover - requires Discord
+        view: SelectQuestionView | None = self.view  # type: ignore[assignment]
+        if view is not None:
+            await view.change_page(interaction, self._direction)
+
+
 def build_select_view(
     questions: Sequence[Question],
     visibility: dict[str, dict[str, str]],
     answers: dict[str, object] | None,
     *,
     interaction_check: InteractionGate | None = None,
+    page: int = 0,
 ) -> SelectQuestionView | None:
     """Return a view configured for the visible select questions."""
 
+    visible_questions = [
+        question
+        for question in questions
+        if question.type in {"single-select", "multi-select"}
+        and _visible_state(visibility, question.qid) != "skip"
+    ]
+    if not visible_questions:
+        return None
     view = SelectQuestionView(
-        questions=questions,
+        questions=visible_questions,
         visibility=visibility,
         answers=answers or {},
         interaction_check=interaction_check,
+        page=page,
     )
-    if not view.questions:
+    if view.page_count == 0:
         return None
     return view
 

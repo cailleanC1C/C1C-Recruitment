@@ -354,11 +354,14 @@ class BaseWelcomeController:
             allowed, _ = await self.check_interaction(thread_id, interaction)
             return allowed
 
+        pending = session.pending_step or {}
+        page = int(pending.get("page", 0))
         view = build_select_view(
             self._questions[thread_id],
             session.visibility,
             session.answers,
             interaction_check=gate,
+            page=page,
         )
         if view is None:
             await self._show_preview(thread, session)
@@ -366,7 +369,8 @@ class BaseWelcomeController:
 
         view.on_change = self._select_changed(thread_id)
         view.on_complete = self._select_completed(thread_id)
-        store.set_pending_step(thread_id, {"kind": "select", "index": 0})
+        view.on_page_change = self._select_page_updated(thread_id)
+        store.set_pending_step(thread_id, {"kind": "select", "index": 0, "page": view.page})
         content = self._select_intro_text()
         message = self._select_messages.get(thread_id)
         if message:
@@ -675,11 +679,14 @@ class BaseWelcomeController:
             allowed, _ = await self.check_interaction(thread_id, interaction)
             return allowed
 
+        pending = session.pending_step or {}
+        page = int(pending.get("page", 0))
         view = build_select_view(
             self._questions[thread_id],
             session.visibility,
             session.answers,
             interaction_check=gate,
+            page=page,
         )
         if view is None:
             store.set_pending_step(thread_id, None)
@@ -696,6 +703,8 @@ class BaseWelcomeController:
 
         view.on_change = self._select_changed(thread_id)
         view.on_complete = self._select_completed(thread_id)
+        view.on_page_change = self._select_page_updated(thread_id)
+        store.set_pending_step(thread_id, {"kind": "select", "index": 0, "page": view.page})
         await interaction.response.edit_message(view=view)
         await logs.send_welcome_log(
             "debug",
@@ -744,6 +753,20 @@ class BaseWelcomeController:
             **self._log_fields(thread_id, actor=interaction.user),
         )
         await self._show_preview(thread, session)
+
+    def _select_page_updated(self, thread_id: int) -> Callable[[discord.Interaction, int], Awaitable[None]]:
+        async def handler(interaction: discord.Interaction, page: int) -> None:
+            allowed, _ = await self.check_interaction(thread_id, interaction)
+            if not allowed:
+                return
+            session = store.get(thread_id)
+            if session is None:
+                return
+            pending = dict(session.pending_step or {"kind": "select", "index": 0})
+            pending["page"] = page
+            store.set_pending_step(thread_id, pending)
+
+        return handler
 
     async def _show_preview(
         self,
