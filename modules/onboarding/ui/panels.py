@@ -197,6 +197,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
             "app_permissions": permissions_text,
+            "app_perms_text": permissions_text,
             "app_permissions_snapshot": snapshot,
         }
         if thread_id is not None:
@@ -232,6 +233,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             "view_id": OPEN_QUESTIONS_CUSTOM_ID,
             "actor": logs.format_actor(interaction.user),
             "app_permissions": permissions_text,
+            "app_perms_text": permissions_text,
             "app_permissions_snapshot": snapshot,
         }
         actor_name = logs.format_actor_handle(interaction.user)
@@ -272,8 +274,6 @@ class OpenQuestionsPanelView(discord.ui.View):
         button_log_context.setdefault("result", "clicked")
         button_log_context.setdefault("view_tag", WELCOME_PANEL_TAG)
 
-        await logs.send_welcome_log("info", **button_log_context)
-
         if controller is None or thread_id is None:
             await self._restart_from_view(interaction, log_context)
             return
@@ -313,6 +313,8 @@ class OpenQuestionsPanelView(discord.ui.View):
             )
             await self._notify_missing_permissions(interaction)
             return
+
+        await logs.send_welcome_log("info", **button_log_context)
 
         try:
             allowed, _ = await controller.check_interaction(
