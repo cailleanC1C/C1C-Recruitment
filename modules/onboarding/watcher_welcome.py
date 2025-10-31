@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import discord
 from discord import RawReactionActionEvent
@@ -34,9 +35,11 @@ def _announce(bot: commands.Bot, message: str) -> None:
     log.info("welcome watcher notice: %s", message)
 
     async def runner() -> None:
+        await bot.wait_until_ready()
         await _send_runtime(message)
 
-    bot.loop.create_task(runner())
+    # discord.py 2.x restricts accessing Client.loop here; schedule via asyncio
+    asyncio.create_task(runner())
 
 
 def _actor_id(actor: discord.abc.User | None) -> int | None:
