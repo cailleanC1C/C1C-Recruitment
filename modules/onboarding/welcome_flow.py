@@ -12,7 +12,12 @@ from modules.onboarding import logs
 
 from . import thread_scopes
 from .controllers.promo_controller import PromoController
-from .controllers.welcome_controller import WelcomeController
+from .controllers.welcome_controller import (
+    WelcomeController,
+    extract_target_from_message,
+    locate_welcome_message,
+)
+from .ui import panels
 from shared.sheets import onboarding_questions
 
 __all__ = ["start_welcome_dialog"]
@@ -24,6 +29,7 @@ async def start_welcome_dialog(
     source: str,
     *,
     bot: commands.Bot | None = None,
+    panel_message_id: int | None = None,
 ) -> None:
     """Launch the shared welcome dialog flow when all gates pass."""
 
@@ -55,29 +61,69 @@ async def start_welcome_dialog(
             payload.update(extra)
         return payload
 
+    target_user_id: int | None = None
+    target_message_id: int | None = None
+    try:
+        welcome_message = await locate_welcome_message(thread)
+    except Exception as exc:  # pragma: no cover - defensive network path
+        await logs.send_welcome_exception(
+            "warn",
+            exc,
+            **_context({"result": "target_lookup_failed"}),
+        )
+    else:
+        target_user_id, target_message_id = extract_target_from_message(welcome_message)
+
+    context_defaults: dict[str, Any] = {}
+    if target_user_id is not None:
+        context_defaults["target_user_id"] = target_user_id
+    if target_message_id is not None:
+        context_defaults["target_message_id"] = target_message_id
+    if panel_message_id is not None:
+        context_defaults["message_id"] = panel_message_id
+
     if not feature_flags.is_enabled("welcome_dialog"):
-        await logs.send_welcome_log("info", **_context({"result": "feature_disabled"}))
+        await logs.send_welcome_log(
+            "info", **_context({"result": "feature_disabled", **context_defaults})
+        )
+        return
+
+    if flow == "unknown":
+        await logs.send_welcome_log(
+            "warn",
+            **_context({"result": "scope_gate", "reason": "scope_or_role", **context_defaults}),
+        )
         return
 
     if source != "ticket":
-        if not initiator or not (
-            rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator)
-        ):
+        actor_id = getattr(actor, "id", None)
+        actor_is_target = (
+            actor_id is not None and target_user_id is not None and int(actor_id) == int(target_user_id)
+        )
+        actor_is_privileged = bool(
+            initiator
+            and (rbac.is_admin_member(initiator) or rbac.is_recruiter(initiator))
+        )
+
+        if target_user_id is None and not actor_is_privileged:
             await logs.send_welcome_log(
                 "warn",
                 **_context(
-                    {"result": "role_gate", "reason": "scope_or_role"},
+                    {"result": "ambiguous_target", **context_defaults},
                     actor_override=initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
                 ),
             )
             return
 
-    if flow == "unknown":
-        await logs.send_welcome_log(
-            "warn",
-            **_context({"result": "scope_gate", "reason": "scope_or_role"}),
-        )
-        return
+        if not (actor_is_target or actor_is_privileged):
+            await logs.send_welcome_log(
+                "warn",
+                **_context(
+                    {"result": "denied_role", "reason": "scope_or_role", **context_defaults},
+                    actor_override=initiator if isinstance(initiator, (discord.Member, discord.User)) else None,
+                ),
+            )
+            return
 
     schema_version: str | None = None
     questions: list[Any] = []
@@ -88,20 +134,27 @@ async def start_welcome_dialog(
         await logs.send_welcome_exception(
             "error",
             exc,
-            **_context({"result": "schema_load_failed"}),
+            **_context({"result": "schema_load_failed", **context_defaults}),
         )
         return
 
     await logs.send_welcome_log(
         "info",
-        **_context({"result": "started", "schema": schema_version, "questions": len(questions)}),
+        **_context(
+            {
+                "result": "started",
+                "schema": schema_version,
+                "questions": len(questions),
+                **context_defaults,
+            }
+        ),
     )
 
     controller_bot = bot or _resolve_bot(thread)
     if controller_bot is None:
         await logs.send_welcome_log(
             "warn",
-            **_context({"result": "missing_bot"}),
+            **_context({"result": "missing_bot", **context_defaults}),
         )
         return
 
@@ -109,6 +162,12 @@ async def start_welcome_dialog(
         controller = WelcomeController(controller_bot)
     else:
         controller = PromoController(controller_bot)
+    if panel_message_id is not None:
+        try:
+            controller._panel_messages[int(thread.id)] = int(panel_message_id)
+            panels.register_panel_message(int(thread.id), int(panel_message_id))
+        except (TypeError, ValueError):
+            pass
     await controller.run(
         thread,
         actor,

@@ -132,6 +132,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self._controller = controller
         self._thread_id = thread_id
+        self.disable_on_timeout = False
 
     def _resolve(self, interaction: discord.Interaction) -> tuple[_ControllerProtocol | None, int | None]:
         thread_id = self._thread_id or getattr(interaction.channel, "id", None) or interaction.channel_id
@@ -228,13 +229,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 pass
 
         if controller is None or thread_id is None:
-            await logs.send_welcome_log(
-                "warn",
-                result="stale",
-                reason="stale_controller",
-                **log_context,
-            )
-            await self._notify_expired(interaction)
+            await self._restart_from_view(interaction, log_context)
             return
 
         if missing:
@@ -255,21 +250,52 @@ class OpenQuestionsPanelView(discord.ui.View):
             )
             if not allowed:
                 return
-            await controller._handle_modal_launch(thread_id, interaction)
+            await controller._handle_modal_launch(
+                thread_id,
+                interaction,
+                context=controller_context,
+            )
         except Exception as exc:  # pragma: no cover - defensive path
             error_context = dict(log_context)
             await logs.send_welcome_exception("error", exc, **error_context)
             await self._notify_error(interaction)
 
-    async def _notify_expired(self, interaction: discord.Interaction) -> None:
-        message = "⚠️ This onboarding panel expired. Please react again to restart."
+    async def _restart_from_view(
+        self,
+        interaction: discord.Interaction,
+        log_context: dict[str, Any],
+    ) -> None:
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        message = getattr(interaction, "message", None)
+        message_id = getattr(message, "id", None)
+
+        restart_context = dict(log_context)
+        restart_context["result"] = "restarted"
+        await logs.send_welcome_log("info", **restart_context)
+
+        await self._notify_restart(interaction)
+
+        if not isinstance(thread, discord.Thread):
+            failure_context = dict(restart_context)
+            failure_context["result"] = "error"
+            failure_context["reason"] = "thread_missing"
+            await logs.send_welcome_log("error", **failure_context)
+            return
+
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
-        except Exception:  # pragma: no cover - defensive logging
-            log.warning("failed to send expired panel notice", exc_info=True)
+            from modules.onboarding.welcome_flow import start_welcome_dialog
+
+            await start_welcome_dialog(
+                thread,
+                interaction.user,
+                "panel_restart",
+                bot=interaction.client,
+                panel_message_id=int(message_id) if message_id is not None else None,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging path
+            error_context = dict(restart_context)
+            error_context["result"] = "error"
+            await logs.send_welcome_exception("error", exc, **error_context)
 
     async def _notify_error(self, interaction: discord.Interaction) -> None:
         message = "⚠️ Something went wrong while opening the onboarding panel. Please try again."
@@ -280,6 +306,16 @@ class OpenQuestionsPanelView(discord.ui.View):
                 await interaction.response.send_message(message, ephemeral=True)
         except Exception:  # pragma: no cover - defensive logging
             log.warning("failed to send error notice", exc_info=True)
+
+    async def _notify_restart(self, interaction: discord.Interaction) -> None:
+        message = "♻️ Restarting the onboarding form…"
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except Exception:  # pragma: no cover - defensive logging
+            log.warning("failed to send restart notice", exc_info=True)
 
     async def _notify_missing_permissions(self, interaction: discord.Interaction) -> None:
         message = (

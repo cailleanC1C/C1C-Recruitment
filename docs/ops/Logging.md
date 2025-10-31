@@ -65,6 +65,7 @@ Line mode:
 ⚠️ **Welcome panel** — actor=@Member • thread=#welcome › ticket-123 (112233445566778899) • parent=#ops › welcome (998877665544332211) • result=denied_perms • details: view=welcome_panel; custom_id=welcome.panel.open; message=334455667788990011; thread_id=112233445566778899; parent_id=998877665544332211; actor_id=223344556677889900; app_perms=send_messages=True, send_messages_in_threads=False, embed_links=True, read_message_history=True; app_perms_flags=send_messages=True, send_messages_in_threads=False, embed_links=True, read_message_history=True; missing=send_messages_in_threads
 ⚠️ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 (112233445566778899) • parent=#ops › welcome (998877665544332211) • result=ambiguous_target • details: view=welcome_panel; custom_id=welcome.panel.open; message=334455667788990011; thread_id=112233445566778899; parent_id=998877665544332211; actor_id=123456789012345678; app_perms=send_messages=True, send_messages_in_threads=True, embed_links=True, read_message_history=True; app_perms_flags=send_messages=True, send_messages_in_threads=True, embed_links=True, read_message_history=True; reason=greeting_missing_mention; target_message=445566778899001122
 🛈 **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 (112233445566778899) • parent=#ops › welcome (998877665544332211) • result=restarted • details: view=welcome_panel; custom_id=fallback.emoji; thread_id=112233445566778899; parent_id=998877665544332211; actor_id=123456789012345678; app_perms=-; app_perms_flags=-; trigger=phrase_match
+❌ **Welcome panel** — actor=@Recruiter • thread=#welcome › ticket-123 (112233445566778899) • parent=#ops › welcome (998877665544332211) • result=error • details: view=welcome_panel; custom_id=welcome.panel.open; message=334455667788990011; thread_id=112233445566778899; parent_id=998877665544332211; actor_id=123456789012345678; app_perms=send_messages=True, send_messages_in_threads=True, embed_links=True, read_message_history=True; app_perms_flags=send_messages=True, send_messages_in_threads=True, embed_links=True, read_message_history=True; reason=restart_failed
 ```
 
 ## Dedupe policy
@@ -85,4 +86,4 @@ Line mode:
 - Continue emitting structured logs (JSON/stdout) for auditability—only the human-facing Discord posts use the templates above.
 ---
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-10-31 (v0.9.7)
