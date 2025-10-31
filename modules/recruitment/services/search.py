@@ -1,4 +1,4 @@
-"""Prefix commands and panels imported from the legacy Matchmaker bot."""
+"""Recruitment service guards kept import-safe for C-03 guardrail."""
 
 from __future__ import annotations
 

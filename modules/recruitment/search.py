@@ -1,4 +1,4 @@
-"""Shared recruitment roster helpers used by member and recruiter panels."""
+"""Shared recruitment roster helpers kept import-safe for C-03 guardrail."""
 
 from __future__ import annotations
 

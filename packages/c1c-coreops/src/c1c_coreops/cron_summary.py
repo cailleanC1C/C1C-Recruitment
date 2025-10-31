@@ -1,4 +1,4 @@
-"""Daily summary helpers for CoreOps cron telemetry."""
+"""Daily cron summary helpers kept import-safe for C-03 guardrail."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 from statistics import mean
 from typing import Iterable
 
-from .cronlog import read_metrics
+from c1c_coreops.cronlog import read_metrics
 
 log = logging.getLogger("c1c.cron")
 TAG = "[cron]"
