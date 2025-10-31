@@ -463,9 +463,10 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         restart_context = dict(log_context)
         restart_context["result"] = "restarted"
-        await logs.send_welcome_log("info", **restart_context)
 
         await self._notify_restart(interaction)
+
+        await logs.send_welcome_log("info", **restart_context)
 
         if not isinstance(thread, discord.Thread):
             failure_context = dict(restart_context)
