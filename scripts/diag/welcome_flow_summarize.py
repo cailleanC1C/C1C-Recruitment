@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+PANELS_PATH = Path("modules") / "onboarding" / "ui" / "panels.py"
+WELCOME_CONTROLLER_PATH = Path("modules") / "onboarding" / "controllers" / "welcome_controller.py"
 
 
 @dataclass
@@ -217,7 +219,7 @@ def _build_hypotheses(events: Iterable[dict[str, Any]]) -> list[Hypothesis]:
     return sorted(hypotheses, key=lambda item: item.priority, reverse=True)
 
 
-def _line_for(path: str, needle: str) -> int | None:
+def _line_for(path: Path, needle: str) -> int | None:
     file_path = REPO_ROOT / path
     if not file_path.exists():
         return None
@@ -247,27 +249,35 @@ def _build_next_steps(events: Iterable[dict[str, Any]]) -> list[str]:
     )
 
     if registered:
-        line = _line_for("modules/onboarding/ui/panels.py", "def register_persistent_views")
-        anchor = f"modules/onboarding/ui/panels.py:L{line}" if line else "modules/onboarding/ui/panels.py"
+        line = _line_for(PANELS_PATH, "def register_persistent_views")
+        anchor = (
+            f"{PANELS_PATH.as_posix()}:L{line}"
+            if line
+            else PANELS_PATH.as_posix()
+        )
         steps.append(f"- Guard persistent registration duplication in `{anchor}`")
     if ack_conflicts:
-        line = _line_for("modules/onboarding/controllers/welcome_controller.py", "_handle_modal_launch")
+        line = _line_for(WELCOME_CONTROLLER_PATH, "_handle_modal_launch")
         anchor = (
-            f"modules/onboarding/controllers/welcome_controller.py:L{line}"
+            f"{WELCOME_CONTROLLER_PATH.as_posix()}:L{line}"
             if line
-            else "modules/onboarding/controllers/welcome_controller.py"
+            else WELCOME_CONTROLLER_PATH.as_posix()
         )
         steps.append(f"- Enforce single-response modal launch in `{anchor}`")
     if perm_conflicts:
-        line = _line_for("modules/onboarding/ui/panels.py", "async def launch")
-        anchor = f"modules/onboarding/ui/panels.py:L{line}" if line else "modules/onboarding/ui/panels.py"
+        line = _line_for(PANELS_PATH, "async def launch")
+        anchor = (
+            f"{PANELS_PATH.as_posix()}:L{line}"
+            if line
+            else PANELS_PATH.as_posix()
+        )
         steps.append(f"- Harden thread permission checks in `{anchor}`")
     if unknown_message:
-        line = _line_for("modules/onboarding/controllers/welcome_controller.py", "_safe_ephemeral")
+        line = _line_for(WELCOME_CONTROLLER_PATH, "_safe_ephemeral")
         anchor = (
-            f"modules/onboarding/controllers/welcome_controller.py:L{line}"
+            f"{WELCOME_CONTROLLER_PATH.as_posix()}:L{line}"
             if line
-            else "modules/onboarding/controllers/welcome_controller.py"
+            else WELCOME_CONTROLLER_PATH.as_posix()
         )
         steps.append(f"- Handle stale panel cleanup in `{anchor}`")
     if not steps:

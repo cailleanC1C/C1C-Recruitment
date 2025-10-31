@@ -57,6 +57,7 @@ It exists so that contributors update the correct references after each developm
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
+* [`WelcomeDiag.md`](ops/WelcomeDiag.md) — temporary welcome flow diagnostics flag and log locations.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
