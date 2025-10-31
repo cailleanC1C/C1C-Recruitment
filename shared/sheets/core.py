@@ -289,10 +289,6 @@ async def asheets_read(
             worksheet = await _retry_with_backoff_async(
                 async_adapter.aworksheet_by_title, workbook, worksheet_name, **kwargs
             )
-        else:
-            worksheet = getattr(workbook, "sheet1", None)
-    else:
-        worksheet = getattr(workbook, "sheet1", None)
 
     if worksheet is None:
         worksheet = await _retry_with_backoff_async(
