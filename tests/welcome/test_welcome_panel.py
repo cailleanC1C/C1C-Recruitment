@@ -89,8 +89,9 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         await button.callback(interaction)
 
         controller._handle_modal_launch.assert_awaited_once()
-        response.defer.assert_awaited_once()
-        assert response.defer.await_args.kwargs.get("ephemeral") is True
+        controller.check_interaction.assert_not_awaited()
+        response.defer.assert_not_awaited()
+        response.send_modal.assert_awaited_once_with("sentinel")
 
     asyncio.run(runner())
 
@@ -141,10 +142,10 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.check_interaction.assert_awaited_once()
-        controller._handle_modal_launch.assert_not_awaited()
+        controller.check_interaction.assert_not_awaited()
+        controller._handle_modal_launch.assert_awaited_once()
         followup.send.assert_not_awaited()
-        response.defer.assert_awaited_once()
+        response.defer.assert_not_awaited()
         assert logs_mock.await_count == 1
         assert logs_mock.await_args.kwargs.get("result") == "clicked"
 

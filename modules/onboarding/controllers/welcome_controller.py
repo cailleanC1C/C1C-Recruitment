@@ -554,6 +554,11 @@ class BaseWelcomeController:
         channel_obj: discord.abc.GuildChannel | discord.Thread | None
         channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else thread
         channel_label = _channel_path(channel_obj)
+        log.info(
+            "✅ Welcome — modal_open • user=%s • channel=%s",
+            display_name,
+            channel_label,
+        )
         try:
             await interaction.response.send_modal(modal)
         except discord.InteractionResponded:
@@ -592,11 +597,6 @@ class BaseWelcomeController:
                     diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
                 )
                 await asyncio.gather(*diag_tasks, return_exceptions=True)
-            log.info(
-                "✅ Welcome — modal_open • user=%s • channel=%s",
-                display_name,
-                channel_label,
-            )
         await logs.send_welcome_log(
             "debug",
             view="modal",
@@ -698,6 +698,8 @@ class BaseWelcomeController:
     ) -> None:
         session = store.get(thread_id)
         thread = self._threads.get(thread_id)
+        await interaction.response.defer(ephemeral=True)
+
         if session is None or thread is None:
             await logs.send_welcome_log(
                 "warn",
@@ -707,6 +709,30 @@ class BaseWelcomeController:
                 **self._log_fields(thread_id, actor=interaction.user),
             )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
+            return
+
+        gate_context: dict[str, Any] = {
+            "view": "modal",
+            "view_tag": panels.WELCOME_PANEL_TAG,
+            "custom_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+            "view_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+            "step_index": index,
+            "flow": self.flow,
+        }
+        gate_context.setdefault("diag", f"{self.flow}_flow")
+        schema_id = getattr(session, "schema_hash", None)
+        if schema_id is not None:
+            try:
+                gate_context["schema_id"] = int(schema_id)
+            except (TypeError, ValueError):
+                gate_context["schema_id"] = schema_id
+
+        allowed, _ = await self.check_interaction(
+            thread_id,
+            interaction,
+            context=gate_context,
+        )
+        if not allowed:
             return
 
         for question in questions:

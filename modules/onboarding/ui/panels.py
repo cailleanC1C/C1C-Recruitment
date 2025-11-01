@@ -201,6 +201,7 @@ def register_persistent_views(bot: discord.Client) -> None:
                     fields["stacksite"] = stacksite
             diag.log_event_sync("info", "persistent_view_registered", **fields)
     if registered:
+        log.info("🧭 welcome.view registered (timeout=%s)", view.timeout)
         log.info("✅ Welcome — persistent-view • view=%s", view.__class__.__name__)
 
 
@@ -387,16 +388,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         actor_id = getattr(actor, "id", None)
         # UI no longer pre-authorizes; controller enforces the permission rule.
 
-        await _defer_interaction(interaction)
-
         try:
-            allowed, _ = await controller.check_interaction(
-                thread_id,
-                interaction,
-                context=controller_context,
-            )
-            if not allowed:
-                return
             await controller._handle_modal_launch(
                 thread_id,
                 interaction,
