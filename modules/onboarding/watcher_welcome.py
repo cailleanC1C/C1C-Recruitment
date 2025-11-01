@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from modules.common import feature_flags
 from modules.common import runtime as rt
-from modules.onboarding import logs, thread_scopes
+from modules.onboarding import logs, thread_membership, thread_scopes
 from modules.onboarding.ui import panels
 from shared.config import (
     get_guardian_knight_role_ids,
@@ -150,6 +150,21 @@ class WelcomeWatcher(commands.Cog):
         actor: discord.abc.User | None,
         source: str,
     ) -> None:
+        joined, join_error = await thread_membership.ensure_thread_membership(thread)
+        if not joined:
+            context = self._log_context(
+                thread,
+                actor,
+                source=source,
+                result="thread_join_failed",
+                reason="thread_join",
+            )
+            if join_error is not None:
+                await logs.send_welcome_exception("error", join_error, **context)
+            else:
+                await logs.send_welcome_log("error", **context)
+            return
+
         view = panels.OpenQuestionsPanelView()
         content = "Ready when you are — tap below to open the onboarding questions."
         try:
