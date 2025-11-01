@@ -31,6 +31,33 @@ log = logging.getLogger("c1c.onboarding.logs")
 _LOG_METHODS: dict[str, Callable[[str, Any], None]] = {}
 _PANEL_DEDUPER = EventDeduper()
 
+_LOG_RECORD_RESERVED_ATTRS = frozenset(
+    {
+        "args",
+        "asctime",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "module",
+        "msecs",
+        "message",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+    }
+)
+
 
 def _resolve_logger(level: str) -> Callable[[str, Any], None]:
     """Return a logging function for the requested level."""
@@ -46,6 +73,25 @@ def _resolve_logger(level: str) -> Callable[[str, Any], None]:
             }
         )
     return _LOG_METHODS.get(level, _LOG_METHODS["info"])
+
+
+def _sanitize_log_extra(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``payload`` that is safe for ``logging`` extras."""
+
+    sanitized: dict[str, Any] = {}
+    reserved_targets = set(payload)
+    for key, value in payload.items():
+        if key in _LOG_RECORD_RESERVED_ATTRS:
+            alias_base = f"context_{key}"
+            alias = alias_base
+            suffix = 1
+            while alias in sanitized or alias in reserved_targets:
+                suffix += 1
+                alias = f"{alias_base}_{suffix}"
+            sanitized[alias] = value
+        else:
+            sanitized[key] = value
+    return sanitized
 
 def _stringify(value: Any) -> str:
     if value is None:
@@ -191,10 +237,13 @@ async def send_welcome_exception(level: str, error: BaseException, **kv: Any) ->
 
 def log_view_error(extra: Mapping[str, Any] | None, err: BaseException) -> None:
     payload = dict(extra or {})
+    sanitized = _sanitize_log_extra(payload)
+    sanitized.setdefault("error_class", err.__class__.__name__)
+    sanitized.setdefault("error_message", str(err))
     log.error(
         "welcome view error",
         exc_info=(err.__class__, err, err.__traceback__),
-        extra=payload,
+        extra=sanitized,
     )
 
 
