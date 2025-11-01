@@ -499,6 +499,17 @@ class BaseWelcomeController:
         diag_state["ambiguous_target"] = target_user_id is None
         diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
 
+        diag_enabled = diag.is_enabled()
+        if diag_state.get("response_is_done"):
+            if diag_enabled:
+                await diag.log_event(
+                    "info",
+                    "modal_launch_skipped",
+                    skip_reason="response_done",
+                    **diag_state,
+                )
+            return
+
         modals = build_modals(
             self._questions[thread_id],
             session.visibility,
@@ -527,7 +538,6 @@ class BaseWelcomeController:
         diag_state["modal_index"] = index
         diag_state["schema_id"] = session.schema_hash
         diag_state["about_to_send_modal"] = True
-        diag_enabled = diag.is_enabled()
         diag_tasks: list[Awaitable[None]] = []
         if diag_enabled:
             diag_tasks.append(diag.log_event("info", "modal_launch_pre", **diag_state))
