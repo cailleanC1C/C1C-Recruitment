@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from c1c_coreops import rbac
 from modules.common import feature_flags
-from modules.onboarding import logs, thread_scopes
+from modules.onboarding import logs, thread_membership, thread_scopes
 from modules.onboarding.controllers.welcome_controller import (
     extract_target_from_message,
     locate_welcome_message,
@@ -194,6 +194,16 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 trigger="scope_gate",
                 result="wrong_scope",
             )
+            return
+
+        joined, join_error = await thread_membership.ensure_thread_membership(thread)
+        if not joined:
+            context = _base_context(member=member, thread=thread, message_id=payload.message_id)
+            context.update({"result": "thread_join_failed", "trigger": "thread_join"})
+            if join_error is not None:
+                await logs.send_welcome_exception("error", join_error, **context)
+            else:
+                await logs.send_welcome_log("error", **context)
             return
 
         target_user_id: int | None = None

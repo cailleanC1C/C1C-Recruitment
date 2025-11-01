@@ -222,6 +222,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         self._controller = controller
         self._thread_id = thread_id
         self.disable_on_timeout = False
+        self._error_notice_ids: set[int] = set()
         if diag.is_enabled():
             diag.log_event_sync(
                 "debug",
@@ -386,6 +387,8 @@ class OpenQuestionsPanelView(discord.ui.View):
         actor_id = getattr(actor, "id", None)
         # UI no longer pre-authorizes; controller enforces the permission rule.
 
+        await _defer_interaction(interaction)
+
         try:
             allowed, _ = await controller.check_interaction(
                 thread_id,
@@ -499,9 +502,16 @@ class OpenQuestionsPanelView(discord.ui.View):
             await logs.send_welcome_exception("error", exc, **error_context)
 
     async def _ensure_error_notice(self, interaction: discord.Interaction) -> None:
-        if getattr(interaction, "_c1c_error_notified", False):
+        identifier = getattr(interaction, "id", None)
+        if identifier is None:
+            identifier = id(interaction)
+        try:
+            key = int(identifier)
+        except (TypeError, ValueError):
+            key = id(interaction)
+        if key in self._error_notice_ids:
             return
-        setattr(interaction, "_c1c_error_notified", True)
+        self._error_notice_ids.add(key)
         if interaction.response.is_done():
             await _edit_original_response(interaction, content=self.ERROR_NOTICE)
             return

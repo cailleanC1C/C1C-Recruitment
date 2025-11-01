@@ -89,6 +89,8 @@ async def _run_event(
     is_recruiter: bool = True,
     welcome_parent: bool = True,
     promo_parent: bool = False,
+    thread_join: bool = True,
+    thread_join_error: Exception | None = None,
 ):
     message = SimpleNamespace(id=7001, content=message_content)
     thread = DummyThread(message)
@@ -118,6 +120,13 @@ async def _run_event(
         lambda current: is_recruiter,
     )
 
+    join_mock = AsyncMock(return_value=(thread_join, thread_join_error))
+    monkeypatch.setattr(
+        reaction_fallback.thread_membership,
+        "ensure_thread_membership",
+        join_mock,
+    )
+
     start_mock = AsyncMock()
     monkeypatch.setattr(reaction_fallback, "start_welcome_dialog", start_mock)
 
@@ -126,7 +135,7 @@ async def _run_event(
     caplog.set_level(logging.INFO)
     await cog.on_raw_reaction_add(payload)
 
-    return start_mock, caplog
+    return start_mock, caplog, join_mock
 
 
 def _record_details(record):
@@ -159,7 +168,7 @@ def _find_log(caplog, key):
 
 
 def test_phrase_match_starts_dialog(monkeypatch, caplog):
-    start_mock, caplog = asyncio.run(
+    start_mock, caplog, join_mock = asyncio.run(
         _run_event(
             monkeypatch,
             caplog,
@@ -168,12 +177,13 @@ def test_phrase_match_starts_dialog(monkeypatch, caplog):
     )
 
     start_mock.assert_awaited_once()
+    join_mock.assert_awaited_once()
     details = _find_log(caplog, "trigger")
     assert details["trigger"] == "phrase_match"
 
 
 def test_token_match_starts_dialog(monkeypatch, caplog):
-    start_mock, caplog = asyncio.run(
+    start_mock, caplog, join_mock = asyncio.run(
         _run_event(
             monkeypatch,
             caplog,
@@ -182,12 +192,13 @@ def test_token_match_starts_dialog(monkeypatch, caplog):
     )
 
     start_mock.assert_awaited_once()
+    join_mock.assert_awaited_once()
     details = _find_log(caplog, "trigger")
     assert details["trigger"] == "token_match"
 
 
 def test_no_trigger_rejected_even_for_admin(monkeypatch, caplog):
-    start_mock, caplog = asyncio.run(
+    start_mock, caplog, join_mock = asyncio.run(
         _run_event(
             monkeypatch,
             caplog,
@@ -198,12 +209,13 @@ def test_no_trigger_rejected_even_for_admin(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
+    join_mock.assert_awaited_once()
     details = _find_log(caplog, "result")
     assert details["result"] == "no_trigger"
 
 
 def test_wrong_parent_rejected(monkeypatch, caplog):
-    start_mock, caplog = asyncio.run(
+    start_mock, caplog, join_mock = asyncio.run(
         _run_event(
             monkeypatch,
             caplog,
@@ -214,12 +226,13 @@ def test_wrong_parent_rejected(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
+    join_mock.assert_not_called()
     details = _find_log(caplog, "result")
     assert details["result"] == "wrong_scope"
 
 
 def test_role_gate_rejected(monkeypatch, caplog):
-    start_mock, caplog = asyncio.run(
+    start_mock, caplog, join_mock = asyncio.run(
         _run_event(
             monkeypatch,
             caplog,
@@ -230,5 +243,24 @@ def test_role_gate_rejected(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
+    join_mock.assert_awaited_once()
     details = _find_log(caplog, "result")
     assert details["result"] == "ambiguous_target"
+
+
+def test_thread_join_failure_logs(monkeypatch, caplog):
+    start_mock, caplog, join_mock = asyncio.run(
+        _run_event(
+            monkeypatch,
+            caplog,
+            message_content="Close the ticket By Reacting With 🎫 please!",
+            thread_join=False,
+            thread_join_error=RuntimeError("cannot join"),
+        )
+    )
+
+    start_mock.assert_not_called()
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "thread_join_failed"
+    assert details["trigger"] == "thread_join"
