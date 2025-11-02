@@ -49,6 +49,8 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
 
         controller = MagicMock()
         controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
 
         thread_id = 7777
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
@@ -82,6 +84,7 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
+        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
         controller.build_modal_stub.assert_called_once_with(thread_id)
         response.defer.assert_not_awaited()
         response.send_modal.assert_awaited_once_with("sentinel")
@@ -99,6 +102,8 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
 
         controller = MagicMock()
         controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
 
         thread_id = 4242
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
@@ -133,6 +138,7 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
+        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
         controller.build_modal_stub.assert_called_once_with(thread_id)
         followup.send.assert_not_awaited()
         response.defer.assert_not_awaited()

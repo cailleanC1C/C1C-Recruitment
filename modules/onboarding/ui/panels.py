@@ -260,12 +260,35 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         controller, thread_id = self._resolve(interaction)
         if controller is None or thread_id is None:
-            await self._ensure_error_notice(interaction)
+            await self._restart_from_view(interaction, log_context={"reason": "launch_resolve_failed"})
             return
 
         diag_state = diag.interaction_state(interaction)
         diag_state["thread_id"] = thread_id
         diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
+
+        preload_questions = getattr(controller, "get_or_load_questions", None)
+        cache: Any = None
+        cache_dict = getattr(controller, "_questions", None)
+        if isinstance(cache_dict, dict):
+            cache = cache_dict.get(thread_id)
+        else:
+            legacy_cache = getattr(controller, "questions_by_thread", None)
+            if isinstance(legacy_cache, dict):
+                cache = legacy_cache.get(thread_id)
+
+        if callable(preload_questions) and not cache:
+            try:
+                await preload_questions(thread_id)
+            except Exception as exc:  # pragma: no cover - best-effort preload
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "onboard_preload_failed",
+                        thread_id=thread_id,
+                        error=str(exc),
+                    )
+                log.warning("welcome modal preload failed", exc_info=True)
 
         try:
             modal = controller.build_modal_stub(thread_id)
