@@ -532,10 +532,6 @@ class OpenQuestionsPanelView(discord.ui.View):
         parent_channel = getattr(thread, "parent", None) if thread is not None else None
 
         extra: dict[str, Any] = {
-            "diag": "welcome_flow",
-            "event": "view_error",
-            "view": self.__class__.__name__,
-            "view_tag": WELCOME_PANEL_TAG,
             "custom_id": getattr(item, "custom_id", None),
             "component_type": item.__class__.__name__ if item is not None else None,
             "message_id": getattr(interaction.message, "id", None)
@@ -545,7 +541,6 @@ class OpenQuestionsPanelView(discord.ui.View):
             "actor": logs.format_actor(interaction.user),
             "actor_id": getattr(interaction.user, "id", None),
             "actor_name": logs.format_actor_handle(interaction.user),
-            "response_is_done": getattr(interaction.response, "is_done", lambda: None)(),
             "app_permissions": perms_text,
             "app_perms_text": perms_text,
             "app_permissions_snapshot": snapshot,
@@ -589,7 +584,13 @@ class OpenQuestionsPanelView(discord.ui.View):
                 extra.setdefault("channel", formatted)
 
         await self._ensure_error_notice(interaction)
-        logs.log_view_error(extra, error)
+        logs.log_view_error(
+            interaction,
+            self,
+            error,
+            tag=WELCOME_PANEL_TAG,
+            extra=extra,
+        )
 
     async def _notify_restart(self, interaction: discord.Interaction) -> None:
         message = "♻️ Restarting the onboarding form…"
