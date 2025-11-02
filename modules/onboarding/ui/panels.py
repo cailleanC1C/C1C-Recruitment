@@ -256,7 +256,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """Minimal button handler that always attempts to open the modal."""
+        """Stage 1: post a clean launcher so the modal opens on a fresh interaction."""
 
         controller, thread_id = self._resolve(interaction)
         if controller is None or thread_id is None:
@@ -281,61 +281,35 @@ class OpenQuestionsPanelView(discord.ui.View):
             if diag.is_enabled():
                 await diag.log_event(
                     "warning",
-                    "modal_launch_skipped",
+                    "welcome_stage1_skipped",
                     skip_reason="interaction_already_responded",
                     **diag_state,
                 )
             await self._post_retry_start(interaction, reason="response_done")
             return
 
-        preload_questions = getattr(controller, "get_or_load_questions", None)
-        cache: Any = None
-        cache_dict = getattr(controller, "_questions", None)
-        if isinstance(cache_dict, dict):
-            cache = cache_dict.get(thread_id)
-        else:
-            legacy_cache = getattr(controller, "questions_by_thread", None)
-            if isinstance(legacy_cache, dict):
-                cache = legacy_cache.get(thread_id)
+        from .views import CleanLaunchView
 
-        if callable(preload_questions) and not cache:
-            try:
-                await preload_questions(thread_id)
-            except Exception as exc:  # pragma: no cover - best-effort preload
-                if diag.is_enabled():
-                    await diag.log_event(
-                        "warning",
-                        "onboard_preload_failed",
-                        thread_id=thread_id,
-                        error=str(exc),
-                    )
-                log.warning("welcome modal preload failed", exc_info=True)
+        view = CleanLaunchView(controller, thread_id)
+        content = "Let’s capture some details. Tap **Open questions** to begin."
 
         try:
-            modal = controller.build_modal_stub(thread_id)
-        except Exception:
-            await self._ensure_error_notice(interaction)
-            raise
-
-        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
-        diag_state["modal_total"] = getattr(modal, "total_steps", None)
-
-        try:
-            await interaction.response.send_modal(modal)
+            await interaction.response.send_message(content, view=view)
         except Exception as exc:  # pragma: no cover - defensive network operations
             if diag.is_enabled():
                 await diag.log_event(
                     "warning",
-                    "modal_launch_failed_fallforward",
+                    "welcome_stage1_failed",
                     exception_type=exc.__class__.__name__,
                     exception_message=str(exc),
                     **diag_state,
                 )
-            log.warning("panel launch failed; falling forward", exc_info=True)
-            await self._post_retry_start(interaction, reason="send_modal_error")
+            log.warning("failed to post clean launcher", exc_info=True)
+            await self._post_retry_start(interaction, reason="stage1_send_failed")
             return
+
         if diag.is_enabled():
-            await diag.log_event("info", "modal_launch_sent", **diag_state)
+            await diag.log_event("info", "welcome_stage1_post_clean_launcher", **diag_state)
 
     async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
         """Post a small prompt with a retry button that uses a fresh interaction."""

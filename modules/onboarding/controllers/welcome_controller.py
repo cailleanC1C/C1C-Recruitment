@@ -179,6 +179,8 @@ class BaseWelcomeController:
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
+        # Legacy alias for UI helpers that still look for ``questions_by_thread``.
+        self.questions_by_thread = self._questions
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
