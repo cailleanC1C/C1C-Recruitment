@@ -48,13 +48,9 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
 
         controller = MagicMock()
-        controller.diag_target_user_id = MagicMock(return_value=5555)
-        controller.check_interaction = AsyncMock(return_value=(True, None))
-
-        async def _fake_modal_launch(thread_id: int, interaction, *, context=None):
-            await interaction.response.send_modal("sentinel")
-
-        controller._handle_modal_launch = AsyncMock(side_effect=_fake_modal_launch)
+        controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
 
         thread_id = 7777
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
@@ -88,8 +84,8 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller._handle_modal_launch.assert_awaited_once()
-        controller.check_interaction.assert_not_awaited()
+        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
+        controller.build_modal_stub.assert_called_once_with(thread_id)
         response.defer.assert_not_awaited()
         response.send_modal.assert_awaited_once_with("sentinel")
 
@@ -105,9 +101,9 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
 
         controller = MagicMock()
-        controller.diag_target_user_id = MagicMock(return_value=None)
-        controller.check_interaction = AsyncMock(return_value=(False, "denied"))
-        controller._handle_modal_launch = AsyncMock()
+        controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
 
         thread_id = 4242
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
@@ -142,11 +138,10 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.check_interaction.assert_not_awaited()
-        controller._handle_modal_launch.assert_awaited_once()
+        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
+        controller.build_modal_stub.assert_called_once_with(thread_id)
         followup.send.assert_not_awaited()
         response.defer.assert_not_awaited()
-        assert logs_mock.await_count == 1
-        assert logs_mock.await_args.kwargs.get("result") == "clicked"
+        assert logs_mock.await_count == 0
 
     asyncio.run(runner())

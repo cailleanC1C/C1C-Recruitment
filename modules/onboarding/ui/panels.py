@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import discord
 
@@ -256,13 +256,62 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        """Minimal button handler that always attempts to open the modal."""
+
+        controller, thread_id = self._resolve(interaction)
+        if controller is None or thread_id is None:
+            await self._restart_from_view(interaction, log_context="launch_resolve_failed")
+            return
+
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
+
+        preload_questions = getattr(controller, "get_or_load_questions", None)
+        cache: Any = None
+        cache_dict = getattr(controller, "_questions", None)
+        if isinstance(cache_dict, dict):
+            cache = cache_dict.get(thread_id)
+        else:
+            legacy_cache = getattr(controller, "questions_by_thread", None)
+            if isinstance(legacy_cache, dict):
+                cache = legacy_cache.get(thread_id)
+
+        if callable(preload_questions) and not cache:
+            try:
+                await preload_questions(thread_id)
+            except Exception as exc:  # pragma: no cover - best-effort preload
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "onboard_preload_failed",
+                        thread_id=thread_id,
+                        error=str(exc),
+                    )
+                log.warning("welcome modal preload failed", exc_info=True)
+
         try:
-            if not _claim_interaction(interaction):
-                return
-            await self._handle_launch(interaction)
+            modal = controller.build_modal_stub(thread_id)
         except Exception:
             await self._ensure_error_notice(interaction)
             raise
+
+        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
+        diag_state["modal_total"] = getattr(modal, "total_steps", None)
+
+        try:
+            await interaction.response.send_modal(modal)
+        except discord.InteractionResponded:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            return
+        if diag.is_enabled():
+            await diag.log_event("info", "modal_launch_sent", **diag_state)
 
     @discord.ui.button(
         label="Restart",
@@ -278,140 +327,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             raise
 
     async def _handle_launch(self, interaction: discord.Interaction) -> None:
-        state = diag.interaction_state(interaction)
-        controller = self._controller
-        thread_id = state.get("thread_id")
-        target_user_id: int | None = None
-        if controller is not None and thread_id is not None:
-            getter = getattr(controller, "diag_target_user_id", None)
-            if callable(getter):
-                target_user_id = getter(int(thread_id))
-        if diag.is_enabled():
-            await diag.log_event(
-                "info",
-                "panel_button_clicked",
-                custom_id=OPEN_QUESTIONS_CUSTOM_ID,
-                target_user_id=target_user_id,
-                ambiguous_target=target_user_id is None,
-                **state,
-            )
-
-        channel = getattr(interaction, "channel", None)
-        thread = channel if isinstance(channel, discord.Thread) else None
-        controller, thread_id = self._resolve(interaction)
-        message = getattr(interaction, "message", None)
-        message_id = getattr(message, "id", None)
-        actor_id = getattr(interaction.user, "id", None)
-
-        snapshot, permissions_text, _missing = diag.permission_snapshot(interaction)
-
-        controller_context: dict[str, Any] = {
-            "view": "panel",
-            "view_tag": WELCOME_PANEL_TAG,
-            "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
-            "view_id": OPEN_QUESTIONS_CUSTOM_ID,
-            "app_permissions": permissions_text,
-            "app_perms_text": permissions_text,
-            "app_permissions_snapshot": snapshot,
-        }
-        if thread_id is not None:
-            try:
-                controller_context["thread_id"] = int(thread_id)
-            except (TypeError, ValueError):
-                pass
-        if message_id is not None:
-            try:
-                controller_context["message_id"] = int(message_id)
-            except (TypeError, ValueError):
-                pass
-        if actor_id is not None:
-            try:
-                controller_context["actor_id"] = int(actor_id)
-            except (TypeError, ValueError):
-                pass
-        if isinstance(thread, discord.Thread):
-            parent_id = getattr(thread, "parent_id", None)
-            if parent_id is not None:
-                try:
-                    controller_context["parent_channel_id"] = int(parent_id)
-                except (TypeError, ValueError):
-                    pass
-        else:
-            parent_id = None
-
-        log_context: dict[str, Any] = {
-            **logs.thread_context(thread),
-            "view": "panel",
-            "view_tag": WELCOME_PANEL_TAG,
-            "custom_id": OPEN_QUESTIONS_CUSTOM_ID,
-            "view_id": OPEN_QUESTIONS_CUSTOM_ID,
-            "actor": logs.format_actor(interaction.user),
-            "app_permissions": permissions_text,
-            "app_perms_text": permissions_text,
-            "app_permissions_snapshot": snapshot,
-        }
-        actor_name = logs.format_actor_handle(interaction.user)
-        if actor_name:
-            log_context["actor_name"] = actor_name
-        if thread_id is not None and "thread" not in log_context:
-            log_context["thread"] = logs.format_thread(thread_id)
-        if thread_id is not None:
-            try:
-                log_context["thread_id"] = int(thread_id)
-            except (TypeError, ValueError):
-                pass
-        if message_id is not None:
-            try:
-                log_context["message_id"] = int(message_id)
-            except (TypeError, ValueError):
-                pass
-        if actor_id is not None:
-            try:
-                log_context["actor_id"] = int(actor_id)
-            except (TypeError, ValueError):
-                pass
-        if parent_id is not None:
-            try:
-                log_context["parent_channel_id"] = int(parent_id)
-            except (TypeError, ValueError):
-                pass
-
-        flow_name = getattr(controller, "flow", None) if controller is not None else None
-        if flow_name:
-            log_context["flow"] = flow_name
-            log_context.setdefault("diag", f"{flow_name}_flow")
-        else:
-            log_context.setdefault("diag", "welcome_flow")
-
-        button_log_context = dict(log_context)
-        button_log_context.setdefault("event", "panel_button_clicked")
-        button_log_context.setdefault("result", "clicked")
-        button_log_context.setdefault("view_tag", WELCOME_PANEL_TAG)
-
-        if controller is None or thread_id is None:
-            await self._restart_from_view(interaction, log_context)
-            return
-
-        actor = interaction.user
-        actor_id = getattr(actor, "id", None)
-        # UI no longer pre-authorizes; controller enforces the permission rule.
-
-        try:
-            await controller._handle_modal_launch(
-                thread_id,
-                interaction,
-                context=controller_context,
-            )
-        except Exception as exc:  # pragma: no cover - defensive path
-            error_context = dict(log_context)
-            await logs.send_welcome_exception("error", exc, **error_context)
-            await self._ensure_error_notice(interaction)
-            raise
-        finally:
-            try:
-                await logs.send_welcome_log("info", **button_log_context)
-            except Exception:  # pragma: no cover - defensive guard
-                log.warning("failed to emit welcome panel button log", exc_info=True)
+        await self.launch(interaction, cast(discord.ui.Button, None))
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
