@@ -500,28 +500,74 @@ class BaseWelcomeController:
         diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
 
         diag_enabled = diag.is_enabled()
-        if diag_state.get("response_is_done"):
+        response_is_done = bool(diag_state.get("response_is_done"))
+        response = getattr(interaction, "response", None)
+        if not response_is_done:
+            marker = getattr(response, "is_done", None)
+            try:
+                response_is_done = bool(marker()) if callable(marker) else bool(marker)
+            except Exception:
+                response_is_done = False
+        diag_state["response_is_done"] = response_is_done
+        diag_state["claimed"] = getattr(interaction, "_c1c_claimed", False)
+        if response_is_done:
             if diag_enabled:
                 await diag.log_event(
-                    "info",
+                    "debug",
                     "modal_launch_skipped",
                     skip_reason="response_done",
                     **diag_state,
                 )
             return
 
+        questions = self._questions.get(thread_id)
+        if not questions:
+            rehydrated = await self._rehydrate_questions(thread_id, session=session)
+            if not rehydrated:
+                if diag_enabled:
+                    payload = dict(diag_state)
+                    payload["questions_missing"] = True
+                    await diag.log_event(
+                        "debug",
+                        "modal_launch_questions_missing",
+                        **payload,
+                    )
+                return
+            questions = self._questions.get(thread_id)
+
         modals = build_modals(
-            self._questions[thread_id],
+            questions,
             session.visibility,
             session.answers,
             title_prefix=self._modal_title_prefix(),
         )
+        total_modals = len(modals)
         pending = session.pending_step or {}
         index = int(pending.get("index", 0))
-        if index >= len(modals):
+        diag_state["modal_index"] = index
+        diag_state["modal_total"] = total_modals
+
+        # TODO(#welcome-modal-debug): remove once modal launch telemetry is stable.
+        log.debug(
+            "🔍 Welcome — modal_launch_probe • thread=%s • response_done=%s • claimed=%s • index=%s/%s",
+            thread_id,
+            response_is_done,
+            diag_state["claimed"],
+            index,
+            total_modals,
+        )
+
+        if index >= total_modals:
             store.set_pending_step(thread_id, None)
-            await _safe_ephemeral(interaction, "No more questions on this step.")
-            await self._start_select_step(thread, session)
+            if diag_enabled:
+                payload = dict(diag_state)
+                payload["index"] = index
+                payload["total"] = total_modals
+                await diag.log_event(
+                    "debug",
+                    "modal_launch_oob_reset",
+                    **payload,
+                )
             return
 
         questions_for_step = list(modals[index].questions)
@@ -535,7 +581,6 @@ class BaseWelcomeController:
             on_submit=self._modal_submitted(thread_id, questions_for_step, index),
         )
         store.set_pending_step(thread_id, {"kind": "modal", "index": index})
-        diag_state["modal_index"] = index
         diag_state["schema_id"] = session.schema_hash
         diag_state["about_to_send_modal"] = True
         diag_tasks: list[Awaitable[None]] = []
@@ -604,6 +649,45 @@ class BaseWelcomeController:
             index=index,
             **self._log_fields(thread_id, actor=interaction.user),
         )
+
+    async def _rehydrate_questions(
+        self,
+        thread_id: int,
+        *,
+        session: SessionData | None,
+    ) -> bool:
+        """Best-effort attempt to restore question state for a thread."""
+
+        questions = self._questions.get(thread_id)
+        if questions:
+            return True
+
+        try:
+            from shared.sheets import onboarding_questions
+        except Exception:
+            return False
+
+        try:
+            refreshed = onboarding_questions.get_questions(self.flow)
+        except Exception:
+            log.warning(
+                "failed to rehydrate welcome questions", exc_info=True
+            )
+            return False
+
+        self._questions[thread_id] = list(refreshed)
+        if session is not None:
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    self._questions[thread_id],
+                    session.answers,
+                )
+            except Exception:
+                log.warning(
+                    "failed to recompute visibility during welcome rehydrate",
+                    exc_info=True,
+                )
+        return True
 
     async def _restart_from_interaction(
         self,

@@ -45,4 +45,8 @@ Gate instrumentation surfaces as single-line console logs:
 ```
 
 ---
-Doc last updated: 2025-10-31 (v0.9.7)
+## Known pitfalls
+
+- **Don't pre-respond before a modal.** `send_modal` must be the first response on the interaction; any prior defer/send forces Discord to reject the modal with `response_is_done: true`.
+
+Doc last updated: 2025-11-02 (v0.9.7)

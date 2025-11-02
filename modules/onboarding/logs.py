@@ -235,16 +235,81 @@ async def send_welcome_exception(level: str, error: BaseException, **kv: Any) ->
     await send_welcome_log(level, **details)
 
 
-def log_view_error(extra: Mapping[str, Any] | None, err: BaseException) -> None:
-    payload = dict(extra or {})
+def log_view_error(
+    interaction: discord.Interaction,
+    view: discord.ui.View,
+    err: BaseException,
+    *,
+    tag: str | None = None,
+    extra: Mapping[str, Any] | None = None,
+) -> None:
+    """Emit a resilient error log for view callbacks.
+
+    The Discord interaction payload frequently omits optional attributes. Guard
+    every access so the logging path never raises and masks the original
+    exception.
+    """
+
+    def _safe(getter: Callable[[], Any], default: Any = None) -> Any:
+        try:
+            return getter()
+        except Exception:
+            return default
+
+    data = _safe(lambda: getattr(interaction, "data", None)) or {}
+    response = getattr(interaction, "response", None)
+
+    def _response_is_done() -> bool:
+        if response is None:
+            return False
+        flag = getattr(response, "is_done", None)
+        if callable(flag):
+            return bool(_safe(flag, False))
+        if flag is None:
+            return False
+        try:
+            return bool(flag)
+        except Exception:
+            return False
+
+    payload: dict[str, Any] = {
+        "diag": "welcome_flow",
+        "event": "view_error",
+        "view": type(view).__name__,
+        "view_tag": getattr(view, "tag", None) or tag or "unknown",
+        "custom_id": _safe(lambda: data.get("custom_id")),
+        "component_type": _safe(lambda: data.get("component_type")),
+        "message_id": _safe(lambda: getattr(interaction.message, "id", None)),
+        "interaction_id": _safe(lambda: getattr(interaction, "id", None)),
+        "actor": str(_safe(lambda: getattr(interaction, "user", None))),
+        "actor_id": _safe(lambda: getattr(getattr(interaction, "user", None), "id", None)),
+        "actor_name": _safe(lambda: getattr(getattr(interaction, "user", None), "mention", None)),
+        "response_is_done": _response_is_done(),
+        "app_permissions": str(getattr(interaction, "app_permissions", None)),
+        "claimed": _safe(lambda: getattr(interaction, "_c1c_claimed", False), False),
+    }
+
+    if extra:
+        payload.update(extra)
+
     sanitized = _sanitize_log_extra(payload)
     sanitized.setdefault("error_class", err.__class__.__name__)
     sanitized.setdefault("error_message", str(err))
-    log.error(
-        "welcome view error",
-        exc_info=(err.__class__, err, err.__traceback__),
-        extra=sanitized,
-    )
+
+    try:
+        log.error(
+            "welcome view error",
+            exc_info=(err.__class__, err, err.__traceback__),
+            extra=sanitized,
+        )
+    except Exception:
+        # As an extreme fallback emit a minimal record so the originating error
+        # never disappears behind a logging failure.
+        log.error(
+            "welcome view error (minimal)",
+            exc_info=(err.__class__, err, err.__traceback__),
+            extra={"diag": "welcome_flow", "event": "view_error_min"},
+        )
 
 
 def _dedupe_key(payload: Mapping[str, Any]) -> str | None:
