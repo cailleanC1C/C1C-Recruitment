@@ -125,9 +125,18 @@ def _restart_context_from_state(
 
 
 def _claim_interaction(interaction: discord.Interaction) -> bool:
+    """Mark this interaction as claimed by the welcome panel handler."""
+
+    # NOTE: discord.Interaction does not expose ``_c1c_claimed`` by default.
+    # Always guard with ``getattr`` before first use.
     if getattr(interaction, "_c1c_claimed", False):
         return False
-    setattr(interaction, "_c1c_claimed", True)
+    try:
+        setattr(interaction, "_c1c_claimed", True)
+    except Exception:
+        # As a last resort, allow the flow to continue even if we cannot mark
+        # the ad-hoc attribute.
+        return True
     return True
 
 
@@ -248,6 +257,8 @@ class OpenQuestionsPanelView(discord.ui.View):
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         try:
+            if not _claim_interaction(interaction):
+                return
             await self._handle_launch(interaction)
         except Exception:
             await self._ensure_error_notice(interaction)
@@ -284,9 +295,6 @@ class OpenQuestionsPanelView(discord.ui.View):
                 ambiguous_target=target_user_id is None,
                 **state,
             )
-
-        if not _claim_interaction(interaction):
-            return
 
         channel = getattr(interaction, "channel", None)
         thread = channel if isinstance(channel, discord.Thread) else None
