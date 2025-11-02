@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, cast
 
 import discord
 from discord.ext import commands
@@ -15,6 +15,7 @@ from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
+from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question
 
@@ -457,6 +458,100 @@ class BaseWelcomeController:
             **self._log_fields(thread_id),
         )
 
+    def build_modal_stub(self, thread_id: int, *, index: Optional[int] = None) -> WelcomeQuestionnaireModal:
+        session = store.get(thread_id)
+        questions = self._questions.get(thread_id)
+        answers = session.answers if session else {}
+        visibility = session.visibility if session else {}
+        pending = session.pending_step or {} if session else {}
+        step_index = index if index is not None else int(pending.get("index", 0) or 0)
+
+        modals = build_modals(
+            questions or [],
+            visibility,
+            answers,
+            title_prefix=self._modal_title_prefix(),
+        )
+
+        if modals:
+            if step_index < 0:
+                step_index = 0
+            if step_index >= len(modals):
+                step_index = len(modals) - 1
+            modal = modals[step_index]
+            modal.submit_callback = self._modal_submitted(thread_id, list(modal.questions), modal.step_index)
+        else:
+            modal = WelcomeQuestionnaireModal(
+                questions=[],
+                step_index=0,
+                total_steps=1,
+                title_prefix=self._modal_title_prefix(),
+                answers=answers,
+                visibility=visibility,
+                on_submit=self._modal_submitted(thread_id, [], 0),
+            )
+
+        setattr(modal, "_c1c_thread_id", thread_id)
+        setattr(modal, "_c1c_index", getattr(modal, "step_index", 0))
+        return modal
+
+    async def get_or_load_questions(
+        self,
+        thread_id: int,
+        *,
+        session: SessionData | None = None,
+    ) -> list[Question] | None:
+        questions = self._questions.get(thread_id)
+        if questions:
+            return questions
+        restored = await self._rehydrate_questions(thread_id, session=session)
+        if restored:
+            return self._questions.get(thread_id)
+        return None
+
+    async def prompt_retry(self, interaction: discord.Interaction, thread_id: int) -> None:
+        thread = self._threads.get(thread_id)
+        if thread is None and isinstance(interaction.channel, discord.Thread):
+            thread = interaction.channel
+        if thread is None:
+            return
+        try:
+            await thread.send("Something blinked. Tap **Open questions** again to continue.")
+        except Exception:
+            log.warning("failed to post retry prompt", exc_info=True)
+
+    async def prompt_next(self, interaction: discord.Interaction, thread_id: int, next_idx: int) -> None:
+        thread = self._threads.get(thread_id)
+        if thread is None and isinstance(interaction.channel, discord.Thread):
+            thread = interaction.channel
+        if thread is None:
+            return
+        view = self.make_next_button(thread_id, next_idx)
+        try:
+            await thread.send("Next up…", view=view)
+        except Exception:
+            log.warning("failed to post next-step prompt", exc_info=True)
+
+    def make_next_button(self, thread_id: int, next_idx: int) -> NextStepView:
+        return NextStepView(self, thread_id, next_idx)
+
+    async def finish_onboarding(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int,
+        *,
+        session: SessionData,
+        thread: discord.Thread,
+    ) -> None:
+        await self._start_select_step(thread, session)
+        refreshed = store.get(thread_id)
+        pending = refreshed.pending_step if refreshed is not None else None
+        if not pending:
+            try:
+                await thread.send("All set. A recruiter will review your answers shortly.")
+            except Exception:
+                log.warning("failed to send onboarding completion notice", exc_info=True)
+
     def _select_changed(self, thread_id: int) -> Callable[[discord.Interaction, Question, list[str]], Awaitable[None]]:
         async def handler(
             interaction: discord.Interaction,
@@ -486,167 +581,47 @@ class BaseWelcomeController:
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
-        session = store.get(thread_id)
-        thread = self._threads.get(thread_id)
-        if session is None or thread is None:
-            await self._restart_from_interaction(thread_id, interaction, context=context)
-            return
-
         diag_state = diag.interaction_state(interaction)
         diag_state["thread_id"] = thread_id
+        diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
         target_user_id = self._target_users.get(thread_id)
         diag_state["target_user_id"] = target_user_id
         diag_state["ambiguous_target"] = target_user_id is None
-        diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
 
-        diag_enabled = diag.is_enabled()
-        response_is_done = bool(diag_state.get("response_is_done"))
-        response = getattr(interaction, "response", None)
-        if not response_is_done:
-            marker = getattr(response, "is_done", None)
-            try:
-                response_is_done = bool(marker()) if callable(marker) else bool(marker)
-            except Exception:
-                response_is_done = False
-        diag_state["response_is_done"] = response_is_done
-        diag_state["claimed"] = getattr(interaction, "_c1c_claimed", False)
-        if response_is_done:
-            if diag_enabled:
-                await diag.log_event(
-                    "debug",
-                    "modal_launch_skipped",
-                    skip_reason="response_done",
-                    **diag_state,
-                )
-            return
+        modal = self.build_modal_stub(thread_id)
+        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
+        diag_state["modal_total"] = getattr(modal, "total_steps", None)
 
-        questions = self._questions.get(thread_id)
-        if not questions:
-            rehydrated = await self._rehydrate_questions(thread_id, session=session)
-            if not rehydrated:
-                if diag_enabled:
-                    payload = dict(diag_state)
-                    payload["questions_missing"] = True
-                    await diag.log_event(
-                        "debug",
-                        "modal_launch_questions_missing",
-                        **payload,
-                    )
-                return
-            questions = self._questions.get(thread_id)
-
-        modals = build_modals(
-            questions,
-            session.visibility,
-            session.answers,
-            title_prefix=self._modal_title_prefix(),
-        )
-        total_modals = len(modals)
-        pending = session.pending_step or {}
-        index = int(pending.get("index", 0))
-        diag_state["modal_index"] = index
-        diag_state["modal_total"] = total_modals
-
-        # TODO(#welcome-modal-debug): remove once modal launch telemetry is stable.
-        log.debug(
-            "🔍 Welcome — modal_launch_probe • thread=%s • response_done=%s • claimed=%s • index=%s/%s",
-            thread_id,
-            response_is_done,
-            diag_state["claimed"],
-            index,
-            total_modals,
-        )
-
-        if index >= total_modals:
-            store.set_pending_step(thread_id, None)
-            if diag_enabled:
-                payload = dict(diag_state)
-                payload["index"] = index
-                payload["total"] = total_modals
-                await diag.log_event(
-                    "debug",
-                    "modal_launch_oob_reset",
-                    **payload,
-                )
-            return
-
-        questions_for_step = list(modals[index].questions)
-        modal = WelcomeQuestionnaireModal(
-            questions=questions_for_step,
-            step_index=index,
-            total_steps=len(modals),
-            title_prefix=self._modal_title_prefix(),
-            answers=session.answers,
-            visibility=session.visibility,
-            on_submit=self._modal_submitted(thread_id, questions_for_step, index),
-        )
-        store.set_pending_step(thread_id, {"kind": "modal", "index": index})
-        diag_state["schema_id"] = session.schema_hash
-        diag_state["about_to_send_modal"] = True
-        diag_tasks: list[Awaitable[None]] = []
-        if diag_enabled:
-            diag_tasks.append(diag.log_event("info", "modal_launch_pre", **diag_state))
-            if diag_state.get("response_is_done"):
-                diag_tasks.append(
-                    diag.log_event(
-                        "info",
-                        "modal_launch_followup",
-                        followup_path=True,
-                        **diag_state,
-                    )
-                )
-        display_name = _display_name(getattr(interaction, "user", None))
-        channel_obj: discord.abc.GuildChannel | discord.Thread | None
-        channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else thread
-        channel_label = _channel_path(channel_obj)
-        log.info(
-            "✅ Welcome — modal_open • user=%s • channel=%s",
-            display_name,
-            channel_label,
-        )
         try:
             await interaction.response.send_modal(modal)
         except discord.InteractionResponded:
-            log.warning(
-                "⚠️ Welcome — modal_already_responded • user=%s • channel=%s",
-                display_name,
-                channel_label,
-            )
-            if diag_enabled:
-                diag_tasks.append(
-                    diag.log_event(
-                        "warning",
-                        "modal_launch_skipped",
-                        skip_reason="interaction_already_responded",
-                        **diag_state,
-                    )
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
                 )
-                await asyncio.gather(*diag_tasks, return_exceptions=True)
             return
         except Exception as exc:
-            if diag_enabled:
-                diag_tasks.append(
-                    diag.log_event(
-                        "error",
-                        "modal_launch_error",
-                        exception_type=exc.__class__.__name__,
-                        exception_message=str(exc),
-                        **diag_state,
-                    )
+            if diag.is_enabled():
+                await diag.log_event(
+                    "error",
+                    "modal_launch_error",
+                    exception_type=exc.__class__.__name__,
+                    exception_message=str(exc),
+                    **diag_state,
                 )
-                await asyncio.gather(*diag_tasks, return_exceptions=True)
             raise
         else:
-            if diag_enabled:
-                diag_tasks.append(
-                    diag.log_event("info", "modal_launch_sent", modal_sent=True, **diag_state)
-                )
-                await asyncio.gather(*diag_tasks, return_exceptions=True)
+            if diag.is_enabled():
+                await diag.log_event("info", "modal_launch_sent", **diag_state)
+
         await logs.send_welcome_log(
             "debug",
             view="modal",
             result="launched",
-            index=index,
+            index=diag_state.get("modal_index"),
             **self._log_fields(thread_id, actor=interaction.user),
         )
 
@@ -795,6 +770,31 @@ class BaseWelcomeController:
             await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
             return
 
+        questions_for_thread = await self.get_or_load_questions(thread_id, session=session)
+        if not questions_for_thread:
+            await logs.send_welcome_log(
+                "warning",
+                view="modal",
+                result="questions_missing",
+                index=index,
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
+            await _safe_ephemeral(
+                interaction,
+                "⚠️ Something blinked. Tap **Open questions** again to continue.",
+            )
+            await self.prompt_retry(interaction, thread_id)
+            return
+
+        if not session.visibility:
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    questions_for_thread,
+                    session.answers,
+                )
+            except Exception:
+                session.visibility = {}
+
         gate_context: dict[str, Any] = {
             "view": "modal",
             "view_tag": panels.WELCOME_PANEL_TAG,
@@ -817,6 +817,30 @@ class BaseWelcomeController:
             context=gate_context,
         )
         if not allowed:
+            return
+
+        modals_before = build_modals(
+            questions_for_thread,
+            session.visibility,
+            session.answers,
+            title_prefix=self._modal_title_prefix(),
+        )
+        total_before = len(modals_before)
+
+        if total_before and index >= total_before:
+            store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
+            await logs.send_welcome_log(
+                "debug",
+                view="modal",
+                result="oob_reset",
+                index=index,
+                **self._log_fields(thread_id, actor=interaction.user),
+            )
+            await _safe_ephemeral(
+                interaction,
+                "⚠️ Let’s restart that section. Tap **Open questions** again in the thread.",
+            )
+            await self.prompt_retry(interaction, thread_id)
             return
 
         for question in questions:
@@ -857,14 +881,18 @@ class BaseWelcomeController:
                 session.answers.pop(question.qid, None)
 
         session.visibility = rules.evaluate_visibility(
-            self._questions[thread_id],
+            questions_for_thread,
             session.answers,
         )
-        store.set_pending_step(thread_id, {"kind": "modal", "index": index + 1})
-        await _safe_ephemeral(
-            interaction,
-            "✅ Saved! Use the button in the thread if more questions remain.",
+
+        modals_after = build_modals(
+            questions_for_thread,
+            session.visibility,
+            session.answers,
+            title_prefix=self._modal_title_prefix(),
         )
+        total_after = len(modals_after)
+
         await logs.send_welcome_log(
             "debug",
             view="modal",
@@ -882,15 +910,27 @@ class BaseWelcomeController:
             _channel_path(channel_obj),
         )
 
-        modals = build_modals(
-            self._questions[thread_id],
-            session.visibility,
-            session.answers,
-            title_prefix=self._modal_title_prefix(),
-        )
-        if index + 1 >= len(modals):
+        next_index = index + 1 if index + 1 < total_after else None
+        if next_index is None:
             store.set_pending_step(thread_id, None)
-            await self._start_select_step(thread, session)
+            await _safe_ephemeral(
+                interaction,
+                "✅ Saved! You’re all set for this section.",
+            )
+            await self.finish_onboarding(
+                interaction,
+                thread_id,
+                session=session,
+                thread=thread,
+            )
+            return
+
+        store.set_pending_step(thread_id, {"kind": "modal", "index": next_index})
+        await _safe_ephemeral(
+            interaction,
+            "✅ Saved! Look for the next prompt in the thread.",
+        )
+        await self.prompt_next(interaction, thread_id, next_index)
 
     async def _handle_select_change(
         self,
