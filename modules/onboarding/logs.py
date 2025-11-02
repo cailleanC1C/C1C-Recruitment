@@ -286,7 +286,7 @@ def log_view_error(
         "actor_name": _safe(lambda: getattr(getattr(interaction, "user", None), "mention", None)),
         "response_is_done": _response_is_done(),
         "app_permissions": str(getattr(interaction, "app_permissions", None)),
-        "claimed": _safe(lambda: getattr(interaction, "_c1c_claimed", False), False),
+        "claimed": getattr(interaction, "_c1c_claimed", False),
     }
 
     if extra:
