@@ -178,6 +178,7 @@ class BaseWelcomeController:
         self._initiators: Dict[int, discord.abc.User | discord.Member | None] = {}
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
+        self.retry_message_ids: Dict[int, int] = {}
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
@@ -900,6 +901,16 @@ class BaseWelcomeController:
             index=index,
             **self._log_fields(thread_id, actor=interaction.user),
         )
+
+        retry_registry = getattr(self, "retry_message_ids", None)
+        if isinstance(retry_registry, dict):
+            retry_message_id = retry_registry.pop(thread_id, None)
+            if retry_message_id:
+                try:
+                    message = await thread.fetch_message(retry_message_id)
+                    await message.delete()
+                except Exception:  # pragma: no cover - best-effort cleanup
+                    pass
 
         display_name = _display_name(getattr(interaction, "user", None))
         channel_obj: discord.abc.GuildChannel | discord.Thread | None

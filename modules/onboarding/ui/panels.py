@@ -267,6 +267,27 @@ class OpenQuestionsPanelView(discord.ui.View):
         diag_state["thread_id"] = thread_id
         diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
 
+        response_obj = getattr(interaction, "response", None)
+        response_done_attr = getattr(response_obj, "is_done", None)
+        response_done = False
+        if callable(response_done_attr):
+            try:
+                response_done = bool(response_done_attr())
+            except Exception:
+                response_done = False
+        elif isinstance(response_done_attr, bool):
+            response_done = response_done_attr
+        if response_done:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            await self._post_retry_start(interaction, reason="response_done")
+            return
+
         preload_questions = getattr(controller, "get_or_load_questions", None)
         cache: Any = None
         cache_dict = getattr(controller, "_questions", None)
@@ -301,17 +322,66 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         try:
             await interaction.response.send_modal(modal)
-        except discord.InteractionResponded:
+        except Exception as exc:  # pragma: no cover - defensive network operations
             if diag.is_enabled():
                 await diag.log_event(
                     "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
+                    "modal_launch_failed_fallforward",
+                    exception_type=exc.__class__.__name__,
+                    exception_message=str(exc),
                     **diag_state,
                 )
+            log.warning("panel launch failed; falling forward", exc_info=True)
+            await self._post_retry_start(interaction, reason="send_modal_error")
             return
         if diag.is_enabled():
             await diag.log_event("info", "modal_launch_sent", **diag_state)
+
+    async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
+        """Post a small prompt with a retry button that uses a fresh interaction."""
+
+        controller, thread_id = self._resolve(interaction)
+        channel = getattr(interaction, "channel", None)
+        if channel is None or not hasattr(channel, "send"):
+            return
+
+        if controller is None or thread_id is None:
+            return
+
+        if diag.is_enabled():
+            await diag.log_event(
+                "info",
+                "retry_prompt_posted",
+                thread_id=thread_id,
+                reason=reason,
+            )
+
+        existing_retry_id = None
+        retry_registry = getattr(controller, "retry_message_ids", None)
+        if isinstance(retry_registry, dict):
+            existing_retry_id = retry_registry.get(thread_id)
+
+        if existing_retry_id:
+            try:
+                message = await channel.fetch_message(existing_retry_id)
+                await message.delete()
+            except Exception:  # pragma: no cover - best-effort cleanup
+                pass
+
+        from .views import RetryStartView  # local import to avoid circular dependency
+
+        view = RetryStartView(controller, thread_id)
+        try:
+            message = await channel.send(
+                "Let’s capture some details. Tap **Open questions** to begin.",
+                view=view,
+            )
+        except Exception:  # pragma: no cover - network fallback
+            log.warning("failed to post retry start prompt", exc_info=True)
+            return
+
+        if isinstance(retry_registry, dict):
+            retry_registry[thread_id] = getattr(message, "id", None)
 
     @discord.ui.button(
         label="Restart",
