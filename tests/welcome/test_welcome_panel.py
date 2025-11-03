@@ -6,6 +6,7 @@ import pytest
 
 from modules.onboarding.controllers import welcome_controller as welcome
 from modules.onboarding.ui import panels
+from modules.onboarding.ui.wizard import OnboardWizard
 
 
 class _DummyMessage(SimpleNamespace):
@@ -40,7 +41,7 @@ def test_locate_welcome_message_skips_thread_fetch(monkeypatch: pytest.MonkeyPat
     asyncio.run(runner())
 
 
-def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_panel_button_launch_posts_wizard_message(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)
         monkeypatch.setattr(panels.logs, "send_welcome_log", AsyncMock())
@@ -48,9 +49,7 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
 
         controller = MagicMock()
-        controller.build_modal_stub = MagicMock(return_value="sentinel")
-        controller.get_or_load_questions = AsyncMock(return_value=None)
-        controller._questions = {}
+        controller.render_step = MagicMock(return_value="Step 1")
 
         thread_id = 7777
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
@@ -62,32 +61,37 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
             response.is_done.return_value = True
 
         response.defer = AsyncMock(side_effect=_defer)
-        response.send_modal = AsyncMock()
         followup = SimpleNamespace(send=AsyncMock())
-        app_permissions = SimpleNamespace(
-            send_messages=True,
-            send_messages_in_threads=True,
-            embed_links=True,
-            read_message_history=True,
-        )
+
+        class DummyThread:
+            def __init__(self) -> None:
+                self.sent = AsyncMock()
+
+            async def send(self, *args: object, **kwargs: object):
+                return await self.sent(*args, **kwargs)
+
+        dummy_thread = DummyThread()
+        monkeypatch.setattr(panels.discord, "Thread", DummyThread)
+
         interaction = SimpleNamespace(
             response=response,
             followup=followup,
             edit_original_response=AsyncMock(),
             user=SimpleNamespace(id=5555, roles=[], display_name="Guardian"),
-            channel=None,
+            channel=dummy_thread,
             channel_id=thread_id,
             message=_DummyMessage(id=3333),
-            app_permissions=app_permissions,
         )
 
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
-        controller.build_modal_stub.assert_called_once_with(thread_id)
-        response.defer.assert_not_awaited()
-        response.send_modal.assert_awaited_once_with("sentinel")
+        controller.render_step.assert_called_once_with(thread_id, step=0)
+        response.defer.assert_awaited_once()
+        dummy_thread.sent.assert_awaited()
+        sent_call = dummy_thread.sent.await_args
+        assert sent_call.args[0] == "Step 1"
+        assert isinstance(sent_call.kwargs["view"], OnboardWizard)
 
     asyncio.run(runner())
 
@@ -101,12 +105,12 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
 
         controller = MagicMock()
-        controller.build_modal_stub = MagicMock(return_value="sentinel")
-        controller.get_or_load_questions = AsyncMock(return_value=None)
-        controller._questions = {}
+        controller.render_step = MagicMock(return_value="Step 1")
 
         thread_id = 4242
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
+        ensure_mock = AsyncMock()
+        monkeypatch.setattr(view, "_ensure_error_notice", ensure_mock)
 
         response = SimpleNamespace()
         response.is_done = MagicMock(return_value=False)
@@ -115,15 +119,7 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
             response.is_done.return_value = True
 
         response.defer = AsyncMock(side_effect=_defer)
-        response.send_modal = AsyncMock()
-        response.send_message = AsyncMock()
         followup = SimpleNamespace(send=AsyncMock())
-        app_permissions = SimpleNamespace(
-            send_messages=True,
-            send_messages_in_threads=True,
-            embed_links=True,
-            read_message_history=True,
-        )
         interaction = SimpleNamespace(
             response=response,
             followup=followup,
@@ -132,16 +128,15 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
             channel=None,
             channel_id=thread_id,
             message=_DummyMessage(id=2222),
-            app_permissions=app_permissions,
         )
 
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
-        controller.build_modal_stub.assert_called_once_with(thread_id)
+        controller.render_step.assert_not_called()
         followup.send.assert_not_awaited()
         response.defer.assert_not_awaited()
+        assert ensure_mock.await_count == 1
         assert logs_mock.await_count == 0
 
     asyncio.run(runner())

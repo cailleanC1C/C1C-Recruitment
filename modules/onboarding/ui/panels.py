@@ -8,6 +8,7 @@ import discord
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
+from .wizard import OnboardWizard
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -35,6 +36,18 @@ class _ControllerProtocol:
         ...
 
     async def _handle_modal_launch(self, thread_id: int, interaction: discord.Interaction) -> None:  # pragma: no cover - protocol
+        ...
+
+    def render_step(self, thread_id: int | None, step: int) -> str:  # pragma: no cover - protocol
+        ...
+
+    async def capture_step(self, interaction: discord.Interaction, thread_id: int | None, step: int) -> None:  # pragma: no cover - protocol
+        ...
+
+    def is_finished(self, thread_id: int | None, step: int) -> bool:  # pragma: no cover - protocol
+        ...
+
+    async def finish_and_summarize(self, interaction: discord.Interaction, thread_id: int | None) -> None:  # pragma: no cover - protocol
         ...
 
 
@@ -267,75 +280,27 @@ class OpenQuestionsPanelView(discord.ui.View):
         diag_state["thread_id"] = thread_id
         diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
 
-        response_obj = getattr(interaction, "response", None)
-        response_done_attr = getattr(response_obj, "is_done", None)
-        response_done = False
-        if callable(response_done_attr):
-            try:
-                response_done = bool(response_done_attr())
-            except Exception:
-                response_done = False
-        elif isinstance(response_done_attr, bool):
-            response_done = response_done_attr
-        if response_done:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            await self._post_retry_start(interaction, reason="response_done")
+        channel = getattr(interaction, "channel", None)
+        if not isinstance(channel, discord.Thread):
+            await self._ensure_error_notice(interaction)
             return
 
-        preload_questions = getattr(controller, "get_or_load_questions", None)
-        cache: Any = None
-        cache_dict = getattr(controller, "_questions", None)
-        if isinstance(cache_dict, dict):
-            cache = cache_dict.get(thread_id)
-        else:
-            legacy_cache = getattr(controller, "questions_by_thread", None)
-            if isinstance(legacy_cache, dict):
-                cache = legacy_cache.get(thread_id)
+        try:
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
 
-        if callable(preload_questions) and not cache:
-            try:
-                await preload_questions(thread_id)
-            except Exception as exc:  # pragma: no cover - best-effort preload
-                if diag.is_enabled():
-                    await diag.log_event(
-                        "warning",
-                        "onboard_preload_failed",
-                        thread_id=thread_id,
-                        error=str(exc),
-                    )
-                log.warning("welcome modal preload failed", exc_info=True)
+        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
+        content = controller.render_step(thread_id, step=0)
 
         try:
-            modal = controller.build_modal_stub(thread_id)
+            await channel.send(content, view=view)
         except Exception:
             await self._ensure_error_notice(interaction)
             raise
 
-        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
-        diag_state["modal_total"] = getattr(modal, "total_steps", None)
-
-        try:
-            await interaction.response.send_modal(modal)
-        except Exception as exc:  # pragma: no cover - defensive network operations
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_failed_fallforward",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
-                )
-            log.warning("panel launch failed; falling forward", exc_info=True)
-            await self._post_retry_start(interaction, reason="send_modal_error")
-            return
         if diag.is_enabled():
-            await diag.log_event("info", "modal_launch_sent", **diag_state)
+            await diag.log_event("info", "wizard_launch_sent", **diag_state)
 
     async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
         """Post a small prompt with a retry button that uses a fresh interaction."""
