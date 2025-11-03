@@ -30,14 +30,20 @@ def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPat
         class DummyResponse:
             def __init__(self) -> None:
                 self.sent_messages: list[str] = []
+                self.deferred = False
 
             def is_done(self) -> bool:
-                return bool(self.sent_messages)
+                return bool(self.sent_messages) or self.deferred
 
             async def send_message(self, message: str, *, ephemeral: bool = False) -> None:
                 if self.is_done():
                     raise AssertionError("response already sent")
                 self.sent_messages.append(message)
+
+            async def defer(self, ephemeral: bool = False) -> None:
+                if self.is_done():
+                    raise AssertionError("response already sent")
+                self.deferred = True
 
         response = DummyResponse()
 
@@ -59,7 +65,8 @@ def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPat
         await view._restart_from_view(interaction, {"view": "panel"})
 
         assert response.is_done()
-        assert response.sent_messages[0] == "♻️ Restarting the onboarding form…"
+        assert response.deferred is True
+        assert not response.sent_messages
         assert log_mock.await_count >= 1
 
     asyncio.run(runner())
