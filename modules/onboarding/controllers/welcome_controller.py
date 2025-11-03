@@ -542,7 +542,7 @@ class BaseWelcomeController:
             await self._start_select_step(thread, session)
             return
 
-        store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
+        store.set_pending_step(thread_id, {"kind": "inline", "index": 0})
         intro = self._modal_intro_text()
         view = panels.OpenQuestionsPanelView(controller=self, thread_id=thread_id)
         message_id = self._panel_messages.get(thread_id)
@@ -792,6 +792,131 @@ class BaseWelcomeController:
     def make_next_button(self, thread_id: int, next_idx: int) -> NextStepView:
         return NextStepView(self, thread_id, next_idx)
 
+    async def render_inline_step(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int,
+        *,
+        index: int | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["view"] = "inline"
+        data = getattr(interaction, "data", None)
+        if isinstance(data, dict):
+            diag_state["custom_id"] = data.get("custom_id")
+        target_user_id = self._target_users.get(thread_id)
+        diag_state["target_user_id"] = target_user_id
+        diag_state["ambiguous_target"] = target_user_id is None
+
+        response = getattr(interaction, "response", None)
+        response_done = False
+        if response is not None:
+            is_done = getattr(response, "is_done", None)
+            if callable(is_done):
+                try:
+                    response_done = bool(is_done())
+                except Exception:
+                    response_done = False
+            elif isinstance(is_done, bool):
+                response_done = is_done
+        if response_done:
+            diag_state["response_is_done"] = True
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            return
+
+        session = store.get(thread_id)
+        if session is None:
+            session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+
+        try:
+            questions_for_thread = await self.get_or_load_questions(thread_id, session=session)
+        except Exception:
+            log.warning("failed to load questions for inline wizard", exc_info=True)
+            raise
+
+        if not questions_for_thread:
+            raise RuntimeError("no questions available for inline wizard")
+
+        if not session.visibility:
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    questions_for_thread,
+                    session.answers,
+                )
+            except Exception:
+                session.visibility = {}
+
+        pending = session.pending_step or {}
+        if index is None:
+            raw_index = pending.get("index", 0) if isinstance(pending, dict) else 0
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                index = 0
+        total_questions = len(questions_for_thread)
+        if total_questions <= 0:
+            raise RuntimeError("no inline steps available")
+        if index < 0:
+            index = 0
+        if index >= total_questions:
+            index = total_questions - 1
+
+        store.set_pending_step(thread_id, {"kind": "inline", "index": index})
+
+        try:
+            content = self.render_step(thread_id, index)
+        except Exception:
+            log.warning("failed to render inline step", exc_info=True)
+            raise
+
+        wizard = panels.OnboardWizard(self, thread_id, step=index)
+
+        diag_state["step_index"] = index
+        diag_state["total_steps"] = total_questions
+
+        try:
+            await interaction.response.send_message(content=content, view=wizard)
+        except Exception as exc:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_failed",
+                    exception_type=exc.__class__.__name__,
+                    exception_message=str(exc),
+                    **diag_state,
+                )
+            raise
+        else:
+            if diag.is_enabled():
+                await diag.log_event("info", "inline_wizard_posted", **diag_state)
+
+        try:
+            message = await interaction.original_response()
+        except Exception:
+            message = None
+        if message is not None:
+            wizard.attach(message)
+
+        log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
+        if context is not None:
+            log_payload.update(context)
+        log_payload.setdefault("source", self._sources.get(thread_id, "unknown"))
+        await logs.send_welcome_log(
+            "debug",
+            view="inline",
+            result="launched",
+            index=index,
+            **log_payload,
+        )
+
     async def finish_onboarding(
         self,
         interaction: discord.Interaction,
@@ -838,49 +963,7 @@ class BaseWelcomeController:
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
-        diag_state = diag.interaction_state(interaction)
-        diag_state["thread_id"] = thread_id
-        diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
-        target_user_id = self._target_users.get(thread_id)
-        diag_state["target_user_id"] = target_user_id
-        diag_state["ambiguous_target"] = target_user_id is None
-
-        modal = self.build_modal_stub(thread_id)
-        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
-        diag_state["modal_total"] = getattr(modal, "total_steps", None)
-
-        try:
-            await interaction.response.send_modal(modal)
-        except discord.InteractionResponded:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            return
-        except Exception as exc:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "error",
-                    "modal_launch_error",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
-                )
-            raise
-        else:
-            if diag.is_enabled():
-                await diag.log_event("info", "modal_launch_sent", **diag_state)
-
-        await logs.send_welcome_log(
-            "debug",
-            view="modal",
-            result="launched",
-            index=diag_state.get("modal_index"),
-            **self._log_fields(thread_id, actor=interaction.user),
-        )
+        await self.render_inline_step(interaction, thread_id, context=context)
 
     async def _rehydrate_questions(
         self,
@@ -1085,7 +1168,7 @@ class BaseWelcomeController:
         total_before = len(modals_before)
 
         if total_before and index >= total_before:
-            store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
+            store.set_pending_step(thread_id, {"kind": "inline", "index": 0})
             await logs.send_welcome_log(
                 "debug",
                 view="modal",
@@ -1189,7 +1272,7 @@ class BaseWelcomeController:
             )
             return
 
-        store.set_pending_step(thread_id, {"kind": "modal", "index": next_index})
+        store.set_pending_step(thread_id, {"kind": "inline", "index": next_index})
         await _safe_ephemeral(
             interaction,
             "✅ Saved! Look for the next prompt in the thread.",
