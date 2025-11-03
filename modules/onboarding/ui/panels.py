@@ -1,6 +1,7 @@
 """Persistent UI components for the onboarding welcome panel."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, Iterable, Optional, Sequence, cast
 
@@ -900,8 +901,7 @@ class OnboardWizard(discord.ui.View):
             self.question = question
 
         async def callback(self, interaction: discord.Interaction) -> None:
-            modal = self._wizard.TextModal(self._wizard, self.question)
-            await interaction.response.send_modal(modal)
+            await self._wizard._prompt_text_answer(interaction, self.question)
 
     class BackButton(discord.ui.Button):
         def __init__(self, parent: "OnboardWizard") -> None:
@@ -976,106 +976,174 @@ class OnboardWizard(discord.ui.View):
                     log.warning("failed to update wizard cancel message", exc_info=True)
             wizard.stop()
 
-    class TextModal(discord.ui.Modal):
-        def __init__(self, parent: "OnboardWizard", question: Any) -> None:
-            self._wizard = parent
-            self.question = question
-            title = parent._question_label(question) or "Answer"
-            super().__init__(title=title)
-            default = parent._text_default(question)
-            style = (
-                discord.TextStyle.paragraph
-                if parent._question_type(question) == "paragraph"
-                else discord.TextStyle.short
-            )
-            max_length = getattr(question, "maxlen", None)
-            if isinstance(question, dict):
-                max_length = question.get("maxlen", max_length)
-            self.input = discord.ui.TextInput(
-                label=title,
-                default=default,
-                required=False,
-                placeholder=question.get("help") if isinstance(question, dict) else getattr(question, "help", None),
-                style=style,
-                max_length=max_length if isinstance(max_length, int) and max_length > 0 else None,
-            )
-            self.add_item(self.input)
-
-        async def on_submit(self, interaction: discord.Interaction) -> None:
-            value = (self.input.value or "").strip()
-            wizard = self._wizard
-            required = wizard._question_required(self.question)
-            qtype = wizard._question_type(self.question)
-            key = wizard._question_key(self.question)
-            if required and not value:
-                await interaction.response.send_message(
-                    f"⚠️ **{wizard._question_label(self.question)}** is required.",
-                    ephemeral=True,
-                )
-                return
-            meta_getter = getattr(wizard.controller, "_question_meta", None)
-            meta: dict[str, Any]
-            if callable(meta_getter):
-                meta = meta_getter(self.question)
-            else:
-                meta = {
-                    "qid": key,
-                    "label": wizard._question_label(self.question),
-                    "type": qtype,
-                    "validate": getattr(self.question, "validate", None)
-                    if not isinstance(self.question, dict)
-                    else self.question.get("validate"),
-                    "help": getattr(self.question, "help", None)
-                    if not isinstance(self.question, dict)
-                    else self.question.get("help"),
-                }
-
-            if value:
-                validator = getattr(wizard.controller, "validate_answer", None)
-                if callable(validator):
-                    ok, cleaned, err = validator(meta, value)
-                else:
-                    ok, cleaned, err = True, value, None
-                if not ok:
-                    sender = getattr(wizard.controller, "_send_validation_error", None)
-                    if callable(sender):
-                        await sender(interaction, wizard.thread_id, meta, err)
-                    else:
-                        notice = err or "Input does not match the required format."
-                        await interaction.response.send_message(
-                            f"⚠️ {notice}", ephemeral=True
-                        )
-                    return
-                if diag.is_enabled():
-                    has_regex = False
-                    checker = getattr(wizard.controller, "_has_sheet_regex", None)
-                    if callable(checker):
-                        has_regex = checker(meta)
-                    else:
-                        validate_field = (meta.get("validate") or "").strip().lower()
-                        has_regex = validate_field.startswith("regex:")
-                    await diag.log_event(
-                        "info",
-                        "welcome_validator_branch",
-                        qid=meta.get("qid"),
-                        have_regex=has_regex,
-                        type=meta.get("type"),
-                    )
-                await wizard.controller.set_answer(wizard.thread_id, key, cleaned)
-            else:
-                await wizard.controller.set_answer(wizard.thread_id, key, None)
+    async def _prompt_text_answer(self, interaction: discord.Interaction, question: Any) -> None:
+        controller = self.controller
+        client = getattr(controller, "bot", None) or getattr(interaction, "client", None)
+        if client is None:
+            log.warning("inline wizard text prompt missing client")
+            followup = getattr(interaction, "followup", None)
             try:
-                await interaction.response.defer()
+                if followup is not None:
+                    await followup.send(
+                        "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
+                        ephemeral=True,
+                    )
+                elif not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
+                        ephemeral=True,
+                    )
             except Exception:
-                pass
-            await wizard.refresh()
+                log.warning("failed to notify user about inline text capture error", exc_info=True)
+            return
 
-        async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:  # pragma: no cover - network
-            log.warning("inline wizard modal failed", exc_info=True)
-            await interaction.response.send_message(
-                "⚠️ Something blinked while saving that answer. Please try again.",
-                ephemeral=True,
-            )
+        label = self._question_label(question) or "this question"
+        prompt = f"✍️ Please type your answer for **{label}** below."
+        prompt_message: discord.Message | None = None
+        used_original = False
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(prompt, ephemeral=True)
+                used_original = True
+            else:
+                followup = getattr(interaction, "followup", None)
+                if followup is None:
+                    log.warning("inline wizard followup handler missing for text prompt")
+                    return
+                prompt_message = await followup.send(prompt, ephemeral=True)
+        except Exception:
+            log.warning("failed to send inline text prompt", exc_info=True)
+            return
+
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        raw_thread_id = getattr(thread, "id", None)
+        try:
+            thread_id = int(raw_thread_id) if raw_thread_id is not None else int(self.thread_id)
+        except (TypeError, ValueError):
+            thread_id = int(self.thread_id)
+        user = getattr(interaction, "user", None)
+        raw_user_id = getattr(user, "id", None)
+        try:
+            user_id = int(raw_user_id) if raw_user_id is not None else None
+        except (TypeError, ValueError):
+            user_id = None
+        if user_id is None:
+            log.warning("inline wizard text prompt missing user context")
+            return
+
+        def check(message: discord.Message) -> bool:
+            author = getattr(message, "author", None)
+            channel = getattr(message, "channel", None)
+            if author is None or getattr(author, "id", None) != user_id:
+                return False
+            if not isinstance(channel, discord.Thread):
+                return False
+            return int(getattr(channel, "id", 0) or 0) == thread_id
+
+        try:
+            message = await client.wait_for("message", check=check, timeout=300)
+        except asyncio.TimeoutError:
+            notice = "⏳ Timed out waiting for your answer. Press **Enter answer** to try again."
+            try:
+                if used_original:
+                    await interaction.edit_original_response(content=notice)
+                elif prompt_message is not None:
+                    await prompt_message.edit(content=notice)
+            except Exception:
+                log.debug("failed to update timeout notice", exc_info=True)
+            return
+        except Exception:
+            log.warning("inline wizard text capture failed", exc_info=True)
+            return
+
+        value = (message.content or "").strip()
+        try:
+            await message.delete()
+        except Exception:
+            log.debug("failed to delete inline text answer message", exc_info=True)
+
+        required = self._question_required(question)
+        key = self._question_key(question)
+        meta_getter = getattr(controller, "_question_meta", None)
+        if callable(meta_getter):
+            meta = meta_getter(question)
+        else:
+            meta = {
+                "qid": key,
+                "label": self._question_label(question),
+                "type": self._question_type(question),
+                "validate": getattr(question, "validate", None)
+                if not isinstance(question, dict)
+                else question.get("validate"),
+                "help": getattr(question, "help", None)
+                if not isinstance(question, dict)
+                else question.get("help"),
+            }
+
+        if required and not value:
+            sender = getattr(controller, "_send_validation_error", None)
+            if callable(sender):
+                await sender(interaction, self.thread_id, meta, "This question is required.")
+            else:
+                warning = f"⚠️ **{self._question_label(question)}** is required."
+                try:
+                    if used_original:
+                        await interaction.edit_original_response(content=warning)
+                    elif prompt_message is not None:
+                        await prompt_message.edit(content=warning)
+                except Exception:
+                    log.debug("failed to send required notice", exc_info=True)
+            return
+
+        if value:
+            validator = getattr(controller, "validate_answer", None)
+            if callable(validator):
+                ok, cleaned, err = validator(meta, value)
+            else:
+                ok, cleaned, err = True, value, None
+            if not ok:
+                sender = getattr(controller, "_send_validation_error", None)
+                if callable(sender):
+                    await sender(interaction, self.thread_id, meta, err)
+                else:
+                    notice = err or "Input does not match the required format."
+                    try:
+                        if used_original:
+                            await interaction.edit_original_response(content=f"⚠️ {notice}")
+                        elif prompt_message is not None:
+                            await prompt_message.edit(content=f"⚠️ {notice}")
+                    except Exception:
+                        log.debug("failed to send validation notice", exc_info=True)
+                return
+            if diag.is_enabled():
+                checker = getattr(controller, "_has_sheet_regex", None)
+                if callable(checker):
+                    has_regex = checker(meta)
+                else:
+                    validate_field = (meta.get("validate") or "").strip().lower()
+                    has_regex = validate_field.startswith("regex:")
+                await diag.log_event(
+                    "info",
+                    "welcome_validator_branch",
+                    qid=meta.get("qid"),
+                    have_regex=has_regex,
+                    type=meta.get("type"),
+                )
+            await controller.set_answer(self.thread_id, key, cleaned)
+            success_notice = "✅ Saved."
+        else:
+            await controller.set_answer(self.thread_id, key, None)
+            success_notice = "✅ Answer cleared."
+
+        try:
+            if used_original:
+                await interaction.edit_original_response(content=success_notice)
+            elif prompt_message is not None:
+                await prompt_message.edit(content=success_notice)
+        except Exception:
+            log.debug("failed to post success notice", exc_info=True)
+
+        await self.refresh()
 
     async def _handle_select(
         self,
