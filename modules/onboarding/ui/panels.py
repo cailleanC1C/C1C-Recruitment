@@ -293,11 +293,6 @@ class OpenQuestionsPanelView(discord.ui.View):
             response_was_done = response_done_attr
 
         try:
-            disabled_view = self.as_disabled(label="Launching…")
-            try:
-                await interaction.response.edit_message(view=disabled_view)
-            except discord.InteractionResponded:
-                await interaction.edit_original_response(view=disabled_view)
             await self._handle_launch(interaction, response_was_done=response_was_done)
         except Exception:
             await self._ensure_error_notice(interaction)
@@ -376,18 +371,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         diag_state["thread_id"] = thread_id
         diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
 
-        response_done = response_was_done
-        if not response_done:
-            response_obj = getattr(interaction, "response", None)
-            response_done_attr = getattr(response_obj, "is_done", None)
-            if callable(response_done_attr):
-                try:
-                    response_done = bool(response_done_attr())
-                except Exception:
-                    response_done = False
-            elif isinstance(response_done_attr, bool):
-                response_done = response_done_attr
-        if response_done:
+        if response_was_done:
             if diag.is_enabled():
                 await diag.log_event(
                     "warning",
@@ -397,6 +381,13 @@ class OpenQuestionsPanelView(discord.ui.View):
                 )
             await self._post_retry_start(interaction, reason="response_done")
             return
+
+        # Safe path: we haven’t answered yet → disable the button then continue
+        try:
+            await interaction.response.edit_message(view=self.as_disabled(label="Launching…"))
+        except discord.InteractionResponded:
+            # If already answered by something else, still proceed
+            pass
 
         preload_questions = getattr(controller, "get_or_load_questions", None)
         questions_cache: Any = None

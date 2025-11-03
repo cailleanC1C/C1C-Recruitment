@@ -151,8 +151,8 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
 
         controller.get_or_load_questions.assert_not_awaited()
         controller.render_step.assert_not_called()
-        response.edit_message.assert_awaited()
+        response.edit_message.assert_not_awaited()
         retry_mock.assert_awaited_once()
-        interaction.edit_original_response.assert_awaited()
+        interaction.edit_original_response.assert_not_awaited()
 
     asyncio.run(runner())
