@@ -17,7 +17,7 @@ from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
-from shared.sheets.onboarding_questions import Question
+from shared.sheets.onboarding_questions import Question, schema_hash
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
@@ -168,6 +168,8 @@ class BaseWelcomeController:
         self.flow = flow
         self._threads: Dict[int, discord.Thread] = {}
         self._questions: Dict[int, list[Question]] = {}
+        self.questions_by_thread = self._questions
+        self.answers_by_thread: Dict[int, dict[str, Any]] = {}
         self._select_messages: Dict[int, discord.Message] = {}
         self._preview_messages: Dict[int, discord.Message] = {}
         self._preview_logged: set[int] = set()
@@ -187,6 +189,184 @@ class BaseWelcomeController:
         """Return the cached target recruit identifier for diagnostics."""
 
         return self._target_users.get(thread_id)
+
+    @staticmethod
+    def _question_key(question: Question | dict[str, Any]) -> str:
+        if hasattr(question, "qid"):
+            value = getattr(question, "qid")
+            return str(value)
+        if isinstance(question, dict):
+            candidate = question.get("id") or question.get("qid")
+            if candidate is not None:
+                return str(candidate)
+        return ""
+
+    def _answer_for(self, thread_id: int, key: str) -> Any:
+        answers = self.answers_by_thread.get(thread_id)
+        if answers and key in answers:
+            return answers[key]
+        session = store.get(thread_id)
+        if session and session.answers:
+            return session.answers.get(key)
+        return None
+
+    def _answer_present(self, question: Question | dict[str, Any], value: Any) -> bool:
+        if value is None:
+            return False
+        qtype = getattr(question, "type", None)
+        if isinstance(question, dict):
+            qtype = question.get("type")
+        if qtype in SELECT_TYPES:
+            return _has_select_answer(value)
+        if qtype == "number":
+            return value is not None
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (int, float)):
+            return True
+        if isinstance(value, dict):
+            return bool(value)
+        if isinstance(value, Iterable):
+            return any(True for _ in value)
+        return bool(value)
+
+    async def set_answer(self, thread_id: int, key: str, value: Any) -> None:
+        answers = self.answers_by_thread.setdefault(thread_id, {})
+        if value is None or (isinstance(value, str) and not value.strip()):
+            answers.pop(key, None)
+        elif isinstance(value, (list, tuple)) and not value:
+            answers.pop(key, None)
+        elif isinstance(value, dict) and not value:
+            answers.pop(key, None)
+        else:
+            answers[key] = value
+
+        session = store.get(thread_id)
+        if session is not None:
+            session.answers = session.answers or {}
+            if value is None or (isinstance(value, str) and not value.strip()):
+                session.answers.pop(key, None)
+            elif isinstance(value, (list, tuple)) and not value:
+                session.answers.pop(key, None)
+            elif isinstance(value, dict) and not value:
+                session.answers.pop(key, None)
+            else:
+                session.answers[key] = value
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    self._questions.get(thread_id, []), session.answers
+                )
+            except Exception:
+                log.warning("failed to recompute visibility during inline capture", exc_info=True)
+
+    def has_answer(self, thread_id: int, question: Question | dict[str, Any]) -> bool:
+        key = self._question_key(question)
+        if not key:
+            return False
+        value = self._answer_for(thread_id, key)
+        return self._answer_present(question, value)
+
+    def is_finished(self, thread_id: int, step: int) -> bool:
+        questions = self._questions.get(thread_id) or []
+        return step >= len(questions)
+
+    def render_step(self, thread_id: int, step: int) -> str:
+        questions = self._questions.get(thread_id) or []
+        if not questions:
+            return "No onboarding questions are configured for this flow yet."
+        if step < 0:
+            step = 0
+        if step >= len(questions):
+            step = len(questions) - 1
+        question = questions[step]
+        label = getattr(question, "label", None) or str(question)
+        key = self._question_key(question)
+        stored = self._answer_for(thread_id, key)
+        formatted = _preview_value_for_question(question, stored)
+        if formatted:
+            return f"{label}\n\nCurrent answer: {formatted}"
+        return label
+
+    async def finish_inline_wizard(
+        self,
+        thread_id: int,
+        interaction: discord.Interaction,
+        *,
+        message: discord.Message | None = None,
+    ) -> None:
+        answers = self.answers_by_thread.get(thread_id, {})
+        if message is None:
+            message = getattr(interaction, "message", None)
+        notice = "✅ Collected. Posting summary…"
+        try:
+            if interaction is not None and not interaction.response.is_done():
+                await interaction.response.edit_message(content=notice, view=None)
+            elif message is not None:
+                await message.edit(content=notice, view=None)
+        except Exception:
+            log.warning("failed to update wizard completion message", exc_info=True)
+
+        thread: discord.Thread | None = None
+        if message is not None:
+            channel = getattr(message, "channel", None)
+            if isinstance(channel, discord.Thread):
+                thread = channel
+        if thread is None:
+            thread = self._threads.get(thread_id)
+        if thread is None:
+            return
+
+        session = store.get(thread_id)
+        visibility = None
+        if session is not None:
+            session.answers = dict(answers)
+            visibility = session.visibility
+        else:
+            session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+            session.answers = dict(answers)
+            visibility = session.visibility
+
+        try:
+            summary_author = self._resolve_summary_author(thread, interaction)
+        except Exception:
+            log.warning("failed to resolve summary author; falling back to thread owner", exc_info=True)
+            summary_author = getattr(thread, "owner", None) or interaction.user
+
+        schema = session.schema_hash if session else schema_hash(self.flow)
+        summary_embed = build_summary_embed(
+            self.flow,
+            dict(answers),
+            summary_author,
+            schema or "",
+            visibility,
+        )
+
+        recruiter_ids = list(getattr(self, "recruiter_role_ids", []) or [])
+        if not recruiter_ids:
+            recruiter_ids = list(getattr(self, "RECRUITER_ROLE_IDS", []) or [])
+        mention_text = " ".join(f"<@&{int(role_id)}>" for role_id in recruiter_ids if role_id)
+        allowed_mentions = discord.AllowedMentions(roles=True, users=False, everyone=False)
+        try:
+            await thread.send(
+                content=mention_text or None,
+                embed=summary_embed,
+                allowed_mentions=allowed_mentions if mention_text else None,
+            )
+        except Exception:
+            log.warning("failed to post onboarding summary", exc_info=True)
+        else:
+            await logs.send_welcome_log(
+                "info",
+                result="completed",
+                view="inline",
+                source=self._sources.get(thread_id, "unknown"),
+                schema=session.schema_hash if session else None,
+                details=_final_fields(self._questions.get(thread_id, []), dict(answers)),
+                **self._log_fields(thread_id, actor=getattr(interaction, "user", None)),
+            )
+
+        self.answers_by_thread.pop(thread_id, None)
+        self._cleanup_session(thread_id)
 
     def _log_fields(
         self,
@@ -1197,6 +1377,7 @@ class BaseWelcomeController:
         store.end(thread_id)
         self._threads.pop(thread_id, None)
         self._questions.pop(thread_id, None)
+        self.answers_by_thread.pop(thread_id, None)
         self._select_messages.pop(thread_id, None)
         self._preview_messages.pop(thread_id, None)
         self._sources.pop(thread_id, None)
