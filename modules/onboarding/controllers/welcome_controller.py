@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import sys
 from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, cast
 
@@ -21,6 +22,44 @@ from shared.sheets.onboarding_questions import Question, schema_hash
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
+
+
+# --- Sheet-driven validator (no fallbacks/coercion) --------------------------
+NUMERIC_HINTS = ("number",)
+
+
+def _sheet_regex(meta: dict[str, Any]) -> str | None:
+    v = (meta.get("validate") or "").strip()
+    if v.lower().startswith("regex:"):
+        return v.split(":", 1)[1].strip()
+    return None
+
+
+def validate_answer(meta: dict[str, Any], raw: str) -> tuple[bool, str | None, str | None]:
+    """
+    (ok, cleaned, error)
+    - If sheet provides a regex -> enforce it on the raw string.
+    - Else -> accept as-is. No numeric/int fallbacks.
+    """
+
+    raw = "" if raw is None else str(raw)
+
+    pattern = _sheet_regex(meta)
+    if pattern:
+        try:
+            match = re.fullmatch(pattern, raw)
+        except re.error:
+            log.warning(
+                "welcome: bad regex in sheet",
+                extra={"qid": meta.get("qid"), "pattern": pattern},
+            )
+            return True, raw, None
+        if not match:
+            message = meta.get("help") or "Input does not match the required format."
+            return False, None, message
+        return True, raw, None
+
+    return True, raw, None
 
 
 def _display_name(user: discord.abc.User | discord.Member | None) -> str:
@@ -200,6 +239,43 @@ class BaseWelcomeController:
             if candidate is not None:
                 return str(candidate)
         return ""
+
+    def _question_meta(self, question: Question | dict[str, Any]) -> dict[str, Any]:
+        meta: dict[str, Any] = {
+            "qid": self._question_key(question),
+            "label": "",
+            "type": "",
+            "validate": None,
+            "help": None,
+        }
+        if isinstance(question, dict):
+            meta["label"] = str(question.get("label") or question.get("text") or "")
+            meta["type"] = str(question.get("type") or "")
+            meta["validate"] = question.get("validate")
+            meta["help"] = question.get("help")
+        else:
+            meta["label"] = str(getattr(question, "label", ""))
+            meta["type"] = str(getattr(question, "type", ""))
+            meta["validate"] = getattr(question, "validate", None)
+            meta["help"] = getattr(question, "help", None)
+        return meta
+
+    def _has_sheet_regex(self, meta: dict[str, Any]) -> bool:
+        return bool(_sheet_regex(meta))
+
+    def validate_answer(self, meta: dict[str, Any], raw: str) -> tuple[bool, str | None, str | None]:
+        return validate_answer(meta, raw)
+
+    async def _send_validation_error(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int,
+        meta: dict[str, Any],
+        message: str | None,
+    ) -> None:
+        label = meta.get("label") or meta.get("qid") or "This question"
+        notice = message or "Input does not match the required format."
+        await _safe_ephemeral(interaction, f"⚠️ **{label}** • {notice}")
 
     def _answer_for(self, thread_id: int, key: str) -> Any:
         answers = self.answers_by_thread.get(thread_id)
@@ -1029,37 +1105,34 @@ class BaseWelcomeController:
             state = _visible_state(session.visibility, question.qid)
             required = bool(question.required) and state != "optional"
             answer = raw_value.strip()
-            if question.type == "number":
-                if not answer:
-                    if required:
-                        await _safe_ephemeral(
-                            interaction,
-                            f"⚠️ **{question.label}** is required.",
-                        )
-                        return
-                    session.answers.pop(question.qid, None)
-                    continue
-                try:
-                    parsed = int(answer)
-                except ValueError:
-                    await _safe_ephemeral(
-                        interaction,
-                        f"⚠️ **{question.label}** needs to be a whole number.",
-                    )
-                    return
-                session.answers[question.qid] = parsed
-                continue
-
             if required and not answer:
                 await _safe_ephemeral(
                     interaction,
                     f"⚠️ **{question.label}** is required.",
                 )
                 return
-            if answer:
-                session.answers[question.qid] = answer
-            else:
-                session.answers.pop(question.qid, None)
+
+            meta = self._question_meta(question)
+
+            if not answer:
+                await self.set_answer(thread_id, question.qid, None)
+                continue
+
+            ok, cleaned, err = self.validate_answer(meta, answer)
+            if not ok:
+                await self._send_validation_error(interaction, thread_id, meta, err)
+                return
+
+            if diag.is_enabled():
+                await diag.log_event(
+                    "info",
+                    "welcome_validator_branch",
+                    qid=meta.get("qid"),
+                    have_regex=self._has_sheet_regex(meta),
+                    type=meta.get("type"),
+                )
+
+            await self.set_answer(thread_id, question.qid, cleaned)
 
         session.visibility = rules.evaluate_visibility(
             questions_for_thread,
