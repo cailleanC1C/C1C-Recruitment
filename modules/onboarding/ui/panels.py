@@ -1013,18 +1013,55 @@ class OnboardWizard(discord.ui.View):
                     ephemeral=True,
                 )
                 return
-            if qtype == "number" and value:
-                try:
-                    parsed: Any = int(value)
-                except ValueError:
-                    await interaction.response.send_message(
-                        f"⚠️ **{wizard._question_label(self.question)}** needs to be a whole number.",
-                        ephemeral=True,
-                    )
+            meta_getter = getattr(wizard.controller, "_question_meta", None)
+            meta: dict[str, Any]
+            if callable(meta_getter):
+                meta = meta_getter(self.question)
+            else:
+                meta = {
+                    "qid": key,
+                    "label": wizard._question_label(self.question),
+                    "type": qtype,
+                    "validate": getattr(self.question, "validate", None)
+                    if not isinstance(self.question, dict)
+                    else self.question.get("validate"),
+                    "help": getattr(self.question, "help", None)
+                    if not isinstance(self.question, dict)
+                    else self.question.get("help"),
+                }
+
+            if value:
+                validator = getattr(wizard.controller, "validate_answer", None)
+                if callable(validator):
+                    ok, cleaned, err = validator(meta, value)
+                else:
+                    ok, cleaned, err = True, value, None
+                if not ok:
+                    sender = getattr(wizard.controller, "_send_validation_error", None)
+                    if callable(sender):
+                        await sender(interaction, wizard.thread_id, meta, err)
+                    else:
+                        notice = err or "Input does not match the required format."
+                        await interaction.response.send_message(
+                            f"⚠️ {notice}", ephemeral=True
+                        )
                     return
-                await wizard.controller.set_answer(wizard.thread_id, key, parsed)
-            elif value:
-                await wizard.controller.set_answer(wizard.thread_id, key, value)
+                if diag.is_enabled():
+                    has_regex = False
+                    checker = getattr(wizard.controller, "_has_sheet_regex", None)
+                    if callable(checker):
+                        has_regex = checker(meta)
+                    else:
+                        validate_field = (meta.get("validate") or "").strip().lower()
+                        has_regex = validate_field.startswith("regex:")
+                    await diag.log_event(
+                        "info",
+                        "welcome_validator_branch",
+                        qid=meta.get("qid"),
+                        have_regex=has_regex,
+                        type=meta.get("type"),
+                    )
+                await wizard.controller.set_answer(wizard.thread_id, key, cleaned)
             else:
                 await wizard.controller.set_answer(wizard.thread_id, key, None)
             try:
