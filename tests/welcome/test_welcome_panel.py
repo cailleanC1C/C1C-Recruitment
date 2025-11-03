@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 
 from modules.onboarding.controllers import welcome_controller as welcome
@@ -66,15 +67,15 @@ def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> No
 
         response = SimpleNamespace()
         response.is_done = MagicMock(return_value=False)
-        response.send_message = AsyncMock()
-        followup = SimpleNamespace(send=AsyncMock())
+        response.edit_message = AsyncMock()
+        followup_message = _DummyMessage(id=9876, edit=AsyncMock())
+        followup = SimpleNamespace(send=AsyncMock(return_value=followup_message))
         app_permissions = SimpleNamespace(
             send_messages=True,
             send_messages_in_threads=True,
             embed_links=True,
             read_message_history=True,
         )
-        original_message = SimpleNamespace(edit=AsyncMock())
         interaction = SimpleNamespace(
             response=response,
             followup=followup,
@@ -84,7 +85,6 @@ def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> No
             channel_id=thread_id,
             message=_DummyMessage(id=3333),
             app_permissions=app_permissions,
-            original_response=AsyncMock(return_value=original_message),
         )
 
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
@@ -92,12 +92,12 @@ def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> No
 
         controller.get_or_load_questions.assert_awaited_once_with(thread_id)
         controller.render_step.assert_called_once_with(thread_id, 0)
-        response.send_message.assert_awaited()
-        args, kwargs = response.send_message.await_args
-        assert kwargs["content"] == "Question text"
+        response.edit_message.assert_awaited()
+        args, kwargs = followup.send.await_args
+        assert args[0] == "Question text"
         assert isinstance(kwargs["view"], panels.OnboardWizard)
-        interaction.original_response.assert_awaited_once_with()
-        assert kwargs["view"].message is original_message
+        assert kwargs["wait"] is True
+        assert kwargs["view"].message is followup_message
 
     asyncio.run(runner())
 
@@ -126,7 +126,7 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
 
         response = SimpleNamespace()
         response.is_done = MagicMock(return_value=True)
-        response.send_message = AsyncMock()
+        response.edit_message = AsyncMock(side_effect=discord.InteractionResponded(None))
         followup = SimpleNamespace(send=AsyncMock())
         app_permissions = SimpleNamespace(
             send_messages=True,
@@ -151,8 +151,8 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
 
         controller.get_or_load_questions.assert_not_awaited()
         controller.render_step.assert_not_called()
-        response.send_message.assert_not_awaited()
+        response.edit_message.assert_not_awaited()
         retry_mock.assert_awaited_once()
-        interaction.original_response.assert_not_awaited()
+        interaction.edit_original_response.assert_not_awaited()
 
     asyncio.run(runner())

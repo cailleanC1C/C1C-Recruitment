@@ -19,9 +19,11 @@ from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
 from shared.sheets.onboarding_questions import Question, schema_hash
+from shared.logfmt import channel_label, user_label
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
+launch_log = logging.getLogger("c1c.onboarding.controller")
 
 
 # --- Sheet-driven validator (no fallbacks/coercion) --------------------------
@@ -220,6 +222,44 @@ class BaseWelcomeController:
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
+        self._button_sessions: Dict[str, Any] = {}
+
+    async def start_session_from_button(
+        self,
+        thread_id: int,
+        *,
+        actor_id: int | None,
+        channel: discord.abc.GuildChannel | discord.Thread | None,
+        guild: discord.Guild | None,
+    ) -> None:
+        """Single entrypoint from the persistent panel button."""
+
+        sessions = self._button_sessions
+        guild_id = getattr(guild, "id", None)
+        key = f"{guild_id}:{thread_id}"
+        previous = sessions.pop(key, None)
+        if previous is not None:
+            closer = getattr(previous, "close", None)
+            if callable(closer):
+                try:
+                    await closer(reason="superseded")
+                except Exception:
+                    pass
+        sentinel = object()
+        sessions[key] = sentinel
+
+        guild_obj = guild or getattr(channel, "guild", None)
+        channel_id = getattr(channel, "id", None) if channel is not None else thread_id
+        try:
+            channel_id = int(channel_id)
+        except (TypeError, ValueError):
+            pass
+
+        launch_log.info(
+            "🛈 Onboarding — launch • user=%s • thread=%s",
+            user_label(guild_obj, actor_id),
+            channel_label(guild_obj, channel_id if isinstance(channel_id, int) else thread_id),
+        )
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
@@ -1037,7 +1077,12 @@ class BaseWelcomeController:
         log_payload.setdefault("custom_id", panels.OPEN_QUESTIONS_CUSTOM_ID)
         log_payload["result"] = "restarted"
 
-        await _safe_ephemeral(interaction, "♻️ Restarting the onboarding form…")
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            log.warning("failed to defer restart notice", exc_info=True)
 
         await logs.send_welcome_log("info", **log_payload)
 
