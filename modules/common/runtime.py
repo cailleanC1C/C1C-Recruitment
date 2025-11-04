@@ -681,7 +681,6 @@ class Runtime:
 
         from c1c_coreops import cog as coreops_cog
         from cogs import app_admin
-        from modules import onboarding as onboarding_pkg
         from modules.onboarding import ops_check as onboarding_ops_check
         from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
