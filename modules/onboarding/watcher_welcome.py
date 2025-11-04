@@ -205,6 +205,22 @@ class WelcomeWatcher(commands.Cog):
             return
         if getattr(message.author, "bot", False):
             return
+
+        try:
+            thread_id_int = int(thread.id)
+        except (TypeError, ValueError):
+            thread_id_int = None
+        controller = panels.get_controller(thread_id_int) if thread_id_int is not None else None
+        handler = getattr(controller, "handle_rolling_message", None) if controller else None
+        if callable(handler):
+            try:
+                handled = await handler(message)
+            except Exception:
+                log.warning("rolling card handler raised", exc_info=True)
+            else:
+                if handled:
+                    return
+
         content = (message.content or "").lower()
         if _TRIGGER_PHRASE not in content:
             return

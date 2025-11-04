@@ -701,6 +701,7 @@ class Runtime:
             log.exception("feature toggle refresh failed")
 
         onboarding_panels.register_persistent_views(self.bot)
+        await onboarding_pkg.setup(self.bot)
 
         async def _load_feature_module(
             module_path: str, feature_keys: Sequence[str]

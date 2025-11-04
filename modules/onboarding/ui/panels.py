@@ -9,6 +9,7 @@ import discord
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
+from .wizard import OnboardWizard
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -16,6 +17,7 @@ __all__ = [
     "OnboardWizard",
     "OpenQuestionsPanelView",
     "bind_controller",
+    "get_controller",
     "get_panel_message_id",
     "is_panel_live",
     "mark_panel_inactive_by_message",
@@ -39,14 +41,16 @@ class _ControllerProtocol:
     async def _handle_modal_launch(self, thread_id: int, interaction: discord.Interaction) -> None:  # pragma: no cover - protocol
         ...
 
-    async def start_session_from_button(
-        self,
-        thread_id: int,
-        *,
-        actor_id: int | None,
-        channel: discord.abc.GuildChannel | discord.Thread | None,
-        guild: discord.Guild | None,
-    ) -> None:  # pragma: no cover - protocol
+    def render_step(self, thread_id: int | None, step: int) -> str:  # pragma: no cover - protocol
+        ...
+
+    async def capture_step(self, interaction: discord.Interaction, thread_id: int | None, step: int) -> None:  # pragma: no cover - protocol
+        ...
+
+    def is_finished(self, thread_id: int | None, step: int) -> bool:  # pragma: no cover - protocol
+        ...
+
+    async def finish_and_summarize(self, interaction: discord.Interaction, thread_id: int | None) -> None:  # pragma: no cover - protocol
         ...
 
 
@@ -163,6 +167,12 @@ def unbind_controller(thread_id: int) -> None:
         _ACTIVE_PANEL_MESSAGE_IDS.discard(message_id)
 
 
+def get_controller(thread_id: int | None) -> _ControllerProtocol | None:
+    if thread_id is None:
+        return None
+    return _CONTROLLERS.get(thread_id)
+
+
 def register_panel_message(thread_id: int, message_id: int) -> None:
     _PANEL_MESSAGES[thread_id] = message_id
     _ACTIVE_PANEL_MESSAGE_IDS.add(message_id)
@@ -273,30 +283,86 @@ class OpenQuestionsPanelView(discord.ui.View):
                     child.label = label
         return clone
 
+    @classmethod
+    async def refresh_enabled(
+        cls,
+        interaction: discord.Interaction | None,
+        *,
+        controller: _ControllerProtocol | None,
+        thread_id: int | None,
+    ) -> None:
+        if interaction is None:
+            return
+        view = cls(controller=controller, thread_id=thread_id)
+        response = getattr(interaction, "response", None)
+        if response is not None:
+            is_done = getattr(response, "is_done", None)
+            responded = False
+            if callable(is_done):
+                try:
+                    responded = bool(is_done())
+                except Exception:
+                    responded = False
+            elif isinstance(is_done, bool):
+                responded = is_done
+            if not responded:
+                try:
+                    await response.edit_message(view=view)
+                    return
+                except Exception:
+                    log.debug("failed to refresh panel via interaction response", exc_info=True)
+        message = getattr(interaction, "message", None)
+        if isinstance(message, discord.Message):
+            try:
+                await message.edit(view=view)
+            except Exception:
+                log.warning("failed to refresh panel message", exc_info=True)
+
+    async def _restore_enabled(self, interaction: discord.Interaction) -> None:
+        await self.__class__.refresh_enabled(
+            interaction,
+            controller=self._controller,
+            thread_id=self._thread_id,
+        )
+
     @discord.ui.button(
         label="Open questions",
         style=discord.ButtonStyle.primary,
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """Minimal button handler that always attempts to open the modal."""
+        """Stage 1: post a clean launcher so the modal opens on a fresh interaction."""
 
-        response_was_done = False
-        response_obj = getattr(interaction, "response", None)
-        response_done_attr = getattr(response_obj, "is_done", None)
-        if callable(response_done_attr):
-            try:
-                response_was_done = bool(response_done_attr())
-            except Exception:
-                response_was_done = False
-        elif isinstance(response_done_attr, bool):
-            response_was_done = response_done_attr
+        controller, thread_id = self._resolve(interaction)
+        if controller is None or thread_id is None:
+            await self._restart_from_view(interaction, log_context="launch_resolve_failed")
+            return
+
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
+
+        channel = getattr(interaction, "channel", None)
+        if not isinstance(channel, discord.Thread):
+            await self._ensure_error_notice(interaction)
+            return
 
         try:
-            await self._handle_launch(interaction, response_was_done=response_was_done)
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
+
+        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
+        content = controller.render_step(thread_id, step=0)
+
+        try:
+            await channel.send(content, view=view)
         except Exception:
             await self._ensure_error_notice(interaction)
             raise
+
+        if diag.is_enabled():
+            await diag.log_event("info", "wizard_launch_sent", **diag_state)
 
     async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
         """Post a small prompt with a retry button that uses a fresh interaction."""
@@ -398,6 +464,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             try:
                 await preload_questions(thread_id)
             except Exception as exc:  # pragma: no cover - best-effort preload
+                await self._restore_enabled(interaction)
                 if diag.is_enabled():
                     await diag.log_event(
                         "warning",
@@ -412,50 +479,26 @@ class OpenQuestionsPanelView(discord.ui.View):
         questions_dict = getattr(controller, "questions_by_thread", {})
         thread_questions = questions_dict.get(thread_id) if isinstance(questions_dict, dict) else None
         if not thread_questions:
+            await self._restore_enabled(interaction)
             await self._ensure_error_notice(interaction)
             return
 
-        # New: do not re-render the prior message here; proceed to controller session start.
+        # Rolling-card prototype replaces the inline wizard.
         starter = getattr(controller, "start_session_from_button", None)
         if callable(starter):
-            await starter(
-                thread_id,
-                actor_id=getattr(getattr(interaction, "user", None), "id", None),
-                channel=getattr(interaction, "channel", None),
-                guild=getattr(interaction, "guild", None),
-            )
-
-        try:
-            content = controller.render_step(thread_id, 0)
-        except Exception:
-            await self._ensure_error_notice(interaction)
-            raise
-
-        wizard = OnboardWizard(controller, thread_id, step=0)
-
-        followup = getattr(interaction, "followup", None)
-        try:
-            if followup is None:
-                raise RuntimeError("missing followup handler")
-            message = await followup.send(content, view=wizard, wait=True)
-        except Exception as exc:  # pragma: no cover - defensive network operations
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_failed",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
+            try:
+                await starter(
+                    thread_id,
+                    actor_id=getattr(getattr(interaction, "user", None), "id", None),
+                    channel=getattr(interaction, "channel", None),
+                    guild=getattr(interaction, "guild", None),
+                    interaction=interaction,
                 )
-            log.warning("inline wizard launch failed", exc_info=True)
-            await self._post_retry_start(interaction, reason="send_message_error")
+            except Exception:
+                await self._restore_enabled(interaction)
+                await self._ensure_error_notice(interaction)
+                raise
             return
-
-        if diag.is_enabled():
-            await diag.log_event("info", "inline_wizard_posted", **diag_state)
-
-        if isinstance(message, discord.Message) or hasattr(message, "edit"):
-            wizard.attach(message)
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
