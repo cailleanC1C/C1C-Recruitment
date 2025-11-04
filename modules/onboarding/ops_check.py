@@ -14,13 +14,20 @@ from shared.sheets import onboarding_questions
 class OnboardingOps(commands.Cog):
     """Operational helpers for managing the onboarding question sheet."""
 
+    # Guard so hot-reloads / second paths don't re-register the same group
+    _fallback_registered: bool = False
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._ops_registered = False
-        self._fallback_registered = False
+        self._fallback_attached = False
 
+        # Provide an explicit callback so discord.py can introspect the command
+        # signature when registering the group. Without a callable here the
+        # extension raises "Command signature requires at least 1 parameter(s)"
+        # during load.
         self._group = commands.Group(
-            self._onb_root,
+            callback=self._onb_root,
             name="onb",
             invoke_without_command=True,
             help="Operational helpers for onboarding questions.",
@@ -94,14 +101,14 @@ class OnboardingOps(commands.Cog):
         ops_root = self.bot.get_command("ops")
 
         if isinstance(ops_root, commands.Group):
-            if self._fallback_registered:
+            if self._fallback_attached:
                 removed = self.bot.remove_command(self._group.name)
                 if removed is not None:
                     log.human(
                         "info",
                         "ops wiring: removed standalone 'onb' fallback",
                     )
-                self._fallback_registered = False
+                self._fallback_attached = False
             if not self._ops_registered:
                 ops_root.add_command(self._group)
                 self._group.cog = self
@@ -113,10 +120,10 @@ class OnboardingOps(commands.Cog):
                 if isinstance(parent, commands.Group):
                     parent.remove_command(self._group.name)
                 self._ops_registered = False
-            if not self._fallback_registered:
+            if not self._fallback_attached:
                 self.bot.add_command(self._group)
                 self._group.cog = self
-                self._fallback_registered = True
+                self._fallback_attached = True
                 log.human(
                     "warning",
                     "ops wiring: registered standalone '!onb' group as fallback",
@@ -227,4 +234,10 @@ class OnboardingOps(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     cog = OnboardingOps(bot)
     await bot.add_cog(cog)
+    # Register the fallback group only once. This avoids CommandRegistrationError
+    # when setup() runs again (hot reloads, multiple attach paths).
+    if not OnboardingOps._fallback_registered and bot.get_command("onb") is None:
+        bot.add_command(cog._group)
+        OnboardingOps._fallback_registered = True
+        cog._fallback_attached = True
     cog.configure_commands()
