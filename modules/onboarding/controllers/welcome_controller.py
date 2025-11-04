@@ -614,8 +614,17 @@ class BaseWelcomeController:
         except (TypeError, ValueError):
             resolved_thread_id = None
         if resolved_thread_id is not None:
-            self.answers_by_thread[int(resolved_thread_id)] = {}
-            self._rolling_sessions[int(resolved_thread_id)] = session
+            thread_key = int(resolved_thread_id)
+            self.answers_by_thread[thread_key] = {}
+            self._rolling_sessions[thread_key] = session
+            try:
+                store.ensure(
+                    thread_key,
+                    flow=self.flow,
+                    schema_hash=schema_hash(self.flow),
+                )
+            except Exception:
+                pass
 
         channel_id = getattr(channel, "id", None) if channel is not None else thread_id
         try:
@@ -659,8 +668,46 @@ class BaseWelcomeController:
     ) -> None:
         if thread_id is None:
             return
-        answers = self.answers_by_thread.setdefault(int(thread_id), {})
+        thread_key = int(thread_id)
+        answers = self.answers_by_thread.setdefault(thread_key, {})
         answers[question.qid] = value
+
+        session: SessionData | None = None
+        try:
+            session = store.get(thread_key)
+        except Exception:
+            session = None
+
+        if session is None:
+            return
+
+        try:
+            if hasattr(session, "set_answer") and callable(getattr(session, "set_answer")):
+                session.set_answer(question.qid, value)
+            else:
+                answers_map = getattr(session, "answers", None)
+                if isinstance(answers_map, dict):
+                    answers_map[question.qid] = value
+
+            if hasattr(session, "recompute_visibility") and callable(
+                getattr(session, "recompute_visibility")
+            ):
+                try:
+                    session.recompute_visibility()
+                except Exception:
+                    pass
+        except Exception:
+            try:
+                from shared.logs import log as shared_log
+
+                shared_log.human(
+                    "warning",
+                    "Onboarding — store sync failed",
+                    thread=str(thread_key),
+                    qid=question.qid,
+                )
+            except Exception:
+                pass
 
     def _complete_rolling(self, thread_id: int | None) -> None:
         if thread_id is None:
