@@ -15,7 +15,9 @@
 
 ---
 
-## 2) The Woadkeeper (Discord Bot)
+## 2) The Woadkeeper (Discord Bot) 
+
+docs/ops/.env.example
 
 **Identifiers / Secrets (ENV var names — exact):**
 - `DISCORD_TOKEN` — bot token used at runtime
@@ -98,7 +100,7 @@ Use these to reason about health and lifecycle; if you change them, reflect chan
 ---
 
 ## 6) Guardrails & Change Control (process)
-
+docs/guardrails/RepositoryGuardrails.md
 - Any change to **intents, OAuth scopes, permissions, access lists, or sheet IDs** must:
   1) Be reflected here,
   2) Include a short rationale in the PR body,
@@ -110,7 +112,7 @@ Use these to reason about health and lifecycle; if you change them, reflect chan
 
 ## 7) Codex Hook (read this, do not duplicate policy)
 
-For PR formatting rules, labels, and doc footers see `CollaborationContract.md — Appendix A (Codex Operating Standards)`. This file is *only* the agent registry and must not duplicate the operating standards.
+For PR formatting rules, labels, and doc footers see `docs/contracts/CollaborationContract.md — Appendix A (Codex Operating Standards)`. This file is *only* the agent registry and must not duplicate the operating standards.
 
 ---
 
