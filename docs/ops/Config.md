@@ -133,6 +133,10 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'FEATURE_TOGGLES_TAB'
 - 'REPORTS_TAB'
 
+### Onboarding
+- `onboarding.questions_tab` (string) — **Existing** sheet tab name containing the onboarding questions with headers:
+  `flow, order, qid, label, type, required, maxlen, validate, help, note, rules`. No fallback. If missing or invalid, validation and flows must fail fast.
+
 ### Onboarding sheet keys
 - 'WELCOME_TICKETS_TAB'
 - 'PROMO_TICKETS_TAB'
@@ -204,4 +208,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-03 (v0.9.7)
