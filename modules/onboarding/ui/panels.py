@@ -1,8 +1,9 @@
 """Persistent UI components for the onboarding welcome panel."""
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Iterable, Optional, Sequence
 
 import discord
 
@@ -12,8 +13,10 @@ from modules.onboarding import diag, logs
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
     "WELCOME_PANEL_TAG",
+    "OnboardWizard",
     "OpenQuestionsPanelView",
     "bind_controller",
+    "get_controller",
     "get_panel_message_id",
     "is_panel_live",
     "mark_panel_inactive_by_message",
@@ -35,6 +38,17 @@ class _ControllerProtocol:
         ...
 
     async def _handle_modal_launch(self, thread_id: int, interaction: discord.Interaction) -> None:  # pragma: no cover - protocol
+        ...
+
+    async def start_session_from_button(
+        self,
+        thread_id: int,
+        *,
+        actor_id: int | None,
+        channel: discord.abc.GuildChannel | discord.Thread | None,
+        guild: discord.Guild | None,
+        interaction: discord.Interaction | None = None,
+    ) -> None:  # pragma: no cover - protocol
         ...
 
 
@@ -151,6 +165,12 @@ def unbind_controller(thread_id: int) -> None:
         _ACTIVE_PANEL_MESSAGE_IDS.discard(message_id)
 
 
+def get_controller(thread_id: int | None) -> _ControllerProtocol | None:
+    if thread_id is None:
+        return None
+    return _CONTROLLERS.get(thread_id)
+
+
 def register_panel_message(thread_id: int, message_id: int) -> None:
     _PANEL_MESSAGES[thread_id] = message_id
     _ACTIVE_PANEL_MESSAGE_IDS.add(message_id)
@@ -250,6 +270,59 @@ class OpenQuestionsPanelView(discord.ui.View):
             controller = _CONTROLLERS.get(int(thread_id))
         return controller, int(thread_id) if thread_id is not None else None
 
+    def as_disabled(self, *, label: str | None = None) -> "OpenQuestionsPanelView":
+        """Return a disabled clone of this view for optimistic locking."""
+
+        clone = self.__class__(controller=self._controller, thread_id=self._thread_id)
+        for child in clone.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+                if label and getattr(child, "custom_id", None) == OPEN_QUESTIONS_CUSTOM_ID:
+                    child.label = label
+        return clone
+
+    @classmethod
+    async def refresh_enabled(
+        cls,
+        interaction: discord.Interaction | None,
+        *,
+        controller: _ControllerProtocol | None,
+        thread_id: int | None,
+    ) -> None:
+        if interaction is None:
+            return
+        view = cls(controller=controller, thread_id=thread_id)
+        response = getattr(interaction, "response", None)
+        if response is not None:
+            is_done = getattr(response, "is_done", None)
+            responded = False
+            if callable(is_done):
+                try:
+                    responded = bool(is_done())
+                except Exception:
+                    responded = False
+            elif isinstance(is_done, bool):
+                responded = is_done
+            if not responded:
+                try:
+                    await response.edit_message(view=view)
+                    return
+                except Exception:
+                    log.debug("failed to refresh panel via interaction response", exc_info=True)
+        message = getattr(interaction, "message", None)
+        if isinstance(message, discord.Message):
+            try:
+                await message.edit(view=view)
+            except Exception:
+                log.warning("failed to refresh panel message", exc_info=True)
+
+    async def _restore_enabled(self, interaction: discord.Interaction) -> None:
+        await self.__class__.refresh_enabled(
+            interaction,
+            controller=self._controller,
+            thread_id=self._thread_id,
+        )
+
     @discord.ui.button(
         label="Open questions",
         style=discord.ButtonStyle.primary,
@@ -291,27 +364,56 @@ class OpenQuestionsPanelView(discord.ui.View):
                 log.warning("welcome modal preload failed", exc_info=True)
 
         try:
-            modal = controller.build_modal_stub(thread_id)
+            await self._handle_launch(interaction, response_was_done=response_was_done)
         except Exception:
             await self._ensure_error_notice(interaction)
             raise
 
-        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
-        diag_state["modal_total"] = getattr(modal, "total_steps", None)
+    async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
+        """Post a small prompt with a retry button that uses a fresh interaction."""
 
-        try:
-            await interaction.response.send_modal(modal)
-        except discord.InteractionResponded:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
+        controller, thread_id = self._resolve(interaction)
+        channel = getattr(interaction, "channel", None)
+        if channel is None or not hasattr(channel, "send"):
             return
+
+        if controller is None or thread_id is None:
+            return
+
         if diag.is_enabled():
-            await diag.log_event("info", "modal_launch_sent", **diag_state)
+            await diag.log_event(
+                "info",
+                "retry_prompt_posted",
+                thread_id=thread_id,
+                reason=reason,
+            )
+
+        existing_retry_id = None
+        retry_registry = getattr(controller, "retry_message_ids", None)
+        if isinstance(retry_registry, dict):
+            existing_retry_id = retry_registry.get(thread_id)
+
+        if existing_retry_id:
+            try:
+                message = await channel.fetch_message(existing_retry_id)
+                await message.delete()
+            except Exception:  # pragma: no cover - best-effort cleanup
+                pass
+
+        from .views import RetryStartView  # local import to avoid circular dependency
+
+        view = RetryStartView(controller, thread_id)
+        try:
+            message = await channel.send(
+                "Let’s capture some details. Tap **Open questions** to begin.",
+                view=view,
+            )
+        except Exception:  # pragma: no cover - network fallback
+            log.warning("failed to post retry start prompt", exc_info=True)
+            return
+
+        if isinstance(retry_registry, dict):
+            retry_registry[thread_id] = getattr(message, "id", None)
 
     @discord.ui.button(
         label="Restart",
@@ -326,8 +428,82 @@ class OpenQuestionsPanelView(discord.ui.View):
             await self._ensure_error_notice(interaction)
             raise
 
-    async def _handle_launch(self, interaction: discord.Interaction) -> None:
-        await self.launch(interaction, cast(discord.ui.Button, None))
+    async def _handle_launch(
+        self, interaction: discord.Interaction, *, response_was_done: bool = False
+    ) -> None:
+        controller, thread_id = self._resolve(interaction)
+        if controller is None or thread_id is None:
+            await self._restart_from_view(
+                interaction, log_context={"reason": "launch_resolve_failed"}
+            )
+            return
+
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
+
+        if response_was_done:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "modal_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            await self._post_retry_start(interaction, reason="response_done")
+            return
+
+        # Safe path: we haven’t answered yet → disable the button then continue
+        try:
+            await interaction.response.edit_message(view=self.as_disabled(label="Launching…"))
+        except discord.InteractionResponded:
+            # If already answered by something else, still proceed
+            pass
+
+        preload_questions = getattr(controller, "get_or_load_questions", None)
+        questions_cache: Any = None
+        cache_dict = getattr(controller, "questions_by_thread", None)
+        if isinstance(cache_dict, dict):
+            questions_cache = cache_dict.get(thread_id)
+        if callable(preload_questions) and not questions_cache:
+            try:
+                await preload_questions(thread_id)
+            except Exception as exc:  # pragma: no cover - best-effort preload
+                await self._restore_enabled(interaction)
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "onboard_preload_failed",
+                        thread_id=thread_id,
+                        error=str(exc),
+                    )
+                log.warning("welcome question preload failed", exc_info=True)
+                await self._ensure_error_notice(interaction)
+                return
+
+        questions_dict = getattr(controller, "questions_by_thread", {})
+        thread_questions = questions_dict.get(thread_id) if isinstance(questions_dict, dict) else None
+        if not thread_questions:
+            await self._restore_enabled(interaction)
+            await self._ensure_error_notice(interaction)
+            return
+
+        # Rolling-card prototype replaces the inline wizard.
+        starter = getattr(controller, "start_session_from_button", None)
+        if callable(starter):
+            try:
+                await starter(
+                    thread_id,
+                    actor_id=getattr(getattr(interaction, "user", None), "id", None),
+                    channel=getattr(interaction, "channel", None),
+                    guild=getattr(interaction, "guild", None),
+                    interaction=interaction,
+                )
+            except Exception:
+                await self._restore_enabled(interaction)
+                await self._ensure_error_notice(interaction)
+                raise
+            return
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
@@ -517,11 +693,584 @@ class OpenQuestionsPanelView(discord.ui.View):
         )
 
     async def _notify_restart(self, interaction: discord.Interaction) -> None:
-        message = "♻️ Restarting the onboarding form…"
+        """Acknowledge the restart interaction without a confusing toast."""
+
         if interaction.response.is_done():
-            await _edit_original_response(interaction, content=message)
             return
         try:
-            await interaction.response.send_message(message, ephemeral=True)
+            await _defer_interaction(interaction)
         except Exception:  # pragma: no cover - defensive logging
-            log.warning("failed to send restart notice", exc_info=True)
+            log.warning("failed to defer restart notice", exc_info=True)
+
+
+class OnboardWizard(discord.ui.View):
+    def __init__(self, controller: _ControllerProtocol, thread_id: int, *, step: int = 0) -> None:
+        super().__init__(timeout=600)
+        self.controller = controller
+        self.thread_id = thread_id
+        self.step = step
+        self.message: discord.Message | None = None
+        self._configure_components()
+
+    def attach(self, message: discord.Message) -> None:
+        self.message = message
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network
+        checker = getattr(self.controller, "check_interaction", None)
+        if callable(checker):
+            try:
+                allowed, _ = await checker(self.thread_id, interaction)
+            except Exception:
+                log.warning("inline wizard gate check failed", exc_info=True)
+                return False
+            return allowed
+        return True
+
+    def _questions(self) -> Sequence[Any]:
+        questions_dict = getattr(self.controller, "questions_by_thread", {})
+        if isinstance(questions_dict, dict):
+            questions = questions_dict.get(self.thread_id) or []
+            if isinstance(questions, Sequence):
+                return questions
+        return []
+
+    def _question(self) -> Any | None:
+        questions = list(self._questions())
+        if not questions:
+            return None
+        if self.step < 0:
+            self.step = 0
+        if self.step >= len(questions):
+            self.step = len(questions) - 1
+        if self.step < 0 or self.step >= len(questions):
+            return None
+        return questions[self.step]
+
+    def _question_label(self, question: Any | None) -> str:
+        if question is None:
+            return ""
+        if isinstance(question, dict):
+            return str(question.get("label") or question.get("text") or "")
+        return str(getattr(question, "label", ""))
+
+    def _question_type(self, question: Any | None) -> str:
+        if question is None:
+            return ""
+        if isinstance(question, dict):
+            value = question.get("type") or ""
+        else:
+            value = getattr(question, "type", "")
+        return str(value or "")
+
+    def _question_required(self, question: Any | None) -> bool:
+        if question is None:
+            return False
+        if isinstance(question, dict):
+            return bool(question.get("required"))
+        return bool(getattr(question, "required", False))
+
+    def _question_options(self, question: Any | None) -> Sequence[Any]:
+        if question is None:
+            return []
+        if isinstance(question, dict):
+            raw = question.get("options") or question.get("choices") or []
+        else:
+            raw = getattr(question, "options", [])
+        if isinstance(raw, Sequence):
+            return raw
+        return []
+
+    def _is_multi_select(self, question: Any | None) -> bool:
+        if question is None:
+            return False
+        qtype = self._question_type(question)
+        if qtype == "multi-select":
+            return True
+        multi_max = getattr(question, "multi_max", None)
+        if multi_max:
+            try:
+                return int(multi_max) > 1
+            except (TypeError, ValueError):
+                return False
+        if isinstance(question, dict):
+            try:
+                return int(question.get("multi_max") or 0) > 1
+            except (TypeError, ValueError):
+                return False
+        return False
+
+    def _question_key(self, question: Any | None) -> str:
+        key_getter = getattr(self.controller, "_question_key", None)
+        if callable(key_getter):
+            return key_getter(question)  # type: ignore[arg-type]
+        if isinstance(question, dict):
+            value = question.get("id") or question.get("qid")
+            return str(value or "")
+        return str(getattr(question, "qid", ""))
+
+    def _current_answer(self, question: Any | None) -> Any:
+        key = self._question_key(question)
+        accessor = getattr(self.controller, "_answer_for", None)
+        if callable(accessor) and key:
+            try:
+                return accessor(self.thread_id, key)
+            except Exception:
+                log.debug("failed to read stored answer", exc_info=True)
+        answers = getattr(self.controller, "answers_by_thread", {})
+        if isinstance(answers, dict):
+            thread_answers = answers.get(self.thread_id, {})
+            if isinstance(thread_answers, dict):
+                return thread_answers.get(key)
+        return None
+
+    def _selected_tokens(self, stored: Any) -> set[str]:
+        if stored is None:
+            return set()
+        tokens: set[str] = set()
+        if isinstance(stored, dict):
+            value = stored.get("value")
+            if value:
+                tokens.add(str(value))
+            values = stored.get("values")
+            if isinstance(values, Iterable):
+                for item in values:
+                    if isinstance(item, dict):
+                        token = item.get("value") or item.get("label")
+                        if token:
+                            tokens.add(str(token))
+                    elif item:
+                        tokens.add(str(item))
+            return tokens
+        if isinstance(stored, Iterable) and not isinstance(stored, (str, bytes)):
+            for item in stored:
+                if isinstance(item, dict):
+                    token = item.get("value") or item.get("label")
+                    if token:
+                        tokens.add(str(token))
+                elif item:
+                    tokens.add(str(item))
+        return tokens
+
+    def _text_default(self, question: Any | None) -> str:
+        stored = self._current_answer(question)
+        if stored is None:
+            return ""
+        if isinstance(stored, str):
+            return stored
+        if isinstance(stored, (int, float)):
+            return str(stored)
+        return ""
+
+    def _has_current_answer(self, question: Any | None) -> bool:
+        if question is None:
+            return False
+        checker = getattr(self.controller, "has_answer", None)
+        if callable(checker):
+            try:
+                return bool(checker(self.thread_id, question))
+            except Exception:
+                log.debug("inline wizard answer check failed", exc_info=True)
+                return False
+        stored = self._current_answer(question)
+        if stored is None:
+            return False
+        if isinstance(stored, str):
+            return bool(stored.strip())
+        if isinstance(stored, (int, float)):
+            return True
+        if isinstance(stored, dict):
+            return bool(stored)
+        if isinstance(stored, Iterable):
+            return any(True for _ in stored)
+        return bool(stored)
+
+    def _configure_components(self) -> None:
+        self.clear_items()
+        question = self._question()
+        if question is None:
+            self.add_item(self.CancelButton(self))
+            return
+        options = list(self._question_options(question))
+        if options:
+            select = self.OptionSelect(self, question, options, self._is_multi_select(question))
+            self.add_item(select)
+        else:
+            self.add_item(self.TextPromptButton(self, question))
+        self.add_item(self.BackButton(self))
+        self.add_item(self.NextButton(self, question))
+        self.add_item(self.CancelButton(self))
+
+    def is_last_step(self) -> bool:
+        questions = self._questions()
+        return self.step >= len(questions) - 1
+
+    async def refresh(self, interaction: discord.Interaction | None = None) -> None:
+        self._configure_components()
+        content = self.controller.render_step(self.thread_id, self.step)
+        if interaction is not None:
+            response = getattr(interaction, "response", None)
+            if response is not None:
+                is_done = getattr(response, "is_done", None)
+                done = False
+                if callable(is_done):
+                    try:
+                        done = bool(is_done())
+                    except Exception:
+                        done = False
+                elif isinstance(is_done, bool):
+                    done = is_done
+                if not done:
+                    try:
+                        await interaction.response.edit_message(content=content, view=self)
+                        return
+                    except Exception:
+                        log.warning("failed to edit wizard message via interaction", exc_info=True)
+        if self.message is not None:
+            try:
+                await self.message.edit(content=content, view=self)
+            except Exception:
+                log.warning("failed to refresh wizard message", exc_info=True)
+
+    async def on_timeout(self) -> None:  # pragma: no cover - network
+        for child in self.children:
+            if hasattr(child, "disabled"):
+                child.disabled = True  # type: ignore[assignment]
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                log.warning("failed to disable wizard on timeout", exc_info=True)
+        self.stop()
+
+    class OptionSelect(discord.ui.Select):
+        def __init__(
+            self,
+            parent: "OnboardWizard",
+            question: Any,
+            options: Sequence[Any],
+            is_multi: bool,
+        ) -> None:
+            self._wizard = parent
+            self.question = question
+            stored = parent._current_answer(question)
+            selected = parent._selected_tokens(stored)
+            select_options: list[discord.SelectOption] = []
+            for option in options:
+                if isinstance(option, dict):
+                    label = str(option.get("label") or option.get("value") or "")
+                    value = str(option.get("value") or option.get("label") or label)
+                else:
+                    label = str(getattr(option, "label", ""))
+                    value = str(getattr(option, "value", label))
+                select_options.append(
+                    discord.SelectOption(label=label, value=value, default=value in selected)
+                )
+            placeholder = parent._question_label(question) or "Select an option"
+            max_values = 1
+            if is_multi:
+                try:
+                    configured = getattr(question, "multi_max", None)
+                    if isinstance(question, dict):
+                        configured = question.get("multi_max", configured)
+                    if configured:
+                        max_values = max(1, int(configured))
+                    else:
+                        max_values = max(1, len(select_options))
+                except (TypeError, ValueError):
+                    max_values = max(1, len(select_options))
+            super().__init__(
+                placeholder=placeholder,
+                min_values=0,
+                max_values=max_values,
+                options=select_options,
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self._wizard._handle_select(interaction, self.question, list(self.values))
+
+    class TextPromptButton(discord.ui.Button):
+        def __init__(self, parent: "OnboardWizard", question: Any) -> None:
+            super().__init__(style=discord.ButtonStyle.secondary, label="Enter answer")
+            self._wizard = parent
+            self.question = question
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self._wizard._prompt_text_answer(interaction, self.question)
+
+    class BackButton(discord.ui.Button):
+        def __init__(self, parent: "OnboardWizard") -> None:
+            super().__init__(style=discord.ButtonStyle.secondary, label="Back")
+            self._wizard = parent
+            if parent.step <= 0:
+                self.disabled = True
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            wizard = self._wizard
+            if wizard.step > 0:
+                wizard.step -= 1
+            await wizard.refresh(interaction)
+
+    class NextButton(discord.ui.Button):
+        def __init__(self, parent: "OnboardWizard", question: Any) -> None:
+            label = "Finish" if parent.is_last_step() else "Next"
+            super().__init__(style=discord.ButtonStyle.primary, label=label)
+            self._wizard = parent
+            required = parent._question_required(question)
+            if required and not parent._has_current_answer(question):
+                self.disabled = True
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            wizard = self._wizard
+            next_index = wizard.step + 1
+            total = len(wizard._questions())
+            is_finished = False
+            checker = getattr(wizard.controller, "is_finished", None)
+            if callable(checker):
+                try:
+                    is_finished = bool(checker(wizard.thread_id, next_index))
+                except Exception:
+                    log.warning("inline wizard finish check failed", exc_info=True)
+                    is_finished = next_index >= total
+            else:
+                is_finished = next_index >= total
+            if is_finished:
+                await wizard.controller.finish_inline_wizard(
+                    wizard.thread_id,
+                    interaction,
+                    message=wizard.message,
+                )
+                wizard.stop()
+                return
+            wizard.step = next_index
+            await wizard.refresh(interaction)
+
+    class CancelButton(discord.ui.Button):
+        def __init__(self, parent: "OnboardWizard") -> None:
+            super().__init__(style=discord.ButtonStyle.danger, label="Cancel")
+            self._wizard = parent
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            wizard = self._wizard
+            answers = getattr(wizard.controller, "answers_by_thread", None)
+            if isinstance(answers, dict):
+                answers.pop(wizard.thread_id, None)
+            notice = "❌ Wizard cancelled."
+            response = getattr(interaction, "response", None)
+            handled = False
+            if response is not None and not response.is_done():
+                try:
+                    await interaction.response.edit_message(content=notice, view=None)
+                    handled = True
+                except Exception:
+                    handled = False
+            if not handled and wizard.message is not None:
+                try:
+                    await wizard.message.edit(content=notice, view=None)
+                except Exception:
+                    log.warning("failed to update wizard cancel message", exc_info=True)
+            wizard.stop()
+
+    async def _prompt_text_answer(self, interaction: discord.Interaction, question: Any) -> None:
+        controller = self.controller
+        client = getattr(controller, "bot", None) or getattr(interaction, "client", None)
+        if client is None:
+            log.warning("inline wizard text prompt missing client")
+            followup = getattr(interaction, "followup", None)
+            try:
+                if followup is not None:
+                    await followup.send(
+                        "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
+                        ephemeral=True,
+                    )
+                elif not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
+                        ephemeral=True,
+                    )
+            except Exception:
+                log.warning("failed to notify user about inline text capture error", exc_info=True)
+            return
+
+        label = self._question_label(question) or "this question"
+        prompt = f"✍️ Please type your answer for **{label}** below."
+        prompt_message: discord.Message | None = None
+        used_original = False
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(prompt, ephemeral=True)
+                used_original = True
+            else:
+                followup = getattr(interaction, "followup", None)
+                if followup is None:
+                    log.warning("inline wizard followup handler missing for text prompt")
+                    return
+                prompt_message = await followup.send(prompt, ephemeral=True)
+        except Exception:
+            log.warning("failed to send inline text prompt", exc_info=True)
+            return
+
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        raw_thread_id = getattr(thread, "id", None)
+        try:
+            thread_id = int(raw_thread_id) if raw_thread_id is not None else int(self.thread_id)
+        except (TypeError, ValueError):
+            thread_id = int(self.thread_id)
+        user = getattr(interaction, "user", None)
+        raw_user_id = getattr(user, "id", None)
+        try:
+            user_id = int(raw_user_id) if raw_user_id is not None else None
+        except (TypeError, ValueError):
+            user_id = None
+        if user_id is None:
+            log.warning("inline wizard text prompt missing user context")
+            return
+
+        def check(message: discord.Message) -> bool:
+            author = getattr(message, "author", None)
+            channel = getattr(message, "channel", None)
+            if author is None or getattr(author, "id", None) != user_id:
+                return False
+            if not isinstance(channel, discord.Thread):
+                return False
+            return int(getattr(channel, "id", 0) or 0) == thread_id
+
+        try:
+            message = await client.wait_for("message", check=check, timeout=300)
+        except asyncio.TimeoutError:
+            notice = "⏳ Timed out waiting for your answer. Press **Enter answer** to try again."
+            try:
+                if used_original:
+                    await interaction.edit_original_response(content=notice)
+                elif prompt_message is not None:
+                    await prompt_message.edit(content=notice)
+            except Exception:
+                log.debug("failed to update timeout notice", exc_info=True)
+            return
+        except Exception:
+            log.warning("inline wizard text capture failed", exc_info=True)
+            return
+
+        value = (message.content or "").strip()
+        try:
+            await message.delete()
+        except Exception:
+            log.debug("failed to delete inline text answer message", exc_info=True)
+
+        required = self._question_required(question)
+        key = self._question_key(question)
+        meta_getter = getattr(controller, "_question_meta", None)
+        if callable(meta_getter):
+            meta = meta_getter(question)
+        else:
+            meta = {
+                "qid": key,
+                "label": self._question_label(question),
+                "type": self._question_type(question),
+                "validate": getattr(question, "validate", None)
+                if not isinstance(question, dict)
+                else question.get("validate"),
+                "help": getattr(question, "help", None)
+                if not isinstance(question, dict)
+                else question.get("help"),
+            }
+
+        if required and not value:
+            sender = getattr(controller, "_send_validation_error", None)
+            if callable(sender):
+                await sender(interaction, self.thread_id, meta, "This question is required.")
+            else:
+                warning = f"⚠️ **{self._question_label(question)}** is required."
+                try:
+                    if used_original:
+                        await interaction.edit_original_response(content=warning)
+                    elif prompt_message is not None:
+                        await prompt_message.edit(content=warning)
+                except Exception:
+                    log.debug("failed to send required notice", exc_info=True)
+            return
+
+        if value:
+            validator = getattr(controller, "validate_answer", None)
+            if callable(validator):
+                ok, cleaned, err = validator(meta, value)
+            else:
+                ok, cleaned, err = True, value, None
+            if not ok:
+                sender = getattr(controller, "_send_validation_error", None)
+                if callable(sender):
+                    await sender(interaction, self.thread_id, meta, err)
+                else:
+                    notice = err or "Input does not match the required format."
+                    try:
+                        if used_original:
+                            await interaction.edit_original_response(content=f"⚠️ {notice}")
+                        elif prompt_message is not None:
+                            await prompt_message.edit(content=f"⚠️ {notice}")
+                    except Exception:
+                        log.debug("failed to send validation notice", exc_info=True)
+                return
+            if diag.is_enabled():
+                checker = getattr(controller, "_has_sheet_regex", None)
+                if callable(checker):
+                    has_regex = checker(meta)
+                else:
+                    validate_field = (meta.get("validate") or "").strip().lower()
+                    has_regex = validate_field.startswith("regex:")
+                await diag.log_event(
+                    "info",
+                    "welcome_validator_branch",
+                    qid=meta.get("qid"),
+                    have_regex=has_regex,
+                    type=meta.get("type"),
+                )
+            await controller.set_answer(self.thread_id, key, cleaned)
+            success_notice = "✅ Saved."
+        else:
+            await controller.set_answer(self.thread_id, key, None)
+            success_notice = "✅ Answer cleared."
+
+        try:
+            if used_original:
+                await interaction.edit_original_response(content=success_notice)
+            elif prompt_message is not None:
+                await prompt_message.edit(content=success_notice)
+        except Exception:
+            log.debug("failed to post success notice", exc_info=True)
+
+        await self.refresh()
+
+    async def _handle_select(
+        self,
+        interaction: discord.Interaction,
+        question: Any,
+        selections: list[str],
+    ) -> None:
+        key = self._question_key(question)
+        if not selections:
+            await self.controller.set_answer(self.thread_id, key, None)
+            await self.refresh(interaction)
+            return
+        options: dict[str, str] = {}
+        for option in self._question_options(question):
+            if isinstance(option, dict):
+                label = str(option.get("label") or option.get("value") or "")
+                value = str(option.get("value") or option.get("label") or label)
+            else:
+                label = str(getattr(option, "label", ""))
+                value = str(getattr(option, "value", label))
+            options[value] = label
+        if self._is_multi_select(question):
+            stored: list[dict[str, str]] = []
+            for token in selections:
+                label = options.get(token, token)
+                stored.append({"value": token, "label": label})
+            await self.controller.set_answer(self.thread_id, key, stored)
+        else:
+            token = selections[0]
+            label = options.get(token, token)
+            await self.controller.set_answer(
+                self.thread_id,
+                key,
+                {"value": token, "label": label},
+            )
+        await self.refresh(interaction)
