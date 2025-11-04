@@ -19,13 +19,12 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 
 # Copy the rest
- # copy repo
- COPY . /app
+COPY . /app
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
-# Register the internal CoreOps package so imports like `import c1c_coreops` work.
-# Using editable install keeps dev flow smooth while we refactor.
+# Register the internal CoreOps package
 RUN pip install -e packages/c1c-coreops \
-&& python -c "import c1c_coreops; print('c1c_coreops import OK')"
+ && python -c "import c1c_coreops; print('c1c_coreops import OK')"
 
 # Expose the health server port (Render sets $PORT; this is just doc)
 EXPOSE 10000
