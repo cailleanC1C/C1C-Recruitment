@@ -878,31 +878,56 @@ class BaseWelcomeController:
             except Exception:
                 pass
 
-            try:
-                await panels.OpenQuestionsPanelView.refresh_enabled(
-                    interaction,
-                    controller=self,
-                    thread_id=view_thread_id,
-                )
-            except Exception:
-                log.debug("failed to restore panel buttons after empty schema", exc_info=True)
-
-            hint_text = (
-                "No onboarding questions are configured. Please ping a Recruitment Coordinator."
+            notice = (
+                "❌ No onboarding questions are configured. Please ping a Recruitment Coordinator."
             )
-            card: RollingCard | None = None
-            if thread_key is not None:
-                card = self._rolling_cards.get(thread_key)
-            if card is None and channel_obj is not None:
-                card = RollingCard(channel_obj)
-                if thread_key is not None:
-                    self._rolling_cards[thread_key] = card
-            if card is not None:
+            edit_applied = False
+            if interaction is not None:
                 try:
-                    await card.ensure()
-                    await card.hint(hint_text)
+                    view = panels.OpenQuestionsPanelView(
+                        controller=self,
+                        thread_id=view_thread_id,
+                    )
+                    await interaction.edit_original_response(
+                        content=notice,
+                        view=view,
+                    )
+                    edit_applied = True
                 except Exception:
-                    log.warning("failed to post onboarding empty-schema hint", exc_info=True)
+                    log.debug(
+                        "failed to edit panel message after empty schema",
+                        exc_info=True,
+                    )
+
+            if not edit_applied:
+                try:
+                    await panels.OpenQuestionsPanelView.refresh_enabled(
+                        interaction,
+                        controller=self,
+                        thread_id=view_thread_id,
+                    )
+                except Exception:
+                    log.debug(
+                        "failed to restore panel buttons after empty schema",
+                        exc_info=True,
+                    )
+
+                card: RollingCard | None = None
+                if thread_key is not None:
+                    card = self._rolling_cards.get(thread_key)
+                if card is None and channel_obj is not None:
+                    card = RollingCard(channel_obj)
+                    if thread_key is not None:
+                        self._rolling_cards[thread_key] = card
+                if card is not None:
+                    try:
+                        await card.ensure()
+                        await card.hint(notice)
+                    except Exception:
+                        log.warning(
+                            "failed to post onboarding empty-schema hint",
+                            exc_info=True,
+                        )
             return
 
         try:
