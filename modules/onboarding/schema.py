@@ -134,3 +134,17 @@ def _clear_welcome_questions_cache() -> None:
 
     global _WELCOME_Q_CACHE
     _WELCOME_Q_CACHE = None
+
+# --------------------------------------------------------------------
+# Compatibility shim for legacy controllers
+# --------------------------------------------------------------------
+def parse_values_list(values):
+    """
+    Legacy helper referenced by older onboarding controllers.
+    Normalizes tuples/lists of strings into a list of non-empty strings.
+    """
+    if not values:
+        return []
+    if isinstance(values, (list, tuple)):
+        return [str(v).strip() for v in values if v is not None and str(v).strip()]
+    return [str(values).strip()]
