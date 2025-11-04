@@ -4,14 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from shared.config import (
-    get_onboarding_questions_tab,
-    get_onboarding_sheet_id,
-)
-from shared.sheets.core import fetch_records
-from modules.common.logs import log as shared_log
-
-_CACHE: dict[str, List["Question"] | None] = {"welcome": None}
+from shared.config import cfg
+from shared.sheets.core import read_table
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
 
@@ -57,21 +51,12 @@ def _order_key(value: str) -> Tuple[int, str]:
 def load_welcome_questions() -> List[Question]:
     """Load and validate the *existing* onboarding tab. Strict, no fallback."""
 
-    tab = get_onboarding_questions_tab()
+    tab = cfg.get("onboarding.questions_tab")
     if not tab:
-        raise RuntimeError(
-            "missing config value from get_onboarding_questions_tab()"
-        )
+        raise RuntimeError("missing config key: onboarding.questions_tab")
 
-    sheet_id = get_onboarding_sheet_id()
-    if not sheet_id:
-        raise RuntimeError(
-            "missing onboarding sheet id from get_onboarding_sheet_id()"
-        )
-
-    rows = fetch_records(sheet_id=sheet_id, worksheet=tab)
+    rows = read_table(tab_name=tab)
     if not rows:
-        shared_log.human("warning", "Onboarding — schema empty", tab=tab)
         raise RuntimeError(f"tab '{tab}' is empty")
 
     headers = set(rows[0].keys())
@@ -117,47 +102,7 @@ def load_welcome_questions() -> List[Question]:
         questions.append(question)
 
     if not questions:
-        shared_log.human(
-            "warning",
-            "Onboarding — schema has no welcome rows",
-            tab=tab,
-        )
         raise RuntimeError(f"no 'welcome' questions found in tab '{tab}'")
 
     questions.sort(key=lambda question: question.order_key)
-    snapshot = list(questions)
-    _CACHE["welcome"] = snapshot
-    return list(snapshot)
-
-
-def get_cached_welcome_questions() -> List[Question] | None:
-    """Return the cached welcome questions if available."""
-
-    cached = _CACHE.get("welcome")
-    if cached is None:
-        return None
-    return list(cached)
-
-
-def prime_welcome_cache() -> tuple[int, list[str]]:
-    """Load and cache the welcome flow questions, returning summary info."""
-
-    questions = load_welcome_questions()
-    sample = [question.qid or question.label for question in questions[:3]]
-    return len(questions), sample
-
-
-_VALUES_PREFIX = re.compile(r"\bvalues\s*:\s*", re.IGNORECASE)
-
-
-def parse_values_list(spec: str) -> list[str]:
-    """Extract a comma-separated option list from a ``validate`` spec."""
-
-    spec = (spec or "").strip()
-    if not spec:
-        return []
-    match = _VALUES_PREFIX.search(spec)
-    if not match:
-        return []
-    body = spec[match.end() :]
-    return [part.strip() for part in body.split(",") if part.strip()]
+    return questions

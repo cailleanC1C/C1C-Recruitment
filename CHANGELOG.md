@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.9.7 — 2025-11-04 Onboarding Stability & Preload
+- Fixed crash: `TypeError: Command signature requires at least 1 parameter(s)` when initializing `onb` command group.
+- Added **preload** of onboarding questions on bot startup to warm cache.
+- Implemented safe re-enable + user-facing error message when onboarding schema is empty.
+- Added ops-level commands (`!ops onb reload`, `!ops onb check`) for staff to manually reload or verify onboarding question cache.
+- Improved error-handling and logging for onboarding launch flow (`panel_posted`, `launch_resolve_failed`, etc.).
+- Refactored fallback handling to remove legacy modal dependencies.
+- Adjusted message editing to ensure UI state consistency after failed schema loads.
+
+## v0.9.7 — 2025-11-03 Interaction Timing & Panel Flow
+- Reworked onboarding flow to remove modal use; converted to in-thread card interactions.
+- Fixed interaction-failure issue where “Enter answer now” produced Discord’s red toast.
+- Added direct user-message flow for responses, validation, and summary building.
+- Integrated cleanup logic to remove transient question messages only after summary posted.
+- Audited and removed obsolete fallback logic tied to modals.
+- Updated logging consistency and added diagnostic event `diag: welcome_flow`.
+
 ## v0.9.7 — 2025-10-29
 ### Added
 - Humanized Discord logging templates with shared emoji map and label helpers for guilds, channels, and users.
@@ -241,5 +258,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-
-Doc last updated: 2025-10-28 (v0.9.7)
+Doc last updated: 2025-11-04 (v0.9.7)

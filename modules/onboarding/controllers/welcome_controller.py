@@ -24,10 +24,9 @@ from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, buil
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
-from modules.onboarding.ui import RollingCard, panels
-from shared.config import get_onboarding_cleanup_after_summary
-from shared.sheets.onboarding_questions import Question, schema_hash
-from modules.common.logs import channel_label, user_label, log as shared_log
+from modules.onboarding.ui import panels
+from shared.sheets.onboarding_questions import Question
+from shared.config import get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
@@ -803,284 +802,94 @@ class BaseWelcomeController:
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
-        self._button_sessions: Dict[str, Any] = {}
-        self._rolling_sessions: Dict[int, RollingCardSession] = {}
-        self._rolling_cards: Dict[int, RollingCard] = {}
-        self._rolling_questions: Sequence[SheetQuestionRecord] | None = None
-        self._captured_msgs: Dict[int, list[int]] = {}
+        self.answers_by_thread: Dict[int | None, dict[str, Any]] = {}
+        recruiter_attr = getattr(self, "recruiter_role_ids", None) or getattr(self, "RECRUITER_ROLE_IDS", None)
+        if recruiter_attr:
+            self.recruiter_role_ids = list(recruiter_attr)
+        else:
+            try:
+                self.recruiter_role_ids = list(get_recruiter_role_ids())
+            except Exception:
+                self.recruiter_role_ids = []
 
-    async def start_session_from_button(
+    async def log_event(self, level: str, event: str, **fields: Any) -> None:
+        if diag.is_enabled():
+            await diag.log_event(level, event, **fields)
+
+    def get_questions(self, thread_id: int | None) -> list[dict[str, Any]]:
+        return [
+            {"id": "ign", "label": "Your in-game name", "kind": "text"},
+            {
+                "id": "vibe",
+                "label": "Preferred clan vibe",
+                "kind": "choice",
+                "choices": ["Casual", "Balanced", "Competitive"],
+            },
+            {"id": "tz", "label": "Timezone (e.g., CET, PST)", "kind": "tz"},
+        ]
+
+    def render_step(self, thread_id: int | None, step: int) -> str:
+        questions = self.get_questions(thread_id)
+        step = max(0, min(step, len(questions)))
+        key = int(thread_id) if thread_id is not None else None
+        answers = self.answers_by_thread.setdefault(key, {})
+        if step >= len(questions):
+            return "Reviewing your answers…"
+        question = questions[step]
+        current = answers.get(question["id"])
+        hint = f"\n\n_Current:_ **{current}**" if current else ""
+        return f"**Step {step + 1} of {len(questions)}**\n{question['label']}{hint}"
+
+    async def capture_step(self, interaction: discord.Interaction, thread_id: int | None, step: int) -> None:
+        return None
+
+    def is_finished(self, thread_id: int | None, step: int) -> bool:
+        return step >= len(self.get_questions(thread_id))
+
+    async def set_answer(self, thread_id: int | None, key: str, value: str) -> None:
+        dictionary = self.answers_by_thread.setdefault(int(thread_id) if thread_id is not None else None, {})
+        dictionary[key] = value
+
+    async def finish_and_summarize(self, interaction: discord.Interaction, thread_id: int | None) -> None:
+        from discord import AllowedMentions
+
+        key = int(thread_id) if thread_id is not None else None
+        answers = dict(self.answers_by_thread.get(key, {}))
+        user = getattr(interaction, "user", None)
+        embed = self._make_summary_embed(user, answers, interaction.channel)
+
+        await interaction.response.edit_message(content="✅ Collected. Posting summary…", view=None)
+
+        role_ids = [rid for rid in (self.recruiter_role_ids or []) if rid]
+        mentions = " ".join(f"<@&{rid}>" for rid in role_ids)
+
+        await interaction.channel.send(
+            content=mentions or None,
+            embed=embed,
+            allowed_mentions=AllowedMentions(everyone=False, users=False, roles=True),
+        )
+
+        if key in self.answers_by_thread:
+            del self.answers_by_thread[key]
+
+        await self.log_event("info", "onboard_finished", thread_id=thread_id, pinged_roles=len(role_ids))
+
+    def _make_summary_embed(
         self,
-        thread_id: int,
-        *,
-        actor_id: int | None,
-        channel: discord.abc.GuildChannel | discord.Thread | None,
-        guild: discord.Guild | None,
-        interaction: discord.Interaction | None = None,
-    ) -> None:
-        """Single entrypoint from the persistent panel button."""
-
-        sessions = self._button_sessions
-        guild_id = getattr(guild, "id", None)
-        key = f"{guild_id}:{thread_id}"
-        previous = sessions.pop(key, None)
-        if previous is not None:
-            closer = getattr(previous, "close", None)
-            if callable(closer):
-                try:
-                    await closer(reason="superseded")
-                except Exception:
-                    pass
-        guild_obj = guild or getattr(channel, "guild", None)
-
-        channel_obj = channel
-        if channel_obj is None:
-            channel_obj = self._threads.get(thread_id)
-        if channel_obj is None:
-            return
-
-        initiator = getattr(interaction, "user", None)
-        questions = self._load_rolling_questions()
-        question_count = len(questions)
-
-        guild_label = user_label(guild_obj, getattr(initiator, "id", actor_id))
-        thread_identifier = getattr(channel_obj, "id", None)
+        user: discord.abc.User | discord.Member | None,
+        answers: dict[str, Any],
+        thread: discord.abc.MessageableChannel | None,
+    ) -> discord.Embed:
+        embed = discord.Embed(title="New Onboarding", description=f"Applicant: {getattr(user, 'mention', 'unknown')}")
+        embed.add_field(name="IGN", value=answers.get("ign", "—"), inline=True)
+        embed.add_field(name="Clan vibe", value=answers.get("vibe", "—"), inline=True)
+        embed.add_field(name="Timezone", value=answers.get("tz", "—"), inline=True)
         try:
-            thread_key = int(thread_identifier) if thread_identifier is not None else None
-        except (TypeError, ValueError):
-            thread_key = None
-        log_thread_id = thread_key if thread_key is not None else thread_id
-        view_thread_id = thread_key if thread_key is not None else thread_id
-
-        try:
-            shared_log.human(
-                "info",
-                "🆕 Onboarding — card session",
-                user=guild_label,
-                thread=channel_label(guild_obj, log_thread_id),
-                questions=question_count,
-            )
+            embed.add_field(name="Thread", value=f"[Open thread]({thread.jump_url})", inline=False)
         except Exception:
             pass
-
-        if question_count == 0:
-            launch_log.warning(
-                "⚠️ Onboarding — card session blocked (no questions) • user=%s • thread=%s",
-                guild_label,
-                channel_label(guild_obj, log_thread_id),
-            )
-            try:
-                shared_log.human(
-                    "warning",
-                    "⚠️ Onboarding — no welcome questions",
-                    user=guild_label,
-                    thread=channel_label(guild_obj, log_thread_id),
-                )
-            except Exception:
-                pass
-
-            notice = (
-                "❌ No onboarding questions are configured. Please ping a Recruitment Coordinator."
-            )
-            edit_applied = False
-            if interaction is not None:
-                try:
-                    view = panels.OpenQuestionsPanelView(
-                        controller=self,
-                        thread_id=view_thread_id,
-                    )
-                    await interaction.edit_original_response(
-                        content=notice,
-                        view=view,
-                    )
-                    edit_applied = True
-                except Exception:
-                    log.debug(
-                        "failed to edit panel message after empty schema",
-                        exc_info=True,
-                    )
-
-            if not edit_applied:
-                try:
-                    await panels.OpenQuestionsPanelView.refresh_enabled(
-                        interaction,
-                        controller=self,
-                        thread_id=view_thread_id,
-                    )
-                except Exception:
-                    log.debug(
-                        "failed to restore panel buttons after empty schema",
-                        exc_info=True,
-                    )
-
-                card: RollingCard | None = None
-                if thread_key is not None:
-                    card = self._rolling_cards.get(thread_key)
-                if card is None and channel_obj is not None:
-                    card = RollingCard(channel_obj)
-                    if thread_key is not None:
-                        self._rolling_cards[thread_key] = card
-                if card is not None:
-                    try:
-                        await card.ensure()
-                        await card.hint(notice)
-                    except Exception:
-                        log.warning(
-                            "failed to post onboarding empty-schema hint",
-                            exc_info=True,
-                        )
-            return
-
-        try:
-            session = RollingCardSession(
-                self,
-                thread=channel_obj,
-                owner=initiator,
-                guild=guild_obj,
-                questions=questions,
-            )
-        except Exception:
-            log.warning("failed to initialize rolling card session", exc_info=True)
-            return
-
-        sessions[key] = session
-        try:
-            resolved_thread_id = int(thread_identifier) if thread_identifier is not None else None
-        except (TypeError, ValueError):
-            resolved_thread_id = None
-        if resolved_thread_id is not None:
-            thread_key = int(resolved_thread_id)
-            existing_card = self._rolling_cards.get(thread_key)
-            if existing_card is not None:
-                session.card = existing_card
-            else:
-                self._rolling_cards[thread_key] = session.card
-            self.answers_by_thread[thread_key] = {}
-            self._rolling_sessions[thread_key] = session
-            try:
-                store.ensure(
-                    thread_key,
-                    flow=self.flow,
-                    schema_hash=schema_hash(self.flow),
-                )
-            except Exception:
-                pass
-
-        channel_id = getattr(channel, "id", None) if channel is not None else thread_id
-        try:
-            channel_id = int(channel_id)
-        except (TypeError, ValueError):
-            pass
-
-        launch_log.info(
-            "🛈 Onboarding — launch • user=%s • thread=%s",
-            user_label(guild_obj, actor_id),
-            channel_label(guild_obj, channel_id if isinstance(channel_id, int) else thread_id),
-        )
-        launch_log.info(
-            "🆕 Onboarding — card session • user=%s • thread=%s • questions=%s",
-            user_label(guild_obj, getattr(session.owner, "id", actor_id)),
-            channel_label(guild_obj, channel_id if isinstance(channel_id, int) else thread_id),
-            len(session._steps),
-        )
-
-        try:
-            await session.start()
-        except Exception:
-            log.warning("rolling card session failed to start", exc_info=True)
-            await session.close(reason="start_failed")
-
-    def _load_rolling_questions(self) -> Sequence[SheetQuestionRecord]:
-        if self._rolling_questions is None:
-            flow_key = (self.flow or "").lower()
-            cached = get_cached_welcome_questions()
-            if cached is None:
-                try:
-                    loaded = load_welcome_questions()
-                except Exception:
-                    log.warning(
-                        "failed to load welcome questions for rolling card", exc_info=True
-                    )
-                    loaded = []
-                else:
-                    self._rolling_questions = [
-                        question for question in loaded if question.flow.lower() == flow_key
-                    ]
-                    return self._rolling_questions
-            else:
-                loaded = cached
-            self._rolling_questions = [
-                question for question in loaded if question.flow.lower() == flow_key
-            ]
-        return self._rolling_questions
-
-    def _record_rolling_answer(
-        self, thread_id: int | None, question: SheetQuestionRecord, value: str
-    ) -> None:
-        if thread_id is None:
-            return
-        thread_key = int(thread_id)
-        answers = self.answers_by_thread.setdefault(thread_key, {})
-        answers[question.qid] = value
-
-        session: SessionData | None = None
-        try:
-            session = store.get(thread_key)
-        except Exception:
-            session = None
-
-        if session is None:
-            return
-
-        try:
-            if hasattr(session, "set_answer") and callable(getattr(session, "set_answer")):
-                session.set_answer(question.qid, value)
-            else:
-                answers_map = getattr(session, "answers", None)
-                if isinstance(answers_map, dict):
-                    answers_map[question.qid] = value
-
-            if hasattr(session, "recompute_visibility") and callable(
-                getattr(session, "recompute_visibility")
-            ):
-                try:
-                    session.recompute_visibility()
-                except Exception:
-                    pass
-        except Exception:
-            try:
-                shared_log.human(
-                    "warning",
-                    "Onboarding — store sync failed",
-                    thread=str(thread_key),
-                    qid=question.qid,
-                )
-            except Exception:
-                pass
-
-    def _complete_rolling(self, thread_id: int | None) -> None:
-        if thread_id is None:
-            return
-        key = int(thread_id)
-        self._rolling_sessions.pop(key, None)
-        self._rolling_cards.pop(key, None)
-        for key, active in list(self._button_sessions.items()):
-            if isinstance(active, RollingCardSession) and getattr(active, "thread_id", None) == thread_id:
-                self._button_sessions.pop(key, None)
-
-    async def handle_rolling_message(self, message: discord.Message) -> bool:
-        channel = getattr(message, "channel", None)
-        thread_id = getattr(channel, "id", None)
-        try:
-            resolved_thread_id = int(thread_id) if thread_id is not None else None
-        except (TypeError, ValueError):
-            resolved_thread_id = None
-        if resolved_thread_id is None:
-            return False
-        session = self._rolling_sessions.get(int(resolved_thread_id))
-        if session is None:
-            return False
-        return await session.handle_message(message)
+        embed.set_footer(text="C1C Onboarding")
+        return embed
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)

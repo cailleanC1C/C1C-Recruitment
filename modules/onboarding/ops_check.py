@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import discord
 from discord.ext import commands
 
-from c1c_coreops.helpers import help_metadata, tier
-from c1c_coreops.rbac import ops_only
-from modules.common.logs import log
 from modules.onboarding.schema import REQUIRED_HEADERS, load_welcome_questions
-from shared.config import get_onboarding_questions_tab
-from shared.sheets import onboarding_questions
+from shared.config import cfg
+from shared.logs import log
 
 
 class OnboardingOps(commands.Cog):
@@ -140,9 +136,22 @@ class OnboardingOps(commands.Cog):
     async def _onb_check(self, ctx: commands.Context) -> None:
         """Validate the onboarding questions tab (sheet-only, strict)."""
 
-        tab = get_onboarding_questions_tab() or "<unset>"
         try:
+            tab = cfg.get("onboarding.questions_tab") or "<unset>"
             questions = load_welcome_questions()
+            await ctx.reply(
+                "✅ Onboarding sheet OK — tab: **{}** • questions: **{}** • headers OK: {}".format(
+                    tab, len(questions), ", ".join(sorted(REQUIRED_HEADERS))
+                ),
+                mention_author=False,
+            )
+            log.human(
+                "info",
+                "✅ Onboarding — schema ok",
+                guild=ctx.guild.name if ctx.guild else "-",
+                tab=tab,
+                count=len(questions),
+            )
         except Exception as exc:  # noqa: BLE001 - report raw error to staff
             await ctx.reply(
                 "❌ Onboarding sheet invalid:\n`{}`\nFix the sheet or config and try again.".format(
@@ -151,84 +160,6 @@ class OnboardingOps(commands.Cog):
                 mention_author=False,
             )
             log.human("error", "❌ Onboarding — schema error", details=str(exc))
-            return
-
-        headers_line = ", ".join(sorted(REQUIRED_HEADERS))
-        await ctx.reply(
-            "✅ Onboarding sheet OK — tab: **{}** • questions: **{}** • headers OK: {}".format(
-                tab, len(questions), headers_line
-            ),
-            mention_author=False,
-        )
-        log.human(
-            "info",
-            "✅ Onboarding — schema ok",
-            guild=ctx.guild.name if ctx.guild else "-",
-            tab=tab,
-            count=len(questions),
-        )
-
-    async def _onb_reload(self, ctx: commands.Context) -> None:
-        """Reload onboarding questions from the sheet and show a quick summary."""
-
-        try:
-            await ctx.trigger_typing()
-        except Exception:
-            pass
-
-        try:
-            onboarding_questions.invalidate_cache()
-            questions = onboarding_questions.get_questions("welcome")
-        except Exception as exc:  # noqa: BLE001 - show raw error to staff
-            await ctx.reply(
-                "❌ Failed to reload onboarding questions:\n`{}`".format(exc),
-                mention_author=False,
-            )
-            log.human("error", "❌ Onboarding — reload failed", details=str(exc))
-            return
-
-        count = len(questions)
-        sample_qids = [question.qid for question in questions[:5] if question.qid]
-
-        if count == 0:
-            description = (
-                "❌ Reloaded: **0** questions for `flow=welcome`.\n"
-                "Use `!ops onb check` for header details."
-            )
-            colour = 0xCC3333
-        else:
-            sample_line = ""
-            if sample_qids:
-                sample_line = f"\nSample qids: `{', '.join(sample_qids)}`"
-            description = (
-                f"✅ Reloaded: **{count}** questions for `flow=welcome`."
-                f"{sample_line}"
-            )
-            colour = 0x33AA55
-
-        embed = discord.Embed(description=description, colour=colour)
-        try:
-            await ctx.reply(embed=embed, mention_author=False)
-        except Exception:
-            await ctx.reply(description, mention_author=False)
-
-        log.human(
-            "info",
-            "✅ Onboarding — reload complete",
-            guild=ctx.guild.name if ctx.guild else "-",
-            count=count,
-            sample=sample_qids,
-        )
-
-    # ------------------------------------------------------------------
-    # Event hooks
-    @commands.Cog.listener()
-    async def on_cog_add(self, _cog: commands.Cog) -> None:
-        self._attach_group()
-
-    @commands.Cog.listener()
-    async def on_cog_remove(self, _cog: commands.Cog) -> None:
-        self._attach_group()
 
 
 async def setup(bot: commands.Bot) -> None:
