@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from discord.ext import commands
@@ -28,5 +29,6 @@ async def setup(bot: commands.Bot) -> None:
     if callable(done) and not done():
         return
 
-    task = bot.loop.create_task(preload_onboarding_schema())
+    # discord.py 2.x removes direct access to ``Bot.loop``; schedule via asyncio
+    task = asyncio.create_task(preload_onboarding_schema())
     setattr(bot, _PRELOAD_TASK_ATTR, task)

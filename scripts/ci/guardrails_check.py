@@ -133,6 +133,17 @@ def run_checks() -> tuple[list[str], list[str]]:
         _echo_violation("S-03", "command decorator outside cogs/*", rel, ln)
         errors.append(f"S-03: command decorator outside cogs/* → {rel}:{ln}: `{line}`")
 
+    deprecated_loop_create_task = [
+        (rel, ln, line)
+        for rel, ln, line in grep([r"\.loop\.create_task\("], ["**/*.py"])
+    ]
+    for rel, ln, line in deprecated_loop_create_task:
+        _echo_violation("S-09", "discord.py loop.create_task deprecated", rel, ln)
+        errors.append(
+            "S-09: discord.py loop.create_task deprecated"
+            f" → {rel}:{ln}: `{line}`"
+        )
+
     # 3) Docs checks
     docs = [p for p in ROOT.glob("docs/**/*.md") if p.is_file() and not is_under_audit(p)]
     for md in docs:
