@@ -18,6 +18,7 @@ except Exception as exc:  # pragma: no cover - optional dependency at import tim
 else:
     _IMPORT_ERROR = None
 
+from shared.config import cfg
 import shared.sheets.async_adapter as async_adapter
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -321,6 +322,40 @@ def call_with_backoff(func: Callable[..., _WorksheetT], *args: Any, **kwargs: An
     """Expose the retry helper for modules performing write operations."""
 
     return _retry_with_backoff(func, *args, **kwargs)
+
+
+def _resolve_default_sheet_id(candidate: str | None) -> str:
+    """Resolve ``candidate`` falling back to configured sheet identifiers."""
+
+    text = str(candidate).strip() if candidate is not None else ""
+    if text:
+        return _resolve_sheet_id(text)
+
+    for key in ("onboarding.sheet_id", "recruitment.sheet_id"):
+        value = cfg.get(key)
+        if isinstance(value, str) and value.strip():
+            return _resolve_sheet_id(value)
+
+    return _resolve_sheet_id(candidate)
+
+
+def read_table(
+    *,
+    sheet_id: str | None = None,
+    tab_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return ``get_all_records`` for ``tab_name`` using configured sheet IDs."""
+
+    resolved_sheet_id = _resolve_default_sheet_id(sheet_id)
+
+    if tab_name is None:
+        raise ValueError("read_table requires tab_name")
+
+    resolved_tab = str(tab_name).strip()
+    if not resolved_tab:
+        raise ValueError("read_table requires tab_name")
+
+    return fetch_records(resolved_sheet_id, resolved_tab)
 
 
 async def acall_with_backoff(
