@@ -177,13 +177,13 @@ _RANGE_SKIP_RE = re.compile(
 
 
 def _norm(value: Any) -> str:
-    """Normalise a scalar value to a trimmed string for comparisons."""
+    """Normalize values to trimmed strings for comparison."""
 
     return str(value).strip()
 
 
 def _parse_rhs_list(text: str) -> list[str]:
-    """Parse RHS list syntax like "[A, B]" or "A,B" into tokens."""
+    """Accept '[A, B]' or 'A,B' → ['A','B'] (trimmed)."""
 
     cleaned = (text or "").strip()
     if cleaned.startswith("[") and cleaned.endswith("]"):
