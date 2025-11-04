@@ -7,11 +7,16 @@ from shared.config import cfg
 from shared.logs import log
 
 
-class OnboardingCheck(commands.Cog):
+class OnboardingOps(commands.Cog):
+    """Operational helpers for managing the onboarding question sheet."""
+
+    # Guard so hot-reloads / second paths don't re-register the same group
+    _fallback_registered: bool = False
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._ops_registered = False
-        self._fallback_registered = False
+        self._fallback_attached = False
 
         # Provide an explicit callback so discord.py can introspect the command
         # signature when registering the group. Without a callable here the
@@ -91,9 +96,44 @@ class OnboardingCheck(commands.Cog):
     def _attach_group(self) -> None:
         ops_root = self.bot.get_command("ops")
 
-    @commands.command(name="onb:check")
-    @commands.has_permissions(administrator=True)
-    async def onb_check(self, ctx: commands.Context):
+        if isinstance(ops_root, commands.Group):
+            if self._fallback_attached:
+                removed = self.bot.remove_command(self._group.name)
+                if removed is not None:
+                    log.human(
+                        "info",
+                        "ops wiring: removed standalone 'onb' fallback",
+                    )
+                self._fallback_attached = False
+            if not self._ops_registered:
+                ops_root.add_command(self._group)
+                self._group.cog = self
+                self._ops_registered = True
+                log.human("info", "ops wiring: added 'onb' subgroup under ops")
+        else:
+            if self._ops_registered:
+                parent = getattr(self._group, "parent", None)
+                if isinstance(parent, commands.Group):
+                    parent.remove_command(self._group.name)
+                self._ops_registered = False
+            if not self._fallback_attached:
+                self.bot.add_command(self._group)
+                self._group.cog = self
+                self._fallback_attached = True
+                log.human(
+                    "warning",
+                    "ops wiring: registered standalone '!onb' group as fallback",
+                )
+
+    async def _onb_root(self, ctx: commands.Context) -> None:
+        if ctx.invoked_subcommand is not None:
+            return
+        await ctx.reply(
+            f"Usage: `{self._usage_prefix} reload` or `{self._usage_prefix} check`",
+            mention_author=False,
+        )
+
+    async def _onb_check(self, ctx: commands.Context) -> None:
         """Validate the onboarding questions tab (sheet-only, strict)."""
 
         try:
@@ -125,9 +165,21 @@ class OnboardingCheck(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     cog = OnboardingOps(bot)
     await bot.add_cog(cog)
-    try:
+    # Register the fallback group only once. This avoids CommandRegistrationError
+    # when setup() runs again (hot reloads, multiple attach paths).
+    existing_onb = bot.get_command("onb")
+    if existing_onb is not None and existing_onb.parent is None:
+        removed = bot.remove_command("onb")
+        if removed is not None:
+            log.human(
+                "info",
+                "ops wiring: replaced lingering standalone 'onb' fallback",
+            )
+        existing_onb = None
+        OnboardingOps._fallback_registered = False
+
+    if not OnboardingOps._fallback_registered and existing_onb is None:
         bot.add_command(cog._group)
-    except Exception:
-        # The command may already exist (e.g. hot reload); ignore safely.
-        pass
+        OnboardingOps._fallback_registered = True
+        cog._fallback_attached = True
     cog.configure_commands()
