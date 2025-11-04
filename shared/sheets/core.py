@@ -26,6 +26,9 @@ _WorksheetT = TypeVar("_WorksheetT")
 _WorkbookCache: Dict[str, Any] = {}
 _WorksheetCache: Dict[Tuple[str, str], Any] = {}
 
+_CONFIG_CACHE: Any | None = None
+_CONFIG_UNAVAILABLE = False
+
 _DEFAULT_ATTEMPTS = int(os.getenv("GSHEETS_RETRY_ATTEMPTS", "5"))
 _DEFAULT_BACKOFF_BASE = float(os.getenv("GSHEETS_RETRY_BASE", "0.5"))
 _DEFAULT_BACKOFF_FACTOR = float(os.getenv("GSHEETS_RETRY_FACTOR", "2.0"))
@@ -321,6 +324,64 @@ def call_with_backoff(func: Callable[..., _WorksheetT], *args: Any, **kwargs: An
     """Expose the retry helper for modules performing write operations."""
 
     return _retry_with_backoff(func, *args, **kwargs)
+
+
+def _get_config():
+    """Return the cached config facade if available without raising."""
+
+    global _CONFIG_CACHE, _CONFIG_UNAVAILABLE
+
+    if _CONFIG_CACHE is not None:
+        return _CONFIG_CACHE
+    if _CONFIG_UNAVAILABLE:
+        return None
+
+    try:
+        from shared.config import cfg as imported_cfg
+    except Exception:  # pragma: no cover - configuration optional in some contexts
+        _CONFIG_UNAVAILABLE = True
+        return None
+
+    _CONFIG_CACHE = imported_cfg
+    return imported_cfg
+
+
+def _resolve_default_sheet_id(candidate: str | None) -> str:
+    """Resolve ``candidate`` falling back to configured sheet identifiers."""
+
+    text = str(candidate).strip() if candidate is not None else ""
+    if text:
+        return _resolve_sheet_id(text)
+
+    config = _get_config()
+    if config is not None:
+        getter = getattr(config, "get", None)
+        if callable(getter):
+            for key in ("onboarding.sheet_id", "recruitment.sheet_id"):
+                value = getter(key)
+                if isinstance(value, str) and value.strip():
+                    return _resolve_sheet_id(value)
+
+    return _resolve_sheet_id(candidate)
+
+
+def read_table(
+    *,
+    sheet_id: str | None = None,
+    tab_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return ``get_all_records`` for ``tab_name`` using configured sheet IDs."""
+
+    resolved_sheet_id = _resolve_default_sheet_id(sheet_id)
+
+    if tab_name is None:
+        raise ValueError("read_table requires tab_name")
+
+    resolved_tab = str(tab_name).strip()
+    if not resolved_tab:
+        raise ValueError("read_table requires tab_name")
+
+    return fetch_records(resolved_sheet_id, resolved_tab)
 
 
 async def acall_with_backoff(
