@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import re
 import sys
-from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Optional, Sequence, cast
 
 import discord
 from discord.ext import commands
 
 from modules.onboarding import diag, logs, rules
+from modules.onboarding.schema import (
+    Question as SheetQuestionRecord,
+    get_cached_welcome_questions,
+    load_welcome_questions,
+    parse_values_list,
+)
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
@@ -22,6 +30,45 @@ from shared.config import get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
+launch_log = logging.getLogger("c1c.onboarding.controller")
+
+
+# --- Sheet-driven validator (no fallbacks/coercion) --------------------------
+NUMERIC_HINTS = ("number",)
+
+
+def _sheet_regex(meta: dict[str, Any]) -> str | None:
+    v = (meta.get("validate") or "").strip()
+    if v.lower().startswith("regex:"):
+        return v.split(":", 1)[1].strip()
+    return None
+
+
+def validate_answer(meta: dict[str, Any], raw: str) -> tuple[bool, str | None, str | None]:
+    """
+    (ok, cleaned, error)
+    - If sheet provides a regex -> enforce it on the raw string.
+    - Else -> accept as-is. No numeric/int fallbacks.
+    """
+
+    raw = "" if raw is None else str(raw)
+
+    pattern = _sheet_regex(meta)
+    if pattern:
+        try:
+            match = re.fullmatch(pattern, raw)
+        except re.error:
+            log.warning(
+                "welcome: bad regex in sheet",
+                extra={"qid": meta.get("qid"), "pattern": pattern},
+            )
+            return True, raw, None
+        if not match:
+            message = meta.get("help") or "Input does not match the required format."
+            return False, None, message
+        return True, raw, None
+
+    return True, raw, None
 
 
 def _display_name(user: discord.abc.User | discord.Member | None) -> str:
@@ -101,6 +148,579 @@ TEXT_TYPES = {"short", "paragraph", "number"}
 SELECT_TYPES = {"single-select", "multi-select"}
 
 
+class RollingCardSession:
+    """Lightweight rolling-card flow for welcome text/number questions."""
+
+    def __init__(
+        self,
+        controller: "WelcomeController",
+        *,
+        thread: discord.abc.Messageable,
+        owner: discord.abc.User | discord.Member | None,
+        guild: discord.Guild | None,
+        questions: Sequence[SheetQuestionRecord],
+    ) -> None:
+        self.controller = controller
+        self.thread = thread
+        self.guild = guild or getattr(thread, "guild", None)
+        self.card = RollingCard(thread)
+        self.owner: discord.abc.User | discord.Member | None = (
+            owner or getattr(thread, "owner", None)
+        )
+        identifier = getattr(self.owner, "id", None)
+        if identifier is None:
+            identifier = getattr(thread, "owner_id", None)
+        try:
+            self.owner_id: int | None = int(identifier) if identifier is not None else None
+        except (TypeError, ValueError):
+            self.owner_id = None
+        self.thread_id: int | None = None
+        thread_identifier = getattr(thread, "id", None)
+        try:
+            self.thread_id = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            self.thread_id = None
+        self._steps: list[SheetQuestionRecord] = [
+            question for question in questions if self._supports(question)
+        ]
+        self._current_index = 0
+        self._current_question: SheetQuestionRecord | None = None
+        self._answers: dict[str, Any] = {}
+        self._answer_order: list[SheetQuestionRecord] = []
+        self._waiting = False
+        self._closed = False
+
+    @staticmethod
+    def _supports(question: SheetQuestionRecord) -> bool:
+        qtype = (question.qtype or "").lower()
+        return qtype in {"bool"} or qtype.startswith(
+            ("short", "paragraph", "number", "single-select", "multi-select")
+        )
+
+    def _owner_display_name(self) -> str:
+        if self.owner is None:
+            return "the ticket owner"
+        return (
+            getattr(self.owner, "display_name", None)
+            or getattr(self.owner, "global_name", None)
+            or getattr(self.owner, "name", None)
+            or "the ticket owner"
+        )
+
+    def _is_owner(self, user: discord.abc.User | None) -> bool:
+        if user is None:
+            return False
+        identifier = getattr(user, "id", None)
+        try:
+            value = int(identifier) if identifier is not None else None
+        except (TypeError, ValueError):
+            return False
+        if self.owner_id is None and value is not None:
+            self.owner_id = value
+            self.owner = user
+        return value is not None and value == self.owner_id
+
+    async def close(self, *, reason: str | None = None) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            message = await self.card.ensure()
+        except Exception:
+            message = None
+        if message is not None:
+            try:
+                await message.edit(view=None)
+            except Exception:
+                pass
+        self.controller._complete_rolling(self.thread_id)
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if captured is not None and self.thread_id is not None:
+            captured.pop(int(self.thread_id), None)
+
+    async def start(self) -> None:
+        if self._closed:
+            return
+        if not self._steps:
+            message = await self.card.ensure()
+            await message.edit(content="**Onboarding — Completed**", view=None)
+            self._closed = True
+            self.controller._complete_rolling(self.thread_id)
+            return
+        await self._render_step()
+
+    async def _render_step(self) -> None:
+        if self._closed:
+            return
+        if self._current_index >= len(self._steps):
+            await self._finish()
+            return
+        question = self._steps[self._current_index]
+        self._current_question = question
+        self._waiting = False
+        view = self._view_for_question(question)
+        await self.card.render(
+            self._current_index + 1,
+            len(self._steps),
+            question.label,
+            question.help,
+            self._summary_lines(),
+            view,
+        )
+
+    def _summary_lines(self) -> list[str]:
+        lines = []
+        for question in self._answer_order:
+            value = self._answers.get(question.qid)
+            if value is None:
+                continue
+            label = question.label or question.qid
+            lines.append(f"• **{label}:** {self._value_for_summary(value)}")
+        return lines
+
+    def _view_for_question(self, question: SheetQuestionRecord) -> discord.ui.View:
+        qtype = (question.qtype or "").lower()
+        if qtype == "bool":
+            return self._bool_view(question)
+        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
+            view = self._select_view(question)
+            if view is not None:
+                return view
+        return self._enter_view(question)
+
+    def _enter_view(self, question: SheetQuestionRecord) -> discord.ui.View:
+        session = self
+
+        class EnterAnswerView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+
+            @discord.ui.button(
+                label="Enter answer",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"welcome.card.enter:{question.qid}",
+            )
+            async def _enter(  # type: ignore[override]
+                self, interaction: discord.Interaction, _: discord.ui.Button
+            ) -> None:
+                await session._handle_enter(interaction)
+
+        return EnterAnswerView()
+
+    def _bool_view(self, question: SheetQuestionRecord) -> discord.ui.View:
+        session = self
+
+        async def submit(interaction: discord.Interaction, choice: str) -> None:
+            if not session._is_owner(getattr(interaction, "user", None)):
+                try:
+                    await interaction.response.send_message(
+                        "Only the ticket owner can answer.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+                return
+            try:
+                await interaction.response.defer()
+            except discord.InteractionResponded:
+                pass
+            await session._store_answer_and_advance(question, choice)
+
+        class BoolView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+
+            @discord.ui.button(
+                label="Yes",
+                style=discord.ButtonStyle.success,
+                custom_id=f"welcome.card.bool:{question.qid}:yes",
+            )
+            async def yes(  # type: ignore[override]
+                self, interaction: discord.Interaction, _: discord.ui.Button
+            ) -> None:
+                await submit(interaction, "Yes")
+
+            @discord.ui.button(
+                label="No",
+                style=discord.ButtonStyle.danger,
+                custom_id=f"welcome.card.bool:{question.qid}:no",
+            )
+            async def no(  # type: ignore[override]
+                self, interaction: discord.Interaction, _: discord.ui.Button
+            ) -> None:
+                await submit(interaction, "No")
+
+        return BoolView()
+
+    def _select_view(self, question: SheetQuestionRecord) -> discord.ui.View | None:
+        options = parse_values_list(question.validate)
+        if not options:
+            options = [
+                part.strip()
+                for part in (question.note or "").split(",")
+                if part.strip()
+            ]
+        if not options:
+            return None
+
+        qtype = (question.qtype or "").lower()
+        max_values = 1
+        if qtype.startswith("multi-select"):
+            max_values = 3
+            parts = [token for token in qtype.split("-") if token]
+            for token in reversed(parts):
+                if token.isdigit():
+                    try:
+                        max_values = max(1, int(token))
+                    except (TypeError, ValueError):
+                        max_values = 3
+                    break
+        max_values = min(max_values, len(options)) or 1
+
+        session = self
+
+        async def submit(interaction: discord.Interaction, values: list[str]) -> None:
+            if not session._is_owner(getattr(interaction, "user", None)):
+                try:
+                    await interaction.response.send_message(
+                        "Only the ticket owner can answer.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+                return
+            try:
+                await interaction.response.defer()
+            except discord.InteractionResponded:
+                pass
+            payload: Any
+            if max_values > 1:
+                payload = list(values)
+            else:
+                payload = values[0] if values else ""
+            await session._store_answer_and_advance(question, payload)
+
+        class SelectPrompt(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+                self.add_item(self._build_select())
+
+            def _build_select(self) -> discord.ui.Select:
+                class AnswerSelect(discord.ui.Select):
+                    async def callback(self, interaction: discord.Interaction) -> None:
+                        await submit(interaction, list(self.values))
+
+                select = AnswerSelect(
+                    placeholder="Select…",
+                    min_values=1,
+                    max_values=max_values,
+                    options=[
+                        discord.SelectOption(label=option, value=option)
+                        for option in options
+                    ],
+                )
+                return select
+
+        return SelectPrompt()
+
+    async def _handle_enter(self, interaction: discord.Interaction) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        self._waiting = True
+        owner_name = self._owner_display_name()
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                label=f"Waiting for {owner_name}…",
+                disabled=True,
+                style=discord.ButtonStyle.secondary,
+            )
+        )
+        try:
+            await interaction.response.edit_message(view=view)
+        except discord.InteractionResponded:
+            await interaction.edit_original_response(view=view)
+        self._log_event("⌛", "waiting")
+
+    def _value_tokens(self, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if isinstance(value, Mapping):
+            tokens: list[str] = []
+            label = value.get("label") or value.get("value")
+            if isinstance(label, str) and label.strip():
+                tokens.append(label.strip())
+            nested = value.get("values")
+            if isinstance(nested, Iterable) and not isinstance(nested, (str, bytes, bytearray)):
+                for item in nested:
+                    tokens.extend(self._value_tokens(item))
+            return tokens
+        if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray)):
+            tokens: list[str] = []
+            for item in value:
+                tokens.extend(self._value_tokens(item))
+            return tokens
+        text = str(value).strip()
+        return [text] if text else []
+
+    def _value_for_summary(self, value: Any) -> str:
+        tokens = self._value_tokens(value)
+        if tokens:
+            return ", ".join(tokens)
+        return str(value)
+
+    def _value_for_store(self, value: Any) -> str:
+        tokens = self._value_tokens(value)
+        if tokens:
+            return ", ".join(tokens)
+        return str(value)
+
+    def _answers_by_qid(self) -> dict[str, Any]:
+        return dict(self._answers)
+
+    async def _store_answer_and_advance(
+        self,
+        question: SheetQuestionRecord,
+        value: Any,
+        *,
+        source_message_id: int | None = None,
+    ) -> None:
+        self._answers[question.qid] = value
+        if question not in self._answer_order:
+            self._answer_order.append(question)
+        str_value = self._value_for_store(value)
+        try:
+            self.controller._record_rolling_answer(self.thread_id, question, str_value)
+        except Exception:
+            pass
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if (
+            captured is not None
+            and self.thread_id is not None
+            and source_message_id is not None
+        ):
+            try:
+                captured.setdefault(int(self.thread_id), []).append(int(source_message_id))
+            except Exception:
+                pass
+        self._log_event("✅", "answer")
+        answers_by_qid = self._answers_by_qid()
+        try:
+            jump = rules.next_index_by_rules(
+                self._current_index, list(self._steps), answers_by_qid
+            )
+        except Exception:
+            jump = None
+        if jump is None:
+            self._current_index += 1
+        else:
+            self._current_index = jump
+        self._current_question = None
+        self._waiting = False
+        await self._render_step()
+
+    async def handle_message(self, message: discord.Message) -> bool:
+        if self._closed or not self._waiting or self._current_question is None:
+            return False
+        if self.thread_id is not None:
+            channel_identifier = getattr(message.channel, "id", None)
+            try:
+                if int(channel_identifier) != self.thread_id:
+                    return False
+            except (TypeError, ValueError):
+                return False
+        if not self._is_owner(message.author):
+            return False
+        raw = (message.content or "").strip()
+        question = self._current_question
+        ok, cleaned, hint = self._validate(question, raw)
+        if not ok:
+            if hint:
+                await self.card.hint(hint)
+            self._log_event("❌", "invalid", detail=hint)
+            return True
+        await self._store_answer_and_advance(
+            question,
+            cleaned,
+            source_message_id=getattr(message, "id", None),
+        )
+        return True
+
+    def _log_event(self, emoji: str, event: str, *, detail: str | None = None) -> None:
+        if self.thread_id is None:
+            return
+        guild_obj = self.guild or getattr(self.thread, "guild", None)
+        launch_log.info(
+            "%s Onboarding — %s • user=%s • thread=%s • qid=%s%s",
+            emoji,
+            event,
+            user_label(guild_obj, self.owner_id),
+            channel_label(guild_obj, self.thread_id),
+            getattr(self._current_question, "qid", "unknown"),
+            f" • {detail}" if detail else "",
+        )
+
+    async def _finish(self) -> None:
+        self._current_question = None
+        message = await self.card.ensure()
+        summary = self._summary_lines()
+        content = "**Onboarding — Completed**"
+        if summary:
+            content += "\n" + "\n".join(summary)
+        try:
+            await message.edit(content=content, view=None)
+        except Exception:
+            pass
+        await self._cleanup_captured_messages()
+        self._closed = True
+        self.controller._complete_rolling(self.thread_id)
+
+    async def _cleanup_captured_messages(self) -> None:
+        if self.thread_id is None:
+            return
+        if not get_onboarding_cleanup_after_summary():
+            return
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if not isinstance(captured, dict):
+            return
+        thread_key = int(self.thread_id)
+        message_ids = list(captured.get(thread_key, []))
+        if not message_ids:
+            captured.pop(thread_key, None)
+            return
+        fetcher = getattr(self.thread, "fetch_message", None)
+        if not callable(fetcher):
+            captured.pop(thread_key, None)
+            return
+        for message_id in message_ids:
+            try:
+                fetched = await fetcher(message_id)
+            except Exception:
+                continue
+            try:
+                await fetched.delete()
+            except Exception:
+                pass
+        captured.pop(thread_key, None)
+
+    def _validate(
+        self, question: SheetQuestionRecord, value: str
+    ) -> tuple[bool, str, str | None]:
+        if (question.qtype or "").lower().startswith("number"):
+            return self._validate_number(question, value)
+        return self._validate_text(question, value)
+
+    def _validate_text(
+        self, question: SheetQuestionRecord, value: str
+    ) -> tuple[bool, str, str | None]:
+        cleaned = value.strip()
+        maxlen = question.maxlen or 0
+        if maxlen and len(cleaned) > maxlen:
+            return False, cleaned, f"Max {maxlen} characters."
+        validate = (question.validate or "").strip()
+        if validate.lower().startswith("regex:"):
+            pattern = validate.split(":", 1)[1].strip()
+            if pattern:
+                try:
+                    if not re.fullmatch(pattern, cleaned):
+                        return False, cleaned, "Format doesn’t match expected pattern."
+                except re.error:
+                    log.warning(
+                        "rolling_card: invalid regex",
+                        extra={"qid": question.qid, "pattern": pattern},
+                    )
+        return True, cleaned, None
+
+    def _validate_number(
+        self, question: SheetQuestionRecord, value: str
+    ) -> tuple[bool, str, str | None]:
+        cleaned = value.strip()
+        if not cleaned:
+            return False, cleaned, "Numbers only (e.g., 71)."
+        enforce_int, min_value, max_value, step = self._parse_numeric_bounds(question.validate)
+        try:
+            number = int(cleaned) if enforce_int else float(cleaned)
+        except ValueError:
+            return False, cleaned, "Numbers only (e.g., 71)."
+        if (min_value is not None and number < min_value) or (
+            max_value is not None and number > max_value
+        ):
+            if min_value is not None and max_value is not None:
+                return (
+                    False,
+                    cleaned,
+                    f"Number must be between {self._fmt_number(min_value, enforce_int)} and {self._fmt_number(max_value, enforce_int)}.",
+                )
+            if min_value is not None:
+                return (
+                    False,
+                    cleaned,
+                    f"Number must be at least {self._fmt_number(min_value, enforce_int)}.",
+                )
+            return (
+                False,
+                cleaned,
+                f"Number must be at most {self._fmt_number(max_value, enforce_int)}.",
+            )
+        if step and min_value is not None:
+            base = min_value
+        else:
+            base = 0
+        if step:
+            remainder = (number - base) / step
+            if not math.isclose(remainder, round(remainder), rel_tol=1e-9, abs_tol=1e-9):
+                return False, cleaned, f"Number must increase by steps of {self._fmt_number(step, enforce_int)}."
+        return True, cleaned, None
+
+    @staticmethod
+    def _fmt_number(value: float, enforce_int: bool) -> str:
+        if enforce_int:
+            return str(int(value))
+        return ("%g" % value).rstrip("0").rstrip(".") if isinstance(value, float) else str(value)
+
+    @staticmethod
+    def _parse_numeric_bounds(
+        validate: str | None,
+    ) -> tuple[bool, float | None, float | None, float | None]:
+        if not validate:
+            return False, None, None, None
+        text = validate.strip()
+        enforce_int = text.lower().startswith("int")
+        remainder = text
+        if ":" in text:
+            prefix, suffix = text.split(":", 1)
+            if prefix.lower() == "int":
+                remainder = suffix
+        tokens = re.split(r"[;,]", remainder)
+        min_value: float | None = None
+        max_value: float | None = None
+        step: float | None = None
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+            match = re.match(r"(?i)(min|max|step)\s*=\s*(-?\d+(?:\.\d+)?)", token)
+            if not match:
+                continue
+            key = match.group(1).lower()
+            try:
+                value = float(match.group(2))
+            except ValueError:
+                continue
+            if key == "min":
+                min_value = value
+            elif key == "max":
+                max_value = value
+            elif key == "step":
+                step = value
+        return enforce_int, min_value, max_value, step
 async def locate_welcome_message(thread: discord.Thread) -> discord.Message | None:
     """Return the welcome greeting message for ``thread`` when available."""
 
@@ -169,6 +789,8 @@ class BaseWelcomeController:
         self.flow = flow
         self._threads: Dict[int, discord.Thread] = {}
         self._questions: Dict[int, list[Question]] = {}
+        self.questions_by_thread = self._questions
+        self.answers_by_thread: Dict[int, dict[str, Any]] = {}
         self._select_messages: Dict[int, discord.Message] = {}
         self._preview_messages: Dict[int, discord.Message] = {}
         self._preview_logged: set[int] = set()
@@ -277,6 +899,221 @@ class BaseWelcomeController:
 
         return self._target_users.get(thread_id)
 
+    @staticmethod
+    def _question_key(question: Question | dict[str, Any]) -> str:
+        if hasattr(question, "qid"):
+            value = getattr(question, "qid")
+            return str(value)
+        if isinstance(question, dict):
+            candidate = question.get("id") or question.get("qid")
+            if candidate is not None:
+                return str(candidate)
+        return ""
+
+    def _question_meta(self, question: Question | dict[str, Any]) -> dict[str, Any]:
+        meta: dict[str, Any] = {
+            "qid": self._question_key(question),
+            "label": "",
+            "type": "",
+            "validate": None,
+            "help": None,
+        }
+        if isinstance(question, dict):
+            meta["label"] = str(question.get("label") or question.get("text") or "")
+            meta["type"] = str(question.get("type") or "")
+            meta["validate"] = question.get("validate")
+            meta["help"] = question.get("help")
+        else:
+            meta["label"] = str(getattr(question, "label", ""))
+            meta["type"] = str(getattr(question, "type", ""))
+            meta["validate"] = getattr(question, "validate", None)
+            meta["help"] = getattr(question, "help", None)
+        return meta
+
+    def _has_sheet_regex(self, meta: dict[str, Any]) -> bool:
+        return bool(_sheet_regex(meta))
+
+    def validate_answer(self, meta: dict[str, Any], raw: str) -> tuple[bool, str | None, str | None]:
+        return validate_answer(meta, raw)
+
+    async def _send_validation_error(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int,
+        meta: dict[str, Any],
+        message: str | None,
+    ) -> None:
+        label = meta.get("label") or meta.get("qid") or "This question"
+        notice = message or "Input does not match the required format."
+        await _safe_ephemeral(interaction, f"⚠️ **{label}** • {notice}")
+
+    def _answer_for(self, thread_id: int, key: str) -> Any:
+        answers = self.answers_by_thread.get(thread_id)
+        if answers and key in answers:
+            return answers[key]
+        session = store.get(thread_id)
+        if session and session.answers:
+            return session.answers.get(key)
+        return None
+
+    def _answer_present(self, question: Question | dict[str, Any], value: Any) -> bool:
+        if value is None:
+            return False
+        qtype = getattr(question, "type", None)
+        if isinstance(question, dict):
+            qtype = question.get("type")
+        if qtype in SELECT_TYPES:
+            return _has_select_answer(value)
+        if qtype == "number":
+            return value is not None
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (int, float)):
+            return True
+        if isinstance(value, dict):
+            return bool(value)
+        if isinstance(value, Iterable):
+            return any(True for _ in value)
+        return bool(value)
+
+    async def set_answer(self, thread_id: int, key: str, value: Any) -> None:
+        answers = self.answers_by_thread.setdefault(thread_id, {})
+        if value is None or (isinstance(value, str) and not value.strip()):
+            answers.pop(key, None)
+        elif isinstance(value, (list, tuple)) and not value:
+            answers.pop(key, None)
+        elif isinstance(value, dict) and not value:
+            answers.pop(key, None)
+        else:
+            answers[key] = value
+
+        session = store.get(thread_id)
+        if session is not None:
+            session.answers = session.answers or {}
+            if value is None or (isinstance(value, str) and not value.strip()):
+                session.answers.pop(key, None)
+            elif isinstance(value, (list, tuple)) and not value:
+                session.answers.pop(key, None)
+            elif isinstance(value, dict) and not value:
+                session.answers.pop(key, None)
+            else:
+                session.answers[key] = value
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    self._questions.get(thread_id, []), session.answers
+                )
+            except Exception:
+                log.warning("failed to recompute visibility during inline capture", exc_info=True)
+
+    def has_answer(self, thread_id: int, question: Question | dict[str, Any]) -> bool:
+        key = self._question_key(question)
+        if not key:
+            return False
+        value = self._answer_for(thread_id, key)
+        return self._answer_present(question, value)
+
+    def is_finished(self, thread_id: int, step: int) -> bool:
+        questions = self._questions.get(thread_id) or []
+        return step >= len(questions)
+
+    def render_step(self, thread_id: int, step: int) -> str:
+        questions = self._questions.get(thread_id) or []
+        if not questions:
+            return "No onboarding questions are configured for this flow yet."
+        if step < 0:
+            step = 0
+        if step >= len(questions):
+            step = len(questions) - 1
+        question = questions[step]
+        label = getattr(question, "label", None) or str(question)
+        key = self._question_key(question)
+        stored = self._answer_for(thread_id, key)
+        formatted = _preview_value_for_question(question, stored)
+        if formatted:
+            return f"{label}\n\nCurrent answer: {formatted}"
+        return label
+
+    async def finish_inline_wizard(
+        self,
+        thread_id: int,
+        interaction: discord.Interaction,
+        *,
+        message: discord.Message | None = None,
+    ) -> None:
+        answers = self.answers_by_thread.get(thread_id, {})
+        if message is None:
+            message = getattr(interaction, "message", None)
+        notice = "✅ Collected. Posting summary…"
+        try:
+            if interaction is not None and not interaction.response.is_done():
+                await interaction.response.edit_message(content=notice, view=None)
+            elif message is not None:
+                await message.edit(content=notice, view=None)
+        except Exception:
+            log.warning("failed to update wizard completion message", exc_info=True)
+
+        thread: discord.Thread | None = None
+        if message is not None:
+            channel = getattr(message, "channel", None)
+            if isinstance(channel, discord.Thread):
+                thread = channel
+        if thread is None:
+            thread = self._threads.get(thread_id)
+        if thread is None:
+            return
+
+        session = store.get(thread_id)
+        visibility = None
+        if session is not None:
+            session.answers = dict(answers)
+            visibility = session.visibility
+        else:
+            session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+            session.answers = dict(answers)
+            visibility = session.visibility
+
+        try:
+            summary_author = self._resolve_summary_author(thread, interaction)
+        except Exception:
+            log.warning("failed to resolve summary author; falling back to thread owner", exc_info=True)
+            summary_author = getattr(thread, "owner", None) or interaction.user
+
+        schema = session.schema_hash if session else schema_hash(self.flow)
+        summary_embed = build_summary_embed(
+            self.flow,
+            dict(answers),
+            summary_author,
+            schema or "",
+            visibility,
+        )
+
+        recruiter_ids = list(getattr(self, "recruiter_role_ids", []) or [])
+        if not recruiter_ids:
+            recruiter_ids = list(getattr(self, "RECRUITER_ROLE_IDS", []) or [])
+        mention_text = " ".join(f"<@&{int(role_id)}>" for role_id in recruiter_ids if role_id)
+        allowed_mentions = discord.AllowedMentions(roles=True, users=False, everyone=False)
+        try:
+            await thread.send(
+                content=mention_text or None,
+                embed=summary_embed,
+                allowed_mentions=allowed_mentions if mention_text else None,
+            )
+        except Exception:
+            log.warning("failed to post onboarding summary", exc_info=True)
+        else:
+            await logs.send_welcome_log(
+                "info",
+                result="completed",
+                view="inline",
+                source=self._sources.get(thread_id, "unknown"),
+                schema=session.schema_hash if session else None,
+                details=_final_fields(self._questions.get(thread_id, []), dict(answers)),
+                **self._log_fields(thread_id, actor=getattr(interaction, "user", None)),
+            )
+
+        self.answers_by_thread.pop(thread_id, None)
+        self._cleanup_session(thread_id)
+
     def _log_fields(
         self,
         thread_id: int,
@@ -375,7 +1212,7 @@ class BaseWelcomeController:
             await self._start_select_step(thread, session)
             return
 
-        store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
+        store.set_pending_step(thread_id, {"kind": "inline", "index": 0})
         intro = self._modal_intro_text()
         view = panels.OpenQuestionsPanelView(controller=self, thread_id=thread_id)
         message_id = self._panel_messages.get(thread_id)
@@ -625,6 +1462,131 @@ class BaseWelcomeController:
     def make_next_button(self, thread_id: int, next_idx: int) -> NextStepView:
         return NextStepView(self, thread_id, next_idx)
 
+    async def render_inline_step(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int,
+        *,
+        index: int | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["view"] = "inline"
+        data = getattr(interaction, "data", None)
+        if isinstance(data, dict):
+            diag_state["custom_id"] = data.get("custom_id")
+        target_user_id = self._target_users.get(thread_id)
+        diag_state["target_user_id"] = target_user_id
+        diag_state["ambiguous_target"] = target_user_id is None
+
+        response = getattr(interaction, "response", None)
+        response_done = False
+        if response is not None:
+            is_done = getattr(response, "is_done", None)
+            if callable(is_done):
+                try:
+                    response_done = bool(is_done())
+                except Exception:
+                    response_done = False
+            elif isinstance(is_done, bool):
+                response_done = is_done
+        if response_done:
+            diag_state["response_is_done"] = True
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_skipped",
+                    skip_reason="interaction_already_responded",
+                    **diag_state,
+                )
+            return
+
+        session = store.get(thread_id)
+        if session is None:
+            session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+
+        try:
+            questions_for_thread = await self.get_or_load_questions(thread_id, session=session)
+        except Exception:
+            log.warning("failed to load questions for inline wizard", exc_info=True)
+            raise
+
+        if not questions_for_thread:
+            raise RuntimeError("no questions available for inline wizard")
+
+        if not session.visibility:
+            try:
+                session.visibility = rules.evaluate_visibility(
+                    questions_for_thread,
+                    session.answers,
+                )
+            except Exception:
+                session.visibility = {}
+
+        pending = session.pending_step or {}
+        if index is None:
+            raw_index = pending.get("index", 0) if isinstance(pending, dict) else 0
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                index = 0
+        total_questions = len(questions_for_thread)
+        if total_questions <= 0:
+            raise RuntimeError("no inline steps available")
+        if index < 0:
+            index = 0
+        if index >= total_questions:
+            index = total_questions - 1
+
+        store.set_pending_step(thread_id, {"kind": "inline", "index": index})
+
+        try:
+            content = self.render_step(thread_id, index)
+        except Exception:
+            log.warning("failed to render inline step", exc_info=True)
+            raise
+
+        wizard = panels.OnboardWizard(self, thread_id, step=index)
+
+        diag_state["step_index"] = index
+        diag_state["total_steps"] = total_questions
+
+        try:
+            await interaction.response.send_message(content=content, view=wizard)
+        except Exception as exc:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_failed",
+                    exception_type=exc.__class__.__name__,
+                    exception_message=str(exc),
+                    **diag_state,
+                )
+            raise
+        else:
+            if diag.is_enabled():
+                await diag.log_event("info", "inline_wizard_posted", **diag_state)
+
+        try:
+            message = await interaction.original_response()
+        except Exception:
+            message = None
+        if message is not None:
+            wizard.attach(message)
+
+        log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
+        if context is not None:
+            log_payload.update(context)
+        log_payload.setdefault("source", self._sources.get(thread_id, "unknown"))
+        await logs.send_welcome_log(
+            "debug",
+            view="inline",
+            result="launched",
+            index=index,
+            **log_payload,
+        )
+
     async def finish_onboarding(
         self,
         interaction: discord.Interaction,
@@ -671,49 +1633,7 @@ class BaseWelcomeController:
         *,
         context: dict[str, Any] | None = None,
     ) -> None:
-        diag_state = diag.interaction_state(interaction)
-        diag_state["thread_id"] = thread_id
-        diag_state["custom_id"] = panels.OPEN_QUESTIONS_CUSTOM_ID
-        target_user_id = self._target_users.get(thread_id)
-        diag_state["target_user_id"] = target_user_id
-        diag_state["ambiguous_target"] = target_user_id is None
-
-        modal = self.build_modal_stub(thread_id)
-        diag_state["modal_index"] = getattr(modal, "step_index", getattr(modal, "_c1c_index", 0))
-        diag_state["modal_total"] = getattr(modal, "total_steps", None)
-
-        try:
-            await interaction.response.send_modal(modal)
-        except discord.InteractionResponded:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "modal_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            return
-        except Exception as exc:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "error",
-                    "modal_launch_error",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
-                )
-            raise
-        else:
-            if diag.is_enabled():
-                await diag.log_event("info", "modal_launch_sent", **diag_state)
-
-        await logs.send_welcome_log(
-            "debug",
-            view="modal",
-            result="launched",
-            index=diag_state.get("modal_index"),
-            **self._log_fields(thread_id, actor=interaction.user),
-        )
+        await self.render_inline_step(interaction, thread_id, context=context)
 
     async def _rehydrate_questions(
         self,
@@ -787,7 +1707,12 @@ class BaseWelcomeController:
         log_payload.setdefault("custom_id", panels.OPEN_QUESTIONS_CUSTOM_ID)
         log_payload["result"] = "restarted"
 
-        await _safe_ephemeral(interaction, "♻️ Restarting the onboarding form…")
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            log.warning("failed to defer restart notice", exc_info=True)
 
         await logs.send_welcome_log("info", **log_payload)
 
@@ -918,7 +1843,7 @@ class BaseWelcomeController:
         total_before = len(modals_before)
 
         if total_before and index >= total_before:
-            store.set_pending_step(thread_id, {"kind": "modal", "index": 0})
+            store.set_pending_step(thread_id, {"kind": "inline", "index": 0})
             await logs.send_welcome_log(
                 "debug",
                 view="modal",
@@ -938,37 +1863,34 @@ class BaseWelcomeController:
             state = _visible_state(session.visibility, question.qid)
             required = bool(question.required) and state != "optional"
             answer = raw_value.strip()
-            if question.type == "number":
-                if not answer:
-                    if required:
-                        await _safe_ephemeral(
-                            interaction,
-                            f"⚠️ **{question.label}** is required.",
-                        )
-                        return
-                    session.answers.pop(question.qid, None)
-                    continue
-                try:
-                    parsed = int(answer)
-                except ValueError:
-                    await _safe_ephemeral(
-                        interaction,
-                        f"⚠️ **{question.label}** needs to be a whole number.",
-                    )
-                    return
-                session.answers[question.qid] = parsed
-                continue
-
             if required and not answer:
                 await _safe_ephemeral(
                     interaction,
                     f"⚠️ **{question.label}** is required.",
                 )
                 return
-            if answer:
-                session.answers[question.qid] = answer
-            else:
-                session.answers.pop(question.qid, None)
+
+            meta = self._question_meta(question)
+
+            if not answer:
+                await self.set_answer(thread_id, question.qid, None)
+                continue
+
+            ok, cleaned, err = self.validate_answer(meta, answer)
+            if not ok:
+                await self._send_validation_error(interaction, thread_id, meta, err)
+                return
+
+            if diag.is_enabled():
+                await diag.log_event(
+                    "info",
+                    "welcome_validator_branch",
+                    qid=meta.get("qid"),
+                    have_regex=self._has_sheet_regex(meta),
+                    type=meta.get("type"),
+                )
+
+            await self.set_answer(thread_id, question.qid, cleaned)
 
         session.visibility = rules.evaluate_visibility(
             questions_for_thread,
@@ -1025,7 +1947,7 @@ class BaseWelcomeController:
             )
             return
 
-        store.set_pending_step(thread_id, {"kind": "modal", "index": next_index})
+        store.set_pending_step(thread_id, {"kind": "inline", "index": next_index})
         await _safe_ephemeral(
             interaction,
             "✅ Saved! Look for the next prompt in the thread.",
@@ -1286,6 +2208,7 @@ class BaseWelcomeController:
         store.end(thread_id)
         self._threads.pop(thread_id, None)
         self._questions.pop(thread_id, None)
+        self.answers_by_thread.pop(thread_id, None)
         self._select_messages.pop(thread_id, None)
         self._preview_messages.pop(thread_id, None)
         self._sources.pop(thread_id, None)

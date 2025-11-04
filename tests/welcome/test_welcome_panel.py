@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 
 from modules.onboarding.controllers import welcome_controller as welcome
@@ -52,6 +53,20 @@ def test_panel_button_launch_posts_wizard_message(monkeypatch: pytest.MonkeyPatc
         controller.render_step = MagicMock(return_value="Step 1")
 
         thread_id = 7777
+        controller = SimpleNamespace()
+        question = {"label": "Question", "qid": "qid", "type": "short"}
+
+        async def _load(tid: int) -> None:
+            controller.questions_by_thread[tid] = [question]
+
+        controller.get_or_load_questions = AsyncMock(side_effect=_load)
+        controller.render_step = MagicMock(return_value="Question text")
+        controller.questions_by_thread = {}
+        controller.answers_by_thread = {}
+        controller.has_answer = MagicMock(return_value=False)
+        controller._question_key = lambda q: q.get("qid", "")
+        controller._answer_for = MagicMock(return_value=None)
+
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
 
         response = SimpleNamespace()
@@ -108,6 +123,15 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         controller.render_step = MagicMock(return_value="Step 1")
 
         thread_id = 4242
+        controller = SimpleNamespace()
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller.render_step = MagicMock(return_value="Question text")
+        controller.questions_by_thread = {thread_id: [{"label": "Question", "qid": "qid", "type": "short"}]}
+        controller.answers_by_thread = {}
+        controller.has_answer = MagicMock(return_value=False)
+        controller._question_key = lambda question: question.get("qid", "")
+        controller._answer_for = MagicMock(return_value=None)
+
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
         ensure_mock = AsyncMock()
         monkeypatch.setattr(view, "_ensure_error_notice", ensure_mock)

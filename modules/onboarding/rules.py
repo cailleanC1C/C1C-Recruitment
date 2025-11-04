@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable as IterableABC, Mapping as MappingABC, Sequence as SequenceABC
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from shared.sheets.onboarding_questions import Question
 
@@ -163,3 +163,143 @@ def _apply_action(states: VisibilityState, qid: str, action: str) -> None:
         return
     if action == _OPTIONAL_ACTION and _SKIP_PRIORITY[current] < _SKIP_PRIORITY[_OPTIONAL_ACTION]:
         states[qid]["state"] = _OPTIONAL_ACTION
+
+
+_COND_RE = re.compile(
+    r"^if\s+(?P<qid>[A-Za-z0-9_]+)\s+(?P<op>in|=|!=|<=|>=|<|>)\s+(?P<rhs>.+?)(?:\s+goto\s+(?P<goto>[0-9]+[A-Za-z]?))?(?:\s+else\s+goto\s+(?P<goto_else>[0-9]+[A-Za-z]?))?$",
+    re.IGNORECASE,
+)
+
+_RANGE_SKIP_RE = re.compile(
+    r"^skip\s+order>=(?P<lo>[0-9]+)\s+and\s+order<(?P<hi>[0-9]+)$",
+    re.IGNORECASE,
+)
+
+
+def _norm(value: Any) -> str:
+    """Normalize values to trimmed strings for comparison."""
+
+    return str(value).strip()
+
+
+def _parse_rhs_list(text: str) -> list[str]:
+    """Accept '[A, B]' or 'A,B' → ['A','B'] (trimmed)."""
+
+    cleaned = (text or "").strip()
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        cleaned = cleaned[1:-1]
+    return [token.strip() for token in cleaned.split(",") if token.strip()]
+
+
+def next_index_by_rules(
+    current_idx: int, questions: List[Any], answers_by_qid: Dict[str, Any]
+) -> Optional[int]:
+    """Return the absolute index to jump to based on the sheet rule, if any."""
+
+    if current_idx < 0 or current_idx >= len(questions):
+        return None
+    question = questions[current_idx]
+    rule = str(getattr(question, "rules", "") or "").strip()
+    if not rule:
+        return None
+
+    if rule.lower().startswith("skip "):
+        if _RANGE_SKIP_RE.match(rule):
+            return None
+
+    match = _COND_RE.match(rule)
+    if not match:
+        return None
+
+    qid = match.group("qid")
+    op = match.group("op").lower()
+    rhs = match.group("rhs")
+    goto = match.group("goto")
+    goto_else = match.group("goto_else")
+
+    if not qid:
+        return None
+
+    value = answers_by_qid.get(qid) or answers_by_qid.get(qid.lower())
+    if value is None:
+        return None
+
+    candidates = _candidate_tokens(value)
+    if not candidates:
+        return None
+
+    if _condition_satisfied(op, candidates, rhs):
+        return _index_for_order(questions, goto)
+    return _index_for_order(questions, goto_else)
+
+
+def _candidate_tokens(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, MappingABC):
+        tokens: list[str] = []
+        label = value.get("label") or value.get("value")
+        if isinstance(label, str) and label.strip():
+            tokens.append(label.strip())
+        nested = value.get("values")
+        if isinstance(nested, IterableABC):
+            tokens.extend(_candidate_tokens(list(nested)))
+        return tokens
+    if isinstance(value, IterableABC) and not isinstance(value, (bytes, bytearray)):
+        tokens: list[str] = []
+        for item in value:
+            tokens.extend(_candidate_tokens(item))
+        return tokens
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _condition_satisfied(op: str, candidates: list[str], rhs: str) -> bool:
+    try:
+        if op == "in":
+            options = _parse_rhs_list(rhs)
+            return any(candidate in options for candidate in candidates)
+
+        rhs_token = _norm(rhs)
+        if op == "=":
+            return any(candidate == rhs_token for candidate in candidates)
+        if op == "!=":
+            return all(candidate != rhs_token for candidate in candidates)
+
+        rhs_value = float(rhs_token)
+        for candidate in candidates:
+            try:
+                value = float(candidate)
+            except Exception:
+                continue
+            if op == "<" and value < rhs_value:
+                return True
+            if op == "<=" and value <= rhs_value:
+                return True
+            if op == ">" and value > rhs_value:
+                return True
+            if op == ">=" and value >= rhs_value:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _index_for_order(questions: List[Any], order_token: Optional[str]) -> Optional[int]:
+    if not order_token:
+        return None
+    needle = str(order_token).strip().lower()
+    if not needle:
+        return None
+    for index, question in enumerate(questions):
+        order_value = getattr(question, "order_raw", None)
+        if order_value is None:
+            order_value = getattr(question, "order", None)
+        if order_value is None:
+            continue
+        if str(order_value).strip().lower() == needle:
+            return index
+    return None
