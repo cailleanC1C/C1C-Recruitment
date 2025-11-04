@@ -4,7 +4,7 @@ from discord.ext import commands
 
 from modules.onboarding.schema import REQUIRED_HEADERS, load_welcome_questions
 from shared.config import cfg
-from shared.logs import log
+from shared.logging import log
 
 
 class OnboardingOps(commands.Cog):
