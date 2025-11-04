@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 
 from modules.onboarding.controllers import welcome_controller as welcome
@@ -40,7 +41,7 @@ def test_locate_welcome_message_skips_thread_fetch(monkeypatch: pytest.MonkeyPat
     asyncio.run(runner())
 
 
-def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)
         monkeypatch.setattr(panels.logs, "send_welcome_log", AsyncMock())
@@ -53,17 +54,27 @@ def test_panel_button_launch_sends_modal(monkeypatch: pytest.MonkeyPatch) -> Non
         controller._questions = {}
 
         thread_id = 7777
+        controller = SimpleNamespace()
+        question = {"label": "Question", "qid": "qid", "type": "short"}
+
+        async def _load(tid: int) -> None:
+            controller.questions_by_thread[tid] = [question]
+
+        controller.get_or_load_questions = AsyncMock(side_effect=_load)
+        controller.render_step = MagicMock(return_value="Question text")
+        controller.questions_by_thread = {}
+        controller.answers_by_thread = {}
+        controller.has_answer = MagicMock(return_value=False)
+        controller._question_key = lambda q: q.get("qid", "")
+        controller._answer_for = MagicMock(return_value=None)
+
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
 
         response = SimpleNamespace()
         response.is_done = MagicMock(return_value=False)
-
-        async def _defer(*_, **__):
-            response.is_done.return_value = True
-
-        response.defer = AsyncMock(side_effect=_defer)
-        response.send_modal = AsyncMock()
-        followup = SimpleNamespace(send=AsyncMock())
+        response.edit_message = AsyncMock()
+        followup_message = _DummyMessage(id=9876, edit=AsyncMock())
+        followup = SimpleNamespace(send=AsyncMock(return_value=followup_message))
         app_permissions = SimpleNamespace(
             send_messages=True,
             send_messages_in_threads=True,
@@ -106,17 +117,22 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         controller._questions = {}
 
         thread_id = 4242
+        controller = SimpleNamespace()
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller.render_step = MagicMock(return_value="Question text")
+        controller.questions_by_thread = {thread_id: [{"label": "Question", "qid": "qid", "type": "short"}]}
+        controller.answers_by_thread = {}
+        controller.has_answer = MagicMock(return_value=False)
+        controller._question_key = lambda question: question.get("qid", "")
+        controller._answer_for = MagicMock(return_value=None)
+
         view = panels.OpenQuestionsPanelView(controller=controller, thread_id=thread_id)
+        retry_mock = AsyncMock()
+        monkeypatch.setattr(view, "_post_retry_start", retry_mock)
 
         response = SimpleNamespace()
-        response.is_done = MagicMock(return_value=False)
-
-        async def _defer(*_, **__):
-            response.is_done.return_value = True
-
-        response.defer = AsyncMock(side_effect=_defer)
-        response.send_modal = AsyncMock()
-        response.send_message = AsyncMock()
+        response.is_done = MagicMock(return_value=True)
+        response.edit_message = AsyncMock(side_effect=discord.InteractionResponded(None))
         followup = SimpleNamespace(send=AsyncMock())
         app_permissions = SimpleNamespace(
             send_messages=True,
@@ -133,6 +149,7 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
             channel_id=thread_id,
             message=_DummyMessage(id=2222),
             app_permissions=app_permissions,
+            original_response=AsyncMock(),
         )
 
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)

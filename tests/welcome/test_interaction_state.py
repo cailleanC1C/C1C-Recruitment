@@ -58,7 +58,7 @@ def test_modal_launch_skips_when_response_done(monkeypatch: pytest.MonkeyPatch, 
 
         response = SimpleNamespace(
             is_done=MagicMock(return_value=True),
-            send_modal=AsyncMock(),
+            send_message=AsyncMock(),
         )
         followup = SimpleNamespace(send=AsyncMock())
         app_perms = SimpleNamespace(
@@ -79,11 +79,11 @@ def test_modal_launch_skips_when_response_done(monkeypatch: pytest.MonkeyPatch, 
 
         await controller._handle_modal_launch(thread_id, interaction)
 
-        assert response.send_modal.await_count == 0
+        assert response.send_message.await_count == 0
 
         events = _read_events(str(log_path))
-        skipped = [event for event in events if event.get("event") == "modal_launch_skipped"]
-        assert skipped, "expected modal_launch_skipped event"
+        skipped = [event for event in events if event.get("event") == "inline_launch_skipped"]
+        assert skipped, "expected inline_launch_skipped event"
         assert skipped[0].get("response_is_done") is True
 
         welcome.store.end(thread_id)

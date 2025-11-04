@@ -49,7 +49,7 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 | Folder             | Purpose                                                                     |
 | ------------------ | --------------------------------------------------------------------------- |
 | `docs/adr/`        | Architectural Decision Records (ADR-XXXX).                                  |
-| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Runbook, Troubleshooting, Watchers. |
+| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Runbook, WelcomeFlow, Troubleshooting, Watchers. |
 | `docs/contracts/`  | Long-lived standards (this contract).                                       |
 | `docs/guardrails/` | Guardrail & CI policy specs (e.g., `RepositoryGuardrails.md`).              |
 | `docs/compliance/` | Audit and guardrail reports (e.g., `REPORT_GUARDRAILS.md`).                 |
@@ -73,12 +73,17 @@ Status: Draft/Approved
 * Version bumps **only** when explicitly approved in the PR via `[approval]`.
 
 ### 3.5 Required PR blocks
+This part has to be followed to the point. it will break the PR if it is not followed correctly. 
 
 ```markdown
 [approval]
 version: vX.Y.Z          # optional; include only when approved
 footer_date: YYYY-MM-DD  # optional; include only when approved
 [/approval]
+
+**Instruction for Codex (do not include this header in commits):**
+At the end of the PR **body**, after all other sections, append the metadata block below **exactly**. 
+Do **not** add any text after it. It must be the **final lines** of the PR body so the workflow can parse it.
 
 [meta]
 labels: <labels here>
@@ -222,7 +227,7 @@ milestone: Harmonize v1.0
 * ☐ ADR filed (if architectural)?
 * ☐ ENV + Sheets in sync?
 * ☐ Excluded `AUDIT/` from scans/tests?
-* ☐ `[meta]` is the last lines in PR body?
+* ☐ `[meta]` is the last lines in PR body? and has instructions?
 
 ---
 
@@ -239,6 +244,9 @@ milestone: Harmonize v1.0
 - **Meta block syntax:**
 
 ```markdown
+**Instruction for Codex (do not include this header in commits):**
+At the end of the PR **body**, after all other sections, append the metadata block below **exactly**. 
+Do **not** add any text after it. It must be the **final lines** of the PR body so the workflow can parse it.
 [meta]
 labels: <comma-separated labels>
 milestone: Harmonize v1.0
@@ -331,4 +339,4 @@ Rules:
 
 ---
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-11-04 (v0.9.7)
