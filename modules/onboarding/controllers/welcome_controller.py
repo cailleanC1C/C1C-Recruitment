@@ -7,7 +7,7 @@ import logging
 import math
 import re
 import sys
-from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Sequence, cast
+from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Optional, Sequence, cast
 
 import discord
 from discord.ext import commands
@@ -16,6 +16,7 @@ from modules.onboarding import diag, logs, rules
 from modules.onboarding.schema import (
     Question as SheetQuestionRecord,
     load_welcome_questions,
+    parse_values_list,
 )
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
@@ -23,6 +24,7 @@ from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import RollingCard, panels
+from shared.config import get_onboarding_cleanup_after_summary
 from shared.sheets.onboarding_questions import Question, schema_hash
 from modules.common.logs import channel_label, user_label
 
@@ -179,20 +181,21 @@ class RollingCardSession:
         except (TypeError, ValueError):
             self.thread_id = None
         self._steps: list[SheetQuestionRecord] = [
-            question
-            for question in questions
-            if self._supports(question)
+            question for question in questions if self._supports(question)
         ]
         self._current_index = 0
         self._current_question: SheetQuestionRecord | None = None
-        self._answers: list[tuple[SheetQuestionRecord, str]] = []
+        self._answers: dict[str, Any] = {}
+        self._answer_order: list[SheetQuestionRecord] = []
         self._waiting = False
         self._closed = False
 
     @staticmethod
     def _supports(question: SheetQuestionRecord) -> bool:
         qtype = (question.qtype or "").lower()
-        return qtype.startswith("short") or qtype.startswith("paragraph") or qtype.startswith("number")
+        return qtype in {"bool"} or qtype.startswith(
+            ("short", "paragraph", "number", "single-select", "multi-select")
+        )
 
     def _owner_display_name(self) -> str:
         if self.owner is None:
@@ -231,6 +234,9 @@ class RollingCardSession:
             except Exception:
                 pass
         self.controller._complete_rolling(self.thread_id)
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if captured is not None and self.thread_id is not None:
+            captured.pop(int(self.thread_id), None)
 
     async def start(self) -> None:
         if self._closed:
@@ -252,7 +258,7 @@ class RollingCardSession:
         question = self._steps[self._current_index]
         self._current_question = question
         self._waiting = False
-        view = self._enter_view(question)
+        view = self._view_for_question(question)
         await self.card.render(
             self._current_index + 1,
             len(self._steps),
@@ -264,10 +270,23 @@ class RollingCardSession:
 
     def _summary_lines(self) -> list[str]:
         lines = []
-        for question, answer in self._answers:
+        for question in self._answer_order:
+            value = self._answers.get(question.qid)
+            if value is None:
+                continue
             label = question.label or question.qid
-            lines.append(f"• **{label}:** {answer}")
+            lines.append(f"• **{label}:** {self._value_for_summary(value)}")
         return lines
+
+    def _view_for_question(self, question: SheetQuestionRecord) -> discord.ui.View:
+        qtype = (question.qtype or "").lower()
+        if qtype == "bool":
+            return self._bool_view(question)
+        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
+            view = self._select_view(question)
+            if view is not None:
+                return view
+        return self._enter_view(question)
 
     def _enter_view(self, question: SheetQuestionRecord) -> discord.ui.View:
         session = self
@@ -287,6 +306,120 @@ class RollingCardSession:
                 await session._handle_enter(interaction)
 
         return EnterAnswerView()
+
+    def _bool_view(self, question: SheetQuestionRecord) -> discord.ui.View:
+        session = self
+
+        async def submit(interaction: discord.Interaction, choice: str) -> None:
+            if not session._is_owner(getattr(interaction, "user", None)):
+                try:
+                    await interaction.response.send_message(
+                        "Only the ticket owner can answer.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+                return
+            try:
+                await interaction.response.defer()
+            except discord.InteractionResponded:
+                pass
+            await session._store_answer_and_advance(question, choice)
+
+        class BoolView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+
+            @discord.ui.button(
+                label="Yes",
+                style=discord.ButtonStyle.success,
+                custom_id=f"welcome.card.bool:{question.qid}:yes",
+            )
+            async def yes(  # type: ignore[override]
+                self, interaction: discord.Interaction, _: discord.ui.Button
+            ) -> None:
+                await submit(interaction, "Yes")
+
+            @discord.ui.button(
+                label="No",
+                style=discord.ButtonStyle.danger,
+                custom_id=f"welcome.card.bool:{question.qid}:no",
+            )
+            async def no(  # type: ignore[override]
+                self, interaction: discord.Interaction, _: discord.ui.Button
+            ) -> None:
+                await submit(interaction, "No")
+
+        return BoolView()
+
+    def _select_view(self, question: SheetQuestionRecord) -> discord.ui.View | None:
+        options = parse_values_list(question.validate)
+        if not options:
+            options = [
+                part.strip()
+                for part in (question.note or "").split(",")
+                if part.strip()
+            ]
+        if not options:
+            return None
+
+        qtype = (question.qtype or "").lower()
+        max_values = 1
+        if qtype.startswith("multi-select"):
+            max_values = 3
+            parts = [token for token in qtype.split("-") if token]
+            for token in reversed(parts):
+                if token.isdigit():
+                    try:
+                        max_values = max(1, int(token))
+                    except (TypeError, ValueError):
+                        max_values = 3
+                    break
+        max_values = min(max_values, len(options)) or 1
+
+        session = self
+
+        async def submit(interaction: discord.Interaction, values: list[str]) -> None:
+            if not session._is_owner(getattr(interaction, "user", None)):
+                try:
+                    await interaction.response.send_message(
+                        "Only the ticket owner can answer.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+                return
+            try:
+                await interaction.response.defer()
+            except discord.InteractionResponded:
+                pass
+            payload: Any
+            if max_values > 1:
+                payload = list(values)
+            else:
+                payload = values[0] if values else ""
+            await session._store_answer_and_advance(question, payload)
+
+        class SelectPrompt(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+                self.add_item(self._build_select())
+
+            def _build_select(self) -> discord.ui.Select:
+                class AnswerSelect(discord.ui.Select):
+                    async def callback(self, interaction: discord.Interaction) -> None:
+                        await submit(interaction, list(self.values))
+
+                select = AnswerSelect(
+                    placeholder="Select…",
+                    min_values=1,
+                    max_values=max_values,
+                    options=[
+                        discord.SelectOption(label=option, value=option)
+                        for option in options
+                    ],
+                )
+                return select
+
+        return SelectPrompt()
 
     async def _handle_enter(self, interaction: discord.Interaction) -> None:
         if not self._is_owner(getattr(interaction, "user", None)):
@@ -313,6 +446,86 @@ class RollingCardSession:
             await interaction.edit_original_response(view=view)
         self._log_event("⌛", "waiting")
 
+    def _value_tokens(self, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        if isinstance(value, Mapping):
+            tokens: list[str] = []
+            label = value.get("label") or value.get("value")
+            if isinstance(label, str) and label.strip():
+                tokens.append(label.strip())
+            nested = value.get("values")
+            if isinstance(nested, Iterable) and not isinstance(nested, (str, bytes, bytearray)):
+                for item in nested:
+                    tokens.extend(self._value_tokens(item))
+            return tokens
+        if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray)):
+            tokens: list[str] = []
+            for item in value:
+                tokens.extend(self._value_tokens(item))
+            return tokens
+        text = str(value).strip()
+        return [text] if text else []
+
+    def _value_for_summary(self, value: Any) -> str:
+        tokens = self._value_tokens(value)
+        if tokens:
+            return ", ".join(tokens)
+        return str(value)
+
+    def _value_for_store(self, value: Any) -> str:
+        tokens = self._value_tokens(value)
+        if tokens:
+            return ", ".join(tokens)
+        return str(value)
+
+    def _answers_by_qid(self) -> dict[str, Any]:
+        return dict(self._answers)
+
+    async def _store_answer_and_advance(
+        self,
+        question: SheetQuestionRecord,
+        value: Any,
+        *,
+        source_message_id: int | None = None,
+    ) -> None:
+        self._answers[question.qid] = value
+        if question not in self._answer_order:
+            self._answer_order.append(question)
+        str_value = self._value_for_store(value)
+        try:
+            self.controller._record_rolling_answer(self.thread_id, question, str_value)
+        except Exception:
+            pass
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if (
+            captured is not None
+            and self.thread_id is not None
+            and source_message_id is not None
+        ):
+            try:
+                captured.setdefault(int(self.thread_id), []).append(int(source_message_id))
+            except Exception:
+                pass
+        self._log_event("✅", "answer")
+        answers_by_qid = self._answers_by_qid()
+        try:
+            jump = rules.next_index_by_rules(
+                self._current_index, list(self._steps), answers_by_qid
+            )
+        except Exception:
+            jump = None
+        if jump is None:
+            self._current_index += 1
+        else:
+            self._current_index = jump
+        self._current_question = None
+        self._waiting = False
+        await self._render_step()
+
     async def handle_message(self, message: discord.Message) -> bool:
         if self._closed or not self._waiting or self._current_question is None:
             return False
@@ -333,13 +546,11 @@ class RollingCardSession:
                 await self.card.hint(hint)
             self._log_event("❌", "invalid", detail=hint)
             return True
-        self._answers.append((question, cleaned))
-        self.controller._record_rolling_answer(self.thread_id, question, cleaned)
-        self._log_event("✅", "answer")
-        self._current_index += 1
-        self._current_question = None
-        self._waiting = False
-        await self._render_step()
+        await self._store_answer_and_advance(
+            question,
+            cleaned,
+            source_message_id=getattr(message, "id", None),
+        )
         return True
 
     def _log_event(self, emoji: str, event: str, *, detail: str | None = None) -> None:
@@ -363,9 +574,41 @@ class RollingCardSession:
         content = "**Onboarding — Completed**"
         if summary:
             content += "\n" + "\n".join(summary)
-        await message.edit(content=content, view=None)
+        try:
+            await message.edit(content=content, view=None)
+        except Exception:
+            pass
+        await self._cleanup_captured_messages()
         self._closed = True
         self.controller._complete_rolling(self.thread_id)
+
+    async def _cleanup_captured_messages(self) -> None:
+        if self.thread_id is None:
+            return
+        if not get_onboarding_cleanup_after_summary():
+            return
+        captured = getattr(self.controller, "_captured_msgs", None)
+        if not isinstance(captured, dict):
+            return
+        thread_key = int(self.thread_id)
+        message_ids = list(captured.get(thread_key, []))
+        if not message_ids:
+            captured.pop(thread_key, None)
+            return
+        fetcher = getattr(self.thread, "fetch_message", None)
+        if not callable(fetcher):
+            captured.pop(thread_key, None)
+            return
+        for message_id in message_ids:
+            try:
+                fetched = await fetcher(message_id)
+            except Exception:
+                continue
+            try:
+                await fetched.delete()
+            except Exception:
+                pass
+        captured.pop(thread_key, None)
 
     def _validate(
         self, question: SheetQuestionRecord, value: str
@@ -562,6 +805,7 @@ class BaseWelcomeController:
         self._button_sessions: Dict[str, Any] = {}
         self._rolling_sessions: Dict[int, RollingCardSession] = {}
         self._rolling_questions: Sequence[SheetQuestionRecord] | None = None
+        self._captured_msgs: Dict[int, list[int]] = {}
 
     async def start_session_from_button(
         self,

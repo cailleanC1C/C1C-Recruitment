@@ -117,3 +117,19 @@ def load_welcome_questions() -> List[Question]:
 
     questions.sort(key=lambda question: question.order_key)
     return questions
+
+
+_VALUES_PREFIX = re.compile(r"\bvalues\s*:\s*", re.IGNORECASE)
+
+
+def parse_values_list(spec: str) -> list[str]:
+    """Extract a comma-separated option list from a ``validate`` spec."""
+
+    spec = (spec or "").strip()
+    if not spec:
+        return []
+    match = _VALUES_PREFIX.search(spec)
+    if not match:
+        return []
+    body = spec[match.end() :]
+    return [part.strip() for part in body.split(",") if part.strip()]
