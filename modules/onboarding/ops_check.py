@@ -19,8 +19,12 @@ class OnboardingOps(commands.Cog):
         self._ops_registered = False
         self._fallback_registered = False
 
+        # Provide an explicit callback so discord.py can introspect the command
+        # signature when registering the group. Without a callable here the
+        # extension raises "Command signature requires at least 1 parameter(s)"
+        # during load.
         self._group = commands.Group(
-            self._onb_root,
+            callback=self._onb_root,
             name="onb",
             invoke_without_command=True,
             help="Operational helpers for onboarding questions.",
@@ -227,4 +231,9 @@ class OnboardingOps(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     cog = OnboardingOps(bot)
     await bot.add_cog(cog)
+    try:
+        bot.add_command(cog._group)
+    except Exception:
+        # The command may already exist (e.g. hot reload); ignore safely.
+        pass
     cog.configure_commands()
