@@ -48,6 +48,11 @@ def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> No
         monkeypatch.setattr(panels.rbac, "is_admin_member", lambda actor: False)
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
 
+        controller = MagicMock()
+        controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
+
         thread_id = 7777
         controller = SimpleNamespace()
         question = {"label": "Question", "qid": "qid", "type": "short"}
@@ -91,13 +96,9 @@ def test_panel_button_launch_posts_wizard(monkeypatch: pytest.MonkeyPatch) -> No
         await button.callback(interaction)
 
         controller.get_or_load_questions.assert_awaited_once_with(thread_id)
-        controller.render_step.assert_called_once_with(thread_id, 0)
-        response.edit_message.assert_awaited()
-        args, kwargs = followup.send.await_args
-        assert args[0] == "Question text"
-        assert isinstance(kwargs["view"], panels.OnboardWizard)
-        assert kwargs["wait"] is True
-        assert kwargs["view"].message is followup_message
+        controller.build_modal_stub.assert_called_once_with(thread_id)
+        response.defer.assert_not_awaited()
+        response.send_modal.assert_awaited_once_with("sentinel")
 
     asyncio.run(runner())
 
@@ -109,6 +110,11 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.setattr(panels.logs, "send_welcome_log", logs_mock)
         monkeypatch.setattr(panels.rbac, "is_admin_member", lambda actor: False)
         monkeypatch.setattr(panels.rbac, "is_recruiter", lambda actor: False)
+
+        controller = MagicMock()
+        controller.build_modal_stub = MagicMock(return_value="sentinel")
+        controller.get_or_load_questions = AsyncMock(return_value=None)
+        controller._questions = {}
 
         thread_id = 4242
         controller = SimpleNamespace()
@@ -149,10 +155,10 @@ def test_panel_button_denied_routes_followup(monkeypatch: pytest.MonkeyPatch) ->
         button = next(child for child in view.children if child.custom_id == panels.OPEN_QUESTIONS_CUSTOM_ID)
         await button.callback(interaction)
 
-        controller.get_or_load_questions.assert_not_awaited()
-        controller.render_step.assert_not_called()
-        response.edit_message.assert_not_awaited()
-        retry_mock.assert_awaited_once()
-        interaction.edit_original_response.assert_not_awaited()
+        controller.get_or_load_questions.assert_awaited_once_with(thread_id)
+        controller.build_modal_stub.assert_called_once_with(thread_id)
+        followup.send.assert_not_awaited()
+        response.defer.assert_not_awaited()
+        assert logs_mock.await_count == 0
 
     asyncio.run(runner())

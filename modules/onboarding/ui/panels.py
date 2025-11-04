@@ -342,6 +342,29 @@ class OpenQuestionsPanelView(discord.ui.View):
         elif isinstance(response_done_attr, bool):
             response_was_done = response_done_attr
 
+        preload_questions = getattr(controller, "get_or_load_questions", None)
+        cache: Any = None
+        cache_dict = getattr(controller, "_questions", None)
+        if isinstance(cache_dict, dict):
+            cache = cache_dict.get(thread_id)
+        else:
+            legacy_cache = getattr(controller, "questions_by_thread", None)
+            if isinstance(legacy_cache, dict):
+                cache = legacy_cache.get(thread_id)
+
+        if callable(preload_questions) and not cache:
+            try:
+                await preload_questions(thread_id)
+            except Exception as exc:  # pragma: no cover - best-effort preload
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "onboard_preload_failed",
+                        thread_id=thread_id,
+                        error=str(exc),
+                    )
+                log.warning("welcome modal preload failed", exc_info=True)
+
         try:
             await self._handle_launch(interaction, response_was_done=response_was_done)
         except Exception:
