@@ -331,16 +331,14 @@ class OpenQuestionsPanelView(discord.ui.View):
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """Minimal button handler that always attempts to open the modal."""
 
-        response_was_done = False
-        response_obj = getattr(interaction, "response", None)
-        response_done_attr = getattr(response_obj, "is_done", None)
-        if callable(response_done_attr):
-            try:
-                response_was_done = bool(response_done_attr())
-            except Exception:
-                response_was_done = False
-        elif isinstance(response_done_attr, bool):
-            response_was_done = response_done_attr
+        controller, thread_id = self._resolve(interaction)
+        if controller is None or thread_id is None:
+            await self._restart_from_view(interaction, log_context="launch_resolve_failed")
+            return
+
+        diag_state = diag.interaction_state(interaction)
+        diag_state["thread_id"] = thread_id
+        diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
 
         preload_questions = getattr(controller, "get_or_load_questions", None)
         cache: Any = None
