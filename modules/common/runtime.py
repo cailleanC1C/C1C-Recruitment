@@ -42,6 +42,8 @@ from shared.obs.events import (
 from c1c_coreops.helpers import audit_tiers, rehydrate_tiers
 from shared.web_routes import mount_emoji_pad
 
+import modules.onboarding as onboarding_pkg
+
 log = logging.getLogger("c1c.runtime")
 
 _ACTIVE_RUNTIME: "Runtime | None" = None
