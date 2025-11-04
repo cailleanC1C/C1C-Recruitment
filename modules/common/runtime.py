@@ -681,6 +681,7 @@ class Runtime:
 
         from c1c_coreops import cog as coreops_cog
         from cogs import app_admin
+        from modules import onboarding as onboarding_pkg
         from modules.onboarding import ops_check as onboarding_ops_check
         from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
@@ -701,6 +702,7 @@ class Runtime:
             log.exception("feature toggle refresh failed")
 
         onboarding_panels.register_persistent_views(self.bot)
+        await onboarding_pkg.setup(self.bot)
 
         async def _load_feature_module(
             module_path: str, feature_keys: Sequence[str]

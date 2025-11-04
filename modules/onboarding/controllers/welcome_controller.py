@@ -15,6 +15,7 @@ from discord.ext import commands
 from modules.onboarding import diag, logs, rules
 from modules.onboarding.schema import (
     Question as SheetQuestionRecord,
+    get_cached_welcome_questions,
     load_welcome_questions,
     parse_values_list,
 )
@@ -991,12 +992,23 @@ class BaseWelcomeController:
 
     def _load_rolling_questions(self) -> Sequence[SheetQuestionRecord]:
         if self._rolling_questions is None:
-            try:
-                loaded = load_welcome_questions()
-            except Exception:
-                log.warning("failed to load welcome questions for rolling card", exc_info=True)
-                loaded = []
             flow_key = (self.flow or "").lower()
+            cached = get_cached_welcome_questions()
+            if cached is None:
+                try:
+                    loaded = load_welcome_questions()
+                except Exception:
+                    log.warning(
+                        "failed to load welcome questions for rolling card", exc_info=True
+                    )
+                    loaded = []
+                else:
+                    self._rolling_questions = [
+                        question for question in loaded if question.flow.lower() == flow_key
+                    ]
+                    return self._rolling_questions
+            else:
+                loaded = cached
             self._rolling_questions = [
                 question for question in loaded if question.flow.lower() == flow_key
             ]

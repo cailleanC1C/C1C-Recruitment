@@ -30,4 +30,11 @@ After the final summary is posted, the bot deletes the user's captured answer me
 - Sheet remains the source of truth.
 - No AUDIT changes.
 
+### Startup behavior
+- On bot start, the onboarding module **preloads** the questions from the sheet once.
+- Logs:
+  - `onb preload ok count=N sample=…` when rows load.
+  - `onb preload: 0 rows…` when the tab is empty or flow filter yields none.
+  - `onb preload failed …` on exceptions (startup continues).
+
 Doc last updated: 2025-11-04 (v0.9.7)
