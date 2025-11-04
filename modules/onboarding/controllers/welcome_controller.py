@@ -24,10 +24,9 @@ from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, buil
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
-from modules.onboarding.ui import RollingCard, panels
-from shared.config import get_onboarding_cleanup_after_summary
-from shared.sheets.onboarding_questions import Question, schema_hash
-from modules.common.logs import channel_label, user_label, log as shared_log
+from modules.onboarding.ui import panels
+from shared.sheets.onboarding_questions import Question
+from shared.config import get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
@@ -803,8 +802,94 @@ class BaseWelcomeController:
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
-        # Legacy alias for UI helpers that still look for ``questions_by_thread``.
-        self.questions_by_thread = self._questions
+        self.answers_by_thread: Dict[int | None, dict[str, Any]] = {}
+        recruiter_attr = getattr(self, "recruiter_role_ids", None) or getattr(self, "RECRUITER_ROLE_IDS", None)
+        if recruiter_attr:
+            self.recruiter_role_ids = list(recruiter_attr)
+        else:
+            try:
+                self.recruiter_role_ids = list(get_recruiter_role_ids())
+            except Exception:
+                self.recruiter_role_ids = []
+
+    async def log_event(self, level: str, event: str, **fields: Any) -> None:
+        if diag.is_enabled():
+            await diag.log_event(level, event, **fields)
+
+    def get_questions(self, thread_id: int | None) -> list[dict[str, Any]]:
+        return [
+            {"id": "ign", "label": "Your in-game name", "kind": "text"},
+            {
+                "id": "vibe",
+                "label": "Preferred clan vibe",
+                "kind": "choice",
+                "choices": ["Casual", "Balanced", "Competitive"],
+            },
+            {"id": "tz", "label": "Timezone (e.g., CET, PST)", "kind": "tz"},
+        ]
+
+    def render_step(self, thread_id: int | None, step: int) -> str:
+        questions = self.get_questions(thread_id)
+        step = max(0, min(step, len(questions)))
+        key = int(thread_id) if thread_id is not None else None
+        answers = self.answers_by_thread.setdefault(key, {})
+        if step >= len(questions):
+            return "Reviewing your answers…"
+        question = questions[step]
+        current = answers.get(question["id"])
+        hint = f"\n\n_Current:_ **{current}**" if current else ""
+        return f"**Step {step + 1} of {len(questions)}**\n{question['label']}{hint}"
+
+    async def capture_step(self, interaction: discord.Interaction, thread_id: int | None, step: int) -> None:
+        return None
+
+    def is_finished(self, thread_id: int | None, step: int) -> bool:
+        return step >= len(self.get_questions(thread_id))
+
+    async def set_answer(self, thread_id: int | None, key: str, value: str) -> None:
+        dictionary = self.answers_by_thread.setdefault(int(thread_id) if thread_id is not None else None, {})
+        dictionary[key] = value
+
+    async def finish_and_summarize(self, interaction: discord.Interaction, thread_id: int | None) -> None:
+        from discord import AllowedMentions
+
+        key = int(thread_id) if thread_id is not None else None
+        answers = dict(self.answers_by_thread.get(key, {}))
+        user = getattr(interaction, "user", None)
+        embed = self._make_summary_embed(user, answers, interaction.channel)
+
+        await interaction.response.edit_message(content="✅ Collected. Posting summary…", view=None)
+
+        role_ids = [rid for rid in (self.recruiter_role_ids or []) if rid]
+        mentions = " ".join(f"<@&{rid}>" for rid in role_ids)
+
+        await interaction.channel.send(
+            content=mentions or None,
+            embed=embed,
+            allowed_mentions=AllowedMentions(everyone=False, users=False, roles=True),
+        )
+
+        if key in self.answers_by_thread:
+            del self.answers_by_thread[key]
+
+        await self.log_event("info", "onboard_finished", thread_id=thread_id, pinged_roles=len(role_ids))
+
+    def _make_summary_embed(
+        self,
+        user: discord.abc.User | discord.Member | None,
+        answers: dict[str, Any],
+        thread: discord.abc.MessageableChannel | None,
+    ) -> discord.Embed:
+        embed = discord.Embed(title="New Onboarding", description=f"Applicant: {getattr(user, 'mention', 'unknown')}")
+        embed.add_field(name="IGN", value=answers.get("ign", "—"), inline=True)
+        embed.add_field(name="Clan vibe", value=answers.get("vibe", "—"), inline=True)
+        embed.add_field(name="Timezone", value=answers.get("tz", "—"), inline=True)
+        try:
+            embed.add_field(name="Thread", value=f"[Open thread]({thread.jump_url})", inline=False)
+        except Exception:
+            pass
+        embed.set_footer(text="C1C Onboarding")
+        return embed
 
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)

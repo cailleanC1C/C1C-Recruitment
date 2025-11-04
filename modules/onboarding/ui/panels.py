@@ -9,6 +9,7 @@ import discord
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
+from .wizard import OnboardWizard
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -40,15 +41,16 @@ class _ControllerProtocol:
     async def _handle_modal_launch(self, thread_id: int, interaction: discord.Interaction) -> None:  # pragma: no cover - protocol
         ...
 
-    async def start_session_from_button(
-        self,
-        thread_id: int,
-        *,
-        actor_id: int | None,
-        channel: discord.abc.GuildChannel | discord.Thread | None,
-        guild: discord.Guild | None,
-        interaction: discord.Interaction | None = None,
-    ) -> None:  # pragma: no cover - protocol
+    def render_step(self, thread_id: int | None, step: int) -> str:  # pragma: no cover - protocol
+        ...
+
+    async def capture_step(self, interaction: discord.Interaction, thread_id: int | None, step: int) -> None:  # pragma: no cover - protocol
+        ...
+
+    def is_finished(self, thread_id: int | None, step: int) -> bool:  # pragma: no cover - protocol
+        ...
+
+    async def finish_and_summarize(self, interaction: discord.Interaction, thread_id: int | None) -> None:  # pragma: no cover - protocol
         ...
 
 
@@ -340,49 +342,27 @@ class OpenQuestionsPanelView(discord.ui.View):
         diag_state["thread_id"] = thread_id
         diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
 
-        response_obj = getattr(interaction, "response", None)
-        response_done_attr = getattr(response_obj, "is_done", None)
-        response_done = False
-        if callable(response_done_attr):
-            try:
-                response_done = bool(response_done_attr())
-            except Exception:
-                response_done = False
-        elif isinstance(response_done_attr, bool):
-            response_done = response_done_attr
-        if response_done:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "welcome_stage1_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            await self._post_retry_start(interaction, reason="response_done")
+        channel = getattr(interaction, "channel", None)
+        if not isinstance(channel, discord.Thread):
+            await self._ensure_error_notice(interaction)
             return
-
-        from .views import CleanLaunchView
-
-        view = CleanLaunchView(controller, thread_id)
-        content = "Let’s capture some details. Tap **Open questions** to begin."
 
         try:
-            await interaction.response.send_message(content, view=view)
-        except Exception as exc:  # pragma: no cover - defensive network operations
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "welcome_stage1_failed",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
-                )
-            log.warning("failed to post clean launcher", exc_info=True)
-            await self._post_retry_start(interaction, reason="stage1_send_failed")
-            return
+            await interaction.response.defer()
+        except discord.InteractionResponded:
+            pass
+
+        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
+        content = controller.render_step(thread_id, step=0)
+
+        try:
+            await channel.send(content, view=view)
+        except Exception:
+            await self._ensure_error_notice(interaction)
+            raise
 
         if diag.is_enabled():
-            await diag.log_event("info", "welcome_stage1_post_clean_launcher", **diag_state)
+            await diag.log_event("info", "wizard_launch_sent", **diag_state)
 
     async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
         """Post a small prompt with a retry button that uses a fresh interaction."""
