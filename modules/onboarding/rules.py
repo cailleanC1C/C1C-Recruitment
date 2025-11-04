@@ -176,6 +176,21 @@ _RANGE_SKIP_RE = re.compile(
 )
 
 
+def _norm(value: Any) -> str:
+    """Normalise a scalar value to a trimmed string for comparisons."""
+
+    return str(value).strip()
+
+
+def _parse_rhs_list(text: str) -> list[str]:
+    """Parse RHS list syntax like "[A, B]" or "A,B" into tokens."""
+
+    cleaned = (text or "").strip()
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        cleaned = cleaned[1:-1]
+    return [token.strip() for token in cleaned.split(",") if token.strip()]
+
+
 def next_index_by_rules(
     current_idx: int, questions: List[Any], answers_by_qid: Dict[str, Any]
 ) -> Optional[int]:
@@ -243,35 +258,34 @@ def _candidate_tokens(value: Any) -> list[str]:
 
 
 def _condition_satisfied(op: str, candidates: list[str], rhs: str) -> bool:
-    if op == "in":
-        options = _parse_rhs_list(rhs)
-        return any(candidate in options for candidate in candidates)
-
-    rhs_token = _norm(rhs)
-    if op == "=":
-        return any(candidate == rhs_token for candidate in candidates)
-    if op == "!=":
-        return all(candidate != rhs_token for candidate in candidates)
-
     try:
+        if op == "in":
+            options = _parse_rhs_list(rhs)
+            return any(candidate in options for candidate in candidates)
+
+        rhs_token = _norm(rhs)
+        if op == "=":
+            return any(candidate == rhs_token for candidate in candidates)
+        if op == "!=":
+            return all(candidate != rhs_token for candidate in candidates)
+
         rhs_value = float(rhs_token)
+        for candidate in candidates:
+            try:
+                value = float(candidate)
+            except Exception:
+                continue
+            if op == "<" and value < rhs_value:
+                return True
+            if op == "<=" and value <= rhs_value:
+                return True
+            if op == ">" and value > rhs_value:
+                return True
+            if op == ">=" and value >= rhs_value:
+                return True
+        return False
     except Exception:
         return False
-
-    for candidate in candidates:
-        try:
-            value = float(candidate)
-        except Exception:
-            continue
-        if op == "<" and value < rhs_value:
-            return True
-        if op == "<=" and value <= rhs_value:
-            return True
-        if op == ">" and value > rhs_value:
-            return True
-        if op == ">=" and value >= rhs_value:
-            return True
-    return False
 
 
 def _index_for_order(questions: List[Any], order_token: Optional[str]) -> Optional[int]:
