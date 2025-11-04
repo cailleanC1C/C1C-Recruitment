@@ -18,7 +18,6 @@ except Exception as exc:  # pragma: no cover - optional dependency at import tim
 else:
     _IMPORT_ERROR = None
 
-from shared.config import cfg
 import shared.sheets.async_adapter as async_adapter
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -26,6 +25,9 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 _WorksheetT = TypeVar("_WorksheetT")
 _WorkbookCache: Dict[str, Any] = {}
 _WorksheetCache: Dict[Tuple[str, str], Any] = {}
+
+_CONFIG_CACHE: Any | None = None
+_CONFIG_UNAVAILABLE = False
 
 _DEFAULT_ATTEMPTS = int(os.getenv("GSHEETS_RETRY_ATTEMPTS", "5"))
 _DEFAULT_BACKOFF_BASE = float(os.getenv("GSHEETS_RETRY_BASE", "0.5"))
@@ -324,6 +326,26 @@ def call_with_backoff(func: Callable[..., _WorksheetT], *args: Any, **kwargs: An
     return _retry_with_backoff(func, *args, **kwargs)
 
 
+def _get_config():
+    """Return the cached config facade if available without raising."""
+
+    global _CONFIG_CACHE, _CONFIG_UNAVAILABLE
+
+    if _CONFIG_CACHE is not None:
+        return _CONFIG_CACHE
+    if _CONFIG_UNAVAILABLE:
+        return None
+
+    try:
+        from shared.config import cfg as imported_cfg
+    except Exception:  # pragma: no cover - configuration optional in some contexts
+        _CONFIG_UNAVAILABLE = True
+        return None
+
+    _CONFIG_CACHE = imported_cfg
+    return imported_cfg
+
+
 def _resolve_default_sheet_id(candidate: str | None) -> str:
     """Resolve ``candidate`` falling back to configured sheet identifiers."""
 
@@ -331,10 +353,14 @@ def _resolve_default_sheet_id(candidate: str | None) -> str:
     if text:
         return _resolve_sheet_id(text)
 
-    for key in ("onboarding.sheet_id", "recruitment.sheet_id"):
-        value = cfg.get(key)
-        if isinstance(value, str) and value.strip():
-            return _resolve_sheet_id(value)
+    config = _get_config()
+    if config is not None:
+        getter = getattr(config, "get", None)
+        if callable(getter):
+            for key in ("onboarding.sheet_id", "recruitment.sheet_id"):
+                value = getter(key)
+                if isinstance(value, str) and value.strip():
+                    return _resolve_sheet_id(value)
 
     return _resolve_sheet_id(candidate)
 
