@@ -11,6 +11,8 @@ from shared.config import (
 from shared.sheets.core import fetch_records
 from modules.common.logs import log as shared_log
 
+_CACHE: dict[str, List["Question"] | None] = {"welcome": None}
+
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
 
 
@@ -123,7 +125,26 @@ def load_welcome_questions() -> List[Question]:
         raise RuntimeError(f"no 'welcome' questions found in tab '{tab}'")
 
     questions.sort(key=lambda question: question.order_key)
-    return questions
+    snapshot = list(questions)
+    _CACHE["welcome"] = snapshot
+    return list(snapshot)
+
+
+def get_cached_welcome_questions() -> List[Question] | None:
+    """Return the cached welcome questions if available."""
+
+    cached = _CACHE.get("welcome")
+    if cached is None:
+        return None
+    return list(cached)
+
+
+def prime_welcome_cache() -> tuple[int, list[str]]:
+    """Load and cache the welcome flow questions, returning summary info."""
+
+    questions = load_welcome_questions()
+    sample = [question.qid or question.label for question in questions[:3]]
+    return len(questions), sample
 
 
 _VALUES_PREFIX = re.compile(r"\bvalues\s*:\s*", re.IGNORECASE)
