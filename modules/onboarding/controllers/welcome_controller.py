@@ -24,7 +24,7 @@ from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import RollingCard, panels
 from shared.sheets.onboarding_questions import Question, schema_hash
-from shared.logfmt import channel_label, user_label
+from modules.common.logs import channel_label, user_label
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
@@ -698,7 +698,7 @@ class BaseWelcomeController:
                     pass
         except Exception:
             try:
-                from shared.logs import log as shared_log
+                from modules.common.logs import log as shared_log
 
                 shared_log.human(
                     "warning",
