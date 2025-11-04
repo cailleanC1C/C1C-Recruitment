@@ -167,7 +167,18 @@ async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(cog)
     # Register the fallback group only once. This avoids CommandRegistrationError
     # when setup() runs again (hot reloads, multiple attach paths).
-    if not OnboardingOps._fallback_registered and bot.get_command("onb") is None:
+    existing_onb = bot.get_command("onb")
+    if existing_onb is not None and existing_onb.parent is None:
+        removed = bot.remove_command("onb")
+        if removed is not None:
+            log.human(
+                "info",
+                "ops wiring: replaced lingering standalone 'onb' fallback",
+            )
+        existing_onb = None
+        OnboardingOps._fallback_registered = False
+
+    if not OnboardingOps._fallback_registered and existing_onb is None:
         bot.add_command(cog._group)
         OnboardingOps._fallback_registered = True
         cog._fallback_attached = True
