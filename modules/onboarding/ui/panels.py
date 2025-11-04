@@ -281,6 +281,48 @@ class OpenQuestionsPanelView(discord.ui.View):
                     child.label = label
         return clone
 
+    @classmethod
+    async def refresh_enabled(
+        cls,
+        interaction: discord.Interaction | None,
+        *,
+        controller: _ControllerProtocol | None,
+        thread_id: int | None,
+    ) -> None:
+        if interaction is None:
+            return
+        view = cls(controller=controller, thread_id=thread_id)
+        response = getattr(interaction, "response", None)
+        if response is not None:
+            is_done = getattr(response, "is_done", None)
+            responded = False
+            if callable(is_done):
+                try:
+                    responded = bool(is_done())
+                except Exception:
+                    responded = False
+            elif isinstance(is_done, bool):
+                responded = is_done
+            if not responded:
+                try:
+                    await response.edit_message(view=view)
+                    return
+                except Exception:
+                    log.debug("failed to refresh panel via interaction response", exc_info=True)
+        message = getattr(interaction, "message", None)
+        if isinstance(message, discord.Message):
+            try:
+                await message.edit(view=view)
+            except Exception:
+                log.warning("failed to refresh panel message", exc_info=True)
+
+    async def _restore_enabled(self, interaction: discord.Interaction) -> None:
+        await self.__class__.refresh_enabled(
+            interaction,
+            controller=self._controller,
+            thread_id=self._thread_id,
+        )
+
     @discord.ui.button(
         label="Open questions",
         style=discord.ButtonStyle.primary,
@@ -406,6 +448,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             try:
                 await preload_questions(thread_id)
             except Exception as exc:  # pragma: no cover - best-effort preload
+                await self._restore_enabled(interaction)
                 if diag.is_enabled():
                     await diag.log_event(
                         "warning",
@@ -420,6 +463,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         questions_dict = getattr(controller, "questions_by_thread", {})
         thread_questions = questions_dict.get(thread_id) if isinstance(questions_dict, dict) else None
         if not thread_questions:
+            await self._restore_enabled(interaction)
             await self._ensure_error_notice(interaction)
             return
 
@@ -435,6 +479,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                     interaction=interaction,
                 )
             except Exception:
+                await self._restore_enabled(interaction)
                 await self._ensure_error_notice(interaction)
                 raise
             return
