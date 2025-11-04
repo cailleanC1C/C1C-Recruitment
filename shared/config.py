@@ -35,6 +35,7 @@ __all__ = [
     "get_gspread_credentials",
     "get_recruitment_sheet_id",
     "get_onboarding_sheet_id",
+    "get_onboarding_questions_tab",
     "get_admin_role_ids",
     "get_staff_role_ids",
     "get_recruiter_role_ids",
@@ -286,6 +287,9 @@ def _load_config() -> Dict[str, object]:
         "GSPREAD_CREDENTIALS": os.getenv("GSPREAD_CREDENTIALS", ""),
         "RECRUITMENT_SHEET_ID": (os.getenv("RECRUITMENT_SHEET_ID") or "").strip(),
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
+        "ONBOARDING_QUESTIONS_TAB": (
+            os.getenv("ONBOARDING_QUESTIONS_TAB") or ""
+        ).strip(),
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
         "RECRUITER_ROLE_IDS": _int_set(os.getenv("RECRUITER_ROLE_IDS")),
@@ -500,6 +504,26 @@ def get_recruitment_sheet_id() -> str:
 
 def get_onboarding_sheet_id() -> str:
     return str(_CONFIG.get("ONBOARDING_SHEET_ID", ""))
+
+
+def get_onboarding_questions_tab() -> str:
+    raw = _CONFIG.get("ONBOARDING_QUESTIONS_TAB", "")
+    value = str(raw or "").strip()
+    if value:
+        return value
+
+    try:
+        from shared.sheets import onboarding as onboarding_sheets  # local import to avoid cycles
+    except Exception:
+        return value
+
+    lookup = getattr(onboarding_sheets, "_config_lookup", None)
+    if callable(lookup):
+        resolved = lookup("onboarding.questions_tab", None)
+        if resolved:
+            return str(resolved).strip()
+
+    return value
 
 
 def _role_set(key: str) -> Set[int]:
