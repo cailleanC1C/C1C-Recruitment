@@ -11,6 +11,7 @@ from config import runtime as _runtime
 from shared.redaction import mask_secret, mask_service_account, sanitize_text
 
 __all__ = [
+    "cfg",
     "reload_config",
     "get_config_snapshot",
     "get_port",
@@ -346,6 +347,57 @@ def reload_config() -> Dict[str, object]:
 
 
 reload_config()
+
+
+def _normalise_key(name: object) -> Optional[str]:
+    if name is None:
+        return None
+
+    text = str(name).strip()
+    if not text:
+        return None
+
+    mapped = re.sub(r"[^A-Za-z0-9_.]", "_", text)
+    mapped = mapped.replace(".", "_")
+    mapped = re.sub(r"__+", "_", mapped)
+    mapped = mapped.strip("_")
+    if not mapped:
+        return None
+    return mapped.upper()
+
+
+class _ConfigFacade:
+    __slots__ = ()
+
+    def get(self, key: object, default: object | None = None) -> object | None:
+        normalised = _normalise_key(key)
+        if not normalised:
+            return default
+        return _CONFIG.get(normalised, default)
+
+    def __contains__(self, key: object) -> bool:  # pragma: no cover - convenience
+        normalised = _normalise_key(key)
+        if not normalised:
+            return False
+        return normalised in _CONFIG
+
+    def items(self):  # pragma: no cover - convenience
+        return _CONFIG.items()
+
+    def keys(self):  # pragma: no cover - convenience
+        return _CONFIG.keys()
+
+    def values(self):  # pragma: no cover - convenience
+        return _CONFIG.values()
+
+    def __getattr__(self, name: str):
+        target = globals().get(name)
+        if target is None:
+            raise AttributeError(name)
+        return target
+
+
+cfg = _ConfigFacade()
 
 
 def get_config_snapshot() -> Dict[str, object]:
