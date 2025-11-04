@@ -10,8 +10,6 @@ Each question edits the same message:
 
 Dropdowns, buttons, and cleanup arrive in the next update.
 
-Doc last updated: 2025-11-03 (v0.9.7)
-
 ### Testing (manual)
 1. Click **Open questions** → view disables with “Launching…”.
 2. First question appears on the rolling card.
@@ -27,3 +25,5 @@ Doc last updated: 2025-11-03 (v0.9.7)
 - No cleanup yet.
 - Sheet remains the source of truth.
 - No AUDIT changes.
+
+Doc last updated: 2025-11-04 (v0.9.7)
