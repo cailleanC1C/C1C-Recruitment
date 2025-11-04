@@ -16,6 +16,7 @@ __all__ = [
     "OnboardWizard",
     "OpenQuestionsPanelView",
     "bind_controller",
+    "get_controller",
     "get_panel_message_id",
     "is_panel_live",
     "mark_panel_inactive_by_message",
@@ -46,6 +47,7 @@ class _ControllerProtocol:
         actor_id: int | None,
         channel: discord.abc.GuildChannel | discord.Thread | None,
         guild: discord.Guild | None,
+        interaction: discord.Interaction | None = None,
     ) -> None:  # pragma: no cover - protocol
         ...
 
@@ -161,6 +163,12 @@ def unbind_controller(thread_id: int) -> None:
     message_id = _PANEL_MESSAGES.pop(thread_id, None)
     if message_id is not None:
         _ACTIVE_PANEL_MESSAGE_IDS.discard(message_id)
+
+
+def get_controller(thread_id: int | None) -> _ControllerProtocol | None:
+    if thread_id is None:
+        return None
+    return _CONTROLLERS.get(thread_id)
 
 
 def register_panel_message(thread_id: int, message_id: int) -> None:
@@ -415,47 +423,21 @@ class OpenQuestionsPanelView(discord.ui.View):
             await self._ensure_error_notice(interaction)
             return
 
-        # New: do not re-render the prior message here; proceed to controller session start.
+        # Rolling-card prototype replaces the inline wizard.
         starter = getattr(controller, "start_session_from_button", None)
         if callable(starter):
-            await starter(
-                thread_id,
-                actor_id=getattr(getattr(interaction, "user", None), "id", None),
-                channel=getattr(interaction, "channel", None),
-                guild=getattr(interaction, "guild", None),
-            )
-
-        try:
-            content = controller.render_step(thread_id, 0)
-        except Exception:
-            await self._ensure_error_notice(interaction)
-            raise
-
-        wizard = OnboardWizard(controller, thread_id, step=0)
-
-        followup = getattr(interaction, "followup", None)
-        try:
-            if followup is None:
-                raise RuntimeError("missing followup handler")
-            message = await followup.send(content, view=wizard, wait=True)
-        except Exception as exc:  # pragma: no cover - defensive network operations
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_failed",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
+            try:
+                await starter(
+                    thread_id,
+                    actor_id=getattr(getattr(interaction, "user", None), "id", None),
+                    channel=getattr(interaction, "channel", None),
+                    guild=getattr(interaction, "guild", None),
+                    interaction=interaction,
                 )
-            log.warning("inline wizard launch failed", exc_info=True)
-            await self._post_retry_start(interaction, reason="send_message_error")
+            except Exception:
+                await self._ensure_error_notice(interaction)
+                raise
             return
-
-        if diag.is_enabled():
-            await diag.log_event("info", "inline_wizard_posted", **diag_state)
-
-        if isinstance(message, discord.Message) or hasattr(message, "edit"):
-            wizard.attach(message)
 
     async def _handle_restart(self, interaction: discord.Interaction) -> None:
         state = diag.interaction_state(interaction)
