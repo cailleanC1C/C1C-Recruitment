@@ -49,7 +49,7 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 | Folder             | Purpose                                                                     |
 | ------------------ | --------------------------------------------------------------------------- |
 | `docs/adr/`        | Architectural Decision Records (ADR-XXXX).                                  |
-| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Runbook, Troubleshooting, Watchers. |
+| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Runbook, WelcomeFlow, Troubleshooting, Watchers. |
 | `docs/contracts/`  | Long-lived standards (this contract).                                       |
 | `docs/guardrails/` | Guardrail & CI policy specs (e.g., `RepositoryGuardrails.md`).              |
 | `docs/compliance/` | Audit and guardrail reports (e.g., `REPORT_GUARDRAILS.md`).                 |
@@ -331,4 +331,4 @@ Rules:
 
 ---
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-11-04 (v0.9.7)
