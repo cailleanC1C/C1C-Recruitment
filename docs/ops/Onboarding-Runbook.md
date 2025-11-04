@@ -8,7 +8,11 @@ Each question edits the same message:
 * Invalid input shows a ❌ inline hint; valid answers advance automatically.
 * A compact “So far” section lists answered questions as **label → value**.
 
-Dropdowns, buttons, and cleanup arrive in the next update.
+For `bool` questions the card shows **Yes/No** buttons.  
+For `single-select` and `multi-select-N` it shows a dropdown (with max N selections).  
+Options come from the sheet (`validate: values: A, B, …` or `note`).
+
+After the final summary is posted, the bot deletes the user's captured answer messages (only those), if cleanup is enabled.
 
 ### Testing (manual)
 1. Click **Open questions** → view disables with “Launching…”.
@@ -17,12 +21,12 @@ Dropdowns, buttons, and cleanup arrive in the next update.
 4. Type a valid and invalid value.
    - Invalid → ❌ inline hint.
    - Valid → advances, updates summary.
-5. After the last question, the card shows the final summary (no cleanup yet).
+5. After the last question, the card shows the final summary and performs cleanup (if enabled).
 
 ### Guardrails
 - No modals or ephemerals.
 - No new sheet columns.
-- No cleanup yet.
+- Cleanup happens after the summary card if enabled via config.
 - Sheet remains the source of truth.
 - No AUDIT changes.
 

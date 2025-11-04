@@ -47,6 +47,7 @@ __all__ = [
     "get_search_results_soft_cap",
     "get_clan_tags_cache_ttl_sec",
     "get_cleanup_age_hours",
+    "get_onboarding_cleanup_after_summary",
     "get_panel_thread_mode",
     "get_panel_fixed_thread_id",
     "get_public_base_url",
@@ -612,6 +613,21 @@ def get_cleanup_age_hours(default: int = 72) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def get_onboarding_cleanup_after_summary() -> bool:
+    raw = os.getenv("ONB_CLEANUP_AFTER_SUMMARY")
+    if raw is None:
+        return True
+    value = raw.strip().lower()
+    if value in {"0", "false", "no", "off"}:
+        return False
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    try:
+        return bool(int(value))
+    except (TypeError, ValueError):
+        return True
 
 
 def get_panel_thread_mode(default: str = "same") -> str:
