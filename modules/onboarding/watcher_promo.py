@@ -66,7 +66,7 @@ def _announce(bot: commands.Bot, message: str) -> None:
     async def runner() -> None:
         await _send_runtime(message)
 
-    bot.loop.create_task(runner())
+    asyncio.create_task(runner())
 
 
 class _ThreadClosureWatcher(commands.Cog):

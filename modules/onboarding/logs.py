@@ -8,6 +8,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 import discord
 
+from c1c_coreops.tags import lifecycle_tag
 from modules.common import runtime as rt
 from shared import logfmt
 from shared.dedupe import EventDeduper
@@ -343,6 +344,7 @@ def _dedupe_key(payload: Mapping[str, Any]) -> str | None:
 
 
 def _render_payload(payload: Mapping[str, Any]) -> str | None:
+    message: str | None
     if "tag" in payload and "recruit" in payload and "channel" in payload:
         details = payload.get("details")
         detail_items: list[str] = []
@@ -352,76 +354,80 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
             detail_items = [_stringify(details)]
         elif details is not None:
             detail_items = [_stringify(details)]
-        return logfmt.LogTemplates.welcome(
+        message = logfmt.LogTemplates.welcome(
             tag=_stringify(payload.get("tag")),
             recruit=_stringify(payload.get("recruit")),
             channel=_stringify(payload.get("channel")),
             result=_stringify(payload.get("result")),
             details=detail_items,
         )
-
-    actor_display = payload.get("actor_name") or _stringify(payload.get("actor"))
-    thread_label = _stringify(
-        payload.get("thread_label") or payload.get("channel") or payload.get("thread")
-    )
-    parent_label = _stringify(
-        payload.get("channel_label") or payload.get("parent") or payload.get("parent_channel")
-    )
-    result = _stringify(payload.get("result"))
-
-    detail_items: list[str] = []
-    detail_fields = [
-        ("view", ("view_tag", "view")),
-        ("custom_id", ("custom_id",)),
-        ("view_id", ("view_id",)),
-        ("message", ("message_id",)),
-        ("thread_id", ("thread_id",)),
-        ("parent_id", ("parent_channel_id",)),
-        ("actor_id", ("actor_id",)),
-        ("target_user_id", ("target_user_id",)),
-        ("target_message", ("target_message_id",)),
-        ("app_perms_text", ("app_perms_text", "app_permissions")),
-        ("missing", ("missing",)),
-        ("trigger", ("trigger",)),
-        ("source", ("source",)),
-        ("reason", ("reason",)),
-        ("schema", ("schema",)),
-        ("questions", ("questions",)),
-        ("emoji", ("emoji",)),
-    ]
-    for name, keys in detail_fields:
-        value = None
-        for key in keys:
-            candidate = payload.get(key)
-            if candidate is not None:
-                value = candidate
-                break
-        if value is None:
-            continue
-        detail_items.append(f"{name}={_stringify(value)}")
-
-    permissions_snapshot = payload.get("app_permissions_snapshot")
-    if permissions_snapshot:
-        detail_items.append(f"app_perms_flags={_stringify(permissions_snapshot)}")
-
-    extra_details = payload.get("details")
-    if isinstance(extra_details, Mapping):
-        detail_items.extend(
-            f"{key}={_stringify(value)}" for key, value in extra_details.items()
+    else:
+        actor_display = payload.get("actor_name") or _stringify(payload.get("actor"))
+        thread_label = _stringify(
+            payload.get("thread_label") or payload.get("channel") or payload.get("thread")
         )
-    elif isinstance(extra_details, Iterable) and not isinstance(extra_details, (str, bytes, bytearray)):
-        detail_items.append(_stringify(extra_details))
-    elif extra_details is not None:
-        detail_items.append(_stringify(extra_details))
+        parent_label = _stringify(
+            payload.get("channel_label") or payload.get("parent") or payload.get("parent_channel")
+        )
+        result = _stringify(payload.get("result"))
 
-    error_text = payload.get("error")
-    if error_text:
-        detail_items.append(f"error={_stringify(error_text)}")
+        detail_items: list[str] = []
+        detail_fields = [
+            ("view", ("view_tag", "view")),
+            ("custom_id", ("custom_id",)),
+            ("view_id", ("view_id",)),
+            ("message", ("message_id",)),
+            ("thread_id", ("thread_id",)),
+            ("parent_id", ("parent_channel_id",)),
+            ("actor_id", ("actor_id",)),
+            ("target_user_id", ("target_user_id",)),
+            ("target_message", ("target_message_id",)),
+            ("app_perms_text", ("app_perms_text", "app_permissions")),
+            ("missing", ("missing",)),
+            ("trigger", ("trigger",)),
+            ("source", ("source",)),
+            ("reason", ("reason",)),
+            ("schema", ("schema",)),
+            ("questions", ("questions",)),
+            ("emoji", ("emoji",)),
+        ]
+        for name, keys in detail_fields:
+            value = None
+            for key in keys:
+                candidate = payload.get(key)
+                if candidate is not None:
+                    value = candidate
+                    break
+            if value is None:
+                continue
+            detail_items.append(f"{name}={_stringify(value)}")
 
-    return logfmt.LogTemplates.welcome_panel(
-        actor=str(actor_display) if actor_display else "-",
-        thread=thread_label,
-        parent=parent_label if parent_label != "-" else None,
-        result=result,
-        details=detail_items,
-    )
+        permissions_snapshot = payload.get("app_permissions_snapshot")
+        if permissions_snapshot:
+            detail_items.append(f"app_perms_flags={_stringify(permissions_snapshot)}")
+
+        extra_details = payload.get("details")
+        if isinstance(extra_details, Mapping):
+            detail_items.extend(
+                f"{key}={_stringify(value)}" for key, value in extra_details.items()
+            )
+        elif isinstance(extra_details, Iterable) and not isinstance(extra_details, (str, bytes, bytearray)):
+            detail_items.append(_stringify(extra_details))
+        elif extra_details is not None:
+            detail_items.append(_stringify(extra_details))
+
+        error_text = payload.get("error")
+        if error_text:
+            detail_items.append(f"error={_stringify(error_text)}")
+
+        message = logfmt.LogTemplates.welcome_panel(
+            actor=str(actor_display) if actor_display else "-",
+            thread=thread_label,
+            parent=parent_label if parent_label != "-" else None,
+            result=result,
+            details=detail_items,
+        )
+
+    if not message:
+        return None
+    return f"{lifecycle_tag()} {message}"
