@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -106,3 +107,30 @@ def load_welcome_questions() -> List[Question]:
 
     questions.sort(key=lambda question: question.order_key)
     return questions
+
+
+_WELCOME_Q_CACHE: Optional[List[Question]] = None
+_WELCOME_Q_LOCK = asyncio.Lock()
+
+
+async def get_cached_welcome_questions(*, force: bool = False) -> List[Question]:
+    """Compatibility shim for legacy async callers expecting cached questions."""
+
+    global _WELCOME_Q_CACHE
+    if not force and _WELCOME_Q_CACHE is not None:
+        return _WELCOME_Q_CACHE
+
+    async with _WELCOME_Q_LOCK:
+        if not force and _WELCOME_Q_CACHE is not None:
+            return _WELCOME_Q_CACHE
+
+        data = await asyncio.to_thread(load_welcome_questions)
+        _WELCOME_Q_CACHE = data
+        return data
+
+
+def _clear_welcome_questions_cache() -> None:
+    """Internal helper to clear the welcome questions cache."""
+
+    global _WELCOME_Q_CACHE
+    _WELCOME_Q_CACHE = None
