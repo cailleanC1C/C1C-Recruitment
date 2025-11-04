@@ -140,8 +140,7 @@ def run_checks() -> tuple[list[str], list[str]]:
     for rel, ln, line in deprecated_loop_create_task:
         _echo_violation("S-09", "discord.py loop.create_task deprecated", rel, ln)
         errors.append(
-            "S-09: discord.py loop.create_task deprecated"
-            f" → {rel}:{ln}: `{line}`"
+            f"S-09: discord.py loop.create_task deprecated → {rel}:{ln}: `{line}`"
         )
 
     # 3) Docs checks
