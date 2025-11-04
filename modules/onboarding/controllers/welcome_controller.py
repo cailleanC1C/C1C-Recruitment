@@ -26,7 +26,7 @@ from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import RollingCard, panels
 from shared.config import get_onboarding_cleanup_after_summary
 from shared.sheets.onboarding_questions import Question, schema_hash
-from modules.common.logs import channel_label, user_label
+from modules.common.logs import channel_label, user_label, log as shared_log
 
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
@@ -804,6 +804,7 @@ class BaseWelcomeController:
         self.retry_message_ids: Dict[int, int] = {}
         self._button_sessions: Dict[str, Any] = {}
         self._rolling_sessions: Dict[int, RollingCardSession] = {}
+        self._rolling_cards: Dict[int, RollingCard] = {}
         self._rolling_questions: Sequence[SheetQuestionRecord] | None = None
         self._captured_msgs: Dict[int, list[int]] = {}
 
@@ -839,6 +840,71 @@ class BaseWelcomeController:
 
         initiator = getattr(interaction, "user", None)
         questions = self._load_rolling_questions()
+        question_count = len(questions)
+
+        guild_label = user_label(guild_obj, getattr(initiator, "id", actor_id))
+        thread_identifier = getattr(channel_obj, "id", None)
+        try:
+            thread_key = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            thread_key = None
+        log_thread_id = thread_key if thread_key is not None else thread_id
+        view_thread_id = thread_key if thread_key is not None else thread_id
+
+        try:
+            shared_log.human(
+                "info",
+                "🆕 Onboarding — card session",
+                user=guild_label,
+                thread=channel_label(guild_obj, log_thread_id),
+                questions=question_count,
+            )
+        except Exception:
+            pass
+
+        if question_count == 0:
+            launch_log.warning(
+                "⚠️ Onboarding — card session blocked (no questions) • user=%s • thread=%s",
+                guild_label,
+                channel_label(guild_obj, log_thread_id),
+            )
+            try:
+                shared_log.human(
+                    "warning",
+                    "⚠️ Onboarding — no welcome questions",
+                    user=guild_label,
+                    thread=channel_label(guild_obj, log_thread_id),
+                )
+            except Exception:
+                pass
+
+            try:
+                await panels.OpenQuestionsPanelView.refresh_enabled(
+                    interaction,
+                    controller=self,
+                    thread_id=view_thread_id,
+                )
+            except Exception:
+                log.debug("failed to restore panel buttons after empty schema", exc_info=True)
+
+            hint_text = (
+                "No onboarding questions are configured. Please ping a Recruitment Coordinator."
+            )
+            card: RollingCard | None = None
+            if thread_key is not None:
+                card = self._rolling_cards.get(thread_key)
+            if card is None and channel_obj is not None:
+                card = RollingCard(channel_obj)
+                if thread_key is not None:
+                    self._rolling_cards[thread_key] = card
+            if card is not None:
+                try:
+                    await card.ensure()
+                    await card.hint(hint_text)
+                except Exception:
+                    log.warning("failed to post onboarding empty-schema hint", exc_info=True)
+            return
+
         try:
             session = RollingCardSession(
                 self,
@@ -852,13 +918,17 @@ class BaseWelcomeController:
             return
 
         sessions[key] = session
-        thread_identifier = getattr(channel_obj, "id", None)
         try:
             resolved_thread_id = int(thread_identifier) if thread_identifier is not None else None
         except (TypeError, ValueError):
             resolved_thread_id = None
         if resolved_thread_id is not None:
             thread_key = int(resolved_thread_id)
+            existing_card = self._rolling_cards.get(thread_key)
+            if existing_card is not None:
+                session.card = existing_card
+            else:
+                self._rolling_cards[thread_key] = session.card
             self.answers_by_thread[thread_key] = {}
             self._rolling_sessions[thread_key] = session
             try:
@@ -942,8 +1012,6 @@ class BaseWelcomeController:
                     pass
         except Exception:
             try:
-                from modules.common.logs import log as shared_log
-
                 shared_log.human(
                     "warning",
                     "Onboarding — store sync failed",
@@ -956,7 +1024,9 @@ class BaseWelcomeController:
     def _complete_rolling(self, thread_id: int | None) -> None:
         if thread_id is None:
             return
-        self._rolling_sessions.pop(int(thread_id), None)
+        key = int(thread_id)
+        self._rolling_sessions.pop(key, None)
+        self._rolling_cards.pop(key, None)
         for key, active in list(self._button_sessions.items()):
             if isinstance(active, RollingCardSession) and getattr(active, "thread_id", None) == thread_id:
                 self._button_sessions.pop(key, None)

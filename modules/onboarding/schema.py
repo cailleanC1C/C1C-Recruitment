@@ -9,6 +9,7 @@ from shared.config import (
     get_onboarding_sheet_id,
 )
 from shared.sheets.core import fetch_records
+from modules.common.logs import log as shared_log
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
 
@@ -68,6 +69,7 @@ def load_welcome_questions() -> List[Question]:
 
     rows = fetch_records(sheet_id=sheet_id, worksheet=tab)
     if not rows:
+        shared_log.human("warning", "Onboarding — schema empty", tab=tab)
         raise RuntimeError(f"tab '{tab}' is empty")
 
     headers = set(rows[0].keys())
@@ -113,6 +115,11 @@ def load_welcome_questions() -> List[Question]:
         questions.append(question)
 
     if not questions:
+        shared_log.human(
+            "warning",
+            "Onboarding — schema has no welcome rows",
+            tab=tab,
+        )
         raise RuntimeError(f"no 'welcome' questions found in tab '{tab}'")
 
     questions.sort(key=lambda question: question.order_key)
