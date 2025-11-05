@@ -392,7 +392,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         custom_id=OPEN_QUESTIONS_CUSTOM_ID,
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        """Stage 1: post a clean launcher so the modal opens on a fresh interaction."""
+        """Start the inline onboarding wizard inside the active thread."""
 
         controller, thread_id = self._resolve(interaction)
         if controller is None or thread_id is None:
@@ -408,18 +408,62 @@ class OpenQuestionsPanelView(discord.ui.View):
             await self._ensure_error_notice(interaction)
             return
 
+        async def _hard_fail(reason: str, *, error: Exception | None = None) -> None:
+            if diag.is_enabled():
+                payload = {"reason": reason, **diag_state}
+                if error is not None:
+                    payload["error"] = str(error)
+                await diag.log_event("warning", "wizard_launch_failed", **payload)
+            await self._ensure_error_notice(interaction)
+            prompt_retry = getattr(controller, "prompt_retry", None)
+            if callable(prompt_retry):
+                try:
+                    await prompt_retry(interaction, thread_id)
+                except Exception:  # pragma: no cover - best-effort fallback
+                    log.warning("failed to post retry prompt", exc_info=True)
+
+        loader = getattr(controller, "get_or_load_questions", None)
+        try:
+            if callable(loader):
+                await loader(thread_id)
+        except KeyError as exc:
+            log.warning("⚠️ onboarding wizard config error: %s", exc)
+            await _hard_fail("config_missing", error=exc)
+            return
+        except Exception as exc:  # pragma: no cover - defensive network path
+            log.warning("onboarding question preload failed", exc_info=True)
+            await _hard_fail("preload_exception", error=exc)
+            return
+
+        questions_dict = getattr(controller, "questions_by_thread", {})
+        thread_questions: Sequence[Any] | None = None
+        if isinstance(questions_dict, dict):
+            thread_questions = questions_dict.get(thread_id)
+        if not thread_questions:
+            log.warning(
+                "⚠️ onboarding wizard: no questions available for thread %s", thread_id
+            )
+            await _hard_fail("no_questions")
+            return
+
         try:
             await interaction.response.defer()
         except discord.InteractionResponded:
             pass
 
+        try:
+            content = controller.render_step(thread_id, step=0)
+        except Exception as exc:
+            log.warning("failed to render onboarding wizard step", exc_info=True)
+            await _hard_fail("render_failed", error=exc)
+            return
+
         view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
-        content = controller.render_step(thread_id, step=0)
 
         try:
             await channel.send(content, view=view)
         except Exception:
-            await self._ensure_error_notice(interaction)
+            await _hard_fail("send_failed")
             raise
 
         if diag.is_enabled():

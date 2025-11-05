@@ -1658,7 +1658,7 @@ class BaseWelcomeController:
             log.warning(
                 "failed to rehydrate welcome questions", exc_info=True
             )
-            return False
+            raise
 
         self._questions[thread_id] = list(refreshed)
         if session is not None:

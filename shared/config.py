@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Dict, Iterable, Optional, Sequence, Set
+from typing import Dict, Iterable, Mapping, Optional, Sequence, Set
 
 from config import runtime as _runtime
 from shared.redaction import mask_secret, mask_service_account, sanitize_text
@@ -37,6 +37,7 @@ __all__ = [
     "get_recruitment_sheet_id",
     "get_onboarding_sheet_id",
     "get_onboarding_questions_tab",
+    "resolve_onboarding_tab",
     "get_admin_role_ids",
     "get_staff_role_ids",
     "get_recruiter_role_ids",
@@ -560,23 +561,41 @@ def get_onboarding_sheet_id() -> str:
 
 
 def get_onboarding_questions_tab() -> str:
-    raw = _CONFIG.get("ONBOARDING_QUESTIONS_TAB", "")
-    value = str(raw or "").strip()
-    if value:
-        return value
-
     try:
-        from shared.sheets import onboarding as onboarding_sheets  # local import to avoid cycles
-    except Exception:
-        return value
+        return resolve_onboarding_tab(cfg)
+    except KeyError:
+        return ""
 
-    lookup = getattr(onboarding_sheets, "_config_lookup", None)
-    if callable(lookup):
-        resolved = lookup("onboarding.questions_tab", None)
-        if resolved:
-            return str(resolved).strip()
 
-    return value
+def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
+    """
+    Returns the sheet tab name for onboarding questions.
+    Lookup order: ONBOARDING_TAB -> onboarding.questions_tab (alias).
+    Raises KeyError if neither exists or is empty.
+    """
+
+    source = config or cfg
+    getter = getattr(source, "get", None)
+    if getter is None and isinstance(source, Mapping):
+        getter = source.get
+    if getter is None:
+        raise TypeError("config must provide a get() method")
+
+    def _lookup(key: str) -> str:
+        try:
+            value = getter(key, None)  # type: ignore[misc]
+        except Exception:
+            return ""
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    tab = _lookup("ONBOARDING_TAB")
+    if not tab:
+        tab = _lookup("onboarding.questions_tab")
+    if not tab:
+        raise KeyError("missing config key: ONBOARDING_TAB (alias: onboarding.questions_tab)")
+    return tab
 
 
 def _role_set(key: str) -> Set[int]:

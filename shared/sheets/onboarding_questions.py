@@ -10,24 +10,17 @@ from functools import lru_cache
 from typing import Iterable, Literal, Sequence
 
 from shared.sheets import core
+from shared.config import cfg, resolve_onboarding_tab
 from shared.sheets import onboarding as onboarding_sheets
 
 __all__ = ["Question", "Option", "get_questions", "schema_hash"]
 
 log = logging.getLogger(__name__)
 
-_QUESTION_TAB = "OnboardingQuestions"
-
-
 def _question_tab() -> str:
     """Return the configured onboarding question tab name."""
 
-    lookup = getattr(onboarding_sheets, "_config_lookup", None)
-    if callable(lookup):
-        tab = (lookup("onboarding_tab", _QUESTION_TAB) or "").strip()
-        if tab:
-            return tab
-    return _QUESTION_TAB
+    return resolve_onboarding_tab(cfg)
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@ import pytest
 
 from modules.onboarding.controllers import welcome_controller as welcome
 from modules.onboarding.ui import panels
-from modules.onboarding.ui.wizard import OnboardWizard
+from modules.onboarding.ui.panels import OnboardWizard
 
 
 class _DummyMessage(SimpleNamespace):
@@ -105,7 +105,7 @@ def test_panel_button_launch_posts_wizard_message(monkeypatch: pytest.MonkeyPatc
         response.defer.assert_awaited_once()
         dummy_thread.sent.assert_awaited()
         sent_call = dummy_thread.sent.await_args
-        assert sent_call.args[0] == "Step 1"
+        assert sent_call.args[0] == controller.render_step.return_value
         assert isinstance(sent_call.kwargs["view"], OnboardWizard)
 
     asyncio.run(runner())

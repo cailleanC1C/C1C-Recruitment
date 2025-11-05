@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from shared.config import cfg
+from shared.config import cfg, resolve_onboarding_tab
 from shared.sheets.core import read_table
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
@@ -52,9 +52,7 @@ def _order_key(value: str) -> Tuple[int, str]:
 def load_welcome_questions() -> List[Question]:
     """Load and validate the *existing* onboarding tab. Strict, no fallback."""
 
-    tab = cfg.get("onboarding.questions_tab")
-    if not tab:
-        raise RuntimeError("missing config key: onboarding.questions_tab")
+    tab = resolve_onboarding_tab(cfg)
 
     rows = read_table(tab_name=tab)
     if not rows:
