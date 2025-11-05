@@ -244,7 +244,7 @@ milestone: Harmonize v1.0
 - **Meta block syntax:**
 
 ```markdown
-**Instruction for Codex (do not include this header in commits):**
+**Instruction for Codex:**
 At the end of the PR **body**, after all other sections, append the metadata block below **exactly**. 
 Do **not** add any text after it. It must be the **final lines** of the PR body so the workflow can parse it.
 [meta]
