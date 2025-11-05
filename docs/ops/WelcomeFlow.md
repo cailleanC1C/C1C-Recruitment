@@ -50,7 +50,3 @@ Gate instrumentation surfaces as single-line console logs:
 - **Always defer first.** Defer the button interaction before posting or editing the wizard message; otherwise Discord returns `response_is_done: true` and the launch fails.
 
 Doc last updated: 2025-11-05 (v0.9.7)
-[meta]
-labels: comp:onboarding, robustness, P2, ready, docs
-milestone: Harmonize v1.0
-[/meta]
