@@ -12,9 +12,6 @@ import discord
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
-from shared.config import get_allowed_guild_ids, get_log_channel_id
-from shared.logfmt import channel_label, guild_label
-from shared.logs import log_lifecycle
 from .wizard import OnboardWizard
 
 __all__ = [
@@ -29,6 +26,7 @@ __all__ = [
     "mark_panel_inactive_by_message",
     "register_panel_message",
     "register_persistent_views",
+    "threads_default_label",
     "unbind_controller",
 ]
 
@@ -233,13 +231,20 @@ def _threads_default_label() -> str | None:
     return None
 
 
-def register_persistent_views(bot: discord.Client) -> None:
+def threads_default_label() -> str | None:
+    """Public helper exposing the configured thread default label."""
+
+    return _threads_default_label()
+
+
+def register_persistent_views(bot: discord.Client) -> dict[str, Any]:
     view = OpenQuestionsPanelView()
     started = time.perf_counter()
     registered = False
     duplicate = False
     stacksite: str | None = None
     error: Exception | None = None
+    custom_ids: list[str] = []
     try:
         bot.add_view(view)
         registered = True
@@ -275,45 +280,21 @@ def register_persistent_views(bot: discord.Client) -> None:
     buttons, text_inputs, selects = _component_counts(view)
     components = f"buttons:{buttons},textinputs:{text_inputs},selects:{selects}"
 
-    allowed_guilds = list(get_allowed_guild_ids())
-    guild_obj: discord.Guild | None = None
-
-    log_channel_id = get_log_channel_id()
-    log_channel_label: str | None = None
-    if log_channel_id:
-        channel = bot.get_channel(log_channel_id)
-        guild_obj = getattr(channel, "guild", None) if channel is not None else None
-        if channel is not None:
-            log_channel_label = channel_label(guild_obj, log_channel_id)
-
-    if guild_obj is None and allowed_guilds:
-        for gid in allowed_guilds:
-            candidate = bot.get_guild(gid)
-            if candidate is not None:
-                guild_obj = candidate
-                break
-        if guild_obj is not None and log_channel_id and not log_channel_label:
-            log_channel_label = channel_label(guild_obj, log_channel_id)
-
-    guild_label_text: str | None = None
-    if guild_obj is not None:
-        guild_label_text = guild_label(bot, guild_obj.id)
-
-    fields = {
+    info: dict[str, Any] = {
         "view": view.__class__.__name__,
         "components": components,
         "threads_default": _threads_default_label(),
-        "guild": guild_label_text,
-        "log_dest": log_channel_label,
-        "duration": f"{duration_ms}ms",
-        "result": "ok" if registered else "error",
+        "duration_ms": duration_ms,
+        "registered": registered,
+        "duplicate_registration": duplicate,
+        "error": error,
+        "timeout": view.timeout,
+        "disable_on_timeout": getattr(view, "disable_on_timeout", None),
+        "custom_ids": custom_ids,
     }
-    if duplicate:
-        fields["duplicate_registration"] = True
-    if error is not None:
-        fields["reason"] = f"{error.__class__.__name__}: {error}"
-
-    log_lifecycle(log, "onboarding", "view_registered", **fields)
+    if stacksite:
+        info["stacksite"] = stacksite
+    return info
 
 
 class OpenQuestionsPanelView(discord.ui.View):

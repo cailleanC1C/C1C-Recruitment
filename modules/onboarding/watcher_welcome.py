@@ -17,6 +17,8 @@ from shared.config import (
     get_recruitment_coordinator_role_ids,
     get_welcome_channel_id,
 )
+from shared.logfmt import channel_label
+from shared.logs import log_lifecycle
 
 log = logging.getLogger("c1c.onboarding.welcome_watcher")
 
@@ -31,8 +33,40 @@ async def _send_runtime(message: str) -> None:
         log.warning("failed to send welcome watcher log message", exc_info=True)
 
 
+def _channel_readable_label(bot: commands.Bot, channel_id: int | None) -> str:
+    if channel_id is None:
+        return "#unknown"
+    try:
+        cid = int(channel_id)
+    except (TypeError, ValueError):
+        return f"#{channel_id}"
+
+    guild: discord.Guild | None = None
+    channel = bot.get_channel(cid)
+    if channel is not None:
+        guild = getattr(channel, "guild", None)
+    if guild is None:
+        for candidate in getattr(bot, "guilds", []):
+            try:
+                if candidate.get_channel(cid):
+                    guild = candidate
+                    break
+                getter = getattr(candidate, "get_thread", None)
+                if callable(getter) and getter(cid):
+                    guild = candidate
+                    break
+            except Exception:
+                continue
+    if guild is not None:
+        try:
+            return channel_label(guild, cid)
+        except Exception:
+            pass
+    return f"#{cid}"
+
+
 def _announce(bot: commands.Bot, message: str) -> None:
-    log.info("welcome watcher notice: %s", message)
+    log.info("%s", message)
 
     async def runner() -> None:
         await bot.wait_until_ready()
@@ -76,6 +110,39 @@ class WelcomeWatcher(commands.Cog):
         coordinator_roles = get_recruitment_coordinator_role_ids()
         guardian_roles = get_guardian_knight_role_ids()
         self._staff_role_ids = set(coordinator_roles) | set(guardian_roles)
+
+    def _register_persistent_view(self) -> None:
+        registration = panels.register_persistent_views(self.bot)
+
+        view_name = registration.get("view") or "OpenQuestionsPanelView"
+        components = registration.get("components") or "buttons:0,textinputs:0,selects:0"
+        threads_default = registration.get("threads_default")
+        duration_ms = registration.get("duration_ms")
+        registered = bool(registration.get("registered"))
+        duplicate = bool(registration.get("duplicate_registration"))
+        error = registration.get("error")
+
+        payload: dict[str, object] = {
+            "view": view_name,
+            "components": components,
+            "result": "ok" if registered else "error",
+        }
+        if threads_default is not None:
+            payload["threads_default"] = threads_default
+        if isinstance(duration_ms, int):
+            payload["duration"] = f"{duration_ms}ms"
+        if duplicate:
+            payload["duplicate_registration"] = True
+        if error is not None:
+            payload["reason"] = f"{error.__class__.__name__}: {error}"
+
+        try:
+            log_lifecycle(log, "onboarding", "view_registered", **payload)
+        except Exception:
+            pass
+
+        if error is not None:
+            raise error
 
     # ---- helpers -----------------------------------------------------------------
     @staticmethod
@@ -301,8 +368,17 @@ async def setup(bot: commands.Bot) -> None:
         )
         return
 
-    await bot.add_cog(WelcomeWatcher(bot, channel_id=channel_id))
-    _announce(
-        bot,
-        f"✅ Welcome watcher enabled — channel_id={int(channel_id)}",
-    )
+    watcher = WelcomeWatcher(bot, channel_id=channel_id)
+    try:
+        watcher._register_persistent_view()
+    except Exception:
+        raise
+
+    await bot.add_cog(watcher)
+
+    try:
+        channel_id_int = int(channel_id)
+    except (TypeError, ValueError):
+        channel_id_int = None
+    label = _channel_readable_label(bot, channel_id_int)
+    _announce(bot, f"✅ Welcome watcher enabled — channel={label}")

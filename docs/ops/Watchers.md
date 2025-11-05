@@ -33,6 +33,7 @@ single structured log._
   thread closures, appends a row to the configured Sheet tab, and logs the result via
   `[welcome_watcher]` messages.
   Lifecycle logging emits a single humanized line at startup with real context (no placeholders).
+  Lifecycle ownership: the welcome watcher emits the onboarding lifecycle record exactly once when the persistent view registers, and other onboarding modules stay silent. The readiness notice humanizes the destination channel (for example, `#ops › onboarding-log`).
 - **Promo watcher** (`welcome_enabled` + `enable_promo_watcher`) — mirrors the welcome flow
   for promo threads, writing to the promo tab and logging as `[promo_watcher]`.
 
