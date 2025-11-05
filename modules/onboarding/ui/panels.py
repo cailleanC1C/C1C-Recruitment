@@ -121,6 +121,17 @@ async def _defer_interaction(interaction: discord.Interaction) -> None:
         return
 
 
+async def _ensure_deferred(interaction: discord.Interaction) -> None:
+    """Ack the interaction if it isn't already. Never raises."""
+    try:
+        if not interaction.response.is_done():
+            # thinking=True keeps the interaction alive without posting text
+            await interaction.response.defer(thinking=True)
+    except Exception:
+        # If it was already acknowledged or Discord races, just continue
+        pass
+
+
 def _restart_context_from_state(
     interaction: discord.Interaction,
     state: dict[str, Any],
@@ -422,15 +433,18 @@ class OpenQuestionsPanelView(discord.ui.View):
                 except Exception:  # pragma: no cover - best-effort fallback
                     log.warning("failed to post retry prompt", exc_info=True)
 
+        # Ack early to avoid Discord's 3s timeout, then do any slow work
+        await _ensure_deferred(interaction)
+
         loader = getattr(controller, "get_or_load_questions", None)
         try:
             if callable(loader):
-                await loader(thread_id)
+                await loader(thread_id)  # may hit Google Sheets; safe because we've deferred
         except KeyError as exc:
             log.warning("⚠️ onboarding wizard config error: %s", exc)
             await _hard_fail("config_missing", error=exc)
             return
-        except Exception as exc:  # pragma: no cover - defensive network path
+        except Exception as exc:  # defensive network path
             log.warning("onboarding question preload failed", exc_info=True)
             await _hard_fail("preload_exception", error=exc)
             return
@@ -446,10 +460,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             await _hard_fail("no_questions")
             return
 
-        try:
-            await interaction.response.defer()
-        except discord.InteractionResponded:
-            pass
+        # Already deferred above; nothing to do here
 
         try:
             content = controller.render_step(thread_id, step=0)
