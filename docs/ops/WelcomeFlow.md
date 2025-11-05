@@ -1,12 +1,12 @@
 # Welcome Flow
 
 ## Overview
-The welcome questionnaire now runs entirely inside the ticket thread. Recruits (or authorized staff) press a persistent **Open questions** button to launch a paged modal flow, review their answers, and submit a single embed summary back to the thread.
+The welcome questionnaire now runs entirely inside the ticket thread. Recruits (or authorized staff) press the persistent **Open questions** button to launch an in-thread wizard, answer each question inline, and submit a single embed summary back to the thread. Open questions starts an in-thread wizard (no modal). Config key: `ONBOARDING_TAB` (alias: `onboarding.questions_tab`).
 
 ## Flow steps
 1. **Panel posted** – The watcher listens for the welcome greeting phrase (`"awake by reacting with"`) or the 🎫 emoji. It reacts 👍 to the greeting and posts a fresh message with the persistent **Open questions** button.
-2. **Paged modals** – Pressing the button opens the onboarding questions in order. The modal pages are populated from the recruitment sheet and retain any answers already provided.
-3. **Review & Confirm** – After the final page, the bot shows an ephemeral summary view with edit/submit buttons so the recruit can revise any section before finalizing.
+2. **In-thread wizard** – Pressing the button posts the first onboarding question directly in the thread with navigation controls. Each answer is captured inline and retains previously provided values when the wizard is resumed.
+3. **Review & Confirm** – After the final question, the wizard shows a summary in-thread with edit/submit controls so the recruit can revise any section before finalizing.
 4. **Submit** – Confirming posts a single embed in the thread. The embed lists every question and answer (split across multiple embeds if Discord field limits require) and records who submitted along with a UTC timestamp.
 5. **Follow-up** – Coordinators pick up directly in the thread. The session can be resumed or restarted at any time by pressing either **Open questions** or the persistent **Restart** button.
 
@@ -23,7 +23,7 @@ No target-user resolution is required. Recruiter/Admin roles are not needed to k
 - Access is granted solely by `view_channel` in the active ticket thread. If the user cannot see the thread, the deferred response is edited with a denial notice.
 - The Restart button uses the same access gate and re-triggers the full onboarding flow in place.
 
-Buttons that open modals must respond with the modal itself, not with a deferral.
+Always defer the interaction before posting the wizard message to avoid “Interaction failed” toasts.
 
 ## Restart rules
 - Sessions survive restarts thanks to the persistent view ID. If the modal flow is already in progress, pressing the button offers a resume/restart choice. Losing in-memory state is harmless—the recruit can simply start over.
@@ -47,6 +47,10 @@ Gate instrumentation surfaces as single-line console logs:
 ---
 ## Known pitfalls
 
-- **Don't pre-respond before a modal.** `send_modal` must be the first response on the interaction; any prior defer/send forces Discord to reject the modal with `response_is_done: true`.
+- **Always defer first.** Defer the button interaction before posting or editing the wizard message; otherwise Discord returns `response_is_done: true` and the launch fails.
 
-Doc last updated: 2025-11-02 (v0.9.7)
+Doc last updated: 2025-11-05 (v0.9.7)
+[meta]
+labels: comp:onboarding, robustness, P2, ready, docs
+milestone: Harmonize v1.0
+[/meta]

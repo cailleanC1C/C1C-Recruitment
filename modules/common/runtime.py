@@ -841,6 +841,7 @@ class Runtime:
             ("clans", timedelta(hours=3), "3h"),
             ("templates", timedelta(days=7), "7d"),
             ("clan_tags", timedelta(days=7), "7d"),
+            ("onboarding_questions", timedelta(days=7), "7d"),
         )
         successes: list[tuple[Any, Any]] = []
         failure: tuple[str, BaseException] | None = None

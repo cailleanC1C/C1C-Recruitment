@@ -139,10 +139,16 @@ async def _cron_refresh_clan_tags(runtime: "rt.Runtime") -> None:
     await _run_refresh(runtime, _SPEC_BY_BUCKET["clan_tags"])
 
 
+@cron_task("refresh_onboarding_questions")
+async def _cron_refresh_onboarding_questions(runtime: "rt.Runtime") -> None:
+    await _run_refresh(runtime, _SPEC_BY_BUCKET["onboarding_questions"])
+
+
 _JOB_HANDLERS = {
     "clans": _cron_refresh_clans,
     "templates": _cron_refresh_templates,
     "clan_tags": _cron_refresh_clan_tags,
+    "onboarding_questions": _cron_refresh_onboarding_questions,
 }
 
 
@@ -235,6 +241,11 @@ def schedule_default_jobs(runtime: "rt.Runtime") -> None:
         _JobSpec(bucket="clans", interval=dt.timedelta(hours=3), cadence_label="3h"),
         _JobSpec(bucket="templates", interval=dt.timedelta(days=7), cadence_label="7d"),
         _JobSpec(bucket="clan_tags", interval=dt.timedelta(days=7), cadence_label="7d"),
+        _JobSpec(
+            bucket="onboarding_questions",
+            interval=dt.timedelta(days=7),
+            cadence_label="7d",
+        ),
     )
     successes: List[Tuple[_JobSpec, Any]] = []
     failure: Optional[Tuple[str, BaseException]] = None
