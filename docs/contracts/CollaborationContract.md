@@ -82,6 +82,7 @@ footer_date: YYYY-MM-DD  # optional; include only when approved
 [/approval]
 ```
 **Codex — Meta Block Instruction (must follow):**
+
 “Append the meta block shown below to the **very end of the PR body**. It must be the **final lines**. **Do not** include this instruction text in the PR body. **Do not** change keys/wording. **Do not** add any characters or blank lines after `[/meta]`.”
 
 And this is the block Codex must append, literally:
