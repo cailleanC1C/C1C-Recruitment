@@ -269,6 +269,46 @@ def _log_snapshot(snapshot: Dict[str, object]) -> None:
     log.info("config loaded", extra={"config": redacted})
 
 
+def _merge_onboarding_tab(config: Dict[str, object]) -> None:
+    """Merge the onboarding questions tab name from sheet config."""
+
+    try:
+        from shared.sheets import onboarding as onboarding_sheets  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency at import time
+        log.debug("config: onboarding sheet module unavailable", exc_info=True)
+        return
+
+    if not (
+        os.getenv("ONBOARDING_SHEET_ID")
+        or os.getenv("GOOGLE_SHEET_ID")
+        or os.getenv("GSHEET_ID")
+    ):
+        log.debug("config: onboarding sheet id not configured; skipping tab merge")
+        return
+
+    try:
+        sheet_config = onboarding_sheets._load_config()  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - network or credential failures
+        log.warning("config: failed to load onboarding Config tab: %s", exc)
+        return
+
+    canonical = str(sheet_config.get("onboarding.questions_tab", "")).strip()
+    alias = str(sheet_config.get("onboarding_tab", "")).strip()
+
+    if canonical and alias and canonical != alias:
+        raise ValueError(
+            "Conflicting onboarding Config entries: "
+            "onboarding.questions_tab=%r vs ONBOARDING_TAB=%r" % (canonical, alias)
+        )
+
+    tab = canonical or alias
+    if not tab:
+        return
+
+    config["ONBOARDING_TAB"] = tab
+    config["ONBOARDING_QUESTIONS_TAB"] = tab
+
+
 def _load_config() -> Dict[str, object]:
     keepalive = _runtime.get_watchdog_check_sec()
     stall = _runtime.get_watchdog_stall_sec()
@@ -329,6 +369,8 @@ def _load_config() -> Dict[str, object]:
         log.warning(
             "Legacy ENABLE_WELCOME_WATCHER detected; set ENABLE_WELCOME_HOOK and remove the old key."
         )
+
+    _merge_onboarding_tab(config)
 
     return config
 
@@ -590,11 +632,18 @@ def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
             return ""
         return str(value).strip()
 
-    tab = _lookup("ONBOARDING_TAB")
+    canonical = _lookup("onboarding.questions_tab")
+    alias = _lookup("ONBOARDING_TAB")
+
+    if canonical and alias and canonical != alias:
+        raise ValueError(
+            "Conflicting onboarding Config entries: "
+            f"onboarding.questions_tab={canonical!r} vs ONBOARDING_TAB={alias!r}"
+        )
+
+    tab = canonical or alias
     if not tab:
-        tab = _lookup("onboarding.questions_tab")
-    if not tab:
-        raise KeyError("missing config key: ONBOARDING_TAB (alias: onboarding.questions_tab)")
+        raise KeyError("missing config key: onboarding.questions_tab (alias: ONBOARDING_TAB)")
     return tab
 
 
