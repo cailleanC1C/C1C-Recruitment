@@ -3,12 +3,23 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 from modules.common import runtime as rt
 
 UTC = dt.timezone.utc
 log = logging.getLogger(__name__)
+
+_ONBOARDING_QUESTIONS_TTL_SEC = 7 * 24 * 60 * 60
+
+
+async def _load_onboarding_questions() -> Tuple[dict[str, str], ...]:
+    """Load onboarding questions from Sheets via the async cache loader."""
+
+    from shared.sheets.onboarding_questions import fetch_question_rows_async
+
+    rows = await fetch_question_rows_async()
+    return rows
 
 
 def _errtext(exc: BaseException) -> str:
@@ -222,6 +233,18 @@ cache = CacheService()
 def capabilities() -> Dict[str, Dict[str, Any]]:
     """Expose cache capabilities for convenience imports."""
     return cache.capabilities()
+
+
+def register_onboarding_questions_bucket() -> None:
+    """Ensure the onboarding questions cache bucket is registered."""
+
+    if cache.get_bucket("onboarding_questions") is not None:
+        return
+    cache.register(
+        "onboarding_questions",
+        _ONBOARDING_QUESTIONS_TTL_SEC,
+        _load_onboarding_questions,
+    )
 
 
 def get_bucket_snapshot(name: str) -> Dict[str, Any]:

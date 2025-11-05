@@ -9,7 +9,9 @@ def register_default_cache_buckets() -> None:
     """Register cache buckets required by Sheets modules."""
 
     import shared.sheets.onboarding as onboarding
+    import shared.sheets.onboarding_questions as onboarding_questions
     import shared.sheets.recruitment as recruitment
 
     onboarding.register_cache_buckets()
+    onboarding_questions.register_cache_buckets()
     recruitment.register_cache_buckets()

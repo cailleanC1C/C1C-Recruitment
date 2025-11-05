@@ -6,16 +6,25 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Iterable, Literal, Sequence
+from typing import Iterable, Literal, Mapping, Sequence, Tuple
 
-from shared.sheets import core
 from shared.config import cfg, resolve_onboarding_tab
 from shared.sheets import onboarding as onboarding_sheets
+from shared.sheets.async_core import afetch_records
 
-__all__ = ["Question", "Option", "get_questions", "schema_hash"]
+__all__ = [
+    "Question",
+    "Option",
+    "fetch_question_rows_async",
+    "get_questions",
+    "register_cache_buckets",
+    "schema_hash",
+]
 
 log = logging.getLogger(__name__)
+
+_cached_rows_snapshot: Tuple[dict[str, str], ...] | None = None
+_cached_questions_by_flow: dict[str, Tuple[Question, ...]] = {}
 
 def _question_tab() -> str:
     """Return the configured onboarding question tab name."""
@@ -53,9 +62,7 @@ def _sheet_id() -> str:
     return onboarding_sheets._sheet_id()  # type: ignore[attr-defined]
 
 
-def _load_rows() -> list[dict[str, str]]:
-    sheet_id = _sheet_id()
-    records = core.fetch_records(sheet_id, _question_tab())
+def _normalise_records(records: Iterable[Mapping[str, object]]) -> Tuple[dict[str, str], ...]:
     parsed: list[dict[str, str]] = []
     for record in records:
         normalized: dict[str, str] = {}
@@ -66,7 +73,41 @@ def _load_rows() -> list[dict[str, str]]:
             normalized[key_norm] = str(value).strip()
         if normalized:
             parsed.append(normalized)
-    return parsed
+    return tuple(parsed)
+
+
+async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
+    """Fetch and normalise onboarding question rows from Sheets."""
+
+    sheet_id = _sheet_id()
+    records = await afetch_records(sheet_id, _question_tab())
+    return _normalise_records(records)
+
+
+def _cached_rows() -> Tuple[dict[str, str], ...]:
+    """Return the cached onboarding question rows."""
+
+    global _cached_rows_snapshot, _cached_questions_by_flow
+
+    from shared.sheets.cache_service import cache
+
+    bucket = cache.get_bucket("onboarding_questions")
+    if bucket is None:
+        _cached_rows_snapshot = None
+        _cached_questions_by_flow.clear()
+        raise RuntimeError("onboarding_questions cache bucket is not registered")
+    value = bucket.value
+    if value is None:
+        _cached_rows_snapshot = None
+        _cached_questions_by_flow.clear()
+        raise RuntimeError("onboarding_questions cache is empty (should be preloaded)")
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    if isinstance(value, Iterable):
+        return tuple(dict(row) for row in value)  # defensive copy for iterables
+    raise TypeError("unexpected onboarding_questions cache payload")
 
 
 def _canonicalize_required(value: str | None) -> bool:
@@ -141,7 +182,9 @@ def _order_sort_key(order: str) -> tuple[int, str]:
     return prefix_num, suffix
 
 
-def _build_questions(flow: Literal["welcome", "promo"], rows: Sequence[dict[str, str]]) -> list[Question]:
+def _build_questions(
+    flow: Literal["welcome", "promo"], rows: Sequence[Mapping[str, str]]
+) -> list[Question]:
     questions: list[Question] = []
     for row in rows:
         row_flow = row.get("flow")
@@ -178,17 +221,11 @@ def _build_questions(flow: Literal["welcome", "promo"], rows: Sequence[dict[str,
     return questions
 
 
-@lru_cache(maxsize=2)
-def _cached_questions(flow: Literal["welcome", "promo"]) -> tuple[Question, ...]:
-    rows = _load_rows()
-    return tuple(_build_questions(flow, rows))
-
-
 def get_questions(flow: Literal["welcome", "promo"]) -> list[Question]:
     """Return the parsed onboarding questions for ``flow``."""
 
-    cached = _cached_questions(flow)
-    return list(cached)
+    questions = _questions_tuple(flow)
+    return list(questions)
 
 
 def _hash_payload(questions: Iterable[Question]) -> str:
@@ -211,14 +248,29 @@ def _hash_payload(questions: Iterable[Question]) -> str:
     return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
+def _questions_tuple(flow: Literal["welcome", "promo"]) -> Tuple[Question, ...]:
+    global _cached_rows_snapshot, _cached_questions_by_flow
+
+    rows = _cached_rows()
+    if rows is not _cached_rows_snapshot:
+        _cached_rows_snapshot = rows
+        _cached_questions_by_flow = {
+            "welcome": tuple(_build_questions("welcome", rows)),
+            "promo": tuple(_build_questions("promo", rows)),
+        }
+    return _cached_questions_by_flow.get(flow, ())
+
+
 def schema_hash(flow: Literal["welcome", "promo"]) -> str:
     """Return the stable schema hash for the onboarding question flow."""
 
-    questions = _cached_questions(flow)
+    questions = _questions_tuple(flow)
     return _hash_payload(questions)
 
 
-def invalidate_cache() -> None:
-    """Clear the cached question rows (exposed for tests)."""
+def register_cache_buckets() -> None:
+    """Register cache buckets used by onboarding questions."""
 
-    _cached_questions.cache_clear()
+    from shared.sheets.cache_service import register_onboarding_questions_bucket
+
+    register_onboarding_questions_bucket()
