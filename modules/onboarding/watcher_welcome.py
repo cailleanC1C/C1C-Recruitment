@@ -33,72 +33,36 @@ async def _send_runtime(message: str) -> None:
         log.warning("failed to send welcome watcher log message", exc_info=True)
 
 
-async def _channel_readable_label(bot: commands.Bot, channel_id: int | str | None) -> str:
+def _channel_readable_label(bot: commands.Bot, channel_id: int | None) -> str:
     if channel_id is None:
         return "#unknown"
-
     try:
         cid = int(channel_id)
     except (TypeError, ValueError):
         return f"#{channel_id}"
 
-    import asyncio
-
-    def _resolve_once() -> str | None:
-        guilds: list[discord.Guild | None] = []
-        channel = bot.get_channel(cid)
-        if channel is not None:
-            guilds.append(getattr(channel, "guild", None))
-        guilds.extend(getattr(bot, "guilds", []))
-
-        seen: set[int] = set()
-        for guild in guilds:
-            if guild is None:
-                continue
-            gid = getattr(guild, "id", None)
-            if gid is not None:
-                try:
-                    gid_int = int(gid)
-                except (TypeError, ValueError):
-                    gid_int = None
-                if gid_int is not None and gid_int in seen:
-                    continue
-                if gid_int is not None:
-                    seen.add(gid_int)
+    guild: discord.Guild | None = None
+    channel = bot.get_channel(cid)
+    if channel is not None:
+        guild = getattr(channel, "guild", None)
+    if guild is None:
+        for candidate in getattr(bot, "guilds", []):
             try:
-                label = channel_label(guild, cid)
+                if candidate.get_channel(cid):
+                    guild = candidate
+                    break
+                getter = getattr(candidate, "get_thread", None)
+                if callable(getter) and getter(cid):
+                    guild = candidate
+                    break
             except Exception:
-                label = None
-            if label and not label.startswith("#unknown"):
-                return label
-
-            resolved = guild.get_channel(cid)
-            if resolved is not None:
-                category = getattr(resolved, "category", None)
-                name = getattr(resolved, "name", None)
-                if category is not None and getattr(category, "name", None):
-                    return f"#{category.name} › {name or 'channel'}"
-                if name:
-                    return f"#{name}"
-
-            getter = getattr(guild, "get_thread", None)
-            thread = getter(cid) if callable(getter) else None
-            if isinstance(thread, discord.Thread):
-                parent = getattr(thread, "parent", None)
-                parent_name = getattr(parent, "name", None)
-                thread_name = getattr(thread, "name", None) or "thread"
-                if parent_name:
-                    return f"#{parent_name} › {thread_name}"
-                return f"#{thread_name}"
-        return None
-
-    fallback = f"#{cid}"
-    for _ in range(20):  # up to ~5s total
-        label = _resolve_once()
-        if label:
-            return label
-        await asyncio.sleep(0.25)
-    return fallback
+                continue
+    if guild is not None:
+        try:
+            return channel_label(guild, cid)
+        except Exception:
+            pass
+    return f"#{cid}"
 
 
 def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> None:
@@ -420,7 +384,11 @@ async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(watcher)
 
     if watcher._onb_registered:
-        label = await _channel_readable_label(bot, channel_id)
+        try:
+            channel_id_int = int(channel_id)
+        except (TypeError, ValueError):
+            channel_id_int = None
+        label = _channel_readable_label(bot, channel_id_int)
         _announce(bot, f"✅ Welcome watcher enabled — channel={label}")
     else:
         reason = watcher._onb_reg_error or "unknown"

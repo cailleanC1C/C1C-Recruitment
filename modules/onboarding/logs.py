@@ -209,8 +209,6 @@ async def send_welcome_log(level: str, **kv: Any) -> None:
 
     payload_map = dict(kv)
 
-    # Lifecycle lines originate exclusively from the welcome watcher.
-
     message = _render_payload(payload_map)
     if not message:
         return
