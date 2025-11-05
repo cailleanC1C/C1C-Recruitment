@@ -687,7 +687,6 @@ class Runtime:
         from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
-        from modules.onboarding.ui import panels as onboarding_panels
         from modules.ops import permissions_sync as ops_permissions
         from modules.ops import watchers_permissions as ops_watchers
         from c1c_coreops import ops as ops_cog
@@ -702,7 +701,6 @@ class Runtime:
         except Exception:
             log.exception("feature toggle refresh failed")
 
-        onboarding_panels.register_persistent_views(self.bot)
         await onboarding_pkg.setup(self.bot)
 
         async def _load_feature_module(
