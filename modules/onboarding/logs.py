@@ -208,8 +208,6 @@ async def send_welcome_log(level: str, **kv: Any) -> None:
     """Send a formatted welcome log message to the shared log channel."""
 
     payload_map = dict(kv)
-    logger = _resolve_logger(level)
-    logger("%s", payload_map)
 
     message = _render_payload(payload_map)
     if not message:
