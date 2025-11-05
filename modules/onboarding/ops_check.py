@@ -1,39 +1,39 @@
 # modules/onboarding/ops_check.py
 from __future__ import annotations
 
-from typing import Optional
-
 from discord.ext import commands
+
+from c1c_coreops.rbac import tier, ops_only
+from c1c_coreops.help import help_metadata
 
 from modules.onboarding.schema import REQUIRED_HEADERS, load_welcome_questions
 from shared.config import cfg
 from shared.logging import log
-from shared.help import help_metadata
-from c1c_coreops.rbac import tier, ops_only  # ← correct RBAC source
 
 
 class OnboardingOps(commands.Cog):
     """Operational helpers for managing the onboarding question sheet."""
 
-    _fallback_registered: bool = False  # avoid double-register on hot reloads
+    # Guard so hot-reloads / second paths don't re-register the same group
+    _fallback_registered: bool = False
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._ops_registered = False
         self._fallback_attached = False
 
-        # explicit callback so discord.py can introspect a valid signature
+        # Root group needs a callable with (ctx) so discord.py can introspect.
         self._group = commands.Group(
-            callback=self._onb_root,   # must accept (ctx)
+            callback=self._onb_root,
             name="onb",
             invoke_without_command=True,
             help="Operational helpers for onboarding questions.",
             brief="Operational helpers for onboarding questions.",
         )
         self._group.cog = self
-        tier("staff")(self._group)  # RBAC on the group
 
-        # help metadata on the group
+        # RBAC + help metadata for the group
+        tier("staff")(self._group)
         extras = getattr(self._group, "extras", None)
         if not isinstance(extras, dict):
             extras = {}
@@ -43,11 +43,9 @@ class OnboardingOps(commands.Cog):
         extras.setdefault("access_tier", "staff")
         extras.setdefault("help_usage", "!ops onb <command>")
 
-        # build subcommands
+        # Subcommands
         self._check_command = self._build_check_command()
         self._reload_command = self._build_reload_command()
-
-        # attach subcommands
         self._group.add_command(self._check_command)
         self._group.add_command(self._reload_command)
 
@@ -90,7 +88,7 @@ class OnboardingOps(commands.Cog):
         return command
 
     # ------------------------------------------------------------------
-    # Wiring
+    # Shared helpers
     @property
     def _usage_prefix(self) -> str:
         return "!ops onb" if self._ops_registered else "!onb"
@@ -99,27 +97,32 @@ class OnboardingOps(commands.Cog):
         self._attach_group()
 
     def _attach_group(self) -> None:
-        ops_root: Optional[commands.Command] = self.bot.get_command("ops")
+        """Attach under !ops if present, otherwise expose a standalone !onb."""
+        ops_root = self.bot.get_command("ops")
 
         if isinstance(ops_root, commands.Group):
+            # Remove any lingering standalone registration
             if self._fallback_attached:
                 removed = self.bot.remove_command(self._group.name)
                 if removed is not None:
                     log.human("info", "ops wiring: removed standalone 'onb' fallback")
                 self._fallback_attached = False
 
+            # Attach as subgroup under ops
             if not self._ops_registered:
                 ops_root.add_command(self._group)
                 self._group.cog = self
                 self._ops_registered = True
                 log.human("info", "ops wiring: added 'onb' subgroup under ops")
         else:
+            # Detach from ops if it was previously attached
             if self._ops_registered:
                 parent = getattr(self._group, "parent", None)
                 if isinstance(parent, commands.Group):
                     parent.remove_command(self._group.name)
                 self._ops_registered = False
 
+            # Register standalone fallback
             if not self._fallback_attached:
                 self.bot.add_command(self._group)
                 self._group.cog = self
@@ -130,7 +133,7 @@ class OnboardingOps(commands.Cog):
                 )
 
     # ------------------------------------------------------------------
-    # Group + commands
+    # Handlers
     async def _onb_root(self, ctx: commands.Context) -> None:
         if ctx.invoked_subcommand is not None:
             return
@@ -157,7 +160,7 @@ class OnboardingOps(commands.Cog):
                 tab=tab,
                 count=len(questions),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - report raw error to staff
             await ctx.reply(
                 "❌ Onboarding sheet invalid:\n`{}`\nFix the sheet or config and try again.".format(
                     exc
@@ -167,37 +170,58 @@ class OnboardingOps(commands.Cog):
             log.human("error", "❌ Onboarding — schema error", details=str(exc))
 
     async def _onb_reload(self, ctx: commands.Context) -> None:
-        """Reload onboarding questions and summarise."""
+        """Force reload of onboarding questions and show a brief summary."""
         try:
             tab = cfg.get("onboarding.questions_tab") or "<unset>"
-            try:
-                questions = load_welcome_questions(force=True)  # if supported
-            except TypeError:
-                questions = load_welcome_questions()
+            questions = load_welcome_questions(force_reload=True)  # if supported; else ignore kw
             count = len(questions)
             await ctx.reply(
-                f"🔄 Reloaded onboarding questions — tab: **{tab}** • questions: **{count}**",
+                f"🔁 Reloaded onboarding questions — tab: **{tab}** • questions: **{count}**",
                 mention_author=False,
             )
             log.human(
                 "info",
-                "🔄 Onboarding — reloaded",
+                "🔁 Onboarding — reloaded questions",
                 guild=ctx.guild.name if ctx.guild else "-",
                 tab=tab,
                 count=count,
             )
-        except Exception as exc:
-            await ctx.reply(f"❌ Reload failed:\n`{exc}`", mention_author=False)
+        except TypeError:
+            # Fallback if load_welcome_questions doesn't support force_reload
+            try:
+                tab = cfg.get("onboarding.questions_tab") or "<unset>"
+                questions = load_welcome_questions()
+                count = len(questions)
+                await ctx.reply(
+                    f"🔁 Reloaded onboarding questions — tab: **{tab}** • questions: **{count}**",
+                    mention_author=False,
+                )
+                log.human(
+                    "info",
+                    "🔁 Onboarding — reloaded questions (no force flag)",
+                    guild=ctx.guild.name if ctx.guild else "-",
+                    tab=tab,
+                    count=count,
+                )
+            except Exception as exc:  # noqa: BLE001
+                await ctx.reply(
+                    "❌ Reload failed:\n`{}`".format(exc),
+                    mention_author=False,
+                )
+                log.human("error", "❌ Onboarding — reload error", details=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            await ctx.reply(
+                "❌ Reload failed:\n`{}`".format(exc),
+                mention_author=False,
+            )
             log.human("error", "❌ Onboarding — reload error", details=str(exc))
 
 
-# ----------------------------------------------------------------------
-# Extension entrypoint
 async def setup(bot: commands.Bot) -> None:
     cog = OnboardingOps(bot)
     await bot.add_cog(cog)
 
-    # Ensure no lingering standalone 'onb' command competes with our group
+    # Replace lingering standalone 'onb' if present to avoid dup registration
     existing_onb = bot.get_command("onb")
     if existing_onb is not None and getattr(existing_onb, "parent", None) is None:
         removed = bot.remove_command("onb")
@@ -206,10 +230,11 @@ async def setup(bot: commands.Bot) -> None:
         existing_onb = None
         OnboardingOps._fallback_registered = False
 
-    # Register fallback once if there is still no 'onb'
+    # Ensure a fallback exists exactly once
     if not OnboardingOps._fallback_registered and existing_onb is None:
         bot.add_command(cog._group)
         OnboardingOps._fallback_registered = True
         cog._fallback_attached = True
 
+    # Try to wire it under !ops if available
     cog.configure_commands()
