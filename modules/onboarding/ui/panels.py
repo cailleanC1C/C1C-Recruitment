@@ -2,13 +2,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
 import discord
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
+from shared.config import get_allowed_guild_ids, get_log_channel_id
+from shared.logfmt import channel_label, guild_label
+from shared.logs import log_lifecycle
 from .wizard import OnboardWizard
 
 __all__ = [
@@ -197,16 +203,49 @@ def mark_panel_inactive_by_message(message_id: int | None) -> None:
         _PANEL_MESSAGES.pop(thread_id, None)
 
 
+def _component_counts(view: discord.ui.View) -> tuple[int, int, int]:
+    buttons = sum(1 for child in view.children if isinstance(child, discord.ui.Button))
+    text_inputs = sum(1 for child in view.children if isinstance(child, discord.ui.TextInput))
+    selects = sum(1 for child in view.children if isinstance(child, discord.ui.Select))
+    return buttons, text_inputs, selects
+
+
+def _threads_default_label() -> str | None:
+    path = Path("config/bot_access_lists.json")
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return None
+    options = payload.get("options", {}) if isinstance(payload, dict) else {}
+    value = options.get("threads_default")
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return "on"
+        if lowered in {"0", "false", "no", "off"}:
+            return "off"
+    return None
+
+
 def register_persistent_views(bot: discord.Client) -> None:
     view = OpenQuestionsPanelView()
+    started = time.perf_counter()
     registered = False
     duplicate = False
     stacksite: str | None = None
+    error: Exception | None = None
     try:
         bot.add_view(view)
         registered = True
-    except Exception:  # pragma: no cover - defensive logging
+    except Exception as exc:  # pragma: no cover - defensive logging
         log.warning("failed to register persistent welcome panel view", exc_info=True)
+        error = exc
     finally:
         if diag.is_enabled():
             key = view.__class__.__name__
@@ -231,9 +270,50 @@ def register_persistent_views(bot: discord.Client) -> None:
                 if stacksite:
                     fields["stacksite"] = stacksite
             diag.log_event_sync("info", "persistent_view_registered", **fields)
-    if registered:
-        log.info("🧭 welcome.view registered (timeout=%s)", view.timeout)
-        log.info("✅ Welcome — persistent-view • view=%s", view.__class__.__name__)
+
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    buttons, text_inputs, selects = _component_counts(view)
+    components = f"buttons:{buttons},textinputs:{text_inputs},selects:{selects}"
+
+    allowed_guilds = list(get_allowed_guild_ids())
+    guild_obj: discord.Guild | None = None
+
+    log_channel_id = get_log_channel_id()
+    log_channel_label: str | None = None
+    if log_channel_id:
+        channel = bot.get_channel(log_channel_id)
+        guild_obj = getattr(channel, "guild", None) if channel is not None else None
+        if channel is not None:
+            log_channel_label = channel_label(guild_obj, log_channel_id)
+
+    if guild_obj is None and allowed_guilds:
+        for gid in allowed_guilds:
+            candidate = bot.get_guild(gid)
+            if candidate is not None:
+                guild_obj = candidate
+                break
+        if guild_obj is not None and log_channel_id and not log_channel_label:
+            log_channel_label = channel_label(guild_obj, log_channel_id)
+
+    guild_label_text: str | None = None
+    if guild_obj is not None:
+        guild_label_text = guild_label(bot, guild_obj.id)
+
+    fields = {
+        "view": view.__class__.__name__,
+        "components": components,
+        "threads_default": _threads_default_label(),
+        "guild": guild_label_text,
+        "log_dest": log_channel_label,
+        "duration": f"{duration_ms}ms",
+        "result": "ok" if registered else "error",
+    }
+    if duplicate:
+        fields["duplicate_registration"] = True
+    if error is not None:
+        fields["reason"] = f"{error.__class__.__name__}: {error}"
+
+    log_lifecycle(log, "onboarding", "view_registered", **fields)
 
 
 class OpenQuestionsPanelView(discord.ui.View):
