@@ -65,8 +65,8 @@ def _channel_readable_label(bot: commands.Bot, channel_id: int | None) -> str:
     return f"#{cid}"
 
 
-def _announce(bot: commands.Bot, message: str) -> None:
-    log.info("%s", message)
+def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> None:
+    log.log(level, "%s", message)
 
     async def runner() -> None:
         await bot.wait_until_ready()
@@ -110,6 +110,8 @@ class WelcomeWatcher(commands.Cog):
         coordinator_roles = get_recruitment_coordinator_role_ids()
         guardian_roles = get_guardian_knight_role_ids()
         self._staff_role_ids = set(coordinator_roles) | set(guardian_roles)
+        self._onb_registered: bool = False
+        self._onb_reg_error: str | None = None
 
     def _register_persistent_view(self) -> None:
         registration = panels.register_persistent_views(self.bot)
@@ -141,8 +143,16 @@ class WelcomeWatcher(commands.Cog):
         except Exception:
             pass
 
-        if error is not None:
-            raise error
+        if registered:
+            self._onb_registered = True
+            self._onb_reg_error = None
+        else:
+            reason = payload.get("reason")
+            if isinstance(reason, str):
+                self._onb_reg_error = reason
+            else:
+                self._onb_reg_error = "unknown"
+            self._onb_registered = False
 
     # ---- helpers -----------------------------------------------------------------
     @staticmethod
@@ -369,16 +379,17 @@ async def setup(bot: commands.Bot) -> None:
         return
 
     watcher = WelcomeWatcher(bot, channel_id=channel_id)
-    try:
-        watcher._register_persistent_view()
-    except Exception:
-        raise
+    watcher._register_persistent_view()
 
     await bot.add_cog(watcher)
 
-    try:
-        channel_id_int = int(channel_id)
-    except (TypeError, ValueError):
-        channel_id_int = None
-    label = _channel_readable_label(bot, channel_id_int)
-    _announce(bot, f"✅ Welcome watcher enabled — channel={label}")
+    if watcher._onb_registered:
+        try:
+            channel_id_int = int(channel_id)
+        except (TypeError, ValueError):
+            channel_id_int = None
+        label = _channel_readable_label(bot, channel_id_int)
+        _announce(bot, f"✅ Welcome watcher enabled — channel={label}")
+    else:
+        reason = watcher._onb_reg_error or "unknown"
+        _announce(bot, f"⚠️ Welcome watcher not enabled — reason={reason}", level=logging.WARNING)
