@@ -80,11 +80,12 @@ This part has to be followed to the point. it will break the PR if it is not fol
 version: vX.Y.Z          # optional; include only when approved
 footer_date: YYYY-MM-DD  # optional; include only when approved
 [/approval]
+```
+**Codex — Meta Block Instruction (must follow):**
+“Append the meta block shown below to the **very end of the PR body**. It must be the **final lines**. **Do not** include this instruction text in the PR body. **Do not** change keys/wording. **Do not** add any characters or blank lines after `[/meta]`.”
 
-**Instruction for Codex (do not include this header in commits):**
-At the end of the PR **body**, after all other sections, append the metadata block below **exactly**. 
-Do **not** add any text after it. It must be the **final lines** of the PR body so the workflow can parse it.
-
+And this is the block Codex must append, literally:
+```
 [meta]
 labels: <labels here>
 milestone: Harmonize v1.0
