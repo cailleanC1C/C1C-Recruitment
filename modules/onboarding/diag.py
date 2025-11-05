@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -11,8 +10,6 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import discord
-
-from modules.onboarding import logs
 
 log = logging.getLogger("c1c.onboarding.diag")
 
@@ -74,16 +71,12 @@ def _append_json_line(payload: dict[str, Any]) -> None:
 
 
 async def log_event(level: str, event: str, **fields: Any) -> None:
-    """Emit a diagnostic event to both the shared log channel and JSON sink."""
+    """Emit a diagnostic event to the JSON sink when enabled."""
 
     if not is_enabled():
         return
 
     payload = _prepare_payload(event, fields)
-    try:
-        await logs.send_welcome_log(level, **payload)
-    except Exception:  # pragma: no cover - defensive guard
-        log.warning("failed to emit welcome diag log", exc_info=True)
     _append_json_line(payload)
 
 
@@ -94,16 +87,6 @@ def log_event_sync(level: str, event: str, **fields: Any) -> None:
         return
 
     payload = _prepare_payload(event, fields)
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        loop.create_task(logs.send_welcome_log(level, **payload))
-    else:  # pragma: no cover - defensive guard
-        log.info("%s", payload)
-
     _append_json_line(payload)
 
 

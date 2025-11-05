@@ -402,15 +402,25 @@ class LogTemplates:
             "error": LOG_EMOJI["error"],
         }
         emoji = palette.get(result, LOG_EMOJI["info"])
-        actor_text = actor or "-"
-        thread_text = thread or "#unknown"
-        detail_text = "; ".join(details or []) if details else "-"
-        segments = [f"actor={actor_text}", f"thread={thread_text}"]
-        if parent:
+        actor_text = (actor or "").strip()
+        thread_text = (thread or "#unknown").strip() or "#unknown"
+        cleaned_details = [item for item in (details or []) if item and item != "-"]
+
+        segments: list[str] = []
+        if actor_text and actor_text != "-":
+            segments.append(f"actor={actor_text}")
+        if thread_text and thread_text != "-":
+            segments.append(f"thread={thread_text}")
+        if parent and parent != "-":
             segments.append(f"channel={parent}")
-        segments.append(f"result={result}")
-        segments.append(f"details: {detail_text}")
-        return f"{emoji} Welcome panel — " + " • ".join(segments)
+        if result and result != "-":
+            segments.append(f"result={result}")
+        if cleaned_details:
+            segments.append("details: " + "; ".join(cleaned_details))
+
+        if segments:
+            return f"{emoji} Welcome panel — " + " • ".join(segments)
+        return f"{emoji} Welcome panel"
 
     @staticmethod
     def select_refresh_template(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
