@@ -32,6 +32,7 @@ single structured log._
 - **Welcome watcher** (`welcome_enabled` + `enable_welcome_hook`) — listens for welcome
   thread closures, appends a row to the configured Sheet tab, and logs the result via
   `[welcome_watcher]` messages.
+  Lifecycle logging emits a single humanized line at startup with real context (no placeholders).
 - **Promo watcher** (`welcome_enabled` + `enable_promo_watcher`) — mirrors the welcome flow
   for promo threads, writing to the promo tab and logging as `[promo_watcher]`.
 
@@ -64,4 +65,4 @@ All jobs post `[cache]` summaries to the ops channel via `modules.common.runtime
 - `/healthz` reports watchdog metrics and cache timestamps; `!ops config` surfaces the active watcher toggles.
 - `LOG_CHANNEL_ID` receives lifecycle notices plus watcher (`[welcome_watcher]`, `[promo_watcher]`) and `[cache]` refresh messages.
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-11-05 (v0.9.7)
