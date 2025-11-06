@@ -105,7 +105,7 @@ def _format_cache_message(bucket: str, result: RefreshResult) -> str:
 async def _run_refresh(runtime: "rt.Runtime", spec: _JobSpec) -> None:
     bucket = _safe_bucket(spec.bucket)
     try:
-        result = await cache_telemetry.refresh_now(name=bucket, actor="cron")
+        result = await cache_telemetry.refresh_now(name=bucket, actor="scheduler")
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # pragma: no cover - defensive guard

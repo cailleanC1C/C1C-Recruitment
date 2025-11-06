@@ -216,7 +216,7 @@ async def refresh_now(name: str, actor: Optional[str] = None) -> RefreshResult:
     start = time.monotonic()
     error_text: Optional[str] = None
     ok = True
-    trigger = "schedule" if actor == "cron" else "manual"
+    trigger = "cron" if actor in {"cron", "scheduler"} else "manual"
     try:
         await cache_service.cache.refresh_now(bucket, trigger=trigger, actor=actor)
     except asyncio.CancelledError:

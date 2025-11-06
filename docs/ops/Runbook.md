@@ -120,7 +120,7 @@ Staff can validate the onboarding sheet without starting a flow:
 ```
 !ops onb:check
 ```
-This command reads the **existing** tab defined by `onboarding.questions_tab` and reports success or the first blocking error (no fallbacks).
+This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports success or the first blocking error (no fallbacks).
 
 ### Daily recruiter summary embed
 - The “Summary Open Spots” card now renders as three distinct blocks: General Overview,
@@ -136,4 +136,4 @@ This command reads the **existing** tab defined by `onboarding.questions_tab` an
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-03 (v0.9.7)
+Doc last updated: 2025-11-06 (v0.9.7)

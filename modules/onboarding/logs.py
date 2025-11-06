@@ -229,7 +229,7 @@ async def send_welcome_exception(level: str, error: BaseException, **kv: Any) ->
     trace = "".join(traceback.format_exception(error))
     details = dict(kv)
     details.setdefault("result", "error")
-    details["error"] = f"{error.__class__.__name__}: {error}"
+    details.setdefault("error", f"{error.__class__.__name__}: {error}")
     details["trace"] = trace
     await send_welcome_log(level, **details)
 

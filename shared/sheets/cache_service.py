@@ -23,7 +23,17 @@ async def _load_onboarding_questions() -> Tuple[dict[str, str], ...]:
 
 
 def _errtext(exc: BaseException) -> str:
+    if isinstance(exc, KeyError) and exc.args:
+        candidate = exc.args[0]
+        if isinstance(candidate, str):
+            text = candidate.strip()
+            if text:
+                return text
     s = str(exc).strip()
+    if s.startswith("'") and s.endswith("'") and len(s) > 2:
+        inner = s[1:-1].strip()
+        if inner:
+            return inner
     return s or getattr(exc, "__class__", type(exc)).__name__
 
 
@@ -193,22 +203,24 @@ class CacheService:
 
     async def _log_refresh(self, b: CacheBucket, *, trigger: str, actor: Optional[str], retries: int) -> None:
         # Format: [refresh] bucket=clans trigger=schedule actor=@user duration=842ms result=ok hits=?,misses=?,retries=1
-        error_text = b.last_error or "-"
-        if actor == "cron":
-            return
-        ttl_flag = "unknown"
-        if b.last_ttl_expired is True:
-            ttl_flag = "true"
-        elif b.last_ttl_expired is False:
-            ttl_flag = "false"
+        normalized_trigger = "manual"
+        if trigger in {"schedule", "cron"}:
+            normalized_trigger = "cron"
+        normalized_actor = actor or "-"
+        if normalized_actor == "cron":
+            normalized_actor = "scheduler"
+        ttl_flag = "true" if b.last_ttl_expired else "false"
         count_text = "-"
         if isinstance(b.last_item_count, int):
             count_text = str(b.last_item_count)
+        raw_result = (b.last_result or "fail").lower()
+        result_flag = "ok" if raw_result in {"ok", "retry_ok"} else "fail"
+        error_text = b.last_error or "-"
         msg = (
-            f"[refresh] bucket={b.name} trigger={trigger} "
-            f"actor={actor or '-'} duration={b.last_latency_ms or 0}ms "
-            f"result={b.last_result or 'unknown'} retries={retries} "
-            f"ttl_expired={ttl_flag} count={count_text} error={error_text}"
+            f"[refresh] bucket={b.name} trigger={normalized_trigger} "
+            f"actor={normalized_actor} duration={b.last_latency_ms or 0}ms "
+            f"result={result_flag} retries={retries} "
+            f"ttl_expired={ttl_flag} count={count_text} error={error_text or '-'}"
         )
         log.info(msg)
 
