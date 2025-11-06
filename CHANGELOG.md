@@ -1,6 +1,6 @@
 # Changelog
 
-### v0.9.8 — 2025-11-05 Onboarding Config Key & Cache Validation
+### v0.9.7 — 2025-11-05 Onboarding Config Key & Cache Validation
 
 * Replaced alias-based resolver with single canonical config key **`ONBOARDING_TAB`** for the onboarding questions sheet.
 * Fixed preload failure caused by mismatched alias (`onboarding.questions_tab`) and missing sheet reference.
