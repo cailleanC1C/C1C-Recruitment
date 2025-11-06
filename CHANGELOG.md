@@ -1,5 +1,15 @@
 # Changelog
 
+### v0.9.8 — 2025-11-05 Onboarding Config Key & Cache Validation
+
+* Replaced alias-based resolver with single canonical config key **`ONBOARDING_TAB`** for the onboarding questions sheet.
+* Fixed preload failure caused by mismatched alias (`onboarding.questions_tab`) and missing sheet reference.
+* Enforced hard-fail on missing or empty onboarding question cache, preventing modal launch with incomplete data.
+* Updated cache service logs to follow CI format (bucket, trigger, actor, duration, result, count, error).
+* Improved watcher lifecycle logging to correctly emit `schema_load_failed` and preload diagnostics.
+* Adjusted startup refresh summary to remove alias notes and align with other cache buckets.
+* Prepared PR metadata rules for Codex compliance (meta-block instruction re-added).
+
 ## v0.9.7 — 2025-11-04 Onboarding Stability & Preload
 - Fixed crash: `TypeError: Command signature requires at least 1 parameter(s)` when initializing `onb` command group.
 - Added **preload** of onboarding questions on bot startup to warm cache.
