@@ -1,7 +1,7 @@
 # Welcome Flow
 
 ## Overview
-The welcome questionnaire now runs entirely inside the ticket thread. Recruits (or authorized staff) press the persistent **Open questions** button to launch an in-thread wizard, answer each question inline, and submit a single embed summary back to the thread. Open questions starts an in-thread wizard (no modal). Config key: `ONBOARDING_TAB` (alias: `onboarding.questions_tab`).
+The welcome questionnaire now runs entirely inside the ticket thread. Recruits (or authorized staff) press the persistent **Open questions** button to launch an in-thread wizard, answer each question inline, and submit a single embed summary back to the thread. Open questions starts an in-thread wizard (no modal). Config key: `ONBOARDING_TAB`.
 
 ## Flow steps
 1. **Panel posted** – The watcher listens for the welcome greeting phrase (`"awake by reacting with"`) or the 🎫 emoji. It reacts 👍 to the greeting and posts a fresh message with the persistent **Open questions** button.
@@ -49,4 +49,4 @@ Gate instrumentation surfaces as single-line console logs:
 
 - **Always defer first.** Defer the button interaction before posting or editing the wizard message; otherwise Discord returns `response_is_done: true` and the launch fails.
 
-Doc last updated: 2025-11-05 (v0.9.7)
+Doc last updated: 2025-11-06 (v0.9.7)

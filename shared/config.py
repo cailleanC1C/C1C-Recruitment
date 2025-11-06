@@ -292,16 +292,7 @@ def _merge_onboarding_tab(config: Dict[str, object]) -> None:
         log.warning("config: failed to load onboarding Config tab: %s", exc)
         return
 
-    canonical = str(sheet_config.get("onboarding.questions_tab", "")).strip()
-    alias = str(sheet_config.get("onboarding_tab", "")).strip()
-
-    if canonical and alias and canonical != alias:
-        raise ValueError(
-            "Conflicting onboarding Config entries: "
-            "onboarding.questions_tab=%r vs ONBOARDING_TAB=%r" % (canonical, alias)
-        )
-
-    tab = canonical or alias
+    tab = str(sheet_config.get("onboarding_tab", "")).strip()
     if not tab:
         return
 
@@ -330,6 +321,7 @@ def _load_config() -> Dict[str, object]:
         "GSPREAD_CREDENTIALS": os.getenv("GSPREAD_CREDENTIALS", ""),
         "RECRUITMENT_SHEET_ID": (os.getenv("RECRUITMENT_SHEET_ID") or "").strip(),
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
+        "ONBOARDING_TAB": (os.getenv("ONBOARDING_TAB") or "").strip(),
         "ONBOARDING_QUESTIONS_TAB": (
             os.getenv("ONBOARDING_QUESTIONS_TAB") or ""
         ).strip(),
@@ -612,8 +604,7 @@ def get_onboarding_questions_tab() -> str:
 def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
     """
     Returns the sheet tab name for onboarding questions.
-    Lookup order: ONBOARDING_TAB -> onboarding.questions_tab (alias).
-    Raises KeyError if neither exists or is empty.
+    Raises KeyError if the key is missing or empty.
     """
 
     source = config or cfg
@@ -632,18 +623,9 @@ def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
             return ""
         return str(value).strip()
 
-    canonical = _lookup("onboarding.questions_tab")
-    alias = _lookup("ONBOARDING_TAB")
-
-    if canonical and alias and canonical != alias:
-        raise ValueError(
-            "Conflicting onboarding Config entries: "
-            f"onboarding.questions_tab={canonical!r} vs ONBOARDING_TAB={alias!r}"
-        )
-
-    tab = canonical or alias
+    tab = _lookup("ONBOARDING_TAB")
     if not tab:
-        raise KeyError("missing config key: onboarding.questions_tab (alias: ONBOARDING_TAB)")
+        raise KeyError("missing config key: ONBOARDING_TAB")
     return tab
 
 

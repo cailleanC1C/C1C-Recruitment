@@ -436,26 +436,62 @@ class OpenQuestionsPanelView(discord.ui.View):
         # Ack early to avoid Discord's 3s timeout, then do any slow work
         await _ensure_deferred(interaction)
 
+        def _schema_failure_payload(error_text: str) -> dict[str, object]:
+            payload = logs.thread_context(channel)
+            payload.update(
+                {
+                    "actor": logs.format_actor(getattr(interaction, "user", None)),
+                    "view": "panel",
+                    "source": "panel",
+                    "result": "schema_load_failed",
+                    "error": error_text,
+                }
+            )
+            actor_name = logs.format_actor_handle(getattr(interaction, "user", None))
+            if actor_name:
+                payload["actor_name"] = actor_name
+            return payload
+
         loader = getattr(controller, "get_or_load_questions", None)
+        thread_questions: Sequence[Any] | None = None
         try:
             if callable(loader):
-                await loader(thread_id)  # may hit Google Sheets; safe because we've deferred
+                thread_questions = await loader(thread_id)
         except KeyError as exc:
             log.warning("⚠️ onboarding wizard config error: %s", exc)
+            message = str(exc.args[0]) if exc.args else str(exc)
+            payload = _schema_failure_payload(message)
+            await logs.send_welcome_exception("error", exc, **payload)
             await _hard_fail("config_missing", error=exc)
             return
-        except Exception as exc:  # defensive network path
+        except RuntimeError as exc:
+            message = str(exc).strip()
+            if "cache is empty" in message:
+                payload = _schema_failure_payload(message)
+                await logs.send_welcome_exception("error", exc, **payload)
+                await _hard_fail("cache_empty", error=exc)
+                return
+            log.warning("onboarding question preload failed", exc_info=True)
+            await _hard_fail("preload_exception", error=exc)
+            return
+        except Exception as exc:  # defensive guard
             log.warning("onboarding question preload failed", exc_info=True)
             await _hard_fail("preload_exception", error=exc)
             return
 
         questions_dict = getattr(controller, "questions_by_thread", {})
-        thread_questions: Sequence[Any] | None = None
-        if isinstance(questions_dict, dict):
+        if not thread_questions and isinstance(questions_dict, dict):
             thread_questions = questions_dict.get(thread_id)
         if not thread_questions:
             log.warning(
                 "⚠️ onboarding wizard: no questions available for thread %s", thread_id
+            )
+            error_message = "no onboarding questions mapped for thread"
+            payload = _schema_failure_payload(error_message)
+            await logs.send_welcome_exception(
+                "error",
+                RuntimeError(error_message),
+                **payload,
             )
             await _hard_fail("no_questions")
             return
