@@ -189,6 +189,7 @@ class BucketResult:
     ttl_ok: Optional[bool]
     retries: Optional[int] = None
     reason: Optional[str] = None
+    metadata: Mapping[str, str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -257,6 +258,10 @@ class LogTemplates:
                 details.append(f"{result.retries}× retry")
             if result.reason and not result.ok:
                 details.append(result.reason)
+            if result.metadata:
+                for key, value in sorted(result.metadata.items()):
+                    if key and value:
+                        details.append(f"{key}={value}")
             detail_text = ", ".join(details)
             bucket_parts.append(f"{result.name} {result.status} ({detail_text})")
         buckets_text = " • ".join(bucket_parts) if bucket_parts else "-"

@@ -58,6 +58,7 @@ def refresh_bucket_results(results: Sequence["RefreshResult"]) -> list[BucketRes
                     ttl_ok=None,
                     retries=retries,
                     reason=reason,
+                    metadata=None,
                 )
             )
             continue
@@ -78,6 +79,7 @@ def refresh_bucket_results(results: Sequence["RefreshResult"]) -> list[BucketRes
                 ttl_ok=ttl_ok,
                 retries=retries,
                 reason=reason,
+                metadata=snapshot.metadata,
             )
         )
     return buckets

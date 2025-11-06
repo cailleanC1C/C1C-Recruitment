@@ -8,14 +8,15 @@ import logging
 from dataclasses import dataclass
 from typing import Iterable, Literal, Mapping, Sequence, Tuple
 
-from shared.config import cfg, resolve_onboarding_tab
-from shared.sheets import onboarding as onboarding_sheets
+from shared.config import cfg, get_onboarding_sheet_id, resolve_onboarding_tab
 from shared.sheets.async_core import afetch_records
 
 __all__ = [
     "Question",
     "Option",
     "fetch_question_rows_async",
+    "resolve_source",
+    "describe_source",
     "get_questions",
     "register_cache_buckets",
     "schema_hash",
@@ -59,7 +60,26 @@ class Question:
 
 
 def _sheet_id() -> str:
-    return onboarding_sheets._sheet_id()  # type: ignore[attr-defined]
+    sheet_id = get_onboarding_sheet_id().strip()
+    if not sheet_id:
+        raise KeyError("missing config key: ONBOARDING_SHEET_ID")
+    return sheet_id
+
+
+def resolve_source() -> tuple[str, str]:
+    """Return the configured onboarding sheet identifier and tab name."""
+
+    sheet_id = _sheet_id()
+    tab = resolve_onboarding_tab(cfg)
+    return sheet_id, tab
+
+
+def describe_source() -> dict[str, str]:
+    """Return metadata describing the onboarding question source."""
+
+    sheet_id, tab = resolve_source()
+    sheet_tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
+    return {"sheet": sheet_tail, "tab": tab}
 
 
 def _normalise_records(records: Iterable[Mapping[str, object]]) -> Tuple[dict[str, str], ...]:

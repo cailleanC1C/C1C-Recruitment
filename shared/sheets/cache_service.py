@@ -283,7 +283,16 @@ def get_bucket_snapshot(name: str) -> Dict[str, Any]:
     except Exception:
         next_refresh = None
 
-    return {
+    metadata: Dict[str, str] | None = None
+    if bucket.name == "onboarding_questions":
+        try:
+            from shared.sheets.onboarding_questions import describe_source
+
+            metadata = describe_source()
+        except Exception:
+            metadata = None
+
+    snapshot: Dict[str, Any] = {
         "name": bucket.name,
         "ttl_sec": getattr(bucket, "ttl_sec", None),
         "last_refresh_at": getattr(bucket, "last_refresh", None),
@@ -294,3 +303,6 @@ def get_bucket_snapshot(name: str) -> Dict[str, Any]:
         "ttl_expired": getattr(bucket, "last_ttl_expired", None),
         "item_count": getattr(bucket, "last_item_count", None),
     }
+    if metadata:
+        snapshot["metadata"] = dict(metadata)
+    return snapshot

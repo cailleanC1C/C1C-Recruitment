@@ -297,7 +297,6 @@ def _merge_onboarding_tab(config: Dict[str, object]) -> None:
         return
 
     config["ONBOARDING_TAB"] = tab
-    config["ONBOARDING_QUESTIONS_TAB"] = tab
 
 
 def _load_config() -> Dict[str, object]:
@@ -322,9 +321,6 @@ def _load_config() -> Dict[str, object]:
         "RECRUITMENT_SHEET_ID": (os.getenv("RECRUITMENT_SHEET_ID") or "").strip(),
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
         "ONBOARDING_TAB": (os.getenv("ONBOARDING_TAB") or "").strip(),
-        "ONBOARDING_QUESTIONS_TAB": (
-            os.getenv("ONBOARDING_QUESTIONS_TAB") or ""
-        ).strip(),
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
         "RECRUITER_ROLE_IDS": _int_set(os.getenv("RECRUITER_ROLE_IDS")),

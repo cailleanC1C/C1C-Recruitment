@@ -11,6 +11,7 @@ import pytest
 os.environ.setdefault("DISCORD_TOKEN", "test-token")
 os.environ.setdefault("GSPREAD_CREDENTIALS", "{}")
 os.environ.setdefault("RECRUITMENT_SHEET_ID", "sheet-id")
+os.environ.setdefault("ONBOARDING_SHEET_ID", "onb-sheet-id-abcdef")
 
 if "modules.common.runtime" not in sys.modules:
     runtime_stub = types.ModuleType("modules.common.runtime")
@@ -50,6 +51,11 @@ def test_startup_preload_success(monkeypatch: pytest.MonkeyPatch, caplog: pytest
             AsyncMock(return_value=sample_rows),
         )
         monkeypatch.setitem(shared_config._CONFIG, "ONBOARDING_TAB", "Questions")
+        monkeypatch.setitem(
+            shared_config._CONFIG,
+            "ONBOARDING_SHEET_ID",
+            "onb-sheet-id-abcdef",
+        )
 
         caplog.set_level(logging.INFO, logger="shared.sheets.cache_service")
 
@@ -69,6 +75,10 @@ def test_startup_preload_success(monkeypatch: pytest.MonkeyPatch, caplog: pytest
         assert "count=1" in line
         assert "error=-" in line
 
+        snapshot = cache_service.get_bucket_snapshot("onboarding_questions")
+        assert snapshot.get("metadata", {}).get("sheet") == "abcdef"
+        assert snapshot.get("metadata", {}).get("tab") == "Questions"
+
     asyncio.run(runner())
 
 
@@ -81,6 +91,11 @@ def test_startup_preload_missing_config(monkeypatch: pytest.MonkeyPatch, caplog:
         monkeypatch.setattr(
             "shared.sheets.onboarding_questions.fetch_question_rows_async",
             AsyncMock(side_effect=KeyError("missing config key: ONBOARDING_TAB")),
+        )
+        monkeypatch.setitem(
+            shared_config._CONFIG,
+            "ONBOARDING_SHEET_ID",
+            "onb-sheet-id-abcdef",
         )
 
         caplog.set_level(logging.INFO, logger="shared.sheets.cache_service")
