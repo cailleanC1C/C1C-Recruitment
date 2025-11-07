@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -21,16 +22,19 @@ _CLAN_TAGS: List[str] | None = None
 _CLAN_TAG_TS: float = 0.0
 
 
+log = logging.getLogger(__name__)
+
+
 def _sheet_id() -> str:
-    sheet_id = (
-        os.getenv("ONBOARDING_SHEET_ID")
-        or os.getenv("GOOGLE_SHEET_ID")
-        or os.getenv("GSHEET_ID")
-        or ""
-    )
-    sheet_id = sheet_id.strip()
+    """Return the onboarding sheet ID (no legacy fallbacks)."""
+
+    sheet_id = os.getenv("ONBOARDING_SHEET_ID", "").strip()
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
+
+    tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
+    redacted = f"…{tail}" if len(sheet_id) > len(tail) else tail
+    log.info("📄 Onboarding sheet resolved • id_tail=%s", redacted)
     return sheet_id
 
 
