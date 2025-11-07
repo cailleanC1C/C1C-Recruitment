@@ -2,6 +2,8 @@
 
 ### v0.9.7 — 2025-11-05 Onboarding Config Key & Cache Validation
 
+* Added CI-format onboarding cache diagnostics with sheet-tail redaction and config snapshot metadata before fetch.
+* Normalised onboarding question record parsing to blank missing answers for downstream consumers.
 * Replaced alias-based resolver with single canonical config key **`ONBOARDING_TAB`** for the onboarding questions sheet.
 * Fixed preload failure caused by mismatched alias (`onboarding.questions_tab`) and missing sheet reference.
 * Enforced hard-fail on missing or empty onboarding question cache, preventing modal launch with incomplete data.

@@ -80,7 +80,8 @@ def describe_source() -> dict[str, str]:
 
     sheet_id, tab = resolve_source()
     sheet_tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
-    return {"sheet": sheet_tail, "tab": tab}
+    redacted = f"…{sheet_tail}" if len(sheet_id) > len(sheet_tail) else sheet_tail
+    return {"sheet": redacted, "tab": tab}
 
 
 def _normalise_records(records: Iterable[Mapping[str, object]]) -> Tuple[dict[str, str], ...]:
@@ -91,7 +92,8 @@ def _normalise_records(records: Iterable[Mapping[str, object]]) -> Tuple[dict[st
             key_norm = (key or "").strip().lower()
             if not key_norm:
                 continue
-            normalized[key_norm] = str(value).strip()
+            text = "" if value is None else str(value)
+            normalized[key_norm] = text.strip()
         if normalized:
             parsed.append(normalized)
     return tuple(parsed)
@@ -101,7 +103,26 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     """Fetch and normalise onboarding question rows from Sheets."""
 
     sheet_id = _sheet_id()
-    records = await afetch_records(sheet_id, _question_tab())
+    tab = _question_tab()
+    sheet_tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
+    sheet_display = f"…{sheet_tail}" if len(sheet_id) > len(sheet_tail) else sheet_tail
+    try:
+        config_keys_count = len(cfg.keys())
+    except Exception:
+        config_keys_count = 0
+    has_onboarding_tab = "ONBOARDING_TAB" in cfg
+    log.info(
+        "📦 Cache = bucket=onboarding_questions • sheet=%s • tab=%s • source=resolved",
+        sheet_display,
+        tab,
+        extra={
+            "sheet_tail": sheet_tail,
+            "onboarding_tab": tab,
+            "config_keys_count": config_keys_count,
+            "has_ONBOARDING_TAB": "true" if has_onboarding_tab else "false",
+        },
+    )
+    records = await afetch_records(sheet_id, tab)
     return _normalise_records(records)
 
 
