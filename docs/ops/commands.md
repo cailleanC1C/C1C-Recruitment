@@ -60,6 +60,15 @@ Detail: Report bot latency and shard status without hitting the cache.
 Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
 ```
 
+## CoreOps / Admin Commands
+
+### `!cfg <KEY>`
+Shows the current value for a single onboarding or recruitment config key and where it originated.
+
+- **Permission:** Admin only
+- **Usage:** `!cfg ONBOARDING_TAB`
+- **Example Response:** `🧩 Config — key=ONBOARDING_TAB • value=OnboardingQuestions • source=sheet:…Qdnb2I`
+
 ## Recruitment commands alignment
 
 ### !clan `<tag>`
@@ -109,4 +118,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-07 (v0.9.7)
