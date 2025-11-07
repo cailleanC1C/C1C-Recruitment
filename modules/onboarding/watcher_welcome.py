@@ -69,12 +69,6 @@ def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> 
     log.log(level, "%s", message)
 
     async def runner() -> None:
-        try:
-            if not bot.is_ready():
-                await bot.wait_until_ready()
-        except Exception:  # pragma: no cover - defensive guard
-            log.warning("welcome watcher announce skipped: bot not ready")
-            return
         await _send_runtime(message)
 
     # discord.py 2.x restricts accessing Client.loop here; schedule via asyncio
@@ -109,14 +103,67 @@ def _collect_role_ids(member: discord.Member | None) -> set[int]:
 class WelcomeWatcher(commands.Cog):
     """Gated watcher that attaches the persistent welcome questionnaire panel."""
 
-    def __init__(self, bot: commands.Bot, *, channel_id: int) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.channel_id = int(channel_id)
+        self.channel_id: int | None = None
         coordinator_roles = get_recruitment_coordinator_role_ids()
         guardian_roles = get_guardian_knight_role_ids()
         self._staff_role_ids = set(coordinator_roles) | set(guardian_roles)
         self._onb_registered: bool = False
         self._onb_reg_error: str | None = None
+        self._announced = False
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        # Guard against firing multiple times on reconnects
+        if self._announced:
+            return
+        self._announced = True
+
+        channel_id = get_welcome_channel_id()
+        if not channel_id:
+            _announce(self.bot, "📴 Welcome watcher disabled — WELCOME_CHANNEL_ID missing.")
+            return
+
+        try:
+            channel_id_int = int(channel_id)
+        except (TypeError, ValueError):
+            self.channel_id = None
+            _announce(
+                self.bot,
+                "⚠️ Welcome watcher not enabled — invalid WELCOME_CHANNEL_ID.",
+                level=logging.WARNING,
+            )
+            return
+
+        self.channel_id = channel_id_int
+
+        if not feature_flags.is_enabled("welcome_dialog"):
+            _announce(
+                self.bot,
+                "📴 Welcome watcher disabled — FeatureToggles['welcome_dialog'] is OFF.",
+            )
+            return
+
+        if not feature_flags.is_enabled("recruitment_welcome"):
+            _announce(
+                self.bot,
+                "📴 Welcome watcher disabled — FeatureToggles['recruitment_welcome'] is OFF.",
+            )
+            return
+
+        self._register_persistent_view()
+
+        if self._onb_registered:
+            label = _channel_readable_label(self.bot, self.channel_id)
+            _announce(self.bot, f"✅ Welcome watcher enabled — channel={label}")
+        else:
+            reason = self._onb_reg_error or "unknown"
+            _announce(
+                self.bot,
+                f"⚠️ Welcome watcher not enabled — reason={reason}",
+                level=logging.WARNING,
+            )
 
     def _register_persistent_view(self) -> None:
         registration = panels.register_persistent_views(self.bot)
@@ -289,7 +336,8 @@ class WelcomeWatcher(commands.Cog):
         thread = message.channel if isinstance(message.channel, discord.Thread) else None
         if thread is None:
             return
-        if thread.parent_id != self.channel_id:
+        target_channel_id = self.channel_id
+        if target_channel_id is None or thread.parent_id != target_channel_id:
             return
         if not thread_scopes.is_welcome_parent(thread):
             return
@@ -348,7 +396,12 @@ class WelcomeWatcher(commands.Cog):
                 thread = channel
         if thread is None:
             return
-        if thread.parent_id != self.channel_id or not thread_scopes.is_welcome_parent(thread):
+        target_channel_id = self.channel_id
+        if (
+            target_channel_id is None
+            or thread.parent_id != target_channel_id
+            or not thread_scopes.is_welcome_parent(thread)
+        ):
             return
 
         bot_user = getattr(self.bot, "user", None)
@@ -376,43 +429,4 @@ class WelcomeWatcher(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    channel_id = get_welcome_channel_id()
-    if not channel_id:
-        _announce(bot, "📴 Welcome watcher disabled — WELCOME_CHANNEL_ID missing.")
-        return
-    if not feature_flags.is_enabled("welcome_dialog"):
-        _announce(
-            bot,
-            "📴 Welcome watcher disabled — FeatureToggles['welcome_dialog'] is OFF.",
-        )
-        return
-    if not feature_flags.is_enabled("recruitment_welcome"):
-        _announce(
-            bot,
-            "📴 Welcome watcher disabled — FeatureToggles['recruitment_welcome'] is OFF.",
-        )
-        return
-
-    watcher = WelcomeWatcher(bot, channel_id=channel_id)
-
-    try:
-        if not bot.is_ready():
-            await bot.wait_until_ready()
-    except Exception:  # pragma: no cover - defensive guard
-        _announce(bot, "⚠️ Welcome watcher not enabled — bot not ready", level=logging.WARNING)
-        return
-
-    watcher._register_persistent_view()
-
-    await bot.add_cog(watcher)
-
-    if watcher._onb_registered:
-        try:
-            channel_id_int = int(channel_id)
-        except (TypeError, ValueError):
-            channel_id_int = None
-        label = _channel_readable_label(bot, channel_id_int)
-        _announce(bot, f"✅ Welcome watcher enabled — channel={label}")
-    else:
-        reason = watcher._onb_reg_error or "unknown"
-        _announce(bot, f"⚠️ Welcome watcher not enabled — reason={reason}", level=logging.WARNING)
+    await bot.add_cog(WelcomeWatcher(bot))

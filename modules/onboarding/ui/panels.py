@@ -1273,8 +1273,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                 label = "Finish" if parent.is_last_step() else "Next"
                 super().__init__(style=discord.ButtonStyle.primary, label=label)
                 self._wizard = parent
-                if not has_answer:
-                    self.disabled = True
+                required = parent._question_required(question)
+                # Disable Next only when required questions lack an answer.
+                self.disabled = required and not has_answer
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
