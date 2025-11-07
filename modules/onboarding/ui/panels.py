@@ -590,11 +590,15 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
 
+        message: discord.Message | None = None
         try:
-            await channel.send(content, view=view)
+            message = await channel.send(content, view=view)
         except Exception:
             await _hard_fail("send_failed")
             raise
+
+        if isinstance(message, discord.Message):
+            view.attach(message)
 
         if diag.is_enabled():
             await diag.log_event("info", "wizard_launch_sent", **diag_state)
@@ -952,7 +956,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             self.controller = controller
             self.thread_id = thread_id
             self.step = step
-            self.message: discord.Message | None = None
+            self._message: discord.Message | None = None
             # Build the controls immediately so attach()/refresh() behave like the legacy view.
             self._configure_components()
 
@@ -960,7 +964,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         def attach(self, message: discord.Message) -> None:
             """Bind the Discord message hosting this view for later refreshes."""
 
-            self.message = message
+            self._message = message
 
         async def refresh(self, interaction: discord.Interaction | None = None) -> None:
             """Rebuild the components and re-render the wizard message if bound."""
@@ -985,12 +989,12 @@ class OpenQuestionsPanelView(discord.ui.View):
                             return
                         except Exception:
                             log.warning("failed to edit wizard message via interaction", exc_info=True)
-            if self.message is not None:
+            if self._message is not None:
                 try:
-                    await self.message.edit(content=content, view=self)
+                    await self._message.edit(content=content, view=self)
                 except Exception:
                     # Editing failures are non-fatal; keep the view state for retries.
-                    log.warning("failed to refresh wizard message", exc_info=True)
+                    pass
 
         # --- Internals --------------------------------------------------------
         async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network
@@ -1177,7 +1181,8 @@ class OpenQuestionsPanelView(discord.ui.View):
             else:
                 self.add_item(self.TextPromptButton(self, question))
             self.add_item(self.BackButton(self))
-            self.add_item(self.NextButton(self, question))
+            has_answer = self._has_current_answer(question)
+            self.add_item(self.NextButton(self, question, has_answer))
             self.add_item(self.CancelButton(self))
 
         def is_last_step(self) -> bool:
@@ -1188,9 +1193,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             for child in self.children:
                 if hasattr(child, "disabled"):
                     child.disabled = True  # type: ignore[assignment]
-            if self.message is not None:
+            if self._message is not None:
                 try:
-                    await self.message.edit(view=self)
+                    await self._message.edit(view=self)
                 except Exception:
                     log.warning("failed to disable wizard on timeout", exc_info=True)
             self.stop()
@@ -1264,13 +1269,13 @@ class OpenQuestionsPanelView(discord.ui.View):
                 await wizard.refresh(interaction)
 
         class NextButton(discord.ui.Button):
-            def __init__(self, parent: "OnboardWizard", question: Any) -> None:
+            def __init__(self, parent: "OnboardWizard", question: Any, has_answer: bool) -> None:
                 label = "Finish" if parent.is_last_step() else "Next"
                 super().__init__(style=discord.ButtonStyle.primary, label=label)
                 self._wizard = parent
                 required = parent._question_required(question)
-                if required and not parent._has_current_answer(question):
-                    self.disabled = True
+                # Disable Next only when required questions lack an answer.
+                self.disabled = required and not has_answer
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
@@ -1290,7 +1295,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                     await wizard.controller.finish_inline_wizard(
                         wizard.thread_id,
                         interaction,
-                        message=wizard.message,
+                        message=wizard._message,
                     )
                     wizard.stop()
                     return
@@ -1316,9 +1321,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                         handled = True
                     except Exception:
                         handled = False
-                if not handled and wizard.message is not None:
+                if not handled and wizard._message is not None:
                     try:
-                        await wizard.message.edit(content=notice, view=None)
+                        await wizard._message.edit(content=notice, view=None)
                     except Exception:
                         log.warning("failed to update wizard cancel message", exc_info=True)
                 wizard.stop()
