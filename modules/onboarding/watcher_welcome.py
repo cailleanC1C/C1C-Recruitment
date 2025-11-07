@@ -70,7 +70,8 @@ def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> 
 
     async def runner() -> None:
         try:
-            await bot.wait_until_ready()
+            if not bot.is_ready():
+                await bot.wait_until_ready()
         except Exception:  # pragma: no cover - defensive guard
             log.warning("welcome watcher announce skipped: bot not ready")
             return
@@ -183,6 +184,16 @@ class WelcomeWatcher(commands.Cog):
             return False
         if getattr(member, "bot", False):
             return False
+        try:
+            perms = thread.permissions_for(member)
+        except Exception:
+            perms = None
+        if perms is not None:
+            can_post = getattr(perms, "send_messages_in_threads", None)
+            if can_post is None:
+                can_post = getattr(perms, "send_messages", False)
+            if can_post:
+                return True
         owner_id = self._thread_owner_id(thread)
         actor_id = _actor_id(member)
         if owner_id is not None and actor_id is not None and owner_id == actor_id:
@@ -383,6 +394,14 @@ async def setup(bot: commands.Bot) -> None:
         return
 
     watcher = WelcomeWatcher(bot, channel_id=channel_id)
+
+    try:
+        if not bot.is_ready():
+            await bot.wait_until_ready()
+    except Exception:  # pragma: no cover - defensive guard
+        _announce(bot, "⚠️ Welcome watcher not enabled — bot not ready", level=logging.WARNING)
+        return
+
     watcher._register_persistent_view()
 
     await bot.add_cog(watcher)
