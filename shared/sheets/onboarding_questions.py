@@ -14,6 +14,7 @@ from shared.sheets.async_core import afetch_records
 __all__ = [
     "Question",
     "Option",
+    "cached_rows",
     "fetch_question_rows_async",
     "resolve_source",
     "describe_source",
@@ -104,6 +105,31 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     return _normalise_records(records)
 
 
+def _coerce_rows(value: object) -> Tuple[dict[str, str], ...] | None:
+    """Best-effort conversion of cached payloads into row tuples."""
+
+    if value is None:
+        return None
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    if isinstance(value, Iterable):
+        return tuple(dict(row) for row in value)  # defensive copy for iterables
+    return None
+
+
+def cached_rows() -> Tuple[dict[str, str], ...] | None:
+    """Return cached onboarding question rows if available, otherwise ``None``."""
+
+    from shared.sheets.cache_service import cache
+
+    bucket = cache.get_bucket("onboarding_questions")
+    if bucket is None:
+        return None
+    return _coerce_rows(bucket.value)
+
+
 def _cached_rows() -> Tuple[dict[str, str], ...]:
     """Return the cached onboarding question rows."""
 
@@ -116,18 +142,13 @@ def _cached_rows() -> Tuple[dict[str, str], ...]:
         _cached_rows_snapshot = None
         _cached_questions_by_flow.clear()
         raise RuntimeError("onboarding_questions cache bucket is not registered")
-    value = bucket.value
-    if value is None:
+
+    rows = _coerce_rows(bucket.value)
+    if rows is None:
         _cached_rows_snapshot = None
         _cached_questions_by_flow.clear()
         raise RuntimeError("onboarding_questions cache is empty (should be preloaded)")
-    if isinstance(value, tuple):
-        return value
-    if isinstance(value, list):
-        return tuple(value)
-    if isinstance(value, Iterable):
-        return tuple(dict(row) for row in value)  # defensive copy for iterables
-    raise TypeError("unexpected onboarding_questions cache payload")
+    return rows
 
 
 def _canonicalize_required(value: str | None) -> bool:

@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from shared.cache import telemetry as cache_telemetry
+
 from shared.sheets import onboarding_questions
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
@@ -57,7 +59,9 @@ def load_welcome_questions() -> List[Question]:
     _, tab = onboarding_questions.resolve_source()
     rows = onboarding_questions.get_questions("welcome")
     if not rows:
-        raise RuntimeError(f"no 'welcome' questions found in tab '{tab}'")
+        raise RuntimeError(
+            f"onboarding_questions cache empty after refresh; tab='{tab}'"
+        )
 
     questions = [_to_schema_question(question) for question in rows]
     questions.sort(key=lambda question: question.order_key)
@@ -78,6 +82,25 @@ async def get_cached_welcome_questions(*, force: bool = False) -> List[Question]
     async with _WELCOME_Q_LOCK:
         if not force and _WELCOME_Q_CACHE is not None:
             return _WELCOME_Q_CACHE
+
+        onboarding_questions.register_cache_buckets()
+        if force:
+            try:
+                await cache_telemetry.refresh_now(
+                    name="onboarding_questions", actor="schema"
+                )
+            except Exception:
+                pass
+            _WELCOME_Q_CACHE = None
+        else:
+            try:
+                if onboarding_questions.cached_rows() is None:
+                    await cache_telemetry.refresh_now(
+                        name="onboarding_questions", actor="schema"
+                    )
+            except Exception:
+                # non-fatal: fall through to loader which will raise if still empty
+                pass
 
         data = await asyncio.to_thread(load_welcome_questions)
         _WELCOME_Q_CACHE = data

@@ -32,6 +32,13 @@ class _JobSpec:
 _SPEC_BY_BUCKET: Dict[str, _JobSpec] = {}
 _REGISTERED: Dict[str, Tuple[Any, asyncio.Task]] = {}
 
+STARTUP_BUCKETS: tuple[str, ...] = (
+    "clans",
+    "clan_tags",
+    "templates",
+    "onboarding_questions",
+)
+
 
 def _format_exception(exc: BaseException) -> str:
     message = str(exc).strip().strip("\"")
@@ -263,3 +270,25 @@ def schedule_default_jobs(runtime: "rt.Runtime") -> None:
         emit_schedule_log(runtime, successes, failure),
         name="cache_refresh_schedule_log",
     )
+
+
+async def preload_on_startup() -> None:
+    """Synchronously refresh core cache buckets during startup."""
+
+    ensure_cache_registration()
+    for name in STARTUP_BUCKETS:
+        bucket = _safe_bucket(name)
+        try:
+            await cache.refresh_now(bucket, actor="startup")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            log.warning(
+                LogTemplates.cache(
+                    bucket=bucket,
+                    ok=False,
+                    duration_s=0.0,
+                    retries=None,
+                    reason=human_reason(exc),
+                )
+            )

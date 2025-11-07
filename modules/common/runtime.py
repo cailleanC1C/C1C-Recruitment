@@ -833,10 +833,12 @@ class Runtime:
         from shared.sheets.cache_scheduler import (
             emit_schedule_log,
             ensure_cache_registration,
+            preload_on_startup,
             register_refresh_job,
         )
 
         ensure_cache_registration()
+        await preload_on_startup()
         cache_specs = (
             ("clans", timedelta(hours=3), "3h"),
             ("templates", timedelta(days=7), "7d"),
