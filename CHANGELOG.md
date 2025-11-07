@@ -6,6 +6,8 @@
 * Fixed preload failure caused by mismatched alias (`onboarding.questions_tab`) and missing sheet reference.
 * Enforced hard-fail on missing or empty onboarding question cache, preventing modal launch with incomplete data.
 * Updated cache service logs to follow CI format (bucket, trigger, actor, duration, result, count, error).
+* Wired `onboarding_questions` cache to `ONBOARDING_SHEET_ID`/`ONBOARDING_TAB`, including sheet-tail + tab metadata in refresh logs and scheduler summaries.
+* Removed `ONBOARDING_QUESTIONS_TAB` alias from configuration, docs, and runtime lookups; onboarding wizard now reads from the shared cache pipeline only.
 * Improved watcher lifecycle logging to correctly emit `schema_load_failed` and preload diagnostics.
 * Adjusted startup refresh summary to remove alias notes and align with other cache buckets.
 * Prepared PR metadata rules for Codex compliance (meta-block instruction re-added).

@@ -5,7 +5,7 @@ import asyncio
 import datetime as dt
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from shared.sheets import cache_service
 from shared.utils import humanize_duration
@@ -35,6 +35,7 @@ class CacheSnapshot:
     last_trigger: Optional[str]
     ttl_expired: Optional[bool]
     item_count: Optional[int]
+    metadata: Optional[Mapping[str, str]] = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,19 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
     if next_delta is not None:
         next_human = humanize_duration(abs(next_delta))
 
+    metadata: Optional[Mapping[str, str]] = None
+    if available:
+        meta_raw = raw.get("metadata")
+        if isinstance(meta_raw, Mapping):
+            cleaned: Dict[str, str] = {}
+            for key, value in meta_raw.items():
+                key_text = str(key).strip()
+                val_text = str(value).strip()
+                if key_text and val_text:
+                    cleaned[key_text] = val_text
+            if cleaned:
+                metadata = cleaned
+
     return CacheSnapshot(
         name=name,
         available=available,
@@ -135,6 +149,7 @@ def _build_snapshot(name: str, raw: Optional[Dict[str, object]]) -> CacheSnapsho
         last_trigger=last_trigger,
         ttl_expired=ttl_expired,
         item_count=item_count,
+        metadata=metadata,
     )
 
 

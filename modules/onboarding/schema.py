@@ -5,8 +5,9 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from shared.config import cfg, resolve_onboarding_tab
-from shared.sheets.core import read_table
+from shared.cache import telemetry as cache_telemetry
+
+from shared.sheets import onboarding_questions
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
 
@@ -27,21 +28,6 @@ class Question:
     rules: str
 
 
-REQUIRED_HEADERS = {
-    "flow",
-    "order",
-    "qid",
-    "label",
-    "type",
-    "required",
-    "maxlen",
-    "validate",
-    "help",
-    "note",
-    "rules",
-}
-
-
 def _order_key(value: str) -> Tuple[int, str]:
     match = _ORDER_RE.match(str(value).strip())
     if not match:
@@ -49,60 +35,35 @@ def _order_key(value: str) -> Tuple[int, str]:
     return (int(match.group("num")), (match.group("tag") or "").lower())
 
 
+def _to_schema_question(raw: onboarding_questions.Question) -> Question:
+    note = ",".join(option.label for option in raw.options)
+    return Question(
+        flow=raw.flow,
+        order_raw=raw.order,
+        order_key=_order_key(raw.order),
+        qid=raw.qid,
+        label=raw.label,
+        qtype=raw.type,
+        required=bool(raw.required),
+        maxlen=raw.maxlen,
+        validate=(raw.validate or ""),
+        help=(raw.help or ""),
+        note=note,
+        rules=(raw.rules or ""),
+    )
+
+
 def load_welcome_questions() -> List[Question]:
-    """Load and validate the *existing* onboarding tab. Strict, no fallback."""
+    """Load and validate the onboarding tab via the shared cache."""
 
-    tab = resolve_onboarding_tab(cfg)
-
-    rows = read_table(tab_name=tab)
+    _, tab = onboarding_questions.resolve_source()
+    rows = onboarding_questions.get_questions("welcome")
     if not rows:
-        raise RuntimeError(f"tab '{tab}' is empty")
-
-    headers = set(rows[0].keys())
-    missing = REQUIRED_HEADERS - headers
-    if missing:
         raise RuntimeError(
-            f"tab '{tab}' missing required headers: {sorted(missing)}"
+            f"onboarding_questions cache empty after refresh; tab='{tab}'"
         )
 
-    questions: List[Question] = []
-    for index, row in enumerate(rows, start=2):
-        flow = str(row.get("flow", "")).strip()
-        if flow.lower() != "welcome":
-            continue
-
-        order_raw = str(row.get("order", "")).strip()
-        qid = str(row.get("qid", "")).strip()
-        label = str(row.get("label", "")).strip()
-        qtype = str(row.get("type", "")).strip()
-
-        question = Question(
-            flow=flow,
-            order_raw=order_raw,
-            order_key=_order_key(order_raw),
-            qid=qid,
-            label=label,
-            qtype=qtype,
-            required=str(row.get("required", "")).strip().upper() == "TRUE",
-            maxlen=int(row["maxlen"]) if str(row.get("maxlen", "")).strip().isdigit() else None,
-            validate=str(row.get("validate", "")).strip(),
-            help=str(row.get("help", "")).strip(),
-            note=str(row.get("note", "")).strip(),
-            rules=str(row.get("rules", "")).strip(),
-        )
-
-        if question.qid == "" or question.label == "" or question.qtype == "":
-            raise RuntimeError(
-                "row {}: qid/label/type required for enabled items (order={!r})".format(
-                    index, question.order_raw
-                )
-            )
-
-        questions.append(question)
-
-    if not questions:
-        raise RuntimeError(f"no 'welcome' questions found in tab '{tab}'")
-
+    questions = [_to_schema_question(question) for question in rows]
     questions.sort(key=lambda question: question.order_key)
     return questions
 
@@ -121,6 +82,25 @@ async def get_cached_welcome_questions(*, force: bool = False) -> List[Question]
     async with _WELCOME_Q_LOCK:
         if not force and _WELCOME_Q_CACHE is not None:
             return _WELCOME_Q_CACHE
+
+        onboarding_questions.register_cache_buckets()
+        if force:
+            try:
+                await cache_telemetry.refresh_now(
+                    name="onboarding_questions", actor="schema"
+                )
+            except Exception:
+                pass
+            _WELCOME_Q_CACHE = None
+        else:
+            try:
+                if onboarding_questions.cached_rows() is None:
+                    await cache_telemetry.refresh_now(
+                        name="onboarding_questions", actor="schema"
+                    )
+            except Exception:
+                # non-fatal: fall through to loader which will raise if still empty
+                pass
 
         data = await asyncio.to_thread(load_welcome_questions)
         _WELCOME_Q_CACHE = data
