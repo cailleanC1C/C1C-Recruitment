@@ -13,7 +13,7 @@
 * Improved watcher lifecycle logging to correctly emit `schema_load_failed` and preload diagnostics.
 * Adjusted startup refresh summary to remove alias notes and align with other cache buckets.
 * Prepared PR metadata rules for Codex compliance (meta-block instruction re-added).
-* Removed legacy onboarding sheet fallbacks and added startup log for resolved sheet id.
+* Removed legacy sheet ID fallbacks across onboarding, recruitment, and shared core helpers; added onboarding resolver telemetry.
 
 ## v0.9.7 — 2025-11-04 Onboarding Stability & Preload
 - Fixed crash: `TypeError: Command signature requires at least 1 parameter(s)` when initializing `onb` command group.

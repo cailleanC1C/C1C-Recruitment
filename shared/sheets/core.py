@@ -135,12 +135,11 @@ def _sleep_with_new_loop(delay: float) -> None:
 
 
 def _resolve_sheet_id(sheet_id: str | None) -> str:
-    if sheet_id is None:
-        sheet_id = os.getenv("GOOGLE_SHEET_ID") or os.getenv("GSHEET_ID") or ""
-    sheet_id = sheet_id.strip()
-    if not sheet_id:
-        raise RuntimeError("GOOGLE_SHEET_ID/GSHEET_ID not set")
-    return sheet_id
+    """Resolve ``sheet_id``, requiring callers to provide an explicit value."""
+
+    if sheet_id is None or not str(sheet_id).strip():
+        raise RuntimeError("sheet id not provided")
+    return str(sheet_id).strip()
 
 
 def open_by_key(sheet_id: str | None = None):

@@ -240,12 +240,7 @@ def _process_clan_sheet(
 
 
 def _sheet_id() -> str:
-    sheet_id = (
-        os.getenv("RECRUITMENT_SHEET_ID")
-        or os.getenv("GOOGLE_SHEET_ID")
-        or os.getenv("GSHEET_ID")
-        or ""
-    ).strip()
+    sheet_id = os.getenv("RECRUITMENT_SHEET_ID", "").strip()
     if not sheet_id:
         raise RuntimeError("RECRUITMENT_SHEET_ID not set")
     return sheet_id
