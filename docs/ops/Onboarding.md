@@ -9,9 +9,10 @@
 ## Notes
 - The onboarding questions cache preloads during startup alongside `clans`, `templates`, and `clan_tags`.
 - A scheduled refresh runs weekly via the cache scheduler (`interval=7d`).
+- The onboarding sheet ID resolves strictly from `ONBOARDING_SHEET_ID`; legacy fallbacks are disabled.
 
 ## Troubleshooting
 - `missing config key: ONBOARDING_TAB` — Sheet configuration does not provide the tab name. Update the Config sheet and rerun the refresh. (Alias `onboarding.questions_tab` is no longer accepted.)
 - `onboarding_questions cache is empty (should be preloaded)` — Startup preload failed or returned zero rows. Fix the sheet and rerun the cache refresh (`!ops refresh onboarding_questions`).
 
-Doc last updated: 2025-11-07 (v0.9.7)
+Doc last updated: 2025-11-07 (v0.9.8)

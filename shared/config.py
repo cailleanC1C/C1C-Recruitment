@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 from typing import Dict, Iterable, Mapping, Optional, Sequence, Set
 
 from config import runtime as _runtime
@@ -280,7 +281,9 @@ def _load_onboarding_config_values() -> tuple[str, Dict[str, str]]:
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
 
-    from shared.sheets import onboarding as onboarding_sheets  # type: ignore
+    onboarding_sheets = sys.modules.get("shared.sheets.onboarding")
+    if onboarding_sheets is None:
+        from shared.sheets import onboarding as onboarding_sheets  # type: ignore
 
     raw_config = onboarding_sheets._read_onboarding_config(sheet_id)  # type: ignore[attr-defined]
     normalized: Dict[str, str] = {}
@@ -650,7 +653,7 @@ def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
     Raises KeyError if the key is missing or empty.
     """
 
-    source = config or cfg
+    source = cfg if config is None else config
     getter = getattr(source, "get", None)
     if getter is None and isinstance(source, Mapping):
         getter = source.get

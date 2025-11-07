@@ -112,7 +112,7 @@ def test_startup_preload_success(monkeypatch: pytest.MonkeyPatch, caplog: pytest
         assert "error=-" in line
 
         snapshot = cache_service.get_bucket_snapshot("onboarding_questions")
-        assert snapshot.get("metadata", {}).get("sheet") == "abcdef"
+        assert snapshot.get("metadata", {}).get("sheet") == "…abcdef"
         assert snapshot.get("metadata", {}).get("tab") == "Questions"
 
     asyncio.run(runner())

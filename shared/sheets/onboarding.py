@@ -26,12 +26,12 @@ log = logging.getLogger(__name__)
 
 
 def _sheet_id() -> str:
-    """Return the onboarding sheet ID (no legacy fallbacks)."""
+    """Resolve the onboarding sheet id – no legacy fallbacks."""
 
     sheet_id = os.getenv("ONBOARDING_SHEET_ID", "").strip()
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
-
+    # Log tail only, never the full id
     tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
     redacted = f"…{tail}" if len(sheet_id) > len(tail) else tail
     log.info("📄 Onboarding sheet resolved • id_tail=%s", redacted)
