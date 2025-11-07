@@ -278,11 +278,9 @@ def _merge_onboarding_tab(config: Dict[str, object]) -> None:
         log.debug("config: onboarding sheet module unavailable", exc_info=True)
         return
 
-    if not (
-        os.getenv("ONBOARDING_SHEET_ID")
-        or os.getenv("GOOGLE_SHEET_ID")
-        or os.getenv("GSHEET_ID")
-    ):
+    # Only the explicit onboarding sheet id controls merge behaviour. Legacy
+    # fallbacks risk pulling a different sheet's config silently.
+    if not os.getenv("ONBOARDING_SHEET_ID"):
         log.debug("config: onboarding sheet id not configured; skipping tab merge")
         return
 

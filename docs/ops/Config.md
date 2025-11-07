@@ -26,6 +26,8 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Optional:** `ONBOARDING_SHEET_ID`, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
+All sheet-facing modules now require their dedicated `*_SHEET_ID` variables; legacy fallbacks such as `GOOGLE_SHEET_ID` / `GSHEET_ID` are ignored.
+
 Missing any **Required** key causes the bot to exit with an error at startup. If `LOG_CHANNEL_ID` is empty, Discord channel logging is disabled and a one-time startup warning is emitted.
 
 ### Core runtime
@@ -51,8 +53,6 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 | `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
 | `REMINDER_SHEET_ID` | string | — | Google Sheet ID for reminders (service-specific). |
 | `MILESTONES_SHEET_ID` | string | — | Google Sheet ID for Milestones (claims, appreciation, shard & mercy, missions) (service-specific). |
-| `GOOGLE_SHEET_ID` | string | — | Back-compat sheet ID used when dedicated IDs are unset. |
-| `GSHEET_ID` | string | — | Legacy alias checked when the other IDs are blank. |
 | `RECRUITMENT_CONFIG_TAB` | string | `Config` | Worksheet name containing recruitment config. |
 | `ONBOARDING_CONFIG_TAB` | string | `Config` | Worksheet name containing onboarding config. |
 | `WORKSHEET_NAME` | string | `bot_info` | Fallback for the `clans_tab` worksheet when sheet config is missing. |
@@ -209,4 +209,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-06 (v0.9.7)
+Doc last updated: 2025-11-07 (v0.9.7)
