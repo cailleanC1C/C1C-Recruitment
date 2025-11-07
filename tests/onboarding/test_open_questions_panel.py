@@ -110,12 +110,16 @@ def test_launch_uses_cached_questions_only(monkeypatch: pytest.MonkeyPatch) -> N
             async def defer(self, thinking: bool = True) -> None:
                 self.deferred = True
 
+            async def edit_message(self, *, view: object | None = None) -> None:
+                self.deferred = True
+
         response = DummyResponse()
+        message = SimpleNamespace(id=1, edit=AsyncMock())
         interaction = SimpleNamespace(
             response=response,
             channel=thread,
             user=SimpleNamespace(id=99, display_name="Recruit"),
-            message=SimpleNamespace(id=1),
+            message=message,
             id=777,
         )
 
@@ -134,6 +138,7 @@ def test_launch_uses_cached_questions_only(monkeypatch: pytest.MonkeyPatch) -> N
         assert response.deferred is True
         network_guard.assert_not_awaited()
         send_exception.assert_not_awaited()
+        interaction.message.edit.assert_awaited_once()
 
     asyncio.run(runner())
 
@@ -164,6 +169,9 @@ def test_launch_empty_cache_logs_failure(monkeypatch: pytest.MonkeyPatch) -> Non
             async def send_message(self, message: str, *, ephemeral: bool = False) -> None:
                 self.sent_messages.append(message)
 
+            async def edit_message(self, *, view: object | None = None) -> None:
+                self.deferred = True
+
         response = DummyResponse()
         thread_id = 2468
         class FakeThread:
@@ -176,11 +184,12 @@ def test_launch_empty_cache_logs_failure(monkeypatch: pytest.MonkeyPatch) -> Non
         monkeypatch.setattr(panels.discord, "Thread", FakeThread)
         thread = FakeThread(thread_id)
 
+        message = SimpleNamespace(id=2, edit=AsyncMock())
         interaction = SimpleNamespace(
             response=response,
             channel=thread,
             user=SimpleNamespace(id=123, display_name="Recruit"),
-            message=SimpleNamespace(id=2),
+            message=message,
             id=314,
         )
 
@@ -201,6 +210,7 @@ def test_launch_empty_cache_logs_failure(monkeypatch: pytest.MonkeyPatch) -> Non
         controller.prompt_retry.assert_awaited_once()
         assert response.deferred is True
         assert response.sent_messages == [view.ERROR_NOTICE]
+        interaction.message.edit.assert_awaited_once()
 
         assert send_exception.await_count == 1
         _, kwargs = send_exception.await_args
