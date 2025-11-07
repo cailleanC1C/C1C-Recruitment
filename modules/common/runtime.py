@@ -825,6 +825,29 @@ class Runtime:
         await ops_permissions.setup(self.bot)
         await ops_watchers.setup(self.bot)
 
+        # === Always-on internal extensions (admin-gated debug/ops commands) ===
+        ALWAYS_EXTENSIONS = (
+            "modules.coreops.cmd_cfg",
+        )
+        for ext in ALWAYS_EXTENSIONS:
+            try:
+                await self.bot.load_extension(ext)
+            except Exception as exc:
+                human_log.human(
+                    "warn",
+                    "feature module load failed",
+                    feature_module=ext,
+                    feature_key="always_on",
+                    error=str(exc),
+                )
+            else:
+                human_log.human(
+                    "info",
+                    "feature module loaded",
+                    feature_module=ext,
+                    feature_key="always_on",
+                )
+
         # (Refresh commands now live directly in the CoreOps cog.)
 
     async def start(self, token: str) -> None:

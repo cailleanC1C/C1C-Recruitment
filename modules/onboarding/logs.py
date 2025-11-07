@@ -213,6 +213,10 @@ async def send_welcome_log(level: str, **kv: Any) -> None:
     if not message:
         return
 
+    sanitized_extra = _sanitize_log_extra(payload_map)
+    log_method = _resolve_logger(level)
+    log_method("%s", sanitized_extra)
+
     dedupe_key = _dedupe_key(payload_map)
     should_emit = True if dedupe_key is None else _PANEL_DEDUPER.should_emit(dedupe_key)
     if not should_emit:

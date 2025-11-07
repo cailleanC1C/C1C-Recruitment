@@ -1,5 +1,8 @@
 # Changelog
 
+### v0.9.7 — 2025-11-07
+- CoreOps: load `modules.coreops.cmd_cfg` as an always-on extension so `!cfg` is available (admin only).
+
 ### v0.9.7 — 2025-11-05 Onboarding Config Key & Cache Validation
 
 * Added CI-format onboarding cache diagnostics with sheet-tail redaction and config snapshot metadata before fetch.

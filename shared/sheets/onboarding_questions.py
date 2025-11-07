@@ -5,14 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from dataclasses import dataclass
 from typing import Iterable, Literal, Mapping, Sequence, Tuple
 
 from shared.config import (
     cfg,
     get_onboarding_sheet_id,
-    onboarding_config_merge_count,
     resolve_onboarding_tab,
 )
 from shared.sheets.async_core import afetch_records
@@ -109,23 +107,7 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     """Fetch and normalise onboarding question rows from Sheets."""
 
     sheet_id = _sheet_id()
-    try:
-        tab = _question_tab()
-    except KeyError:
-        sheet_tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
-        display = f"…{sheet_tail}" if len(sheet_id) > len(sheet_tail) else sheet_tail
-        config_tab = (os.getenv("ONBOARDING_CONFIG_TAB") or "Config").strip() or "Config"
-        merged_keys = onboarding_config_merge_count()
-        log.error(
-            "🧊 Refresh — onboarding_questions fail (missing config key: ONBOARDING_TAB)",
-            extra={
-                "sheet_tail": sheet_tail,
-                "sheet": display,
-                "config_tab": config_tab,
-                "merged_keys": merged_keys,
-            },
-        )
-        raise
+    tab = _question_tab()
     sheet_tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
     sheet_display = f"…{sheet_tail}" if len(sheet_id) > len(sheet_tail) else sheet_tail
     try:
@@ -133,17 +115,6 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     except Exception:
         config_keys_count = 0
     has_onboarding_tab = "ONBOARDING_TAB" in cfg
-
-    # DEBUG: show which keys exist in cfg at refresh time (truncated for safety).
-    try:
-        _keys_preview = ", ".join(sorted(map(str, cfg.keys())))[:240]
-    except Exception:
-        _keys_preview = "<?>"
-    log.info(
-        "📦 Cache = bucket=onboarding_questions • cfg_keys=%s",
-        _keys_preview,
-    )
-
     log.info(
         "📦 Cache = bucket=onboarding_questions • sheet=%s • tab=%s • source=resolved",
         sheet_display,
