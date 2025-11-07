@@ -101,7 +101,22 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     """Fetch and normalise onboarding question rows from Sheets."""
 
     sheet_id = _sheet_id()
-    records = await afetch_records(sheet_id, _question_tab())
+    tab = _question_tab()
+    try:
+        config_keys_count = len(cfg.keys())
+    except Exception:
+        config_keys_count = 0
+    has_onboarding_tab = "ONBOARDING_TAB" in cfg
+    log.info(
+        "[refresh] bucket=onboarding_questions resolved_source",
+        extra={
+            "sheet_id": sheet_id,
+            "config_tab": tab,
+            "config_keys_count": config_keys_count,
+            "has_ONBOARDING_TAB": "true" if has_onboarding_tab else "false",
+        },
+    )
+    records = await afetch_records(sheet_id, tab)
     return _normalise_records(records)
 
 
