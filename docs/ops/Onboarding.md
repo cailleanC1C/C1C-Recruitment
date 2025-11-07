@@ -15,4 +15,16 @@
 - `missing config key: ONBOARDING_TAB` — Sheet configuration does not provide the tab name. Update the Config sheet and rerun the refresh. (Alias `onboarding.questions_tab` is no longer accepted.)
 - `onboarding_questions cache is empty (should be preloaded)` — Startup preload failed or returned zero rows. Fix the sheet and rerun the cache refresh (`!ops refresh onboarding_questions`).
 
-Doc last updated: 2025-11-07 (v0.9.8)
+## Lifecycle & Single-Message Policy
+
+The onboarding wizard lives in **one panel message** inside the ticket thread.
+All user-visible updates **edit that same message**. The wizard does not post
+additional messages for state changes.
+
+Component handlers use a single acknowledgment path (`defer_update`) and route
+through one controller render pipeline to avoid duplicate edits or red toasts.
+
+Persistent views for the onboarding UI are **registered after the bot is ready**
+so components remain active across restarts.
+
+Doc last updated: 2025-11-07 (v0.9.7)

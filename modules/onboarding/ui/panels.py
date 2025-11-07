@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Sequence
 
 import discord
+from discord.ext import commands
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
@@ -19,6 +20,7 @@ __all__ = [
     "WELCOME_PANEL_TAG",
     "OnboardWizard",
     "OpenQuestionsPanelView",
+    "WelcomePanel",
     "bind_controller",
     "get_controller",
     "get_panel_message_id",
@@ -26,6 +28,7 @@ __all__ = [
     "mark_panel_inactive_by_message",
     "register_panel_message",
     "register_persistent_views",
+    "register_views",
     "threads_default_label",
     "unbind_controller",
 ]
@@ -1532,3 +1535,95 @@ class OpenQuestionsPanelView(discord.ui.View):
                     {"value": token, "label": label},
                 )
             await self.refresh(interaction)
+
+
+class WelcomePanel(discord.ui.View):
+    """Minimal persistent panel for onboarding wizard interactions."""
+
+    def __init__(self, controller, *, timeout: float | None = None) -> None:
+        super().__init__(timeout=timeout)
+        self.controller = controller
+        self.log = getattr(controller, "log", None) if controller is not None else None
+
+    def _resolve_controller(self, interaction: discord.Interaction):
+        if self.controller is not None:
+            return self.controller
+        client = getattr(interaction, "client", None)
+        state = getattr(client, "state", None) if client is not None else None
+        getter = getattr(state, "get", None)
+        if callable(getter):
+            controller = getter("onboarding_controller")
+            if controller is not None:
+                self.controller = controller
+                self.log = getattr(controller, "log", None)
+                return controller
+        if isinstance(state, dict):
+            controller = state.get("onboarding_controller")
+            if controller is not None:
+                self.controller = controller
+                self.log = getattr(controller, "log", None)
+                return controller
+        fallback = getattr(client, "onboarding_controller", None)
+        if fallback is not None:
+            self.controller = fallback
+            self.log = getattr(fallback, "log", None)
+            return fallback
+        return None
+
+    @discord.ui.button(label="Open questions", style=discord.ButtonStyle.primary, custom_id="open_questions")
+    async def open_questions(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        try:
+            await interaction.response.defer_update()
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            await _ensure_deferred(interaction)
+
+        controller = self._resolve_controller(interaction)
+        if controller is None:
+            return
+
+        await controller.launch(interaction)
+        if self.log is not None:
+            try:
+                self.log.info(
+                    "wizard:first_click",
+                    extra={"panel_message_id": getattr(interaction.message, "id", None)},
+                )
+            except Exception:
+                pass
+
+    @discord.ui.button(label="Restart", style=discord.ButtonStyle.secondary, custom_id="restart_wizard")
+    async def restart(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        try:
+            await interaction.response.defer_update()
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            await _ensure_deferred(interaction)
+
+        controller = self._resolve_controller(interaction)
+        if controller is None:
+            return
+        await controller.restart(interaction)
+
+
+def register_views(bot: commands.Bot) -> None:
+    """Register persistent onboarding views once the bot is ready."""
+
+    state = getattr(bot, "state", None)
+    controller = None
+    getter = getattr(state, "get", None)
+    if callable(getter):
+        controller = getter("onboarding_controller")
+    elif isinstance(state, dict):
+        controller = state.get("onboarding_controller")
+    if controller is None:
+        controller = getattr(bot, "onboarding_controller", None)
+
+    bot.add_view(WelcomePanel(controller=controller))
+    if hasattr(bot, "logger"):
+        try:
+            bot.logger.info("onboarding: persistent WelcomePanel view registered")
+        except Exception:
+            pass

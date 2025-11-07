@@ -20,6 +20,7 @@ from shared.logfmt import LogTemplates, guild_label, user_label, human_reason
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from modules.common.runtime import Runtime
+from modules.coreops import ready as core_ready
 from c1c_coreops.config import (
     build_command_variants,
     build_lookup_sequence,
@@ -226,6 +227,8 @@ async def on_ready():
     runtime.schedule_startup_preload()
 
     await ensure_scheduler_started(bot)
+
+    await core_ready.on_ready(bot)
 
 
 @bot.event
