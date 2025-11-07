@@ -65,4 +65,4 @@ Here’s your feature-toggle section rewritten to **match that exact spec layout
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-11-08 (v0.9.7)
