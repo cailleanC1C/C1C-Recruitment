@@ -69,7 +69,11 @@ def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> 
     log.log(level, "%s", message)
 
     async def runner() -> None:
-        await bot.wait_until_ready()
+        try:
+            await bot.wait_until_ready()
+        except Exception:  # pragma: no cover - defensive guard
+            log.warning("welcome watcher announce skipped: bot not ready")
+            return
         await _send_runtime(message)
 
     # discord.py 2.x restricts accessing Client.loop here; schedule via asyncio

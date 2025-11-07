@@ -56,6 +56,7 @@ It exists so that contributors update the correct references after each developm
 * [`Architecture.md`](ops/Architecture.md) — detailed system flow, runtime design, and module topology.
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
+* [`env.md`](ops/env.md) — minimal environment checklist highlighting required sheet IDs and removed aliases.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
 * [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
@@ -80,4 +81,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-04 (v0.9.7)
+Doc last updated: 2025-11-08 (v0.9.7)

@@ -63,6 +63,8 @@ __all__ = [
     "redact_token",
     "redact_ids",
     "redact_value",
+    "merge_onboarding_config_early",
+    "onboarding_config_merge_count",
 ]
 
 log = logging.getLogger("c1c.config")
@@ -92,6 +94,8 @@ _log_channel_warning_emitted = False
 
 _CONFIG: Dict[str, object] = {}
 LOG_CHANNEL_ID: Optional[int] | None = None
+
+_LAST_ONBOARDING_CONFIG_KEYS = 0
 
 _SECRET_KEYS = {
     "DISCORD_TOKEN",
@@ -269,32 +273,77 @@ def _log_snapshot(snapshot: Dict[str, object]) -> None:
     log.info("config loaded", extra={"config": redacted})
 
 
+def _load_onboarding_config_values() -> tuple[str, Dict[str, str]]:
+    """Return onboarding config values keyed by upper-case strings."""
+
+    sheet_id = (os.getenv("ONBOARDING_SHEET_ID") or "").strip()
+    if not sheet_id:
+        raise RuntimeError("ONBOARDING_SHEET_ID not set")
+
+    from shared.sheets import onboarding as onboarding_sheets  # type: ignore
+
+    raw_config = onboarding_sheets._read_onboarding_config(sheet_id)  # type: ignore[attr-defined]
+    normalized: Dict[str, str] = {}
+    for key, value in raw_config.items():
+        key_norm = (key or "").strip().upper()
+        if not key_norm:
+            continue
+        text = "" if value is None else str(value).strip()
+        normalized[key_norm] = text
+    return sheet_id, normalized
+
+
 def _merge_onboarding_tab(config: Dict[str, object]) -> None:
     """Merge the onboarding questions tab name from sheet config."""
 
     try:
-        from shared.sheets import onboarding as onboarding_sheets  # type: ignore
-    except Exception:  # pragma: no cover - optional dependency at import time
-        log.debug("config: onboarding sheet module unavailable", exc_info=True)
-        return
-
-    # Only the explicit onboarding sheet id controls merge behaviour. Legacy
-    # fallbacks risk pulling a different sheet's config silently.
-    if not os.getenv("ONBOARDING_SHEET_ID"):
+        sheet_id, values = _load_onboarding_config_values()
+    except RuntimeError:
         log.debug("config: onboarding sheet id not configured; skipping tab merge")
         return
-
-    try:
-        sheet_config = onboarding_sheets._load_config()  # type: ignore[attr-defined]
     except Exception as exc:  # pragma: no cover - network or credential failures
         log.warning("config: failed to load onboarding Config tab: %s", exc)
         return
 
-    tab = str(sheet_config.get("onboarding_tab", "")).strip()
-    if not tab:
+    if not values:
         return
 
-    config["ONBOARDING_TAB"] = tab
+    config.update(values)
+
+    global _LAST_ONBOARDING_CONFIG_KEYS
+    _LAST_ONBOARDING_CONFIG_KEYS = len(values)
+
+
+def merge_onboarding_config_early() -> int:
+    """Merge onboarding Config tab values into the live config mapping."""
+
+    sheet_id, values = _load_onboarding_config_values()
+
+    merged = 0
+    for key, value in values.items():
+        _CONFIG[key] = value
+        merged += 1
+
+    global _LAST_ONBOARDING_CONFIG_KEYS
+    _LAST_ONBOARDING_CONFIG_KEYS = len(values)
+
+    tail = sheet_id[-6:] if len(sheet_id) >= 6 else sheet_id
+    display = f"…{tail}" if len(sheet_id) > len(tail) else tail
+    result = "ok" if merged else "empty"
+    log.info(
+        "🧩 Config — merged onboarding tab • sheet=%s • keys=%d • result=%s",
+        display,
+        len(values),
+        result,
+        extra={"sheet_tail": tail, "keys": len(values), "result": result},
+    )
+    return len(values)
+
+
+def onboarding_config_merge_count() -> int:
+    """Return the number of onboarding config keys merged most recently."""
+
+    return _LAST_ONBOARDING_CONFIG_KEYS
 
 
 def _load_config() -> Dict[str, object]:

@@ -20,6 +20,8 @@ from discord.ext import commands
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from shared import watchdog as watchdog_loop
+from modules.common.logs import log as human_log
+from shared import config as shared_config
 from shared.config import (
     get_port,
     get_env_name,
@@ -830,6 +832,12 @@ class Runtime:
         await self.load_extensions()
         rehydrate_tiers(self.bot)
         audit_tiers(self.bot, log)
+        try:
+            merged = shared_config.merge_onboarding_config_early()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            human_log.human("warn", "Config preload failed", error=repr(exc))
+        else:
+            log.debug("runtime: onboarding config preload merged %d keys", merged)
         from shared.sheets.cache_scheduler import (
             emit_schedule_log,
             ensure_cache_registration,
