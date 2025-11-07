@@ -13,4 +13,15 @@ async def on_ready(bot: commands.Bot) -> None:
     from modules.onboarding.ui import panels
 
     panels.register_views(bot)
-    bot.logger.info("on_ready: onboarding views registered (post-ready)")
+
+    # Guard against bots without a .logger attribute; fall back to module logger.
+    try:
+        logger = getattr(bot, "logger", None)
+        if logger is None:
+            import logging
+
+            logger = logging.getLogger("modules.coreops.ready")
+        logger.info("on_ready: onboarding views registered (post-ready)")
+    except Exception:
+        # Never let logging break startup
+        pass
