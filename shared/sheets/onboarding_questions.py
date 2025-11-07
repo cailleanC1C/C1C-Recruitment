@@ -111,6 +111,17 @@ async def fetch_question_rows_async() -> Tuple[dict[str, str], ...]:
     except Exception:
         config_keys_count = 0
     has_onboarding_tab = "ONBOARDING_TAB" in cfg
+
+    # DEBUG: show which keys exist in cfg at refresh time (truncated for safety).
+    try:
+        _keys_preview = ", ".join(sorted(map(str, cfg.keys())))[:240]
+    except Exception:
+        _keys_preview = "<?>"
+    log.info(
+        "📦 Cache = bucket=onboarding_questions • cfg_keys=%s",
+        _keys_preview,
+    )
+
     log.info(
         "📦 Cache = bucket=onboarding_questions • sheet=%s • tab=%s • source=resolved",
         sheet_display,
