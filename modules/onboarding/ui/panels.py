@@ -64,6 +64,23 @@ _ACTIVE_PANEL_MESSAGE_IDS: set[int] = set()
 _REGISTRATION_COUNTS: Dict[str, int] = {}
 
 
+class _DefaultControllerRegistry:
+    def __init__(self, view: "OpenQuestionsPanelView") -> None:
+        self._view = view
+
+    async def get_or_create(self, thread_id: int | None) -> _ControllerProtocol:
+        controller = self._view._controller
+        if controller is not None:
+            return controller
+        if thread_id is None:
+            raise LookupError("thread_missing")
+        key = int(thread_id)
+        controller = _CONTROLLERS.get(key)
+        if controller is None:
+            raise LookupError("controller_missing")
+        return controller
+
+
 def _display_name(user: discord.abc.User | discord.Member | None) -> str:
     if user is None:
         return "<unknown>"
@@ -321,10 +338,12 @@ class OpenQuestionsPanelView(discord.ui.View):
         *,
         controller: _ControllerProtocol | None = None,
         thread_id: int | None = None,
+        controller_registry: Any | None = None,
     ) -> None:
         super().__init__(timeout=None)
         self._controller = controller
         self._thread_id = thread_id
+        self._controller_registry = controller_registry or _DefaultControllerRegistry(self)
         self.disable_on_timeout = False
         self._error_notice_ids: set[int] = set()
         if diag.is_enabled():
@@ -336,6 +355,16 @@ class OpenQuestionsPanelView(discord.ui.View):
                 disable_on_timeout=self.disable_on_timeout,
                 thread_id=int(thread_id) if thread_id is not None else None,
             )
+
+    def _attach_controller(
+        self, controller: _ControllerProtocol, *, thread_id: int | None = None
+    ) -> None:
+        self._controller = controller
+        if thread_id is not None:
+            try:
+                self._thread_id = int(thread_id)
+            except (TypeError, ValueError):
+                self._thread_id = thread_id
 
     def _resolve(self, interaction: discord.Interaction) -> tuple[_ControllerProtocol | None, int | None]:
         thread_id = self._thread_id or getattr(interaction.channel, "id", None) or interaction.channel_id
@@ -397,6 +426,14 @@ class OpenQuestionsPanelView(discord.ui.View):
             thread_id=self._thread_id,
         )
 
+    def _recompute_nav_state(self) -> None:
+        controller = self._controller
+        state = "attached" if controller is not None else "missing"
+        try:
+            logs.human("info", "onboarding.ui_nav_state", controller=state)
+        except Exception:
+            pass
+
     @discord.ui.button(
         label="Open questions",
         style=discord.ButtonStyle.primary,
@@ -404,6 +441,55 @@ class OpenQuestionsPanelView(discord.ui.View):
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """Start the inline onboarding wizard inside the active thread."""
+
+        if not interaction.response.is_done():
+            try:
+                await interaction.response.defer()
+            except Exception:
+                pass
+
+        channel = getattr(interaction, "channel", None)
+        thread_identifier = getattr(channel, "id", None) if isinstance(channel, discord.Thread) else None
+        if thread_identifier is None:
+            thread_identifier = self._thread_id
+        try:
+            thread_key = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            thread_key = None
+
+        try:
+            controller = await self._controller_registry.get_or_create(thread_key)
+        except Exception as exc:
+            await self._ensure_error_notice_followup(interaction, reason="controller_missing")
+            logs.human(
+                "error",
+                "onboarding.launch_controller_missing",
+                thread_id=thread_key,
+                error=str(exc),
+            )
+            await self._ensure_error_notice(interaction)
+            return
+
+        wait_ready = getattr(controller, "wait_until_ready", None)
+        ready = True
+        if callable(wait_ready):
+            try:
+                ready = await wait_ready(timeout=2.0)
+            except Exception:
+                ready = False
+        if not ready:
+            logs.human("warn", "onboarding.launch_wait_timeout", thread_id=thread_key)
+
+        try:
+            self._attach_controller(controller, thread_id=thread_key)
+            self._recompute_nav_state()
+            message = getattr(interaction, "message", None)
+            if message is not None:
+                await message.edit(view=self)
+        except Exception as err:
+            await self._ensure_error_notice_followup(interaction, reason="edit_failed")
+            logs.human("error", "onboarding.launch_edit_failed", error=str(err))
+            return
 
         controller, thread_id = self._resolve(interaction)
         if controller is None or thread_id is None:
@@ -433,7 +519,6 @@ class OpenQuestionsPanelView(discord.ui.View):
                 except Exception:  # pragma: no cover - best-effort fallback
                     log.warning("failed to post retry prompt", exc_info=True)
 
-        # Ack early to avoid Discord's 3s timeout, then do any slow work
         await _ensure_deferred(interaction)
 
         def _schema_failure_payload(error_text: str) -> dict[str, object]:
@@ -495,8 +580,6 @@ class OpenQuestionsPanelView(discord.ui.View):
             )
             await _hard_fail("no_questions")
             return
-
-        # Already deferred above; nothing to do here
 
         try:
             content = controller.render_step(thread_id, step=0)
@@ -850,14 +933,27 @@ class OpenQuestionsPanelView(discord.ui.View):
             log.warning("failed to defer restart notice", exc_info=True)
 
 
-class OnboardWizard(discord.ui.View):
-    def __init__(self, controller: _ControllerProtocol, thread_id: int, *, step: int = 0) -> None:
-        super().__init__(timeout=600)
-        self.controller = controller
-        self.thread_id = thread_id
-        self.step = step
-        self.message: discord.Message | None = None
-        self._configure_components()
+    async def _ensure_error_notice_followup(self, interaction: discord.Interaction, *, reason: str) -> None:
+        try:
+            followup = getattr(interaction, "followup", None)
+            if followup is None:
+                return
+            await followup.send(
+                "Couldn't open the questions just now. Please try again.",
+                ephemeral=True,
+            )
+        except Exception:
+            log.debug("failed to post error followup", exc_info=True)
+
+
+    class OnboardWizard(discord.ui.View):
+        def __init__(self, controller: _ControllerProtocol, thread_id: int, *, step: int = 0) -> None:
+            super().__init__(timeout=600)
+            self.controller = controller
+            self.thread_id = thread_id
+            self.step = step
+            self.message: discord.Message | None = None
+            self._configure_components()
 
     def attach(self, message: discord.Message) -> None:
         self.message = message

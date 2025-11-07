@@ -787,6 +787,7 @@ class BaseWelcomeController:
     def __init__(self, bot: commands.Bot, *, flow: str) -> None:
         self.bot = bot
         self.flow = flow
+        self._ready_evt = asyncio.Event()
         self._threads: Dict[int, discord.Thread] = {}
         self._questions: Dict[int, list[Question]] = {}
         self.questions_by_thread = self._questions
@@ -811,6 +812,16 @@ class BaseWelcomeController:
                 self.recruiter_role_ids = list(get_recruiter_role_ids())
             except Exception:
                 self.recruiter_role_ids = []
+
+    async def wait_until_ready(self, timeout: float = 0.0) -> bool:
+        if timeout and timeout > 0:
+            try:
+                await asyncio.wait_for(self._ready_evt.wait(), timeout=timeout)
+                return True
+            except asyncio.TimeoutError:
+                return self._ready_evt.is_set()
+        await self._ready_evt.wait()
+        return True
 
     async def log_event(self, level: str, event: str, **fields: Any) -> None:
         if diag.is_enabled():
@@ -1191,6 +1202,7 @@ class BaseWelcomeController:
             allowed_ids.add(int(target_id))
 
         await self._start_modal_step(thread, session)
+        self._ready_evt.set()
 
     async def _start_modal_step(
         self,

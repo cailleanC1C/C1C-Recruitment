@@ -25,6 +25,7 @@ __all__ = [
     "send_welcome_log",
     "send_welcome_exception",
     "log_view_error",
+    "human",
 ]
 
 log = logging.getLogger("c1c.onboarding.logs")
@@ -202,6 +203,17 @@ def thread_context(thread: discord.Thread | None) -> dict[str, Any]:
     if parent_id is not None:
         context["channel_label"] = logfmt.channel_label(guild, parent_id)
     return context
+
+
+def human(level: str, event: str, **payload: Any) -> None:
+    """Emit a lightweight human log entry for onboarding flows."""
+
+    logger = _resolve_logger(level)
+    details = {**payload, "event": event}
+    formatted = ", ".join(
+        f"{key}={_stringify(value)}" for key, value in sorted(details.items())
+    )
+    logger("👤 %s", formatted)
 
 
 async def send_welcome_log(level: str, **kv: Any) -> None:
