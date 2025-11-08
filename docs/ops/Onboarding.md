@@ -50,9 +50,25 @@ _Help comes from the sheet. No invented examples._
 Buttons: `[Answer 💬]  [Skip ⏭️]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
 
 ### Boolean
-**Are you interested in participating in Siege?** *(required)*  
+**Are you interested in participating in Siege?** *(required)*
 Buttons: `[✅ Yes]  [❌ No]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
 
 > All prompt text, help, validation, and limits are sheet-driven. If a cell is blank, the UI shows nothing (no fallback examples).
 
-Doc last updated: 2025-11-07 (v0.9.7)
+### Single-select
+**Pick the option that matches your stage best.** *(required)*  
+_Values come from the sheet `values` cell; order preserved._  
+🎯 Selected: —  
+Controls: a dropdown with the listed values.  
+Buttons: `[Back ⬅️]  [Next ➡️]  [Cancel ❌]` *(Next disabled until selected)*
+
+### Multi-select
+**Which Hydra difficulties are you currently hitting?** *(optional)*  
+_Values come from the sheet; we do not invent examples._  
+🎯 Selected: —  
+Controls: a dropdown that allows multiple selections (max = number of values).  
+Buttons: `[Skip ⏭️]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
+
+> Resume: previously chosen options render pre-selected; users can change and continue later.
+
+Doc last updated: 2025-11-08 (v0.9.7)
