@@ -141,14 +141,8 @@ class WizardController:
         return value in {"TRUE", "1", "YES"}
 
     async def _render_current(self, interaction: discord.Interaction, session: Session) -> None:
+        # 🔒 Prevent re-render after completion
         if getattr(session, "completed", False):
-            try:
-                await interaction.followup.send(
-                    content="This onboarding has already been submitted.",
-                    ephemeral=True,
-                )
-            except Exception:
-                pass
             return
 
         question = self._question_for_step(session)
@@ -193,6 +187,16 @@ class WizardController:
         question: dict,
         value: str,
     ) -> None:
+        # 🔒 Prevent post-finish mutations (Codex P1)
+        if getattr(session, "completed", False):
+            try:
+                await interaction.followup.send(
+                    "This onboarding session is already closed.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
         validate_rule = (question.get("validate") or "").strip()
         if validate_rule:
             try:
@@ -232,6 +236,16 @@ class WizardController:
         question: dict,
         value: bool,
     ) -> None:
+        # 🔒 Prevent post-finish mutations (Codex P1)
+        if getattr(session, "completed", False):
+            try:
+                await interaction.followup.send(
+                    "This onboarding session is already closed.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
         session.set_answer(question["gid"], value)
 
         if self.log:
@@ -256,6 +270,16 @@ class WizardController:
         question: dict,
         value: str,
     ) -> None:
+        # 🔒 Prevent post-finish mutations (Codex P1)
+        if getattr(session, "completed", False):
+            try:
+                await interaction.followup.send(
+                    "This onboarding session is already closed.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
         session.set_answer(question["gid"], value)
 
         if self.log:
@@ -281,6 +305,16 @@ class WizardController:
         question: dict,
         values: list[str],
     ) -> None:
+        # 🔒 Prevent post-finish mutations (Codex P1)
+        if getattr(session, "completed", False):
+            try:
+                await interaction.followup.send(
+                    "This onboarding session is already closed.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
         session.set_answer(question["gid"], values)
 
         if self.log:
@@ -323,6 +357,12 @@ class WizardController:
             content = f"<@&{int(recruiter_role_id)}> New onboarding submission ready."
 
         await interaction.channel.send(content=content, embed=embed)
+
+        # disable any remaining view to block late clicks
+        try:
+            await interaction.message.edit(view=None)
+        except Exception:
+            pass
 
         if self.log:
             try:
