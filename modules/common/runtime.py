@@ -529,6 +529,7 @@ class Runtime:
         await self._web_runner.setup()
         self._web_site = web.TCPSite(self._web_runner, host="0.0.0.0", port=port)
         await self._web_site.start()
+        human_log.human("info", f"web server listening • port={port}")
         log.info("web server listening", extra={"port": port})
 
     async def _health_payload(self) -> tuple[dict, bool]:

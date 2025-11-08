@@ -24,6 +24,7 @@ Every audit and CI check validates against this document.
 - **C-08 Single-Message Panels:** Interactive panels (like clan panels) update in place; avoid message spam.
 - **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, deprecated shared CoreOps shims, `shared/utils/coreops_*`).
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
+- **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
 
 Ah, yeah — the house style in that doc uses **code-style IDs (C-01, F-01, etc.)**, single-sentence bullets, and tight spacing instead of tables or bold headers.
 Here’s your feature-toggle section rewritten to **match that exact spec layout and tone**:

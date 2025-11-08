@@ -1,5 +1,11 @@
 # Changelog
 
+## 2025-11-08
+- **Fix:** Restored keep-alive/web server startup by sweeping imports from the deprecated `shared.config` path to `shared.ports.get_port`.
+- **Ops:** Added canonical boot log line `web server listening • port=<n>` to confirm bind.
+- **Guardrails:** New CI check blocks reintroduction of the deprecated import path.
+- **Docs:** Runbook updated with expected boot line & troubleshooting; guardrails doc updated with “Forbidden Imports”.
+
 ### v0.9.7 — 2025-11-07
 - CoreOps: load `modules.coreops.cmd_cfg` as an always-on extension so `!cfg` is available (admin only).
 
@@ -276,4 +282,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-07 (v0.9.7)
+Doc last updated: 2025-11-08 (v0.9.7)

@@ -11,6 +11,10 @@ jobs:
       guardrails_status: ${{ steps.guardrails.outputs.guardrails_status }}
     steps:
       - uses: actions/checkout@v4
+      - name: Forbidden imports check (get_port path)
+        run: |
+          chmod +x scripts/ci/check_forbidden_imports.sh
+          scripts/ci/check_forbidden_imports.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
