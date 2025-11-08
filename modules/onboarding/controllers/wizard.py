@@ -461,7 +461,7 @@ class WizardController:
         resumed = False
         recovered_panel = False
         try:
-            session = Session.load_from_sheet(channel_id, user_id)
+            session = Session.load_from_sheet(user_id, channel_id)
         except Exception:
             session = None
         if session is None:
@@ -527,7 +527,7 @@ class WizardController:
             return False, False
 
         try:
-            session = Session.load_from_sheet(thread_id, target_user_id)
+            session = Session.load_from_sheet(target_user_id, thread_id)
         except Exception:
             session = None
         if session is None or getattr(session, "completed", False):

@@ -1226,7 +1226,12 @@ class BaseWelcomeController:
 
         store.set_pending_step(thread_id, {"kind": "inline", "index": 0})
         intro = self._modal_intro_text()
-        view = panels.OpenQuestionsPanelView(controller=self, thread_id=thread_id)
+        target_id = self._target_users.get(thread_id)
+        view = panels.OpenQuestionsPanelView(
+            controller=self,
+            thread_id=thread_id,
+            target_user_id=target_id,
+        )
         message_id = self._panel_messages.get(thread_id)
         message: discord.Message | None = None
         if anchor is not None:

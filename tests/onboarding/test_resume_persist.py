@@ -25,7 +25,7 @@ def test_session_round_trip_sheet(session_factory, monkeypatch):
 
     session.save_to_sheet()
 
-    restored = Session.load_from_sheet(session.thread_id, session.applicant_id)
+    restored = Session.load_from_sheet(session.applicant_id, session.thread_id)
     assert restored is not None
     assert restored.answers.get("w_ign") == "Caillean"
     assert restored.step_index == 2

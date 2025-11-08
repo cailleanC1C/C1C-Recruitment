@@ -342,6 +342,7 @@ class OpenQuestionsPanelView(discord.ui.View):
         controller: _ControllerProtocol | None = None,
         thread_id: int | None = None,
         controller_registry: Any | None = None,
+        target_user_id: int | None = None,
     ) -> None:
         super().__init__(timeout=None)
         self._controller = controller
@@ -349,6 +350,8 @@ class OpenQuestionsPanelView(discord.ui.View):
         self._controller_registry = controller_registry or _DefaultControllerRegistry(self)
         self.disable_on_timeout = False
         self._error_notice_ids: set[int] = set()
+        self._target_user_id: int | None = None
+        self._resume_button: discord.ui.Button | None = None
         if diag.is_enabled():
             diag.log_event_sync(
                 "debug",
@@ -358,6 +361,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 disable_on_timeout=self.disable_on_timeout,
                 thread_id=int(thread_id) if thread_id is not None else None,
             )
+        self._update_resume_visibility(thread_id, target_user_id)
 
     def _attach_controller(
         self, controller: _ControllerProtocol, *, thread_id: int | None = None
@@ -368,6 +372,108 @@ class OpenQuestionsPanelView(discord.ui.View):
                 self._thread_id = int(thread_id)
             except (TypeError, ValueError):
                 self._thread_id = thread_id
+        self._update_resume_visibility(self._thread_id, self._target_user_id)
+
+    @staticmethod
+    def _session_exists(thread_id: int, user_id: int) -> bool:
+        try:
+            from modules.onboarding.sessions import Session
+
+            session = Session.load_from_sheet(user_id, thread_id)
+        except Exception:
+            return False
+        if not session:
+            return False
+        return not getattr(session, "completed", False)
+
+    def _create_resume_button(self) -> discord.ui.Button:
+        button = discord.ui.Button(
+            label="Resume",
+            style=discord.ButtonStyle.secondary,
+            custom_id="welcome.panel.resume",
+        )
+
+        async def _resume_callback(interaction: discord.Interaction) -> None:
+            await self._resume_from_button(interaction)
+
+        button.callback = _resume_callback  # type: ignore[assignment]
+        return button
+
+    def _remove_resume_button(self) -> None:
+        if self._resume_button is None:
+            return
+        try:
+            self.remove_item(self._resume_button)
+        except ValueError:
+            pass
+        self._resume_button = None
+
+    def _update_resume_visibility(
+        self, thread_id: int | None, user_id: int | None
+    ) -> tuple[bool, bool]:
+        base_thread = thread_id if thread_id is not None else self._thread_id
+        base_user = user_id if user_id is not None else self._target_user_id
+
+        try:
+            resolved_thread = int(base_thread) if base_thread is not None else None
+        except (TypeError, ValueError):
+            resolved_thread = None
+        try:
+            resolved_user = int(base_user) if base_user is not None else None
+        except (TypeError, ValueError):
+            resolved_user = None
+
+        if resolved_thread is not None:
+            self._thread_id = resolved_thread
+        if resolved_user is not None:
+            self._target_user_id = resolved_user
+
+        has_session = False
+        changed = False
+        if resolved_thread is None or resolved_user is None:
+            if self._resume_button is not None:
+                self._remove_resume_button()
+                changed = True
+            return has_session, changed
+
+        has_session = self._session_exists(resolved_thread, resolved_user)
+        if has_session:
+            if self._resume_button is None:
+                self._resume_button = self._create_resume_button()
+                self.add_item(self._resume_button)
+                changed = True
+        elif self._resume_button is not None:
+            self._remove_resume_button()
+            changed = True
+
+        return has_session, changed
+
+    async def _resume_from_button(self, interaction: discord.Interaction) -> None:
+        channel = getattr(interaction, "channel", None)
+        thread_identifier = getattr(channel, "id", None) if isinstance(channel, discord.Thread) else None
+        user_identifier = getattr(getattr(interaction, "user", None), "id", None)
+
+        has_session, changed = self._update_resume_visibility(thread_identifier, user_identifier)
+        if changed:
+            message = getattr(interaction, "message", None)
+            if message is not None:
+                try:
+                    await message.edit(view=self)
+                except Exception:
+                    pass
+
+        await self._launch_logic(interaction)
+
+        if not has_session:
+            followup = getattr(interaction, "followup", None)
+            if followup is not None:
+                try:
+                    await followup.send(
+                        "No saved onboarding session found — starting a new one.",
+                        ephemeral=True,
+                    )
+                except Exception:
+                    pass
 
     def _resolve(self, interaction: discord.Interaction) -> tuple[_ControllerProtocol | None, int | None]:
         thread_id = self._thread_id or getattr(interaction.channel, "id", None) or interaction.channel_id
@@ -379,7 +485,11 @@ class OpenQuestionsPanelView(discord.ui.View):
     def as_disabled(self, *, label: str | None = None) -> "OpenQuestionsPanelView":
         """Return a disabled clone of this view for optimistic locking."""
 
-        clone = self.__class__(controller=self._controller, thread_id=self._thread_id)
+        clone = self.__class__(
+            controller=self._controller,
+            thread_id=self._thread_id,
+            target_user_id=self._target_user_id,
+        )
         for child in clone.children:
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
@@ -397,7 +507,7 @@ class OpenQuestionsPanelView(discord.ui.View):
     ) -> None:
         if interaction is None:
             return
-        view = cls(controller=controller, thread_id=thread_id)
+        view = cls(controller=controller, thread_id=thread_id, target_user_id=getattr(controller, "target_user_id", None))
         response = getattr(interaction, "response", None)
         if response is not None:
             is_done = getattr(response, "is_done", None)
@@ -445,6 +555,9 @@ class OpenQuestionsPanelView(discord.ui.View):
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """Start the inline onboarding wizard inside the active thread."""
 
+        await self._launch_logic(interaction)
+
+    async def _launch_logic(self, interaction: discord.Interaction) -> None:
         if not interaction.response.is_done():
             try:
                 await interaction.response.defer()
@@ -459,6 +572,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             thread_key = int(thread_identifier) if thread_identifier is not None else None
         except (TypeError, ValueError):
             thread_key = None
+
+        actor_id = getattr(getattr(interaction, "user", None), "id", None)
+        self._update_resume_visibility(thread_key, actor_id)
 
         try:
             controller = await self._controller_registry.get_or_create(thread_key)
@@ -1613,7 +1729,7 @@ class WelcomePanel(discord.ui.View):
             try:
                 from modules.onboarding.sessions import Session
 
-                existing = Session.load_from_sheet(thread_id, user_id)
+                existing = Session.load_from_sheet(user_id, thread_id)
             except Exception:
                 existing = None
         if existing is None:

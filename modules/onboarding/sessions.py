@@ -77,7 +77,7 @@ class Session:
         sess_sheet.save(payload)
 
     @classmethod
-    def load_from_sheet(cls, thread_id: int, applicant_id: int) -> Optional["Session"]:
+    def load_from_sheet(cls, applicant_id: int, thread_id: int) -> Optional["Session"]:
         row = sess_sheet.load(int(applicant_id), int(thread_id))
         if not row:
             return None

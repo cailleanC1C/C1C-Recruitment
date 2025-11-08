@@ -111,4 +111,4 @@ Clicking it posts a final embed to the thread:
 - Recruiters can run `!onb resume @user` inside the onboarding thread to recover a panel for that user.
 - Finished sessions are immutable — post-finish clicks display a "session closed" notice without changing data.
 
-Doc last updated: 2025-11-08 (v0.9.8)
+Doc last updated: 2025-11-08 (v0.9.7)
