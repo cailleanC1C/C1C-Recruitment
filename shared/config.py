@@ -15,7 +15,6 @@ __all__ = [
     "cfg",
     "reload_config",
     "get_config_snapshot",
-    "get_port",
     "get_env_name",
     "get_bot_name",
     "get_watchdog_check_sec",
@@ -67,6 +66,8 @@ __all__ = [
     "merge_onboarding_config_early",
     "onboarding_config_merge_count",
 ]
+
+# Port helper lives in shared.ports. Import there where needed.
 
 log = logging.getLogger("c1c.config")
 
@@ -485,14 +486,6 @@ def get_config_snapshot() -> Dict[str, object]:
     """Return a shallow copy of the cached config values."""
 
     return dict(_CONFIG)
-
-
-def get_port(default: int = 10000) -> int:
-    try:
-        return int(_CONFIG.get("PORT", default))
-    except (TypeError, ValueError):
-        return default
-
 
 def get_env_name(default: str = "dev") -> str:
     value = _CONFIG.get("ENV_NAME")

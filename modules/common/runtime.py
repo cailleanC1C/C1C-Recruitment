@@ -23,7 +23,6 @@ from shared import watchdog as watchdog_loop
 from modules.common.logs import log as human_log
 from shared import config as shared_config
 from shared.config import (
-    get_port,
     get_env_name,
     get_bot_name,
     get_watchdog_check_sec,
@@ -34,6 +33,7 @@ from shared.config import (
     get_refresh_timezone,
     get_strict_emoji_proxy,
 )
+from shared.ports import get_port
 from shared.logging import get_trace_id, set_trace_id, setup_logging
 from shared.obs.events import (
     format_refresh_message,
