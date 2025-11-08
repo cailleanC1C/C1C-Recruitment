@@ -37,6 +37,32 @@ class WizardController:
             return loop.create_task(coro)
         return asyncio.create_task(coro)
 
+    async def _store_session(
+        self,
+        session: Session,
+        *,
+        persist_sheet: bool = True,
+        log_event: bool = True,
+    ) -> None:
+        await self.sessions.save(session)
+        if not persist_sheet:
+            return
+        try:
+            session.save_to_sheet()
+            if log_event and self.log is not None:
+                try:
+                    self.log.info(
+                        "wizard:session_saved",
+                        extra={
+                            "step_index": session.step_index,
+                            "answers_count": len(session.answers),
+                        },
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     async def _send_or_edit_panel(
         self,
         interaction: discord.Interaction,
@@ -73,7 +99,7 @@ class WizardController:
                 session.panel_message_id = msg.id
                 edit_count += 1
 
-        await self.sessions.save(session)
+        await self._store_session(session)
 
         if self.log is not None:
             try:
@@ -377,7 +403,7 @@ class WizardController:
             except Exception:
                 pass
 
-        await self.sessions.save(session)
+        await self._store_session(session, persist_sheet=True, log_event=True)
 
         try:
             await interaction.followup.send(
@@ -427,7 +453,32 @@ class WizardController:
             pass
 
     async def launch(self, interaction: discord.Interaction) -> None:
-        session = await self.sessions.load(interaction.channel.id, interaction.user.id)
+        channel_id = getattr(interaction.channel, "id", None)
+        user_id = getattr(interaction.user, "id", None)
+        if channel_id is None or user_id is None:
+            return
+
+        resumed = False
+        recovered_panel = False
+        try:
+            session = Session.load_from_sheet(user_id, channel_id)
+        except Exception:
+            session = None
+        if session is None:
+            session = await self.sessions.load(channel_id, user_id)
+        else:
+            resumed = True
+            if session.panel_message_id:
+                try:
+                    await interaction.channel.fetch_message(session.panel_message_id)
+                except discord.NotFound:
+                    session.panel_message_id = None
+                    recovered_panel = True
+                except Exception:
+                    session.panel_message_id = None
+                    recovered_panel = True
+            await self._store_session(session, persist_sheet=False, log_event=False)
+
         if getattr(session, "completed", False):
             try:
                 await interaction.followup.send(
@@ -437,6 +488,21 @@ class WizardController:
             except Exception:
                 pass
             return
+
+        if resumed and self.log is not None:
+            try:
+                self.log.info(
+                    "wizard:resume_started",
+                    extra={
+                        "actor": user_id,
+                        "user_id": user_id,
+                        "thread_id": channel_id,
+                        "recovered_panel": recovered_panel,
+                    },
+                )
+            except Exception:
+                pass
+
         await self._render_current(interaction, session)
 
     async def restart(self, interaction: discord.Interaction) -> None:
@@ -453,3 +519,48 @@ class WizardController:
         if hasattr(session, "reset"):
             session.reset()
         await self._render_current(interaction, session)
+
+    async def recruiter_resume(self, origin, target_user_id: int) -> tuple[bool, bool]:
+        channel = getattr(origin, "channel", None)
+        thread_id = getattr(channel, "id", None)
+        if thread_id is None:
+            return False, False
+
+        try:
+            session = Session.load_from_sheet(target_user_id, thread_id)
+        except Exception:
+            session = None
+        if session is None or getattr(session, "completed", False):
+            return False, False
+
+        actor = getattr(origin, "user", None) or getattr(origin, "author", None)
+        recovered = False
+        if session.panel_message_id:
+            try:
+                await channel.fetch_message(session.panel_message_id)
+            except discord.NotFound:
+                session.panel_message_id = None
+                recovered = True
+            except Exception:
+                session.panel_message_id = None
+                recovered = True
+
+        proxy = SimpleNamespace(channel=channel, message=None, user=actor)
+        await self._store_session(session, persist_sheet=False, log_event=False)
+        await self._render_current(proxy, session)
+
+        if self.log is not None:
+            try:
+                self.log.info(
+                    "wizard:resume_started",
+                    extra={
+                        "actor": getattr(actor, "id", None),
+                        "user_id": target_user_id,
+                        "thread_id": thread_id,
+                        "recovered_panel": recovered,
+                    },
+                )
+            except Exception:
+                pass
+
+        return True, recovered

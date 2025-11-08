@@ -24,6 +24,21 @@ def test_open_questions_button_has_custom_id() -> None:
     asyncio.run(runner())
 
 
+def test_resume_button_visible_when_session_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(panels.OpenQuestionsPanelView, "_session_exists", staticmethod(lambda _thread_id, _user_id: True))
+
+    async def runner() -> None:
+        view = OpenQuestionsPanelView(thread_id=1234, target_user_id=5678)
+        resume_ids = [
+            getattr(child, "custom_id", None)
+            for child in view.children
+            if hasattr(child, "custom_id")
+        ]
+        assert "welcome.panel.resume" in resume_ids
+
+    asyncio.run(runner())
+
+
 def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)
