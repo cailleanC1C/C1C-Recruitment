@@ -142,3 +142,37 @@ def test_bool_buttons_store_value(interaction, controller, session_factory):
     _flush(loop)
 
     assert session.answers["w_siege"] is True
+
+
+def test_next_on_last_question_is_guarded(interaction, controller, session_factory):
+    session = session_factory()
+    controller.renderer.questions = [
+        {
+            "gid": "w_ign",
+            "label": "IGN",
+            "type": "short",
+            "required": "TRUE",
+            "help": "",
+            "maxlen": 20,
+        }
+    ]
+
+    loop = controller.bot.loop
+    loop.run_until_complete(controller.sessions.save(session))
+    loop.run_until_complete(controller.launch(interaction))
+    _flush(loop)
+
+    loop.run_until_complete(
+        controller._save_modal_answer(
+            interaction,
+            session,
+            controller.renderer.get_question(0),
+            "Caillean",
+        )
+    )
+    _flush(loop)
+
+    loop.run_until_complete(controller.next(interaction, session))
+    _flush(loop)
+
+    assert session.step_index == 0

@@ -90,6 +90,18 @@ class WizardController:
             raise AttributeError("renderer missing get_question")
         return getter(session.step_index)
 
+    def _has_question(self, index: int) -> bool:
+        """Return True if a question exists at the given index without raising."""
+
+        getter = getattr(self.renderer, "get_question", None)
+        if getter is None:
+            return False
+        try:
+            getter(index)
+            return True
+        except (IndexError, KeyError, TypeError):
+            return False
+
     def _is_required(self, question: dict) -> bool:
         value = str(question.get("required") or "").strip().upper()
         return value in {"TRUE", "1", "YES"}
@@ -190,7 +202,19 @@ class WizardController:
                 pass
             return
 
-        session.step_index += 1
+        # PR-B amend: don't run past final question
+        next_index = session.step_index + 1
+        if not self._has_question(next_index):
+            try:
+                await interaction.followup.send(
+                    content="You’ve reached the last question.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+
+        session.step_index = next_index
         await self._render_current(interaction, session)
 
     async def back(self, interaction: discord.Interaction, session: Session) -> None:
