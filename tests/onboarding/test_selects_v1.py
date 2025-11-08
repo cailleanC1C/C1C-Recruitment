@@ -61,9 +61,17 @@ def _flush(loop: asyncio.AbstractEventLoop) -> None:
     loop.run_until_complete(asyncio.sleep(0))
 
 
-def _build_view(loop, controller, session, question, required, has_answer, optional):
+def _build_view(loop, controller, session, question, required, has_answer, optional, is_last=False):
     async def _inner():
-        return srender.build_view(controller, session, question, required, has_answer, optional)
+        return srender.build_view(
+            controller,
+            session,
+            question,
+            required,
+            has_answer,
+            optional,
+            is_last=is_last,
+        )
 
     return loop.run_until_complete(_inner())
 

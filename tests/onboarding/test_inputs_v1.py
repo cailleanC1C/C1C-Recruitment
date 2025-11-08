@@ -19,6 +19,9 @@ class _DummyRenderer:
     def get_question(self, index: int) -> dict:
         return self.questions[index]
 
+    def all_questions(self) -> list[dict]:
+        return list(self.questions)
+
 
 @pytest.fixture
 def event_loop():
@@ -144,7 +147,7 @@ def test_bool_buttons_store_value(interaction, controller, session_factory):
     assert session.answers["w_siege"] is True
 
 
-def test_next_on_last_question_is_guarded(interaction, controller, session_factory):
+def test_next_on_last_question_triggers_finish(interaction, controller, session_factory):
     session = session_factory()
     controller.renderer.questions = [
         {
@@ -175,4 +178,5 @@ def test_next_on_last_question_is_guarded(interaction, controller, session_facto
     loop.run_until_complete(controller.next(interaction, session))
     _flush(loop)
 
-    assert session.step_index == 0
+    assert session.completed is True
+    interaction.channel.send.assert_awaited()
