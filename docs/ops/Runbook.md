@@ -6,6 +6,22 @@ workflows, and post-change validation.
 
 Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
 
+## Keep-Alive / Web Server — Expected Boot Line
+On successful bind, startup logs:
+
+```
+web server listening • port=<n>
+```
+
+If this line is missing:
+1. Check for import errors near startup (Render logs). An early failure prevents `Runtime.start()` from reaching `start_webserver()`.
+2. Confirm no code imports `get_port` from `shared.config`. The only allowed path is `shared.ports.get_port`.
+3. Verify `/health` responds. If not, the aiohttp site did not start.
+4. After fix, you should see heartbeat/watchdog lines at the configured cadence (`WATCHDOG_*`).
+
+Troubleshooting tip:
+- Run `scripts/ci/check_forbidden_imports.sh` locally to catch the deprecated import.
+
 ## Help overview surfaces
 - `@Bot help` adapts to the caller but always returns four embeds (Overview, Admin / Operational, Staff, User). Sections collapse when the caller cannot run any commands in that slice unless `SHOW_EMPTY_SECTIONS=1` is set, which swaps in a “Coming soon” placeholder for parity checks.
 - Commands are discovered dynamically via `bot.walk_commands()` and filtered through `command.can_run(ctx)` so permission decorators stay authoritative.
@@ -136,4 +152,4 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-06 (v0.9.7)
+Doc last updated: 2025-11-08 (v0.9.7)
