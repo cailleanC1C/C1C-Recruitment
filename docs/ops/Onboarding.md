@@ -98,8 +98,9 @@ Clicking it posts a final embed to the thread:
 >
 > 🕓 Completed • Nov 8 2025 | Total Questions Answered: 6
 >
-> All paragraph answers are shown in full (≤ 300 chars each; ≤ 1020 combined).  
-> Recruiter ping is controlled by sheet toggle.  
+> All paragraph answers are shown in full (≤ 300 chars each; ≤ 1020 combined).
+> Recruiter ping is controlled by sheet toggle.
 > Completed sessions cannot restart.
+> Footer includes the UTC completion timestamp and total answered count.
 
 Doc last updated: 2025-11-08 (v0.9.8)

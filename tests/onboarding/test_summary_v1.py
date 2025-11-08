@@ -123,9 +123,9 @@ def test_paragraphs_enforce_length_cap(session_factory):
     session.mark_completed()
 
     questions = [{"gid": "w_play", "label": "Playstyle", "type": "paragraph"}]
-    embed, answered = render_summary.build_summary_embed(session, questions)
+    embed = render_summary.build_summary_embed(session, questions)
 
-    assert answered == 1
+    assert "Total Questions Answered: 1" in embed.footer.text
     assert len(embed.fields) == 1
     assert len(embed.fields[0].value) == 300
     assert "🕓 Completed" in embed.footer.text

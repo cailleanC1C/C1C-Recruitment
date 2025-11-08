@@ -113,7 +113,7 @@ def build_view(
         view.add_item(skip_button)
 
     button_id = "nav_finish" if is_last else "nav_next"
-    button_label = "Finish" if is_last else "Next"
+    button_label = "Finish ✅" if is_last else "Next"
     next_button = discord.ui.Button(
         label=button_label,
         style=discord.ButtonStyle.primary,

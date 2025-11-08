@@ -57,7 +57,7 @@ def _ensure_utc(timestamp: datetime | None) -> datetime:
     return ts.astimezone(timezone.utc)
 
 
-def build_summary_embed(session: "Session", questions: Sequence[dict]) -> tuple[discord.Embed, int]:
+def build_summary_embed(session: "Session", questions: Sequence[dict]) -> discord.Embed:
     """Build the final onboarding summary embed."""
 
     embed = discord.Embed(title="🎉 Welcome Summary", colour=_COLOUR)
@@ -103,7 +103,7 @@ def build_summary_embed(session: "Session", questions: Sequence[dict]) -> tuple[
         f"🕓 Completed • {timestamp:%b %d %Y %H:%M UTC} | Total Questions Answered: {answered}"
     )
     embed.set_footer(text=footer_text)
-    return embed, answered
+    return embed
 
 
 __all__ = ["build_summary_embed"]

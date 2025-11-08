@@ -313,7 +313,7 @@ class WizardController:
         questions = self._all_questions()
         session.mark_completed()
 
-        embed, answered = render_summary.build_summary_embed(session, questions)
+        embed = render_summary.build_summary_embed(session, questions)
 
         recruiter_role_id = getattr(self.config, "recruiter_role_id", None)
         ping_toggle = bool(getattr(self.config, "ping_recruiter", False))
@@ -330,7 +330,7 @@ class WizardController:
                     "wizard:summary_posted",
                     extra={
                         "thread_id": interaction.channel.id,
-                        "questions": answered,
+                        "questions": len(questions),
                         "pinged": pinged,
                     },
                 )
