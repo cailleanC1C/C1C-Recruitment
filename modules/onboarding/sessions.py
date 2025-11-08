@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
+
+from shared.sheets import onboarding_sessions as sess_sheet
 
 
 def utc_now() -> datetime:
@@ -49,6 +51,54 @@ class Session:
     def mark_completed(self) -> None:
         self.completed = True
         self.completed_at = utc_now()
+
+    # === Sheet persistence helpers ===
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "thread_id": self.thread_id,
+            "applicant_id": self.applicant_id,
+            "panel_message_id": self.panel_message_id,
+            "step_index": self.step_index,
+            "answers": dict(self.answers),
+            "completed": self.completed,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+    def save_to_sheet(self) -> None:
+        payload = {
+            "user_id": int(self.applicant_id),
+            "thread_id": int(self.thread_id),
+            "panel_message_id": int(self.panel_message_id or 0),
+            "step_index": int(self.step_index),
+            "answers": self.answers,
+            "completed": bool(self.completed),
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+        sess_sheet.save(payload)
+
+    @classmethod
+    def load_from_sheet(cls, thread_id: int, applicant_id: int) -> Optional["Session"]:
+        row = sess_sheet.load(int(applicant_id), int(thread_id))
+        if not row:
+            return None
+        panel_id = row.get("panel_message_id") or None
+        session = cls(thread_id=int(thread_id), applicant_id=int(applicant_id), panel_message_id=panel_id)
+        session.step_index = int(row.get("step_index", 0) or 0)
+        answers = row.get("answers") or {}
+        if isinstance(answers, dict):
+            session.answers = dict(answers)
+        else:
+            session.answers = {}
+        session.completed = bool(row.get("completed", False))
+        completed_at = row.get("completed_at")
+        if completed_at:
+            try:
+                normalized = str(completed_at).replace("Z", "+00:00")
+                session.completed_at = datetime.fromisoformat(normalized)
+            except Exception:
+                session.completed_at = None
+        session.last_updated = utc_now()
+        return session
 
 
 class SessionStore:

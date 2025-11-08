@@ -1593,6 +1593,40 @@ class WelcomePanel(discord.ui.View):
             except Exception:
                 pass
 
+    @discord.ui.button(label="Resume", style=discord.ButtonStyle.secondary, custom_id="resume_wizard")
+    async def resume(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        try:
+            await interaction.response.defer_update()
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            await _ensure_deferred(interaction)
+
+        controller = self._resolve_controller(interaction)
+        if controller is None:
+            return
+
+        thread_id = getattr(interaction.channel, "id", None)
+        user_id = getattr(interaction.user, "id", None)
+        existing = None
+        if thread_id is not None and user_id is not None:
+            try:
+                from modules.onboarding.sessions import Session
+
+                existing = Session.load_from_sheet(thread_id, user_id)
+            except Exception:
+                existing = None
+        if existing is None:
+            try:
+                await interaction.followup.send(
+                    "No saved onboarding session found — starting a new one.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+
+        await controller.launch(interaction)
+
     @discord.ui.button(label="Restart", style=discord.ButtonStyle.secondary, custom_id="restart_wizard")
     async def restart(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         try:
