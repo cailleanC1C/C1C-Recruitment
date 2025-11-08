@@ -28,6 +28,7 @@ def build_view(
     required: bool,
     has_answer: bool,
     optional: bool,
+    is_last: bool,
 ) -> Tuple[str, discord.ui.View]:
     """Return ``(content, view)`` for the onboarding wizard panel."""
 
@@ -111,16 +112,21 @@ def build_view(
         skip_button.callback = _skip_callback  # type: ignore[assignment]
         view.add_item(skip_button)
 
+    button_id = "nav_finish" if is_last else "nav_next"
+    button_label = "Finish ✅" if is_last else "Next"
     next_button = discord.ui.Button(
-        label="Next",
+        label=button_label,
         style=discord.ButtonStyle.primary,
-        custom_id="nav_next",
+        custom_id=button_id,
         disabled=required and not has_answer,
     )
 
     async def _next_callback(interaction: discord.Interaction) -> None:
         await interaction.response.defer_update()
-        await controller.next(interaction, session)
+        if is_last:
+            await controller.finish(interaction, session)
+        else:
+            await controller.next(interaction, session)
 
     next_button.callback = _next_callback  # type: ignore[assignment]
     view.add_item(next_button)

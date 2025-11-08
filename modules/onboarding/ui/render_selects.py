@@ -15,7 +15,16 @@ def _parse_values(q) -> list[str]:
     raw = (q.get("values") or "").strip()
     return [s.strip() for s in raw.split(",") if s.strip()]
 
-def build_view(controller, session, q: dict, required: bool, has_answer: bool, optional: bool):
+def build_view(
+    controller,
+    session,
+    q: dict,
+    required: bool,
+    has_answer: bool,
+    optional: bool,
+    *,
+    is_last: bool,
+):
     values = _parse_values(q)
     ans = session.get_answer(q["gid"])
 
@@ -91,16 +100,21 @@ def build_view(controller, session, q: dict, required: bool, has_answer: bool, o
         skip_button.callback = skip_btn  # type: ignore[assignment]
         view.add_item(skip_button)
 
+    button_id = "nav_finish" if is_last else "nav_next"
+    button_label = "Finish ✅" if is_last else "Next"
     next_button = discord.ui.Button(
-        label="Next",
+        label=button_label,
         style=discord.ButtonStyle.primary,
-        custom_id="nav_next",
+        custom_id=button_id,
         disabled=(required and not has_answer),
     )
 
     async def next_btn(inter, _btn):
         await inter.response.defer_update()
-        await controller.next(inter, session)
+        if is_last:
+            await controller.finish(inter, session)
+        else:
+            await controller.next(inter, session)
 
     next_button.callback = next_btn  # type: ignore[assignment]
     view.add_item(next_button)

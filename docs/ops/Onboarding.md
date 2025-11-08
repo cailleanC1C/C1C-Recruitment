@@ -71,4 +71,36 @@ Buttons: `[Skip ⏭️]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
 
 > Resume: previously chosen options render pre-selected; users can change and continue later.
 
-Doc last updated: 2025-11-08 (v0.9.7)
+## Summary & Finish Step
+When the last question is answered, the wizard shows a **Finish ✅** button.
+Clicking it posts a final embed to the thread:
+
+> <@&RecruitmentCoordinator> New onboarding submission ready.
+>
+> **🎉 Welcome Summary**
+> **IGN**<br>
+> Caillean<br>
+>
+> **Player Power**<br>
+> 3 100 000<br>
+>
+> **Playstyle**<br>
+> Focused but chill — enjoys teamwork and slow progression.<br>
+>
+> **Stage**<br>
+> Early Game<br>
+>
+> **Hydra Difficulties**<br>
+> Hard, Brutal<br>
+>
+> **Interested in Siege?**<br>
+> Yes<br>
+>
+> 🕓 Completed • Nov 8 2025 | Total Questions Answered: 6
+>
+> All paragraph answers are shown in full (≤ 300 chars each; ≤ 1020 combined).
+> Recruiter ping is controlled by sheet toggle.
+> Completed sessions cannot restart.
+> Footer includes the UTC completion timestamp and total answered count.
+
+Doc last updated: 2025-11-08 (v0.9.8)

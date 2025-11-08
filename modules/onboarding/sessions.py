@@ -22,6 +22,8 @@ class Session:
     answers: Dict[str, object] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     last_updated: datetime = field(init=False)
+    completed: bool = False
+    completed_at: datetime | None = None
 
     def __post_init__(self) -> None:
         self.last_updated = self.created_at
@@ -43,6 +45,10 @@ class Session:
 
     def get_answer(self, gid: str, default=None):
         return self.answers.get(gid, default)
+
+    def mark_completed(self) -> None:
+        self.completed = True
+        self.completed_at = utc_now()
 
 
 class SessionStore:
