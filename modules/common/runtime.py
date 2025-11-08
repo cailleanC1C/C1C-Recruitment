@@ -692,6 +692,7 @@ class Runtime:
         from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
         from modules.onboarding import watcher_promo as onboarding_promo
+        from modules.onboarding import cmd_resume as onboarding_cmd_resume
         from modules.ops import permissions_sync as ops_permissions
         from modules.ops import watchers_permissions as ops_watchers
         from c1c_coreops import ops as ops_cog
@@ -824,6 +825,7 @@ class Runtime:
         await onboarding_reaction_fallback.setup(self.bot)
         await onboarding_welcome.setup(self.bot)
         await onboarding_promo.setup(self.bot)
+        await onboarding_cmd_resume.setup(self.bot)  # registers !onb resume
         await ops_cog.setup(self.bot)
         await ops_permissions.setup(self.bot)
         await ops_watchers.setup(self.bot)
