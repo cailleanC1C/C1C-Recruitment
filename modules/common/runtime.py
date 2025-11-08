@@ -433,7 +433,10 @@ class _RecurringJob:
                 except Exception:
                     log.exception(
                         "recurring job error",
-                        extra={"name": self.name or getattr(job, "__name__", "job"), "tag": self.tag},
+                        extra={
+                            "job_name": self.name or getattr(job, "__name__", "job"),
+                            "tag": self.tag,
+                        },
                     )
                 finally:
                     self.next_run = self._compute_next_run()
@@ -672,7 +675,7 @@ class Runtime:
                 try:
                     result = await callback()
                 except Exception as exc:
-                    log.exception("scheduled task error", extra={"name": name})
+                    log.exception("scheduled task error", extra={"job_name": name})
                     await self.send_log_message(f"❌ {name} failed: {exc}")
                 else:
                     if result:
