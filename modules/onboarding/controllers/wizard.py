@@ -403,7 +403,7 @@ class WizardController:
             except Exception:
                 pass
 
-        await self.sessions.save(session)
+        await self._store_session(session, persist_sheet=True, log_event=True)
 
         try:
             await interaction.followup.send(
