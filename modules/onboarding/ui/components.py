@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Sequence
 
 import discord
 
@@ -80,5 +80,72 @@ class BoolSelect(discord.ui.View):
         self._run_callback(self._on_no, interaction)
 
 
-__all__ = ["AnswerModal", "BoolSelect"]
+def _mk_options(values: Sequence[str]) -> List[discord.SelectOption]:
+    return [discord.SelectOption(label=v, value=v) for v in values]
+
+
+class SingleSelectView(discord.ui.View):
+    def __init__(
+        self,
+        values: Sequence[str],
+        preselect: str | None,
+        on_pick: Callable[[discord.Interaction, str], None],
+        *,
+        timeout: float | None = 180,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        opts = _mk_options(values)
+        self.select = discord.ui.Select(
+            placeholder="Choose one…",
+            options=opts,
+            min_values=1,
+            max_values=1,
+            custom_id="q_single_select",
+        )
+        if preselect and preselect in values:
+            self.select.default_values = [preselect]
+
+        async def _changed(inter: discord.Interaction):
+            await inter.response.defer_update()
+            on_pick(inter, self.select.values[0])
+
+        self.select.callback = _changed
+        self.add_item(self.select)
+
+
+class MultiSelectView(discord.ui.View):
+    def __init__(
+        self,
+        values: Sequence[str],
+        preselect: Sequence[str],
+        on_pick: Callable[[discord.Interaction, List[str]], None],
+        *,
+        timeout: float | None = 180,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        opts = _mk_options(values)
+        self.select = discord.ui.Select(
+            placeholder="Choose one or more…",
+            options=opts,
+            min_values=1,
+            max_values=max(1, len(values)),
+            custom_id="q_multi_select",
+        )
+        if preselect:
+            self.select.default_values = [v for v in preselect if v in values]
+
+        async def _changed(inter: discord.Interaction):
+            await inter.response.defer_update()
+            on_pick(inter, list(self.select.values))
+
+        self.select.callback = _changed
+        self.add_item(self.select)
+
+
+__all__ = [
+    "AnswerModal",
+    "BoolSelect",
+    "MultiSelectView",
+    "SingleSelectView",
+]
 

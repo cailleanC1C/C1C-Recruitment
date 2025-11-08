@@ -39,7 +39,10 @@ class Session:
         self.last_updated = utc_now()
 
     def has_answer(self, gid: str) -> bool:
-        return gid in self.answers and self.answers[gid] not in (None, "", "—")
+        return gid in self.answers and self.answers[gid] not in (None, "", "—", [])
+
+    def get_answer(self, gid: str, default=None):
+        return self.answers.get(gid, default)
 
 
 class SessionStore:

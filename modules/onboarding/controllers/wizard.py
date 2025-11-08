@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from modules.onboarding.sessions import Session
 from modules.onboarding.ui import render as qrender
+from modules.onboarding.ui import render_selects as srender
 
 
 class WizardController:
@@ -111,10 +112,22 @@ class WizardController:
         required = self._is_required(question)
         has_answer = session.has_answer(question["gid"])
         optional = not required
+        qtype = question.get("type")
 
-        supported = question.get("type") in {"short", "number", "paragraph", "bool"}
-        if supported:
+        if qtype in {"short", "number", "paragraph", "bool"}:
             content, view = qrender.build_view(
+                self,
+                session,
+                question,
+                required=required,
+                has_answer=has_answer,
+                optional=optional,
+            )
+            await self._send_or_edit_panel(interaction, session, content=content, view=view)
+            return
+
+        if qtype in {"single-select", "multi-select"}:
+            content, view = srender.build_view(
                 self,
                 session,
                 question,
@@ -182,6 +195,56 @@ class WizardController:
                     extra={
                         "gid": question["gid"],
                         "kind": "bool",
+                        "required": self._is_required(question),
+                    },
+                )
+            except Exception:
+                pass
+
+        await self._render_current(interaction, session)
+
+    async def _save_select_answer(
+        self,
+        interaction: discord.Interaction,
+        session: Session,
+        question: dict,
+        value: str,
+    ) -> None:
+        session.set_answer(question["gid"], value)
+
+        if self.log:
+            try:
+                self.log.info(
+                    "wizard:answer_saved",
+                    extra={
+                        "gid": question["gid"],
+                        "kind": "single",
+                        "count": 1,
+                        "required": self._is_required(question),
+                    },
+                )
+            except Exception:
+                pass
+
+        await self._render_current(interaction, session)
+
+    async def _save_multi_answer(
+        self,
+        interaction: discord.Interaction,
+        session: Session,
+        question: dict,
+        values: list[str],
+    ) -> None:
+        session.set_answer(question["gid"], values)
+
+        if self.log:
+            try:
+                self.log.info(
+                    "wizard:answer_saved",
+                    extra={
+                        "gid": question["gid"],
+                        "kind": "multi",
+                        "count": len(values),
                         "required": self._is_required(question),
                     },
                 )
