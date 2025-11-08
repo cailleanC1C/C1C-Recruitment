@@ -27,4 +27,32 @@ through one controller render pipeline to avoid duplicate edits or red toasts.
 Persistent views for the onboarding UI are **registered after the bot is ready**
 so components remain active across restarts.
 
+## UI Mockups (Inputs v1)
+
+> Use the buttons below. Don’t type answers as messages—those won’t be read.
+
+### Text (short)
+**What’s your in-game name?** *(required)*  
+_Use your exact player name so we can find you easily._  
+💬 Current answer: —  
+Buttons: `[Answer ✏️]  [Next ➡️]  [Cancel ❌]` *(Next disabled until answered)*
+
+### Number
+**What’s your current player power?** *(required)*  
+_Hints/examples come from the sheet `help` cell if provided._  
+💬 Current answer: —  
+Buttons: `[Answer 🔢]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
+
+### Paragraph (optional)
+**How would you describe your playstyle?** *(optional)*  
+_Help comes from the sheet. No invented examples._  
+💬 Current answer: —  
+Buttons: `[Answer 💬]  [Skip ⏭️]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
+
+### Boolean
+**Are you interested in participating in Siege?** *(required)*  
+Buttons: `[✅ Yes]  [❌ No]  [Back ⬅️]  [Next ➡️]  [Cancel ❌]`
+
+> All prompt text, help, validation, and limits are sheet-driven. If a cell is blank, the UI shows nothing (no fallback examples).
+
 Doc last updated: 2025-11-07 (v0.9.7)
