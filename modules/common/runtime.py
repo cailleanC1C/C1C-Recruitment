@@ -43,6 +43,7 @@ from shared.obs.events import (
 )
 from c1c_coreops.helpers import audit_tiers, rehydrate_tiers
 from shared.web_routes import mount_emoji_pad
+from . import keepalive
 
 import modules.onboarding as onboarding_pkg
 
@@ -149,10 +150,14 @@ async def create_app(*, runtime: "Runtime | None" = None) -> web.Application:
         status = 200 if healthy else 503
         return web.json_response(payload, status=status)
 
+    async def _keepalive_handler(_: web.Request) -> web.Response:
+        return web.Response(text="ok", status=200)
+
     app.router.add_get("/", root)
     app.router.add_get("/ready", ready)
     app.router.add_get("/health", health)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get(keepalive.route_path(), _keepalive_handler)
 
     return app
 

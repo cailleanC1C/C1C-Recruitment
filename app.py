@@ -20,6 +20,7 @@ from shared.logfmt import LogTemplates, guild_label, user_label, human_reason
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from modules.common.runtime import Runtime
+from modules.common import keepalive
 from modules.coreops import ready as core_ready
 from c1c_coreops.config import (
     build_command_variants,
@@ -223,6 +224,8 @@ async def on_ready():
         runtime.scheduler.spawn(_daily_summary_loop(), name="cron_daily_summary")
         bot._cron_summary_task = True
         log.info("[cron] summary scheduler started (00:05Z)")
+
+    await keepalive.ensure_started(bot)
 
     runtime.schedule_startup_preload()
 
