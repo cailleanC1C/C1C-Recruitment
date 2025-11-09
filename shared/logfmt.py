@@ -32,9 +32,13 @@ LOG_EMOJI = {
 
 
 def _append_id(label: str, numeric_id: Optional[int]) -> str:
-    if not numeric_id:
+    if numeric_id is None:
         return label
-    return label
+    try:
+        normalized = int(numeric_id)
+    except (TypeError, ValueError):
+        return label
+    return f"{label} ({normalized})"
 
 
 def _clean_name(name: Optional[str], default: str) -> str:

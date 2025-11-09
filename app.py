@@ -17,6 +17,7 @@ from shared.config import (
     get_config_snapshot,
 )
 from shared.logfmt import LogTemplates, guild_label, user_label, human_reason
+from shared.redaction import sanitize_text
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from modules.common.runtime import Runtime
