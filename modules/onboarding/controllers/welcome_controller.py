@@ -266,6 +266,7 @@ class RollingCardSession:
             question.help,
             self._summary_lines(),
             view,
+            prompt=self._prompt_line(question),
         )
 
     def _summary_lines(self) -> list[str]:
@@ -287,6 +288,14 @@ class RollingCardSession:
             if view is not None:
                 return view
         return self._enter_view(question)
+
+    def _prompt_line(self, question: SheetQuestionRecord) -> str:
+        qtype = (question.qtype or "").lower()
+        if qtype == "bool":
+            return "Tap **Yes** or **No** below."
+        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
+            return "Choose from the dropdown to continue."
+        return "Press **Enter answer** to respond."
 
     def _enter_view(self, question: SheetQuestionRecord) -> discord.ui.View:
         session = self
@@ -310,7 +319,7 @@ class RollingCardSession:
     def _bool_view(self, question: SheetQuestionRecord) -> discord.ui.View:
         session = self
 
-        async def submit(interaction: discord.Interaction, choice: str) -> None:
+        async def submit(interaction: discord.Interaction, choice: bool) -> None:
             if not session._is_owner(getattr(interaction, "user", None)):
                 try:
                     await interaction.response.send_message(
@@ -323,7 +332,8 @@ class RollingCardSession:
                 await interaction.response.defer()
             except discord.InteractionResponded:
                 pass
-            await session._store_answer_and_advance(question, choice)
+            token = "yes" if choice else "no"
+            await session._store_answer_and_advance(question, token)
 
         class BoolView(discord.ui.View):
             def __init__(self) -> None:
@@ -337,7 +347,7 @@ class RollingCardSession:
             async def yes(  # type: ignore[override]
                 self, interaction: discord.Interaction, _: discord.ui.Button
             ) -> None:
-                await submit(interaction, "Yes")
+                await submit(interaction, True)
 
             @discord.ui.button(
                 label="No",
@@ -347,7 +357,7 @@ class RollingCardSession:
             async def no(  # type: ignore[override]
                 self, interaction: discord.Interaction, _: discord.ui.Button
             ) -> None:
-                await submit(interaction, "No")
+                await submit(interaction, False)
 
         return BoolView()
 
@@ -473,7 +483,7 @@ class RollingCardSession:
     def _value_for_summary(self, value: Any) -> str:
         tokens = self._value_tokens(value)
         if tokens:
-            return ", ".join(tokens)
+            return ", ".join(self._format_display_token(token) for token in tokens)
         return str(value)
 
     def _value_for_store(self, value: Any) -> str:
@@ -481,6 +491,13 @@ class RollingCardSession:
         if tokens:
             return ", ".join(tokens)
         return str(value)
+
+    @staticmethod
+    def _format_display_token(token: str) -> str:
+        lowered = token.strip().lower()
+        if lowered in {"yes", "no"}:
+            return lowered.capitalize()
+        return token
 
     def _answers_by_qid(self) -> dict[str, Any]:
         return dict(self._answers)
@@ -546,10 +563,17 @@ class RollingCardSession:
                 await self.card.hint(hint)
             self._log_event("❌", "invalid", detail=hint)
             return True
+        message_id = getattr(message, "id", None)
+        deleted = False
+        try:
+            await message.delete()
+            deleted = True
+        except Exception:
+            deleted = False
         await self._store_answer_and_advance(
             question,
             cleaned,
-            source_message_id=getattr(message, "id", None),
+            source_message_id=None if deleted else message_id,
         )
         return True
 
@@ -1023,26 +1047,128 @@ class BaseWelcomeController:
         value = self._answer_for(thread_id, key)
         return self._answer_present(question, value)
 
-    def is_finished(self, thread_id: int, step: int) -> bool:
+    def _visibility_map(self, thread_id: int) -> dict[str, dict[str, str]]:
+        session = store.get(thread_id)
+        if session is None:
+            return {}
+        return session.visibility or {}
+
+    def _visible_indices(self, thread_id: int) -> list[int]:
         questions = self._questions.get(thread_id) or []
-        return step >= len(questions)
+        visibility = self._visibility_map(thread_id)
+        indices: list[int] = []
+        for idx, question in enumerate(questions):
+            qid = self._question_key(question)
+            if not qid:
+                indices.append(idx)
+                continue
+            if _visible_state(visibility, qid) != "skip":
+                indices.append(idx)
+        return indices
+
+    def resolve_step(
+        self,
+        thread_id: int,
+        step: int,
+        *,
+        direction: int = 1,
+    ) -> tuple[int | None, Question | dict[str, Any] | None]:
+        questions = self._questions.get(thread_id) or []
+        if not questions:
+            return None, None
+
+        total = len(questions)
+        if direction >= 0 and step >= total:
+            return None, None
+        if direction < 0 and step < 0:
+            return None, None
+
+        if step < 0:
+            idx = 0 if direction >= 0 else total - 1
+        elif step >= total:
+            idx = total - 1
+        else:
+            idx = step
+
+        visibility = self._visibility_map(thread_id)
+        while 0 <= idx < total:
+            question = questions[idx]
+            qid = self._question_key(question)
+            if not qid or _visible_state(visibility, qid) != "skip":
+                return idx, question
+            idx += 1 if direction >= 0 else -1
+        return None, None
+
+    def next_visible_step(self, thread_id: int, current_step: int) -> int | None:
+        next_index, _ = self.resolve_step(thread_id, current_step + 1, direction=1)
+        return next_index
+
+    def previous_visible_step(self, thread_id: int, current_step: int) -> int | None:
+        prev_index, _ = self.resolve_step(thread_id, current_step - 1, direction=-1)
+        return prev_index
+
+    def _progress_label(self, thread_id: int, index: int) -> str:
+        visible = self._visible_indices(thread_id)
+        if not visible:
+            total = max(len(self._questions.get(thread_id) or []), 1)
+            return f"{index + 1}/{total}"
+        try:
+            position = visible.index(index)
+        except ValueError:
+            total = max(len(visible), 1)
+            return f"{index + 1}/{total}"
+        total = max(len(visible), 1)
+        return f"{position + 1}/{total}"
+
+    def is_finished(self, thread_id: int, step: int) -> bool:
+        next_index, _ = self.resolve_step(thread_id, step, direction=1)
+        return next_index is None
 
     def render_step(self, thread_id: int, step: int) -> str:
         questions = self._questions.get(thread_id) or []
         if not questions:
             return "No onboarding questions are configured for this flow yet."
-        if step < 0:
-            step = 0
-        if step >= len(questions):
-            step = len(questions) - 1
-        question = questions[step]
-        label = getattr(question, "label", None) or str(question)
+
+        resolved_index, question = self.resolve_step(thread_id, step, direction=1)
+        if resolved_index is None or question is None:
+            return "All onboarding questions are complete."
+
+        label = getattr(question, "label", None)
+        if isinstance(question, dict):
+            label = question.get("label") or question.get("text") or label
+        label = label or str(question)
+
         key = self._question_key(question)
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
+        help_text = getattr(question, "help", None)
+        if isinstance(question, dict):
+            help_text = question.get("help", help_text)
+
+        parts: list[str] = []
+        progress = self._progress_label(thread_id, resolved_index)
+        if progress:
+            parts.append(f"**Onboarding • {progress}**")
+        parts.append(f"## {label}")
+        if help_text:
+            parts.append(f"_{help_text}_")
+
         if formatted:
-            return f"{label}\n\nCurrent answer: {formatted}"
-        return label
+            parts.append(f"**Current answer:** {formatted}")
+        else:
+            options = getattr(question, "options", None)
+            if isinstance(question, dict):
+                options = question.get("options") or question.get("choices")
+            qtype = getattr(question, "type", None)
+            if isinstance(question, dict):
+                qtype = question.get("type", qtype)
+            qtype_text = (qtype or "").lower()
+            if qtype_text == "bool":
+                parts.append("Tap **Yes** or **No** below.")
+            elif not options and not self._answer_present(question, stored):
+                parts.append("Press **Enter answer** to respond.")
+
+        return "\n\n".join(part for part in parts if part)
 
     async def finish_inline_wizard(
         self,
@@ -1498,6 +1624,7 @@ class BaseWelcomeController:
         diag_state["ambiguous_target"] = target_user_id is None
 
         response = getattr(interaction, "response", None)
+        followup = getattr(interaction, "followup", None)
         response_done = False
         if response is not None:
             is_done = getattr(response, "is_done", None)
@@ -1510,14 +1637,6 @@ class BaseWelcomeController:
                 response_done = is_done
         if response_done:
             diag_state["response_is_done"] = True
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            return
 
         session = store.get(thread_id)
         if session is None:
@@ -1551,26 +1670,48 @@ class BaseWelcomeController:
         total_questions = len(questions_for_thread)
         if total_questions <= 0:
             raise RuntimeError("no inline steps available")
-        if index < 0:
-            index = 0
-        if index >= total_questions:
-            index = total_questions - 1
-
-        store.set_pending_step(thread_id, {"kind": "inline", "index": index})
-
-        try:
-            content = self.render_step(thread_id, index)
-        except Exception:
-            log.warning("failed to render inline step", exc_info=True)
-            raise
-
-        wizard = panels.OnboardWizard(self, thread_id, step=index)
+        resolved_index, _ = self.resolve_step(thread_id, index, direction=1)
+        if resolved_index is None:
+            store.set_pending_step(thread_id, None)
+            content = "All onboarding questions are complete."
+            wizard: panels.OnboardWizard | None = None
+        else:
+            index = resolved_index
+            store.set_pending_step(thread_id, {"kind": "inline", "index": index})
+            try:
+                content = self.render_step(thread_id, index)
+            except Exception:
+                log.warning("failed to render inline step", exc_info=True)
+                raise
+            wizard = panels.OnboardWizard(self, thread_id, step=index)
 
         diag_state["step_index"] = index
         diag_state["total_steps"] = total_questions
 
+        send_callable: Callable[..., Awaitable[Any]] | None
+        uses_followup = False
+        if response_done:
+            send_callable = getattr(followup, "send", None)
+            uses_followup = True
+        else:
+            send_callable = getattr(response, "send_message", None)
+
+        if not callable(send_callable):
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_skipped",
+                    skip_reason="no_send_callable",
+                    **diag_state,
+                )
+            return
+
+        message: discord.Message | None = None
         try:
-            await interaction.response.send_message(content=content, view=wizard)
+            if uses_followup:
+                message = await send_callable(content=content, view=wizard)  # type: ignore[misc]
+            else:
+                await send_callable(content=content, view=wizard)
         except Exception as exc:
             if diag.is_enabled():
                 await diag.log_event(
@@ -1582,14 +1723,15 @@ class BaseWelcomeController:
                 )
             raise
         else:
+            if not uses_followup:
+                try:
+                    message = await interaction.original_response()
+                except Exception:
+                    message = None
             if diag.is_enabled():
                 await diag.log_event("info", "inline_wizard_posted", **diag_state)
 
-        try:
-            message = await interaction.original_response()
-        except Exception:
-            message = None
-        if message is not None:
+        if message is not None and wizard is not None:
             wizard.attach(message)
 
         log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
@@ -1603,6 +1745,34 @@ class BaseWelcomeController:
             index=index,
             **log_payload,
         )
+
+    async def start_session_from_button(
+        self,
+        thread_id: int,
+        *,
+        actor_id: int | None = None,
+        channel: discord.abc.Messageable | None = None,
+        guild: discord.Guild | None = None,
+        interaction: discord.Interaction,
+    ) -> None:
+        context = {
+            "view": "panel",
+            "view_tag": panels.WELCOME_PANEL_TAG,
+            "custom_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+        }
+        allowed, _ = await self.check_interaction(thread_id, interaction, context=context)
+        if not allowed:
+            return
+
+        try:
+            await self.render_inline_step(
+                interaction,
+                thread_id,
+                context={"source": self._sources.get(thread_id, "panel")},
+            )
+        except Exception:
+            log.warning("failed to launch inline onboarding wizard", exc_info=True)
+            raise
 
     async def finish_onboarding(
         self,
@@ -2551,11 +2721,23 @@ def _preview_value_for_question(question: Question, stored: Any) -> str:
         return ""
     if question.type in TEXT_TYPES:
         return str(stored)
+    if question.type == "bool":
+        if isinstance(stored, bool):
+            return "Yes" if stored else "No"
+        text = str(stored).strip()
+        lowered = text.lower()
+        if lowered in {"true", "yes", "y", "1"}:
+            return "Yes"
+        if lowered in {"false", "no", "n", "0"}:
+            return "No"
+        return text
     if question.type == "single-select":
         if isinstance(stored, dict):
             label = stored.get("label") or stored.get("value")
             return str(label or "")
         return str(stored)
+    if isinstance(stored, str):
+        return stored.strip()
     if isinstance(stored, Iterable):
         labels = []
         for item in stored:

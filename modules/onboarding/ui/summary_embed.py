@@ -90,6 +90,16 @@ def _format_answer(qtype: str, stored: Any) -> str:
         return ""
     if qtype in {"short", "paragraph", "number"}:
         return str(stored).strip()
+    if qtype == "bool":
+        if isinstance(stored, bool):
+            return "Yes" if stored else "No"
+        text = str(stored).strip()
+        lowered = text.lower()
+        if lowered in {"true", "yes", "y", "1"}:
+            return "Yes"
+        if lowered in {"false", "no", "n", "0"}:
+            return "No"
+        return text
     if qtype == "single-select":
         if isinstance(stored, dict):
             label = stored.get("label") or stored.get("value")
