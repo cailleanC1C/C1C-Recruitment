@@ -13,7 +13,6 @@ from discord.ext import commands
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
-from .wizard import OnboardWizard
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -1651,6 +1650,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                     {"value": token, "label": label},
                 )
             await self.refresh(interaction)
+
+
+OnboardWizard = OpenQuestionsPanelView.OnboardWizard
 
 
 class WelcomePanel(discord.ui.View):

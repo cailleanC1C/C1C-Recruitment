@@ -1498,6 +1498,7 @@ class BaseWelcomeController:
         diag_state["ambiguous_target"] = target_user_id is None
 
         response = getattr(interaction, "response", None)
+        followup = getattr(interaction, "followup", None)
         response_done = False
         if response is not None:
             is_done = getattr(response, "is_done", None)
@@ -1510,14 +1511,6 @@ class BaseWelcomeController:
                 response_done = is_done
         if response_done:
             diag_state["response_is_done"] = True
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_skipped",
-                    skip_reason="interaction_already_responded",
-                    **diag_state,
-                )
-            return
 
         session = store.get(thread_id)
         if session is None:
@@ -1569,8 +1562,30 @@ class BaseWelcomeController:
         diag_state["step_index"] = index
         diag_state["total_steps"] = total_questions
 
+        send_callable: Callable[..., Awaitable[Any]] | None
+        uses_followup = False
+        if response_done:
+            send_callable = getattr(followup, "send", None)
+            uses_followup = True
+        else:
+            send_callable = getattr(response, "send_message", None)
+
+        if not callable(send_callable):
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_skipped",
+                    skip_reason="no_send_callable",
+                    **diag_state,
+                )
+            return
+
+        message: discord.Message | None = None
         try:
-            await interaction.response.send_message(content=content, view=wizard)
+            if uses_followup:
+                message = await send_callable(content=content, view=wizard)  # type: ignore[misc]
+            else:
+                await send_callable(content=content, view=wizard)
         except Exception as exc:
             if diag.is_enabled():
                 await diag.log_event(
@@ -1582,13 +1597,14 @@ class BaseWelcomeController:
                 )
             raise
         else:
+            if not uses_followup:
+                try:
+                    message = await interaction.original_response()
+                except Exception:
+                    message = None
             if diag.is_enabled():
                 await diag.log_event("info", "inline_wizard_posted", **diag_state)
 
-        try:
-            message = await interaction.original_response()
-        except Exception:
-            message = None
         if message is not None:
             wizard.attach(message)
 
@@ -1603,6 +1619,34 @@ class BaseWelcomeController:
             index=index,
             **log_payload,
         )
+
+    async def start_session_from_button(
+        self,
+        thread_id: int,
+        *,
+        actor_id: int | None = None,
+        channel: discord.abc.Messageable | None = None,
+        guild: discord.Guild | None = None,
+        interaction: discord.Interaction,
+    ) -> None:
+        context = {
+            "view": "panel",
+            "view_tag": panels.WELCOME_PANEL_TAG,
+            "custom_id": panels.OPEN_QUESTIONS_CUSTOM_ID,
+        }
+        allowed, _ = await self.check_interaction(thread_id, interaction, context=context)
+        if not allowed:
+            return
+
+        try:
+            await self.render_inline_step(
+                interaction,
+                thread_id,
+                context={"source": self._sources.get(thread_id, "panel")},
+            )
+        except Exception:
+            log.warning("failed to launch inline onboarding wizard", exc_info=True)
+            raise
 
     async def finish_onboarding(
         self,
