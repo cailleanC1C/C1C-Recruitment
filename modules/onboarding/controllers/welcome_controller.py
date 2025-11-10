@@ -20,11 +20,13 @@ from modules.onboarding.schema import (
     parse_values_list,
 )
 from modules.onboarding.session_store import SessionData, store
+from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
+from shared.logfmt import channel_label, user_label
 from shared.sheets.onboarding_questions import Question
 from shared.config import get_recruiter_role_ids
 
@@ -180,6 +182,7 @@ class RollingCardSession:
             self.thread_id = int(thread_identifier) if thread_identifier is not None else None
         except (TypeError, ValueError):
             self.thread_id = None
+        self._all_questions: list[SheetQuestionRecord] = list(questions)
         self._steps: list[SheetQuestionRecord] = [
             question for question in questions if self._supports(question)
         ]
@@ -189,6 +192,21 @@ class RollingCardSession:
         self._answer_order: list[SheetQuestionRecord] = []
         self._waiting = False
         self._closed = False
+        self._visibility: dict[str, dict[str, str]] = {}
+        self._recompute_visibility()
+
+    def _recompute_visibility(self) -> None:
+        try:
+            self._visibility = rules.evaluate_visibility(
+                self._all_questions, self._answers
+            )
+        except Exception:
+            self._visibility = {}
+
+    def _visible_state(self, qid: str | None) -> str:
+        if not qid:
+            return "show"
+        return self._visibility.get(qid, {}).get("state", "show")
 
     @staticmethod
     def _supports(question: SheetQuestionRecord) -> bool:
@@ -252,21 +270,37 @@ class RollingCardSession:
     async def _render_step(self) -> None:
         if self._closed:
             return
-        if self._current_index >= len(self._steps):
+        total = len(self._steps)
+        while self._current_index < total:
+            question = self._steps[self._current_index]
+            if self._visible_state(question.qid) == "skip":
+                self._current_index += 1
+                continue
+            break
+        else:
             await self._finish()
             return
         question = self._steps[self._current_index]
         self._current_question = question
         self._waiting = False
         view = self._view_for_question(question)
+        state = self._visible_state(question.qid)
+        help_text = question.help
+        if state == "optional":
+            optional_hint = "_Optional._"
+            if help_text:
+                help_text = f"{help_text}\n{optional_hint}"
+            else:
+                help_text = optional_hint
+        prompt = self._prompt_line(question)
         await self.card.render(
             self._current_index + 1,
             len(self._steps),
             question.label,
-            question.help,
+            help_text or "",
             self._summary_lines(),
             view,
-            prompt=self._prompt_line(question),
+            prompt=prompt,
         )
 
     def _summary_lines(self) -> list[str]:
@@ -529,6 +563,7 @@ class RollingCardSession:
                 pass
         self._log_event("✅", "answer")
         answers_by_qid = self._answers_by_qid()
+        self._recompute_visibility()
         try:
             jump = rules.next_index_by_rules(
                 self._current_index, list(self._steps), answers_by_qid
@@ -827,6 +862,8 @@ class BaseWelcomeController:
         self._target_users: Dict[int, int | None] = {}
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
+        self._inline_messages: Dict[int, discord.Message] = {}
+        self._next_prompt_message_ids: Dict[int, int] = {}
         self.answers_by_thread: Dict[int | None, dict[str, Any]] = {}
         recruiter_attr = getattr(self, "recruiter_role_ids", None) or getattr(self, "RECRUITER_ROLE_IDS", None)
         if recruiter_attr:
@@ -1224,17 +1261,31 @@ class BaseWelcomeController:
         key = self._question_key(question)
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
-        parts = [label]
+        progress = self._progress_label(thread_id, resolved_index)
+        lines = [f"**Onboarding • {progress}**", f"## {label}"]
+
+        help_text = getattr(question, "help", None)
+        if isinstance(question, dict):
+            help_text = question.get("help") or help_text
+        if help_text:
+            lines.append(f"_{help_text}_")
+
+        if key:
+            state = _visible_state(self._visibility_map(thread_id), key)
+            if state == "optional":
+                lines.append("_Optional._")
+
         if formatted:
-            parts.append(f"Current answer: {formatted}")
+            lines.append(f"**Current answer:** {formatted}")
         else:
             options = getattr(question, "options", None)
             if isinstance(question, dict):
                 options = question.get("options") or question.get("choices")
             uses_text_prompt = not options
             if uses_text_prompt and not self._answer_present(question, stored):
-                parts.append("Press **Enter answer** to respond.")
-        return "\n\n".join(parts)
+                lines.append("Press **Enter answer** to respond.")
+
+        return "\n\n".join(lines)
 
     async def finish_inline_wizard(
         self,
@@ -1254,6 +1305,10 @@ class BaseWelcomeController:
                 await message.edit(content=notice, view=None)
         except Exception:
             log.warning("failed to update wizard completion message", exc_info=True)
+
+        inline_map = getattr(self, "_inline_messages", None)
+        if isinstance(inline_map, dict):
+            inline_map.pop(thread_id, None)
 
         thread: discord.Thread | None = None
         if message is not None:
@@ -1664,7 +1719,19 @@ class BaseWelcomeController:
             return
         view = self.make_next_button(thread_id, next_idx)
         try:
-            await thread.send("Next up…", view=view)
+            existing_id = self._next_prompt_message_ids.get(thread_id)
+            if existing_id:
+                try:
+                    previous = await thread.fetch_message(existing_id)
+                except Exception:
+                    previous = None
+                if previous is not None:
+                    try:
+                        await previous.delete()
+                    except Exception:
+                        log.debug("failed to delete previous next-step prompt", exc_info=True)
+            message = await thread.send("Next up…", view=view)
+            self._next_prompt_message_ids[thread_id] = int(message.id)
         except Exception:
             log.warning("failed to post next-step prompt", exc_info=True)
 
@@ -1754,51 +1821,87 @@ class BaseWelcomeController:
         diag_state["step_index"] = index
         diag_state["total_steps"] = total_questions
 
-        send_callable: Callable[..., Awaitable[Any]] | None
-        uses_followup = False
-        if response_done:
-            send_callable = getattr(followup, "send", None)
-            uses_followup = True
-        else:
-            send_callable = getattr(response, "send_message", None)
-
-        if not callable(send_callable):
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_skipped",
-                    skip_reason="no_send_callable",
-                    **diag_state,
-                )
-            return
-
         message: discord.Message | None = None
-        try:
-            if uses_followup:
-                message = await send_callable(content=content, view=wizard)  # type: ignore[misc]
-            else:
-                await send_callable(content=content, view=wizard)
-        except Exception as exc:
-            if diag.is_enabled():
-                await diag.log_event(
-                    "warning",
-                    "inline_launch_failed",
-                    exception_type=exc.__class__.__name__,
-                    exception_message=str(exc),
-                    **diag_state,
-                )
-            raise
-        else:
-            if not uses_followup:
+        reused_existing = False
+        existing_map = getattr(self, "_inline_messages", None)
+        if isinstance(existing_map, dict):
+            existing_message = existing_map.get(thread_id)
+            if existing_message is not None:
                 try:
-                    message = await interaction.original_response()
+                    await existing_message.edit(content=content, view=wizard)
                 except Exception:
-                    message = None
-            if diag.is_enabled():
-                await diag.log_event("info", "inline_wizard_posted", **diag_state)
+                    existing_map.pop(thread_id, None)
+                else:
+                    message = existing_message
+                    reused_existing = True
+
+        send_callable: Callable[..., Awaitable[Any]] | None = None
+        uses_followup = False
+        if message is None:
+            if response_done:
+                send_callable = getattr(followup, "send", None)
+                uses_followup = True
+            else:
+                send_callable = getattr(response, "send_message", None)
+
+            if not callable(send_callable):
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "inline_launch_skipped",
+                        skip_reason="no_send_callable",
+                        **diag_state,
+                    )
+                return
+
+            try:
+                if uses_followup:
+                    message = await send_callable(content=content, view=wizard)  # type: ignore[misc]
+                else:
+                    await send_callable(content=content, view=wizard)
+            except Exception as exc:
+                if diag.is_enabled():
+                    await diag.log_event(
+                        "warning",
+                        "inline_launch_failed",
+                        exception_type=exc.__class__.__name__,
+                        exception_message=str(exc),
+                        **diag_state,
+                    )
+                raise
+            else:
+                if not uses_followup:
+                    try:
+                        message = await interaction.original_response()
+                    except Exception:
+                        message = None
+
+        if reused_existing and response is not None and not response_done:
+            try:
+                await response.defer(ephemeral=True)
+            except Exception:
+                pass
+
+        if diag.is_enabled():
+            await diag.log_event("info", "inline_wizard_posted", **diag_state)
 
         if message is not None:
             wizard.attach(message)
+            if isinstance(existing_map, dict):
+                existing_map[thread_id] = message
+            prompt_id = self._next_prompt_message_ids.get(thread_id)
+            prompt_message = getattr(interaction, "message", None)
+            if prompt_id and isinstance(prompt_message, discord.Message):
+                try:
+                    if int(prompt_message.id) == prompt_id:
+                        try:
+                            await prompt_message.delete()
+                        except Exception:
+                            log.debug("failed to delete next-step prompt message", exc_info=True)
+                        finally:
+                            self._next_prompt_message_ids.pop(thread_id, None)
+                except Exception:
+                    log.debug("failed to inspect next-step prompt message", exc_info=True)
 
         log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
         if context is not None:
@@ -2203,9 +2306,20 @@ class BaseWelcomeController:
         store.set_pending_step(thread_id, {"kind": "inline", "index": next_index})
         await _safe_ephemeral(
             interaction,
-            "✅ Saved! Look for the next prompt in the thread.",
+            "✅ Saved! Opening the next question…",
         )
-        await self.prompt_next(interaction, thread_id, next_index)
+        try:
+            await self.render_inline_step(
+                interaction,
+                thread_id,
+                index=next_index,
+                context={"source": self._sources.get(thread_id, "modal")},
+            )
+        except Exception:
+            log.warning(
+                "failed to render inline step after modal submission", exc_info=True
+            )
+            await self.prompt_next(interaction, thread_id, next_index)
 
     async def _handle_select_change(
         self,

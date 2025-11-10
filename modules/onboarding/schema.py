@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from shared.cache import telemetry as cache_telemetry
 
 from shared.sheets import onboarding_questions
+from modules.onboarding.rules import validate_rules
 
 _ORDER_RE = re.compile(r"^(?P<num>\d+)(?P<tag>[A-Za-z]?)$")
 
@@ -62,6 +63,11 @@ def load_welcome_questions() -> List[Question]:
         raise RuntimeError(
             f"onboarding_questions cache empty after refresh; tab='{tab}'"
         )
+
+    rule_errors = validate_rules(rows)
+    if rule_errors:
+        joined = "; ".join(rule_errors)
+        raise ValueError(f"Invalid onboarding rules: {joined}")
 
     questions = [_to_schema_question(question) for question in rows]
     questions.sort(key=lambda question: question.order_key)
