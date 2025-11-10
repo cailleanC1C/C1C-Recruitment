@@ -1224,29 +1224,17 @@ class BaseWelcomeController:
         key = self._question_key(question)
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
-        help_text = getattr(question, "help", None)
-        if isinstance(question, dict):
-            help_text = question.get("help", help_text)
-
-        parts: list[str] = []
-        progress = self._progress_label(thread_id, resolved_index)
-        if progress:
-            parts.append(f"**Onboarding • {progress}**")
-        parts.append(f"## {label}")
-        if help_text:
-            parts.append(f"_{help_text}_")
-
+        parts = [label]
         if formatted:
-            parts.append(f"**Current answer:** {formatted}")
+            parts.append(f"Current answer: {formatted}")
         else:
-            options = self._question_options(question)
-            qtype_text = self._question_type_value(question).strip().lower()
-            if qtype_text == "bool":
-                parts.append("Tap **Yes** or **No** below.")
-            elif not options and not self._answer_present(question, stored):
+            options = getattr(question, "options", None)
+            if isinstance(question, dict):
+                options = question.get("options") or question.get("choices")
+            uses_text_prompt = not options
+            if uses_text_prompt and not self._answer_present(question, stored):
                 parts.append("Press **Enter answer** to respond.")
-
-        return "\n\n".join(part for part in parts if part)
+        return "\n\n".join(parts)
 
     async def finish_inline_wizard(
         self,
@@ -1809,7 +1797,7 @@ class BaseWelcomeController:
             if diag.is_enabled():
                 await diag.log_event("info", "inline_wizard_posted", **diag_state)
 
-        if message is not None and wizard is not None:
+        if message is not None:
             wizard.attach(message)
 
         log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
@@ -2809,7 +2797,7 @@ def _preview_value_for_question(question: Question, stored: Any) -> str:
     qtype_text = str(qtype or "").strip().lower()
     if qtype_text in TEXT_TYPES:
         return str(stored)
-    if qtype_text == "bool":
+    if question.type == "bool":
         if isinstance(stored, bool):
             return "Yes" if stored else "No"
         text = str(stored).strip()
@@ -2819,7 +2807,7 @@ def _preview_value_for_question(question: Question, stored: Any) -> str:
         if lowered in {"false", "no", "n", "0"}:
             return "No"
         return text
-    if qtype_text == "single-select":
+    if question.type == "single-select":
         if isinstance(stored, dict):
             label = stored.get("label") or stored.get("value")
             return str(label or "")

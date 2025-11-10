@@ -1410,7 +1410,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 self.add_item(self.CancelButton(self))
                 return
             options = list(self._question_options(question))
-            qtype = self._raw_question_type(question).strip().lower()
+            qtype = self._question_type(question).strip().lower()
             if qtype == "bool":
                 self.add_item(self.BoolButton(self, question, True))
                 self.add_item(self.BoolButton(self, question, False))
@@ -1745,7 +1745,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                         type=meta.get("type"),
                     )
                 await controller.set_answer(self.thread_id, key, cleaned)
-                success_notice = '✅ Saved. Click "Next" for the next question.'
+                success_notice = "✅ Saved. Click **Next** for the next question."
             else:
                 await controller.set_answer(self.thread_id, key, None)
                 success_notice = "✅ Answer cleared."

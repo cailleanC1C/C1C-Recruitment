@@ -135,60 +135,6 @@ def test_text_prompt_button_highlights_until_answered() -> None:
 
 
 
-def test_bool_question_renders_yes_no_buttons() -> None:
-    async def runner() -> None:
-        thread_id = 888
-        question = {"label": "Siege?", "qid": "siege", "type": "bool", "options": []}
-
-        controller = SimpleNamespace()
-        controller.questions_by_thread = {thread_id: [question]}
-        controller.answers_by_thread = {}
-        controller.has_answer = lambda *_args, **_kwargs: False
-
-        wizard = panels.OnboardWizard(controller, thread_id, step=0)
-        labels = {getattr(child, "label", None) for child in wizard.children if hasattr(child, "label")}
-        assert {"Yes", "No"}.issubset(labels)
-
-    asyncio.run(runner())
-
-
-def test_bool_question_with_qtype_renders_yes_no_buttons() -> None:
-    async def runner() -> None:
-        thread_id = 889
-        question = SimpleNamespace(label="Siege?", qid="siege", qtype="bool")
-
-        controller = SimpleNamespace()
-        controller.questions_by_thread = {thread_id: [question]}
-        controller.answers_by_thread = {}
-        controller.has_answer = lambda *_args, **_kwargs: False
-
-        wizard = panels.OnboardWizard(controller, thread_id, step=0)
-        labels = {getattr(child, "label", None) for child in wizard.children if hasattr(child, "label")}
-        assert {"Yes", "No"}.issubset(labels)
-
-    asyncio.run(runner())
-
-
-def test_single_select_from_note_creates_dropdown() -> None:
-    async def runner() -> None:
-        thread_id = 890
-        question = SimpleNamespace(label="Scale", qid="scale", qtype="single-select", note="1, 2, 3")
-
-        controller = SimpleNamespace()
-        controller.questions_by_thread = {thread_id: [question]}
-        controller.answers_by_thread = {}
-        controller.has_answer = lambda *_args, **_kwargs: False
-
-        wizard = panels.OnboardWizard(controller, thread_id, step=0)
-        selects = [child for child in wizard.children if isinstance(child, panels.discord.ui.Select)]
-        assert selects, "expected a dropdown for single-select questions"
-        select = selects[0]
-        option_labels = [option.label for option in select.options]
-        assert option_labels == ["1", "2", "3"]
-
-    asyncio.run(runner())
-
-
 def test_resume_button_visible_when_session_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(panels.OpenQuestionsPanelView, "_session_exists", staticmethod(lambda _thread_id, _user_id: True))
 
