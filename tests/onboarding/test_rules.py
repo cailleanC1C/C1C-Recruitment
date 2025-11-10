@@ -21,20 +21,6 @@ def test_validate_rules_accepts_goto_clauses() -> None:
     assert rules.validate_rules(questions) == []
 
 
-def test_validate_rules_accepts_qid_goto_targets() -> None:
-    questions = [
-        _question(
-            "101",
-            "siege_interest",
-            rule="if siege_interest = no goto siege_commitment",
-        ),
-        _question("201", "siege_setup"),
-        _question("301", "siege_commitment"),
-    ]
-
-    assert rules.validate_rules(questions) == []
-
-
 def test_validate_rules_flags_unknown_targets() -> None:
     questions = [
         _question("101", "g_role"),
@@ -74,21 +60,3 @@ def test_next_index_by_rules_handles_goto(answer, expected) -> None:
     else:
         assert jump is not None
         assert questions[jump].order_raw == expected
-
-
-def test_next_index_by_rules_supports_qid_targets() -> None:
-    questions = [
-        _question(
-            "101",
-            "siege_interest",
-            rule="if siege_interest = no goto siege_commitment",
-        ),
-        _question("201", "siege_setup"),
-        _question("301", "siege_commitment"),
-    ]
-
-    answers = {"siege_interest": "No"}
-
-    jump = rules.next_index_by_rules(0, questions, answers)
-    assert jump is not None
-    assert questions[jump].qid == "siege_commitment"

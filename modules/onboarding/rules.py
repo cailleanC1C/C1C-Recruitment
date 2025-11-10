@@ -238,18 +238,9 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
                     )
                 for key in ("goto", "goto_else"):
                     target = match.group(key)
-                    if not target:
-                        continue
-                    normalized = target.strip().lower()
-                    if normalized in order_map or normalized in qid_lookup:
-                        continue
-                    if re.fullmatch(r"\d+[A-Za-z]?", normalized):
+                    if target and target.strip().lower() not in order_map:
                         errors.append(
                             f"{question.qid}: rule references unknown order '{target}'"
-                        )
-                    else:
-                        errors.append(
-                            f"{question.qid}: rule references unknown question '{target}'"
                         )
                 continue
 
@@ -257,17 +248,10 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
             if goto_match:
                 seen_valid_clause = True
                 target = goto_match.group("goto")
-                if target:
-                    normalized = target.strip().lower()
-                    if normalized not in order_map and normalized not in qid_lookup:
-                        if re.fullmatch(r"\d+[A-Za-z]?", normalized):
-                            errors.append(
-                                f"{question.qid}: rule references unknown order '{target}'"
-                            )
-                        else:
-                            errors.append(
-                                f"{question.qid}: rule references unknown question '{target}'"
-                            )
+                if target and target.strip().lower() not in order_map:
+                    errors.append(
+                        f"{question.qid}: rule references unknown order '{target}'"
+                    )
                 continue
 
         if not seen_valid_clause:
@@ -287,7 +271,7 @@ _RANGE_SKIP_RE = re.compile(
 )
 
 
-_GOTO_RE = re.compile(r"^goto\s+(?P<goto>[A-Za-z0-9_]+)$", re.IGNORECASE)
+_GOTO_RE = re.compile(r"^goto\s+(?P<goto>[0-9]+[A-Za-z]?)$", re.IGNORECASE)
 
 
 def _norm(value: Any) -> str:
