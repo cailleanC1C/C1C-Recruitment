@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Iterable, Literal, Mapping, Sequence, Tuple
 
@@ -209,7 +210,28 @@ def _canonicalise_option(label: str) -> Option:
 def _parse_options(note: str | None) -> tuple[Option, ...]:
     if not note:
         return ()
-    pieces = [piece.strip() for piece in note.split(",")]
+
+    text = note.strip()
+    if not text:
+        return ()
+
+    pieces: list[str]
+    if "," in text:
+        pieces = [piece.strip() for piece in text.split(",")]
+    else:
+        range_match = re.fullmatch(r"(\d+)\s*[-–—]\s*(\d+)", text)
+        if range_match:
+            start = int(range_match.group(1))
+            end = int(range_match.group(2))
+            step = 1 if end >= start else -1
+            pieces = [str(value) for value in range(start, end + step, step)]
+        elif re.fullmatch(r"(?:\d+\s+)+\d+", text):
+            pieces = text.split()
+        elif re.fullmatch(r"\d{2,}", text):
+            pieces = list(text)
+        else:
+            pieces = [text]
+
     values = [piece for piece in pieces if piece]
     return tuple(_canonicalise_option(piece) for piece in values)
 
@@ -218,8 +240,26 @@ def _normalise_type(raw_type: str | None) -> tuple[str, int | None]:
     text = (raw_type or "").strip().lower()
     if not text:
         raise ValueError("Question type is required")
-    if text.startswith("multi-select"):
-        parts = text.split("-")
+
+    alias = text.replace("_", "-")
+    compact = alias.replace(" ", "")
+
+    # Canonicalise boolean-style labels from Sheets (yes/no, boolean, etc.).
+    if alias.startswith("bool") or compact in {
+        "boolean",
+        "yes/no",
+        "yes-no",
+        "yesno",
+        "y/n",
+        "yn",
+        "true/false",
+        "true-false",
+        "truefalse",
+    }:
+        return "bool", None
+
+    if alias.startswith("multi-select"):
+        parts = alias.split("-")
         max_count = None
         if len(parts) >= 3:
             try:
@@ -227,7 +267,8 @@ def _normalise_type(raw_type: str | None) -> tuple[str, int | None]:
             except ValueError:
                 max_count = None
         return "multi-select", max_count
-    return text, None
+
+    return alias, None
 
 
 def _order_sort_key(order: str) -> tuple[int, str]:

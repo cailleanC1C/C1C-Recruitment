@@ -24,6 +24,117 @@ def test_open_questions_button_has_custom_id() -> None:
     asyncio.run(runner())
 
 
+def test_launch_bootstraps_controller_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def runner() -> None:
+        monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)
+        panels._CONTROLLERS.clear()
+
+        thread_id = 6543
+
+        class FakeThread:
+            def __init__(self, identifier: int) -> None:
+                self.id = identifier
+                self.parent = None
+                self.guild = None
+                self.send = AsyncMock(return_value=SimpleNamespace(id=321, channel=self))
+
+        monkeypatch.setattr(panels.discord, "Thread", FakeThread)
+        thread = FakeThread(thread_id)
+
+        controller = SimpleNamespace()
+        controller.questions_by_thread = {thread_id: ("qid",)}
+        controller.get_or_load_questions = AsyncMock(return_value=("qid",))
+        controller.render_step = lambda tid, step: "Step 1" if tid == thread_id else ""
+        controller.wait_until_ready = AsyncMock(return_value=True)
+
+        async def fake_start(
+            thread_obj: FakeThread,
+            initiator: object,
+            source: str,
+            *,
+            bot: object | None = None,
+            panel_message_id: int | None = None,
+            panel_message: object | None = None,
+        ) -> None:
+            assert source == "panel_button"
+            assert thread_obj is thread
+            panels.bind_controller(thread_id, controller)
+
+        start_mock = AsyncMock(side_effect=fake_start)
+        monkeypatch.setattr(
+            "modules.onboarding.welcome_flow.start_welcome_dialog",
+            start_mock,
+        )
+
+        class DummyResponse:
+            def __init__(self) -> None:
+                self.deferred = False
+
+            def is_done(self) -> bool:
+                return self.deferred
+
+            async def defer(self) -> None:
+                self.deferred = True
+
+        response = DummyResponse()
+        message = SimpleNamespace(id=111, edit=AsyncMock())
+        interaction = SimpleNamespace(
+            response=response,
+            channel=thread,
+            user=SimpleNamespace(id=999, display_name="Recruit"),
+            message=message,
+            id=2024,
+            client=SimpleNamespace(),
+        )
+
+        view = OpenQuestionsPanelView()
+
+        button = next(
+            child
+            for child in view.children
+            if getattr(child, "custom_id", None) == OpenQuestionsPanelView.CUSTOM_ID
+        )
+
+        await button.callback(interaction)
+
+        start_mock.assert_awaited_once()
+        controller.get_or_load_questions.assert_awaited_once()
+        controller.wait_until_ready.assert_awaited_once()
+        thread.send.assert_awaited()
+
+        panels._CONTROLLERS.pop(thread_id, None)
+
+    asyncio.run(runner())
+
+
+def test_text_prompt_button_highlights_until_answered() -> None:
+    async def runner() -> None:
+        thread_id = 777
+        question = {"label": "IGN", "qid": "ign", "type": "short", "options": []}
+
+        def make_controller(answered: bool) -> SimpleNamespace:
+            controller = SimpleNamespace()
+            controller.questions_by_thread = {thread_id: [question]}
+            controller.answers_by_thread = {thread_id: {"ign": "Ace"}} if answered else {}
+            controller.has_answer = lambda tid, _question, *, answered=answered: answered and tid == thread_id
+            return controller
+
+        unanswered_controller = make_controller(False)
+        wizard = panels.OnboardWizard(unanswered_controller, thread_id, step=0)
+        text_button = next(child for child in wizard.children if getattr(child, "label", "") == "Enter answer")
+        assert text_button.style is panels.discord.ButtonStyle.primary
+
+        answered_controller = make_controller(True)
+        wizard_after_answer = panels.OnboardWizard(answered_controller, thread_id, step=0)
+        text_button_after = next(
+            child for child in wizard_after_answer.children if getattr(child, "label", "") == "Enter answer"
+        )
+        assert text_button_after.style is panels.discord.ButtonStyle.secondary
+
+    asyncio.run(runner())
+
+
+
 def test_resume_button_visible_when_session_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(panels.OpenQuestionsPanelView, "_session_exists", staticmethod(lambda _thread_id, _user_id: True))
 

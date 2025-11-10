@@ -1040,9 +1040,17 @@ class BaseWelcomeController:
         key = self._question_key(question)
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
+        parts = [label]
         if formatted:
-            return f"{label}\n\nCurrent answer: {formatted}"
-        return label
+            parts.append(f"Current answer: {formatted}")
+        else:
+            options = getattr(question, "options", None)
+            if isinstance(question, dict):
+                options = question.get("options") or question.get("choices")
+            uses_text_prompt = not options
+            if uses_text_prompt and not self._answer_present(question, stored):
+                parts.append("Press **Enter answer** to respond.")
+        return "\n\n".join(parts)
 
     async def finish_inline_wizard(
         self,

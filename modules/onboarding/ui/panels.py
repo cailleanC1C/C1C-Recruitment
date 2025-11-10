@@ -447,6 +447,64 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         return has_session, changed
 
+    async def _bootstrap_controller(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int | None,
+        channel: discord.abc.GuildChannel | discord.Thread | None,
+    ) -> _ControllerProtocol | None:
+        if thread_id is None or not isinstance(channel, discord.Thread):
+            return None
+
+        try:
+            from modules.onboarding.welcome_flow import start_welcome_dialog
+        except Exception:
+            log.warning("welcome bootstrap import failed", exc_info=True)
+            return None
+
+        message = getattr(interaction, "message", None)
+        panel_message = message if isinstance(message, discord.Message) else None
+        panel_id: int | None
+        raw_id = getattr(panel_message, "id", None)
+        try:
+            panel_id = int(raw_id) if raw_id is not None else None
+        except (TypeError, ValueError):
+            panel_id = None
+
+        try:
+            await start_welcome_dialog(
+                channel,
+                getattr(interaction, "user", None),
+                "panel_button",
+                bot=getattr(interaction, "client", None),
+                panel_message_id=panel_id,
+                panel_message=panel_message,
+            )
+        except Exception as exc:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "panel_bootstrap_failed",
+                    thread_id=thread_id,
+                    error=str(exc),
+                )
+            log.warning("failed to bootstrap welcome controller", exc_info=True)
+            return None
+
+        try:
+            controller = await self._controller_registry.get_or_create(thread_id)
+        except Exception:
+            return None
+
+        if diag.is_enabled():
+            await diag.log_event(
+                "info",
+                "panel_bootstrap_success",
+                thread_id=thread_id,
+            )
+
+        return controller
+
     async def _resume_from_button(self, interaction: discord.Interaction) -> None:
         channel = getattr(interaction, "channel", None)
         thread_identifier = getattr(channel, "id", None) if isinstance(channel, discord.Thread) else None
@@ -577,6 +635,18 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         try:
             controller = await self._controller_registry.get_or_create(thread_key)
+        except LookupError as exc:
+            controller = await self._bootstrap_controller(interaction, thread_key, channel)
+            if controller is None:
+                await self._ensure_error_notice_followup(interaction, reason="controller_missing")
+                logs.human(
+                    "error",
+                    "onboarding.launch_controller_missing",
+                    thread_id=thread_key,
+                    error=str(exc),
+                )
+                await self._ensure_error_notice(interaction)
+                return
         except Exception as exc:
             await self._ensure_error_notice_followup(interaction, reason="controller_missing")
             logs.human(
@@ -1366,7 +1436,11 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         class TextPromptButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any) -> None:
-                super().__init__(style=discord.ButtonStyle.secondary, label="Enter answer")
+                needs_answer = not parent._has_current_answer(question)
+                style = (
+                    discord.ButtonStyle.primary if needs_answer else discord.ButtonStyle.secondary
+                )
+                super().__init__(style=style, label="Enter answer")
                 self._wizard = parent
                 self.question = question
 
@@ -1600,7 +1674,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                         type=meta.get("type"),
                     )
                 await controller.set_answer(self.thread_id, key, cleaned)
-                success_notice = "✅ Saved."
+                success_notice = "✅ Saved. Click **Next** for the next question."
             else:
                 await controller.set_answer(self.thread_id, key, None)
                 success_notice = "✅ Answer cleared."
