@@ -13,7 +13,6 @@ from discord.ext import commands
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
-from .wizard import OnboardWizard
 
 __all__ = [
     "OPEN_QUESTIONS_CUSTOM_ID",
@@ -448,6 +447,64 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         return has_session, changed
 
+    async def _bootstrap_controller(
+        self,
+        interaction: discord.Interaction,
+        thread_id: int | None,
+        channel: discord.abc.GuildChannel | discord.Thread | None,
+    ) -> _ControllerProtocol | None:
+        if thread_id is None or not isinstance(channel, discord.Thread):
+            return None
+
+        try:
+            from modules.onboarding.welcome_flow import start_welcome_dialog
+        except Exception:
+            log.warning("welcome bootstrap import failed", exc_info=True)
+            return None
+
+        message = getattr(interaction, "message", None)
+        panel_message = message if isinstance(message, discord.Message) else None
+        panel_id: int | None
+        raw_id = getattr(panel_message, "id", None)
+        try:
+            panel_id = int(raw_id) if raw_id is not None else None
+        except (TypeError, ValueError):
+            panel_id = None
+
+        try:
+            await start_welcome_dialog(
+                channel,
+                getattr(interaction, "user", None),
+                "panel_button",
+                bot=getattr(interaction, "client", None),
+                panel_message_id=panel_id,
+                panel_message=panel_message,
+            )
+        except Exception as exc:
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "panel_bootstrap_failed",
+                    thread_id=thread_id,
+                    error=str(exc),
+                )
+            log.warning("failed to bootstrap welcome controller", exc_info=True)
+            return None
+
+        try:
+            controller = await self._controller_registry.get_or_create(thread_id)
+        except Exception:
+            return None
+
+        if diag.is_enabled():
+            await diag.log_event(
+                "info",
+                "panel_bootstrap_success",
+                thread_id=thread_id,
+            )
+
+        return controller
+
     async def _resume_from_button(self, interaction: discord.Interaction) -> None:
         channel = getattr(interaction, "channel", None)
         thread_identifier = getattr(channel, "id", None) if isinstance(channel, discord.Thread) else None
@@ -578,6 +635,18 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         try:
             controller = await self._controller_registry.get_or_create(thread_key)
+        except LookupError as exc:
+            controller = await self._bootstrap_controller(interaction, thread_key, channel)
+            if controller is None:
+                await self._ensure_error_notice_followup(interaction, reason="controller_missing")
+                logs.human(
+                    "error",
+                    "onboarding.launch_controller_missing",
+                    thread_id=thread_key,
+                    error=str(exc),
+                )
+                await self._ensure_error_notice(interaction)
+                return
         except Exception as exc:
             await self._ensure_error_notice_followup(interaction, reason="controller_missing")
             logs.human(
@@ -1075,6 +1144,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             self.controller = controller
             self.thread_id = thread_id
             self.step = step
+            self._last_direction = 1
             self._message: discord.Message | None = None
             # Build the controls immediately so attach()/refresh() behave like the legacy view.
             self._configure_components()
@@ -1135,6 +1205,16 @@ class OpenQuestionsPanelView(discord.ui.View):
                     return questions
             return []
 
+        def _align_to_visible(self) -> None:
+            resolver = getattr(self.controller, "resolve_step", None)
+            if not callable(resolver):
+                return
+            direction = getattr(self, "_last_direction", 1) or 1
+            resolved, _ = resolver(self.thread_id, self.step, direction=direction)
+            if resolved is None:
+                return
+            self.step = resolved
+
         def _question(self) -> Any | None:
             questions = list(self._questions())
             if not questions:
@@ -1154,14 +1234,21 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return str(question.get("label") or question.get("text") or "")
             return str(getattr(question, "label", ""))
 
-        def _question_type(self, question: Any | None) -> str:
+        @staticmethod
+        def _raw_question_type(question: Any | None) -> str:
             if question is None:
                 return ""
             if isinstance(question, dict):
-                value = question.get("type") or ""
+                value = question.get("type") or question.get("qtype") or question.get("kind")
             else:
-                value = getattr(question, "type", "")
+                value = getattr(question, "type", None)
+                if not value:
+                    value = getattr(question, "qtype", None)
             return str(value or "")
+
+        def _question_type(self, question: Any | None) -> str:
+            value = self._raw_question_type(question)
+            return value
 
         def _question_required(self, question: Any | None) -> bool:
             if question is None:
@@ -1170,22 +1257,47 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return bool(question.get("required"))
             return bool(getattr(question, "required", False))
 
+        @staticmethod
+        def _note_tokens(note: Any) -> list[str]:
+            if note is None:
+                return []
+            if isinstance(note, (list, tuple, set)):
+                return [str(item).strip() for item in note if str(item).strip()]
+            pieces = []
+            for chunk in str(note).replace("\n", ",").split(","):
+                token = chunk.strip()
+                if token:
+                    pieces.append(token)
+            return pieces
+
         def _question_options(self, question: Any | None) -> Sequence[Any]:
             if question is None:
                 return []
+            qtype = self._raw_question_type(question).strip().lower()
+            raw: Any
             if isinstance(question, dict):
-                raw = question.get("options") or question.get("choices") or []
+                raw = question.get("options") or question.get("choices")
             else:
-                raw = getattr(question, "options", [])
-            if isinstance(raw, Sequence):
+                raw = getattr(question, "options", None)
+            if isinstance(raw, Sequence) and raw:
                 return raw
+            if not qtype.startswith("single-select") and not qtype.startswith("multi-select"):
+                return []
+            note = getattr(question, "note", None) if not isinstance(question, dict) else question.get("note")
+            tokens = self._note_tokens(note)
+            if tokens:
+                return [{"label": token, "value": token} for token in tokens]
+            validate = getattr(question, "validate", None) if not isinstance(question, dict) else question.get("validate")
+            validate_tokens = self._note_tokens(validate)
+            if validate_tokens:
+                return [{"label": token, "value": token} for token in validate_tokens]
             return []
 
         def _is_multi_select(self, question: Any | None) -> bool:
             if question is None:
                 return False
-            qtype = self._question_type(question)
-            if qtype == "multi-select":
+            qtype = self._raw_question_type(question).strip().lower()
+            if qtype.startswith("multi-select"):
                 return True
             multi_max = getattr(question, "multi_max", None)
             if multi_max:
@@ -1198,6 +1310,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                     return int(question.get("multi_max") or 0) > 1
                 except (TypeError, ValueError):
                     return False
+            hinted = getattr(question, "qtype", None)
+            if isinstance(hinted, str) and hinted.strip().lower().startswith("multi-select"):
+                return True
             return False
 
         def _question_key(self, question: Any | None) -> str:
@@ -1289,12 +1404,17 @@ class OpenQuestionsPanelView(discord.ui.View):
             """Compose the interactive controls for the current wizard step."""
 
             self.clear_items()
+            self._align_to_visible()
             question = self._question()
             if question is None:
                 self.add_item(self.CancelButton(self))
                 return
             options = list(self._question_options(question))
-            if options:
+            qtype = self._raw_question_type(question).strip().lower()
+            if qtype == "bool":
+                self.add_item(self.BoolButton(self, question, True))
+                self.add_item(self.BoolButton(self, question, False))
+            elif options:
                 select = self.OptionSelect(self, question, options, self._is_multi_select(question))
                 self.add_item(select)
             else:
@@ -1365,9 +1485,30 @@ class OpenQuestionsPanelView(discord.ui.View):
             async def callback(self, interaction: discord.Interaction) -> None:
                 await self._wizard._handle_select(interaction, self.question, list(self.values))
 
+        class BoolButton(discord.ui.Button):
+            def __init__(self, parent: "OnboardWizard", question: Any, value: bool) -> None:
+                label = "Yes" if value else "No"
+                style = discord.ButtonStyle.success if value else discord.ButtonStyle.danger
+                super().__init__(style=style, label=label)
+                self._wizard = parent
+                self.question = question
+                self._value = value
+
+            async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+                wizard = self._wizard
+                token = "yes" if self._value else "no"
+                key = wizard._question_key(self.question)
+                await wizard.controller.set_answer(wizard.thread_id, key, token)
+                wizard._last_direction = 1
+                await wizard.refresh(interaction)
+
         class TextPromptButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any) -> None:
-                super().__init__(style=discord.ButtonStyle.secondary, label="Enter answer")
+                needs_answer = not parent._has_current_answer(question)
+                style = (
+                    discord.ButtonStyle.primary if needs_answer else discord.ButtonStyle.secondary
+                )
+                super().__init__(style=style, label="Enter answer")
                 self._wizard = parent
                 self.question = question
 
@@ -1383,7 +1524,15 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
-                if wizard.step > 0:
+                wizard._last_direction = -1
+                resolver = getattr(wizard.controller, "previous_visible_step", None)
+                if callable(resolver):
+                    previous = resolver(wizard.thread_id, wizard.step)
+                    if previous is not None:
+                        wizard.step = previous
+                    elif wizard.step > 0:
+                        wizard.step -= 1
+                elif wizard.step > 0:
                     wizard.step -= 1
                 await wizard.refresh(interaction)
 
@@ -1398,19 +1547,14 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
-                next_index = wizard.step + 1
-                total = len(wizard._questions())
-                is_finished = False
-                checker = getattr(wizard.controller, "is_finished", None)
-                if callable(checker):
-                    try:
-                        is_finished = bool(checker(wizard.thread_id, next_index))
-                    except Exception:
-                        log.warning("inline wizard finish check failed", exc_info=True)
-                        is_finished = next_index >= total
+                wizard._last_direction = 1
+                resolver = getattr(wizard.controller, "next_visible_step", None)
+                if callable(resolver):
+                    next_index = resolver(wizard.thread_id, wizard.step)
                 else:
-                    is_finished = next_index >= total
-                if is_finished:
+                    questions = wizard._questions()
+                    next_index = wizard.step + 1 if wizard.step + 1 < len(questions) else None
+                if next_index is None:
                     await wizard.controller.finish_inline_wizard(
                         wizard.thread_id,
                         interaction,
@@ -1601,7 +1745,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                         type=meta.get("type"),
                     )
                 await controller.set_answer(self.thread_id, key, cleaned)
-                success_notice = "✅ Saved."
+                success_notice = '✅ Saved. Click "Next" for the next question.'
             else:
                 await controller.set_answer(self.thread_id, key, None)
                 success_notice = "✅ Answer cleared."
@@ -1651,6 +1795,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                     {"value": token, "label": label},
                 )
             await self.refresh(interaction)
+
+
+OnboardWizard = OpenQuestionsPanelView.OnboardWizard
 
 
 class WelcomePanel(discord.ui.View):
