@@ -98,11 +98,22 @@ def _build_order_map(questions: SequenceABC[Question]) -> Dict[str, list[str]]:
     return mapping
 
 
-def _parse_rules(rules: str) -> list[tuple[str, str, list[str]]]:
+def _split_rule_clauses(rules: str) -> list[str]:
+    """Split a rule string into discrete clauses."""
+
     pieces = re.split(r"[\n;]+", rules)
-    parsed: list[tuple[str, str, list[str]]] = []
+    clauses: list[str] = []
     for piece in pieces:
-        clause = " ".join(piece.strip().lower().split())
+        clause = piece.strip()
+        if clause:
+            clauses.append(clause)
+    return clauses
+
+
+def _parse_rules(rules: str) -> list[tuple[str, str, list[str]]]:
+    parsed: list[tuple[str, str, list[str]]] = []
+    for raw_clause in _split_rule_clauses(rules):
+        clause = " ".join(raw_clause.lower().split())
         if not clause:
             continue
         match = re.match(r"^if\s+(?P<cond>.+?)\s+(?P<verb>skip|make)\s+(?P<rest>.+)$", clause)
@@ -165,6 +176,90 @@ def _apply_action(states: VisibilityState, qid: str, action: str) -> None:
         states[qid]["state"] = _OPTIONAL_ACTION
 
 
+def validate_rules(questions: SequenceABC[Question]) -> List[str]:
+    """Return a list of validation error messages for sheet rule clauses."""
+
+    errors: List[str] = []
+    if not questions:
+        return errors
+
+    order_map = _build_order_map(questions)
+    qid_lookup = {question.qid.lower(): question.qid for question in questions}
+
+    for question in questions:
+        raw_rules = (question.rules or "").strip()
+        if not raw_rules:
+            continue
+        parsed = _parse_rules(raw_rules)
+        seen_valid_clause = bool(parsed)
+
+        for _condition, _action, targets in parsed:
+            unresolved: list[str] = []
+            for target in targets:
+                normalized = target.strip().lower().rstrip(".")
+                if not normalized:
+                    continue
+                if normalized.endswith("*"):
+                    base = normalized[:-1]
+                    if not any(order.startswith(base) for order in order_map):
+                        unresolved.append(target)
+                    continue
+                if normalized in order_map:
+                    continue
+                if normalized in qid_lookup:
+                    continue
+                unresolved.append(target)
+            if unresolved:
+                seen: set[str] = set()
+                unique_targets: list[str] = []
+                for token in unresolved:
+                    trimmed = token.strip()
+                    lowered = trimmed.lower()
+                    if lowered in seen:
+                        continue
+                    seen.add(lowered)
+                    unique_targets.append(trimmed)
+                joined = ", ".join(unique_targets)
+                errors.append(f"{question.qid}: unknown rule target(s): {joined}")
+
+        for clause in _split_rule_clauses(raw_rules):
+            lowered = " ".join(clause.lower().split())
+            if _RANGE_SKIP_RE.match(lowered):
+                seen_valid_clause = True
+                continue
+
+            match = _COND_RE.match(clause.strip())
+            if match:
+                seen_valid_clause = True
+                qid = match.group("qid") or ""
+                if qid.lower() not in qid_lookup:
+                    errors.append(
+                        f"{question.qid}: rule references unknown question '{qid}'"
+                    )
+                for key in ("goto", "goto_else"):
+                    target = match.group(key)
+                    if target and target.strip().lower() not in order_map:
+                        errors.append(
+                            f"{question.qid}: rule references unknown order '{target}'"
+                        )
+                continue
+
+            goto_match = _GOTO_RE.match(clause.strip())
+            if goto_match:
+                seen_valid_clause = True
+                target = goto_match.group("goto")
+                if target and target.strip().lower() not in order_map:
+                    errors.append(
+                        f"{question.qid}: rule references unknown order '{target}'"
+                    )
+                continue
+
+        if not seen_valid_clause:
+            errors.append(f"{question.qid}: no valid rule clauses parsed")
+
+    return errors
+
+
 _COND_RE = re.compile(
     r"^if\s+(?P<qid>[A-Za-z0-9_]+)\s+(?P<op>in|=|!=|<=|>=|<|>)\s+(?P<rhs>.+?)(?:\s+goto\s+(?P<goto>[0-9]+[A-Za-z]?))?(?:\s+else\s+goto\s+(?P<goto_else>[0-9]+[A-Za-z]?))?$",
     re.IGNORECASE,
@@ -174,6 +269,9 @@ _RANGE_SKIP_RE = re.compile(
     r"^skip\s+order>=(?P<lo>[0-9]+)\s+and\s+order<(?P<hi>[0-9]+)$",
     re.IGNORECASE,
 )
+
+
+_GOTO_RE = re.compile(r"^goto\s+(?P<goto>[0-9]+[A-Za-z]?)$", re.IGNORECASE)
 
 
 def _norm(value: Any) -> str:
@@ -203,34 +301,62 @@ def next_index_by_rules(
     if not rule:
         return None
 
-    if rule.lower().startswith("skip "):
-        if _RANGE_SKIP_RE.match(rule):
-            return None
-
-    match = _COND_RE.match(rule)
-    if not match:
+    clauses = _split_rule_clauses(rule)
+    if not clauses:
         return None
 
-    qid = match.group("qid")
-    op = match.group("op").lower()
-    rhs = match.group("rhs")
-    goto = match.group("goto")
-    goto_else = match.group("goto_else")
+    qid_cache: dict[str, Any] = {}
 
-    if not qid:
-        return None
+    for clause in clauses:
+        lowered = clause.lower().strip()
+        if lowered.startswith("skip ") and _RANGE_SKIP_RE.match(lowered):
+            continue
 
-    value = answers_by_qid.get(qid) or answers_by_qid.get(qid.lower())
-    if value is None:
-        return None
+        goto_match = _GOTO_RE.match(clause.strip())
+        if goto_match:
+            target = goto_match.group("goto")
+            jump = _index_for_order(questions, target)
+            if jump is not None:
+                return jump
+            continue
 
-    candidates = _candidate_tokens(value)
-    if not candidates:
-        return None
+        match = _COND_RE.match(clause.strip())
+        if not match:
+            continue
 
-    if _condition_satisfied(op, candidates, rhs):
-        return _index_for_order(questions, goto)
-    return _index_for_order(questions, goto_else)
+        qid = match.group("qid")
+        op = match.group("op").lower()
+        rhs = match.group("rhs")
+        goto = match.group("goto")
+        goto_else = match.group("goto_else")
+
+        if not qid:
+            continue
+
+        lookup_key = qid.lower()
+        if lookup_key not in qid_cache:
+            value = answers_by_qid.get(qid)
+            if value is None:
+                value = answers_by_qid.get(lookup_key)
+            qid_cache[lookup_key] = value
+        value = qid_cache.get(lookup_key)
+        if value is None:
+            continue
+
+        candidates = _candidate_tokens(value)
+        if not candidates:
+            continue
+
+        if _condition_satisfied(op, candidates, rhs):
+            jump = _index_for_order(questions, goto)
+            if jump is not None:
+                return jump
+        elif goto_else:
+            jump = _index_for_order(questions, goto_else)
+            if jump is not None:
+                return jump
+
+    return None
 
 
 def _candidate_tokens(value: Any) -> list[str]:
@@ -241,13 +367,19 @@ def _candidate_tokens(value: Any) -> list[str]:
         return [text] if text else []
     if isinstance(value, MappingABC):
         tokens: list[str] = []
-        label = value.get("label") or value.get("value")
+        label = value.get("label")
         if isinstance(label, str) and label.strip():
             tokens.append(label.strip())
+        raw_value = value.get("value")
+        if isinstance(raw_value, str) and raw_value.strip():
+            tokens.append(raw_value.strip())
+        elif raw_value is not None:
+            tokens.extend(_candidate_tokens(raw_value))
         nested = value.get("values")
-        if isinstance(nested, IterableABC):
-            tokens.extend(_candidate_tokens(list(nested)))
-        return tokens
+        if isinstance(nested, IterableABC) and not isinstance(nested, (str, bytes, bytearray)):
+            for item in nested:
+                tokens.extend(_candidate_tokens(item))
+        return [token for token in tokens if token]
     if isinstance(value, IterableABC) and not isinstance(value, (bytes, bytearray)):
         tokens: list[str] = []
         for item in value:
@@ -260,19 +392,20 @@ def _candidate_tokens(value: Any) -> list[str]:
 def _condition_satisfied(op: str, candidates: list[str], rhs: str) -> bool:
     try:
         if op == "in":
-            options = _parse_rhs_list(rhs)
-            return any(candidate in options for candidate in candidates)
+            options = {_norm(option).lower() for option in _parse_rhs_list(rhs)}
+            return any(_norm(candidate).lower() in options for candidate in candidates)
 
         rhs_token = _norm(rhs)
+        rhs_norm = rhs_token.lower()
         if op == "=":
-            return any(candidate == rhs_token for candidate in candidates)
+            return any(_norm(candidate).lower() == rhs_norm for candidate in candidates)
         if op == "!=":
-            return all(candidate != rhs_token for candidate in candidates)
+            return all(_norm(candidate).lower() != rhs_norm for candidate in candidates)
 
         rhs_value = float(rhs_token)
         for candidate in candidates:
             try:
-                value = float(candidate)
+                value = float(_norm(candidate))
             except Exception:
                 continue
             if op == "<" and value < rhs_value:
