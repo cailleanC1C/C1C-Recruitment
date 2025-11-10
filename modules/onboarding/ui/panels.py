@@ -1144,6 +1144,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             self.controller = controller
             self.thread_id = thread_id
             self.step = step
+            self._last_direction = 1
             self._message: discord.Message | None = None
             # Build the controls immediately so attach()/refresh() behave like the legacy view.
             self._configure_components()
@@ -1203,6 +1204,16 @@ class OpenQuestionsPanelView(discord.ui.View):
                 if isinstance(questions, Sequence):
                     return questions
             return []
+
+        def _align_to_visible(self) -> None:
+            resolver = getattr(self.controller, "resolve_step", None)
+            if not callable(resolver):
+                return
+            direction = getattr(self, "_last_direction", 1) or 1
+            resolved, _ = resolver(self.thread_id, self.step, direction=direction)
+            if resolved is None:
+                return
+            self.step = resolved
 
         def _question(self) -> Any | None:
             questions = list(self._questions())
@@ -1358,12 +1369,17 @@ class OpenQuestionsPanelView(discord.ui.View):
             """Compose the interactive controls for the current wizard step."""
 
             self.clear_items()
+            self._align_to_visible()
             question = self._question()
             if question is None:
                 self.add_item(self.CancelButton(self))
                 return
             options = list(self._question_options(question))
-            if options:
+            qtype = self._question_type(question).strip().lower()
+            if qtype == "bool":
+                self.add_item(self.BoolButton(self, question, True))
+                self.add_item(self.BoolButton(self, question, False))
+            elif options:
                 select = self.OptionSelect(self, question, options, self._is_multi_select(question))
                 self.add_item(select)
             else:
@@ -1434,6 +1450,23 @@ class OpenQuestionsPanelView(discord.ui.View):
             async def callback(self, interaction: discord.Interaction) -> None:
                 await self._wizard._handle_select(interaction, self.question, list(self.values))
 
+        class BoolButton(discord.ui.Button):
+            def __init__(self, parent: "OnboardWizard", question: Any, value: bool) -> None:
+                label = "Yes" if value else "No"
+                style = discord.ButtonStyle.success if value else discord.ButtonStyle.danger
+                super().__init__(style=style, label=label)
+                self._wizard = parent
+                self.question = question
+                self._value = value
+
+            async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+                wizard = self._wizard
+                token = "yes" if self._value else "no"
+                key = wizard._question_key(self.question)
+                await wizard.controller.set_answer(wizard.thread_id, key, token)
+                wizard._last_direction = 1
+                await wizard.refresh(interaction)
+
         class TextPromptButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any) -> None:
                 needs_answer = not parent._has_current_answer(question)
@@ -1456,7 +1489,15 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
-                if wizard.step > 0:
+                wizard._last_direction = -1
+                resolver = getattr(wizard.controller, "previous_visible_step", None)
+                if callable(resolver):
+                    previous = resolver(wizard.thread_id, wizard.step)
+                    if previous is not None:
+                        wizard.step = previous
+                    elif wizard.step > 0:
+                        wizard.step -= 1
+                elif wizard.step > 0:
                     wizard.step -= 1
                 await wizard.refresh(interaction)
 
@@ -1471,19 +1512,14 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 wizard = self._wizard
-                next_index = wizard.step + 1
-                total = len(wizard._questions())
-                is_finished = False
-                checker = getattr(wizard.controller, "is_finished", None)
-                if callable(checker):
-                    try:
-                        is_finished = bool(checker(wizard.thread_id, next_index))
-                    except Exception:
-                        log.warning("inline wizard finish check failed", exc_info=True)
-                        is_finished = next_index >= total
+                wizard._last_direction = 1
+                resolver = getattr(wizard.controller, "next_visible_step", None)
+                if callable(resolver):
+                    next_index = resolver(wizard.thread_id, wizard.step)
                 else:
-                    is_finished = next_index >= total
-                if is_finished:
+                    questions = wizard._questions()
+                    next_index = wizard.step + 1 if wizard.step + 1 < len(questions) else None
+                if next_index is None:
                     await wizard.controller.finish_inline_wizard(
                         wizard.thread_id,
                         interaction,

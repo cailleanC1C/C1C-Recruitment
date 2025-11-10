@@ -26,11 +26,15 @@ class RollingCard:
         help_text: str,
         summary: List[str],
         view: Optional[discord.ui.View],
+        prompt: str | None = None,
     ) -> None:
         message = await self.ensure()
-        body = f"**Onboarding • {index}/{total}**\n{label}"
+        progress_total = max(total, 1)
+        body = f"**Onboarding • {index}/{progress_total}**\n\n## {label}"
         if help_text:
-            body += f"\n*{help_text}*"
+            body += f"\n_{help_text}_"
+        if prompt:
+            body += f"\n\n{prompt}"
         if summary:
             body += "\n\n**So far**\n" + "\n".join(summary)
         await message.edit(content=body, view=view)
