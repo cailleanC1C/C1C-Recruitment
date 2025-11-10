@@ -165,6 +165,56 @@ def _apply_action(states: VisibilityState, qid: str, action: str) -> None:
         states[qid]["state"] = _OPTIONAL_ACTION
 
 
+def validate_rules(questions: SequenceABC[Question]) -> List[str]:
+    """Return a list of validation error messages for sheet rule clauses."""
+
+    errors: List[str] = []
+    if not questions:
+        return errors
+
+    order_map = _build_order_map(questions)
+    qid_lookup = {question.qid.lower(): question.qid for question in questions}
+
+    for question in questions:
+        raw_rules = (question.rules or "").strip()
+        if not raw_rules:
+            continue
+        parsed = _parse_rules(raw_rules)
+        if not parsed:
+            errors.append(f"{question.qid}: no valid rule clauses parsed")
+            continue
+        for _condition, _action, targets in parsed:
+            unresolved: list[str] = []
+            for target in targets:
+                normalized = target.strip().lower().rstrip(".")
+                if not normalized:
+                    continue
+                if normalized.endswith("*"):
+                    base = normalized[:-1]
+                    if not any(order.startswith(base) for order in order_map):
+                        unresolved.append(target)
+                    continue
+                if normalized in order_map:
+                    continue
+                if normalized in qid_lookup:
+                    continue
+                unresolved.append(target)
+            if unresolved:
+                seen: set[str] = set()
+                unique_targets: list[str] = []
+                for token in unresolved:
+                    trimmed = token.strip()
+                    lowered = trimmed.lower()
+                    if lowered in seen:
+                        continue
+                    seen.add(lowered)
+                    unique_targets.append(trimmed)
+                joined = ", ".join(unique_targets)
+                errors.append(f"{question.qid}: unknown rule target(s): {joined}")
+
+    return errors
+
+
 _COND_RE = re.compile(
     r"^if\s+(?P<qid>[A-Za-z0-9_]+)\s+(?P<op>in|=|!=|<=|>=|<|>)\s+(?P<rhs>.+?)(?:\s+goto\s+(?P<goto>[0-9]+[A-Za-z]?))?(?:\s+else\s+goto\s+(?P<goto_else>[0-9]+[A-Za-z]?))?$",
     re.IGNORECASE,
