@@ -952,17 +952,29 @@ class BaseWelcomeController:
             "type": "",
             "validate": None,
             "help": None,
+            "note": None,
         }
         if isinstance(question, dict):
             meta["label"] = str(question.get("label") or question.get("text") or "")
-            meta["type"] = str(question.get("type") or "")
+            meta["type"] = str(
+                question.get("type")
+                or question.get("qtype")
+                or question.get("kind")
+                or ""
+            )
             meta["validate"] = question.get("validate")
             meta["help"] = question.get("help")
+            meta["note"] = question.get("note")
         else:
             meta["label"] = str(getattr(question, "label", ""))
-            meta["type"] = str(getattr(question, "type", ""))
+            meta["type"] = str(
+                getattr(question, "type", None)
+                or getattr(question, "qtype", None)
+                or ""
+            )
             meta["validate"] = getattr(question, "validate", None)
             meta["help"] = getattr(question, "help", None)
+            meta["note"] = getattr(question, "note", None)
         return meta
 
     def _has_sheet_regex(self, meta: dict[str, Any]) -> bool:
