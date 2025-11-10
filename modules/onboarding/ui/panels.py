@@ -1234,14 +1234,21 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return str(question.get("label") or question.get("text") or "")
             return str(getattr(question, "label", ""))
 
-        def _question_type(self, question: Any | None) -> str:
+        @staticmethod
+        def _raw_question_type(question: Any | None) -> str:
             if question is None:
                 return ""
             if isinstance(question, dict):
-                value = question.get("type") or ""
+                value = question.get("type") or question.get("qtype") or question.get("kind")
             else:
-                value = getattr(question, "type", "")
+                value = getattr(question, "type", None)
+                if not value:
+                    value = getattr(question, "qtype", None)
             return str(value or "")
+
+        def _question_type(self, question: Any | None) -> str:
+            value = self._raw_question_type(question)
+            return value
 
         def _question_required(self, question: Any | None) -> bool:
             if question is None:
@@ -1250,22 +1257,47 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return bool(question.get("required"))
             return bool(getattr(question, "required", False))
 
+        @staticmethod
+        def _note_tokens(note: Any) -> list[str]:
+            if note is None:
+                return []
+            if isinstance(note, (list, tuple, set)):
+                return [str(item).strip() for item in note if str(item).strip()]
+            pieces = []
+            for chunk in str(note).replace("\n", ",").split(","):
+                token = chunk.strip()
+                if token:
+                    pieces.append(token)
+            return pieces
+
         def _question_options(self, question: Any | None) -> Sequence[Any]:
             if question is None:
                 return []
+            qtype = self._raw_question_type(question).strip().lower()
+            raw: Any
             if isinstance(question, dict):
-                raw = question.get("options") or question.get("choices") or []
+                raw = question.get("options") or question.get("choices")
             else:
-                raw = getattr(question, "options", [])
-            if isinstance(raw, Sequence):
+                raw = getattr(question, "options", None)
+            if isinstance(raw, Sequence) and raw:
                 return raw
+            if not qtype.startswith("single-select") and not qtype.startswith("multi-select"):
+                return []
+            note = getattr(question, "note", None) if not isinstance(question, dict) else question.get("note")
+            tokens = self._note_tokens(note)
+            if tokens:
+                return [{"label": token, "value": token} for token in tokens]
+            validate = getattr(question, "validate", None) if not isinstance(question, dict) else question.get("validate")
+            validate_tokens = self._note_tokens(validate)
+            if validate_tokens:
+                return [{"label": token, "value": token} for token in validate_tokens]
             return []
 
         def _is_multi_select(self, question: Any | None) -> bool:
             if question is None:
                 return False
-            qtype = self._question_type(question)
-            if qtype == "multi-select":
+            qtype = self._raw_question_type(question).strip().lower()
+            if qtype.startswith("multi-select"):
                 return True
             multi_max = getattr(question, "multi_max", None)
             if multi_max:
@@ -1278,6 +1310,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                     return int(question.get("multi_max") or 0) > 1
                 except (TypeError, ValueError):
                     return False
+            hinted = getattr(question, "qtype", None)
+            if isinstance(hinted, str) and hinted.strip().lower().startswith("multi-select"):
+                return True
             return False
 
         def _question_key(self, question: Any | None) -> str:

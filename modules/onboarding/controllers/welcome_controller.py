@@ -952,21 +952,74 @@ class BaseWelcomeController:
             "type": "",
             "validate": None,
             "help": None,
+            "note": None,
         }
         if isinstance(question, dict):
             meta["label"] = str(question.get("label") or question.get("text") or "")
-            meta["type"] = str(question.get("type") or "")
+            meta["type"] = str(
+                question.get("type")
+                or question.get("qtype")
+                or question.get("kind")
+                or ""
+            )
             meta["validate"] = question.get("validate")
             meta["help"] = question.get("help")
+            meta["note"] = question.get("note")
         else:
             meta["label"] = str(getattr(question, "label", ""))
-            meta["type"] = str(getattr(question, "type", ""))
+            meta["type"] = str(
+                getattr(question, "type", None)
+                or getattr(question, "qtype", None)
+                or ""
+            )
             meta["validate"] = getattr(question, "validate", None)
             meta["help"] = getattr(question, "help", None)
+            meta["note"] = getattr(question, "note", None)
         return meta
 
     def _has_sheet_regex(self, meta: dict[str, Any]) -> bool:
         return bool(_sheet_regex(meta))
+
+    @staticmethod
+    def _question_type_value(question: Question | dict[str, Any]) -> str:
+        if isinstance(question, dict):
+            value = question.get("type") or question.get("qtype") or question.get("kind")
+        else:
+            value = getattr(question, "type", None)
+            if not value:
+                value = getattr(question, "qtype", None)
+        return str(value or "")
+
+    @staticmethod
+    def _question_options(question: Question | dict[str, Any]) -> list[Any]:
+        raw: Any
+        if isinstance(question, dict):
+            raw = question.get("options") or question.get("choices")
+        else:
+            raw = getattr(question, "options", None)
+        if isinstance(raw, Sequence):
+            return list(raw)
+        qtype = BaseWelcomeController._question_type_value(question).strip().lower()
+        if not qtype.startswith("single-select") and not qtype.startswith("multi-select"):
+            return []
+        if isinstance(question, dict):
+            note = question.get("note")
+        else:
+            note = getattr(question, "note", None)
+        tokens: list[str] = []
+        if isinstance(note, str) and note.strip():
+            tokens = [token.strip() for token in note.replace("\n", ",").split(",") if token.strip()]
+        elif isinstance(question, dict):
+            validate = question.get("validate")
+            if isinstance(validate, str) and validate.strip():
+                tokens = [token.strip() for token in validate.replace("\n", ",").split(",") if token.strip()]
+        else:
+            validate = getattr(question, "validate", None)
+            if isinstance(validate, str) and validate.strip():
+                tokens = [token.strip() for token in validate.replace("\n", ",").split(",") if token.strip()]
+        if tokens:
+            return [{"label": token, "value": token} for token in tokens]
+        return []
 
     def validate_answer(self, meta: dict[str, Any], raw: str) -> tuple[bool, str | None, str | None]:
         return validate_answer(meta, raw)
@@ -994,9 +1047,7 @@ class BaseWelcomeController:
     def _answer_present(self, question: Question | dict[str, Any], value: Any) -> bool:
         if value is None:
             return False
-        qtype = getattr(question, "type", None)
-        if isinstance(question, dict):
-            qtype = question.get("type")
+        qtype = self._question_type_value(question).strip().lower()
         if qtype in SELECT_TYPES:
             return _has_select_answer(value)
         if qtype == "number":
@@ -1011,28 +1062,60 @@ class BaseWelcomeController:
             return any(True for _ in value)
         return bool(value)
 
+    @staticmethod
+    def _canonical_bool(value: Any) -> str | None:
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if not text:
+                return None
+            if text in {"yes", "y", "true", "1"}:
+                return "yes"
+            if text in {"no", "n", "false", "0"}:
+                return "no"
+        if isinstance(value, (int, float)):
+            return "yes" if value else "no"
+        return None
+
+    def _question_for(self, thread_id: int, key: str) -> Question | dict[str, Any] | None:
+        questions = self._questions.get(thread_id) or []
+        for question in questions:
+            if self._question_key(question) == key:
+                return question
+        return None
+
     async def set_answer(self, thread_id: int, key: str, value: Any) -> None:
         answers = self.answers_by_thread.setdefault(thread_id, {})
-        if value is None or (isinstance(value, str) and not value.strip()):
+        question = self._question_for(thread_id, key)
+        qtype = self._question_type_value(question).strip().lower() if question is not None else ""
+        normalized = value
+        if isinstance(value, str):
+            text = value.strip()
+            normalized = text if text else None
+        if qtype == "bool":
+            token = self._canonical_bool(value)
+            normalized = token if token is not None else (normalized if isinstance(normalized, str) else normalized)
+        if normalized is None or (isinstance(normalized, str) and not normalized.strip()):
             answers.pop(key, None)
-        elif isinstance(value, (list, tuple)) and not value:
+        elif isinstance(normalized, (list, tuple)) and not normalized:
             answers.pop(key, None)
-        elif isinstance(value, dict) and not value:
+        elif isinstance(normalized, dict) and not normalized:
             answers.pop(key, None)
         else:
-            answers[key] = value
+            answers[key] = normalized
 
         session = store.get(thread_id)
         if session is not None:
             session.answers = session.answers or {}
-            if value is None or (isinstance(value, str) and not value.strip()):
+            if normalized is None or (isinstance(normalized, str) and not normalized.strip()):
                 session.answers.pop(key, None)
-            elif isinstance(value, (list, tuple)) and not value:
+            elif isinstance(normalized, (list, tuple)) and not normalized:
                 session.answers.pop(key, None)
-            elif isinstance(value, dict) and not value:
+            elif isinstance(normalized, dict) and not normalized:
                 session.answers.pop(key, None)
             else:
-                session.answers[key] = value
+                session.answers[key] = normalized
             try:
                 session.visibility = rules.evaluate_visibility(
                     self._questions.get(thread_id, []), session.answers
@@ -2524,16 +2607,24 @@ class BaseWelcomeController:
         question: Question,
         values: Iterable[str],
     ) -> None:
-        options = {option.value: option for option in question.options}
-        if question.type == "single-select":
+        option_objects = self._question_options(question)
+        options: dict[str, dict[str, str]] = {}
+        for option in option_objects:
+            if isinstance(option, dict):
+                label = str(option.get("label") or option.get("value") or "")
+                value = str(option.get("value") or option.get("label") or label)
+            else:
+                label = str(getattr(option, "label", ""))
+                value = str(getattr(option, "value", label))
+            if value:
+                options[value] = {"value": value, "label": label or value}
+        qtype = self._question_type_value(question).strip().lower()
+        if qtype.startswith("single-select"):
             if values:
                 value = next(iter(values))
                 option = options.get(value)
                 if option:
-                    session.answers[question.qid] = {
-                        "value": option.value,
-                        "label": option.label,
-                    }
+                    session.answers[question.qid] = dict(option)
                 else:
                     session.answers.pop(question.qid, None)
             else:
@@ -2544,7 +2635,7 @@ class BaseWelcomeController:
         for token in values:
             option = options.get(token)
             if option:
-                selected.append({"value": option.value, "label": option.label})
+                selected.append(dict(option))
         if selected:
             session.answers[question.qid] = selected
         else:
@@ -2702,7 +2793,9 @@ def _visible_state(visibility: dict[str, dict[str, str]], qid: str) -> str:
 def _preview_value_for_question(question: Question, stored: Any) -> str:
     if stored is None:
         return ""
-    if question.type in TEXT_TYPES:
+    qtype = getattr(question, "type", None) or getattr(question, "qtype", None)
+    qtype_text = str(qtype or "").strip().lower()
+    if qtype_text in TEXT_TYPES:
         return str(stored)
     if question.type == "bool":
         if isinstance(stored, bool):
@@ -2741,7 +2834,8 @@ def _missing_required_selects(
 ) -> list[str]:
     missing: list[str] = []
     for question in questions:
-        if question.type not in SELECT_TYPES:
+        qtype = getattr(question, "type", None) or getattr(question, "qtype", None)
+        if str(qtype or "").strip().lower() not in SELECT_TYPES:
             continue
         state = _visible_state(visibility, question.qid)
         if state == "skip":
@@ -2776,8 +2870,22 @@ def _final_fields(questions: Sequence[Question], answers: dict[str, Any]) -> dic
     fields: dict[str, Any] = {}
     option_lookup: dict[str, dict[str, str]] = {}
     for question in questions:
-        if question.type in SELECT_TYPES:
-            option_lookup[question.qid] = {option.value: option.label for option in question.options}
+        qtype = getattr(question, "type", None) or getattr(question, "qtype", None)
+        if str(qtype or "").strip().lower() in SELECT_TYPES:
+            lookup: dict[str, str] = {}
+            for option in getattr(question, "options", ()):  # type: ignore[attr-defined]
+                label = getattr(option, "label", None)
+                value = getattr(option, "value", None)
+                if value:
+                    lookup[str(value)] = str(label if label is not None else value)
+            if not lookup:
+                note = getattr(question, "note", None)
+                if isinstance(note, str) and note.strip():
+                    for token in note.replace("\n", ",").split(","):
+                        text = token.strip()
+                        if text:
+                            lookup[text] = text
+            option_lookup[question.qid] = lookup
     for qid, value in answers.items():
         label_value = _convert_to_labels(value, option_lookup.get(qid, {}))
         if isinstance(label_value, str) and len(label_value) > 300:
