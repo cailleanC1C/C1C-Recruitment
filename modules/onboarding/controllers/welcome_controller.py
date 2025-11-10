@@ -20,11 +20,13 @@ from modules.onboarding.schema import (
     parse_values_list,
 )
 from modules.onboarding.session_store import SessionData, store
+from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
+from shared.logfmt import channel_label, user_label
 from shared.sheets.onboarding_questions import Question
 from shared.config import get_recruiter_role_ids
 
@@ -180,6 +182,7 @@ class RollingCardSession:
             self.thread_id = int(thread_identifier) if thread_identifier is not None else None
         except (TypeError, ValueError):
             self.thread_id = None
+        self._all_questions: list[SheetQuestionRecord] = list(questions)
         self._steps: list[SheetQuestionRecord] = [
             question for question in questions if self._supports(question)
         ]
@@ -189,6 +192,21 @@ class RollingCardSession:
         self._answer_order: list[SheetQuestionRecord] = []
         self._waiting = False
         self._closed = False
+        self._visibility: dict[str, dict[str, str]] = {}
+        self._recompute_visibility()
+
+    def _recompute_visibility(self) -> None:
+        try:
+            self._visibility = rules.evaluate_visibility(
+                self._all_questions, self._answers
+            )
+        except Exception:
+            self._visibility = {}
+
+    def _visible_state(self, qid: str | None) -> str:
+        if not qid:
+            return "show"
+        return self._visibility.get(qid, {}).get("state", "show")
 
     @staticmethod
     def _supports(question: SheetQuestionRecord) -> bool:
@@ -252,21 +270,37 @@ class RollingCardSession:
     async def _render_step(self) -> None:
         if self._closed:
             return
-        if self._current_index >= len(self._steps):
+        total = len(self._steps)
+        while self._current_index < total:
+            question = self._steps[self._current_index]
+            if self._visible_state(question.qid) == "skip":
+                self._current_index += 1
+                continue
+            break
+        else:
             await self._finish()
             return
         question = self._steps[self._current_index]
         self._current_question = question
         self._waiting = False
         view = self._view_for_question(question)
+        state = self._visible_state(question.qid)
+        help_text = question.help
+        if state == "optional":
+            optional_hint = "_Optional._"
+            if help_text:
+                help_text = f"{help_text}\n{optional_hint}"
+            else:
+                help_text = optional_hint
+        prompt = self._prompt_line(question)
         await self.card.render(
             self._current_index + 1,
             len(self._steps),
             question.label,
-            question.help,
+            help_text or "",
             self._summary_lines(),
             view,
-            prompt=self._prompt_line(question),
+            prompt=prompt,
         )
 
     def _summary_lines(self) -> list[str]:
@@ -529,6 +563,7 @@ class RollingCardSession:
                 pass
         self._log_event("✅", "answer")
         answers_by_qid = self._answers_by_qid()
+        self._recompute_visibility()
         try:
             jump = rules.next_index_by_rules(
                 self._current_index, list(self._steps), answers_by_qid
@@ -2271,9 +2306,20 @@ class BaseWelcomeController:
         store.set_pending_step(thread_id, {"kind": "inline", "index": next_index})
         await _safe_ephemeral(
             interaction,
-            "✅ Saved! Look for the next prompt in the thread.",
+            "✅ Saved! Opening the next question…",
         )
-        await self.prompt_next(interaction, thread_id, next_index)
+        try:
+            await self.render_inline_step(
+                interaction,
+                thread_id,
+                index=next_index,
+                context={"source": self._sources.get(thread_id, "modal")},
+            )
+        except Exception:
+            log.warning(
+                "failed to render inline step after modal submission", exc_info=True
+            )
+            await self.prompt_next(interaction, thread_id, next_index)
 
     async def _handle_select_change(
         self,

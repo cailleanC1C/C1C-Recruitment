@@ -261,7 +261,7 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
 
 
 _COND_RE = re.compile(
-    r"^if\s+(?P<qid>[A-Za-z0-9_]+)\s+(?P<op>in|=|!=|<=|>=|<|>)\s+(?P<rhs>.+?)(?:\s+goto\s+(?P<goto>[0-9]+[A-Za-z]?))?(?:\s+else\s+goto\s+(?P<goto_else>[0-9]+[A-Za-z]?))?$",
+    r"^if\s+(?P<qid>[A-Za-z0-9_]+)\s+(?P<op>in|=|!=|<=|>=|<|>)\s+(?P<rhs>.+?)(?:\s+goto\s+(?P<goto>[A-Za-z0-9_]+))?(?:\s+else\s+goto\s+(?P<goto_else>[A-Za-z0-9_]+))?$",
     re.IGNORECASE,
 )
 
@@ -431,8 +431,10 @@ def _index_for_order(questions: List[Any], order_token: Optional[str]) -> Option
         order_value = getattr(question, "order_raw", None)
         if order_value is None:
             order_value = getattr(question, "order", None)
-        if order_value is None:
-            continue
-        if str(order_value).strip().lower() == needle:
+        if order_value is not None:
+            if str(order_value).strip().lower() == needle:
+                return index
+        qid_value = getattr(question, "qid", None)
+        if qid_value and str(qid_value).strip().lower() == needle:
             return index
     return None
