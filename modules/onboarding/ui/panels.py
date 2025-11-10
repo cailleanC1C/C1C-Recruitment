@@ -1710,7 +1710,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                         type=meta.get("type"),
                     )
                 await controller.set_answer(self.thread_id, key, cleaned)
-                success_notice = '✅ Saved. Click "Next" for the next question.'
+                success_notice = "✅ Saved. Click **Next** for the next question."
             else:
                 await controller.set_answer(self.thread_id, key, None)
                 success_notice = "✅ Answer cleared."

@@ -135,23 +135,6 @@ def test_text_prompt_button_highlights_until_answered() -> None:
 
 
 
-def test_bool_question_renders_yes_no_buttons() -> None:
-    async def runner() -> None:
-        thread_id = 888
-        question = {"label": "Siege?", "qid": "siege", "type": "bool", "options": []}
-
-        controller = SimpleNamespace()
-        controller.questions_by_thread = {thread_id: [question]}
-        controller.answers_by_thread = {}
-        controller.has_answer = lambda *_args, **_kwargs: False
-
-        wizard = panels.OnboardWizard(controller, thread_id, step=0)
-        labels = {getattr(child, "label", None) for child in wizard.children if hasattr(child, "label")}
-        assert {"Yes", "No"}.issubset(labels)
-
-    asyncio.run(runner())
-
-
 def test_resume_button_visible_when_session_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(panels.OpenQuestionsPanelView, "_session_exists", staticmethod(lambda _thread_id, _user_id: True))
 

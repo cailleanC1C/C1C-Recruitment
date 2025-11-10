@@ -1141,34 +1141,17 @@ class BaseWelcomeController:
         key = self._question_key(question)
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
-        help_text = getattr(question, "help", None)
-        if isinstance(question, dict):
-            help_text = question.get("help", help_text)
-
-        parts: list[str] = []
-        progress = self._progress_label(thread_id, resolved_index)
-        if progress:
-            parts.append(f"**Onboarding • {progress}**")
-        parts.append(f"## {label}")
-        if help_text:
-            parts.append(f"_{help_text}_")
-
+        parts = [label]
         if formatted:
-            parts.append(f"**Current answer:** {formatted}")
+            parts.append(f"Current answer: {formatted}")
         else:
             options = getattr(question, "options", None)
             if isinstance(question, dict):
                 options = question.get("options") or question.get("choices")
-            qtype = getattr(question, "type", None)
-            if isinstance(question, dict):
-                qtype = question.get("type", qtype)
-            qtype_text = (qtype or "").lower()
-            if qtype_text == "bool":
-                parts.append("Tap **Yes** or **No** below.")
-            elif not options and not self._answer_present(question, stored):
+            uses_text_prompt = not options
+            if uses_text_prompt and not self._answer_present(question, stored):
                 parts.append("Press **Enter answer** to respond.")
-
-        return "\n\n".join(part for part in parts if part)
+        return "\n\n".join(parts)
 
     async def finish_inline_wizard(
         self,
@@ -1731,7 +1714,7 @@ class BaseWelcomeController:
             if diag.is_enabled():
                 await diag.log_event("info", "inline_wizard_posted", **diag_state)
 
-        if message is not None and wizard is not None:
+        if message is not None:
             wizard.attach(message)
 
         log_payload = self._log_fields(thread_id, actor=getattr(interaction, "user", None))
