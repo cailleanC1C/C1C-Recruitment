@@ -26,7 +26,4 @@ Render: Confirm service no longer idles; cron logs continue at scheduled times.
 
 Local: Run server; curl http://localhost:PORT/keepalive returns ok.
 
-## Docs
-Added docs/ops/keepalive.md.
-
-No version bump. (Per contract.)
+Doc last updated: 2025-11-11 (v0.9.7)
