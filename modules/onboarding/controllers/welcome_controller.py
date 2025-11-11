@@ -152,10 +152,10 @@ SELECT_TYPES = {"single-select", "multi-select"}
 STATUS_ICON_WAITING = "✍️"
 STATUS_ICON_SAVED = "✅"
 STATUS_ICON_ERROR = "⚠️"
-STATUS_TEXT_WAITING = "Press \"Enter answer\" and type your answer below."
+STATUS_TEXT_WAITING = "Press “Enter answer” and type your answer below."
 STATUS_TEXT_SAVED = "Saved. Click Next."
-STATUS_TEXT_NUMBER = "Use a number like 12.6M (no commas)."
-STATUS_TEXT_SELECT = "Pick one option."
+STATUS_TEXT_NUMBER = "Invalid format: Use a number like 12.6M (no commas)."
+STATUS_TEXT_SELECT = "Invalid format: Pick one option."
 STATUS_TEXT_GENERIC = "Invalid format: {hint}"
 MAP_CHANGED_NOTE = "↪ Skipped questions updated."
 
@@ -746,15 +746,21 @@ class RollingCardSession:
     def _status_error_text(self, question: SheetQuestionRecord) -> str:
         qtype = (question.qtype or "").lower()
         if qtype.startswith("number"):
+            hint = (self._status_hint or "Use a number like 12.6M (no commas)."
+                    ).strip()
+            if hint:
+                return STATUS_TEXT_GENERIC.format(hint=hint)
             return STATUS_TEXT_NUMBER
         if qtype.startswith("single-select") or qtype.startswith("multi-select"):
             return STATUS_TEXT_SELECT
         if qtype.startswith("bool"):
             return STATUS_TEXT_SELECT
         if qtype.startswith("paragraph") or qtype.startswith("short"):
+            if self._status_hint:
+                return STATUS_TEXT_GENERIC.format(hint=self._status_hint)
             limit = question.maxlen or 300
-            return f"Text only, max {limit} chars."
-        hint = self._status_hint or "Check the format."
+            return STATUS_TEXT_GENERIC.format(hint=f"Text only, up to {limit} chars.")
+        hint = (self._status_hint or "Check the format.").strip()
         return STATUS_TEXT_GENERIC.format(hint=hint)
 
     def _answers_by_qid(self) -> dict[str, Any]:
@@ -1575,18 +1581,26 @@ class BaseWelcomeController:
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
         progress = self._progress_label(thread_id, resolved_index)
-        lines = [f"**Onboarding • {progress}**", f"## {label}"]
+
+        badge: str | None = None
+        if key:
+            visibility = self._visibility_map(thread_id)
+            state = _visible_state(visibility, key)
+            if state == "optional":
+                badge = "Input is optional"
+
+        header = f"**Onboarding • {progress}"
+        if badge:
+            header = f"{header} • {badge}"
+        header = f"{header}**"
+
+        lines = [header, f"## {label}"]
 
         help_text = getattr(question, "help", None)
         if isinstance(question, dict):
             help_text = question.get("help") or help_text
         if help_text:
             lines.append(f"_{help_text}_")
-
-        if key:
-            state = _visible_state(self._visibility_map(thread_id), key)
-            if state == "optional":
-                lines.append("_Optional._")
 
         if formatted:
             lines.append(f"**Current answer:** {formatted}")

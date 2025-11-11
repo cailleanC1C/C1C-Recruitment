@@ -57,5 +57,5 @@ def test_render_step_marks_optional(monkeypatch: pytest.MonkeyPatch) -> None:
     controller.answers_by_thread[thread_id] = {}
 
     text = controller.render_step(thread_id, 0)
-    assert "_Optional._" in text
+    assert text.startswith("**Onboarding • 1/1 • Input is optional**")
 

@@ -91,7 +91,7 @@ def test_rolling_card_session_respects_goto_rules() -> None:
         )
 
         await session.start()
-        assert thread.sent_messages[-1].content.startswith("**Onboarding • 1/3**")
+        assert thread.sent_messages[-1].content.startswith("**Onboarding • 1/3 • Input is required**")
         assert "How important is CvC" in thread.sent_messages[-1].content
 
         await session._store_answer(questions[0], "2")

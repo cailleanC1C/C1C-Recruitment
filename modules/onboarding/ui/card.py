@@ -20,9 +20,9 @@ class RollingCard:
 
     def _badge(self, badge_kind: str | None) -> str | None:
         if badge_kind == "required":
-            return "`Required`"
+            return "Input is required"
         if badge_kind == "optional":
-            return "`Optional`"
+            return "Input is optional"
         return None
 
     async def render_question(
@@ -40,18 +40,20 @@ class RollingCard:
     ) -> None:
         message = await self.ensure()
         progress_total = max(total, 1)
-        lines: List[str] = [f"**Onboarding • {index}/{progress_total}**", "", f"### {title}"]
-
+        header = f"**Onboarding • {index}/{progress_total}"
         badge = self._badge(badge_kind)
         if badge:
-            lines.append(badge)
+            header = f"{header} • {badge}"
+        header = f"{header}**"
+
+        lines: List[str] = [header, "", f"### {title}"]
 
         if help_text:
-            lines.append(help_text)
+            lines.append(f"_{help_text}_")
 
         if answer_preview:
             lines.append("")
-            lines.append(f"**Answer:** {answer_preview}")
+            lines.append(f"**Current answer:** {answer_preview}")
 
         if note:
             lines.append("")
