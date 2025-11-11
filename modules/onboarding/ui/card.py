@@ -1,7 +1,7 @@
 """Rolling onboarding card utilities."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 
 import discord
 
@@ -18,28 +18,67 @@ class RollingCard:
             self.message = await self.channel.send("Starting onboarding…")
         return self.message
 
-    async def render(
+    def _badge(self, badge_kind: str | None) -> str | None:
+        if badge_kind == "required":
+            return "`Required`"
+        if badge_kind == "optional":
+            return "`Optional`"
+        return None
+
+    async def render_question(
         self,
+        *,
         index: int,
         total: int,
-        label: str,
+        title: str,
         help_text: str,
-        summary: List[str],
+        badge_kind: str | None,
+        status: Tuple[str, str] | None,
         view: Optional[discord.ui.View],
-        prompt: str | None = None,
+        answer_preview: str | None = None,
+        note: str | None = None,
     ) -> None:
         message = await self.ensure()
         progress_total = max(total, 1)
-        body = f"**Onboarding • {index}/{progress_total}**\n\n## {label}"
+        lines: List[str] = [f"**Onboarding • {index}/{progress_total}**", "", f"### {title}"]
+
+        badge = self._badge(badge_kind)
+        if badge:
+            lines.append(badge)
+
         if help_text:
-            body += f"\n_{help_text}_"
-        if prompt:
-            body += f"\n\n{prompt}"
-        if summary:
-            body += "\n\n**So far**\n" + "\n".join(summary)
+            lines.append(help_text)
+
+        if answer_preview:
+            lines.append("")
+            lines.append(f"**Answer:** {answer_preview}")
+
+        if note:
+            lines.append("")
+            lines.append(note)
+
+        if status:
+            icon, text = status
+            if text:
+                lines.append("")
+                lines.append(f"{icon} {text}")
+
+        body = "\n".join(lines).strip()
         await message.edit(content=body, view=view)
 
-    async def hint(self, text: str) -> None:
-        if self.message is None:
-            return
-        await self.message.edit(content=f"{self.message.content}\n\n❌ *{text}*")
+    async def render_summary(
+        self,
+        *,
+        items: Sequence[Tuple[str, str]],
+    ) -> None:
+        message = await self.ensure()
+        lines: List[str] = ["**Onboarding — Summary**"]
+        if items:
+            for title, value in items:
+                lines.append("")
+                lines.append(f"**{title}**")
+                lines.append(f"> {value or '—'}")
+        else:
+            lines.append("")
+            lines.append("No answers were captured.")
+        await message.edit(content="\n".join(lines), view=None)
