@@ -81,4 +81,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-08 (v0.9.7)
+Doc last updated: 2025-11-11 (v0.9.7)

@@ -51,6 +51,6 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
 
-> Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled.
+> Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-11 (v0.9.7)

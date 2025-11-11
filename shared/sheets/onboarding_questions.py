@@ -62,7 +62,16 @@ class Question:
     help: str | None
     options: tuple[Option, ...]
     multi_max: int | None
+    visibility_rules: str | None
+    nav_rules: str | None
     rules: str | None = None
+
+
+_VALIDATION_OVERRIDES: dict[str, str] = {
+    "w_power": r"regex:^[0-9]+(\.[0-9]{1,2})?[Mm]?$",
+    "w_hydra_clash": r"regex:^\d+(?:\.\d+)?[MmBb]?$",
+    "w_chimera_clash": r"regex:^\d+(?:\.\d+)?[MmBb]?$",
+}
 
 
 def _sheet_id() -> str:
@@ -201,37 +210,28 @@ def _normalise_whitespace(text: str | None) -> str | None:
     return collapsed or None
 
 
+def _normalise_multiline(text: str | None) -> str | None:
+    if text is None:
+        return None
+    lines = [segment.strip() for segment in str(text).splitlines()]
+    cleaned = [line for line in lines if line]
+    return "\n".join(cleaned) or None
+
+
 def _canonicalise_option(label: str) -> Option:
     display = label.strip()
-    token = "-".join(display.lower().split())
-    return Option(label=display, value=token)
+    return Option(label=display, value=display)
 
 
-def _parse_options(note: str | None) -> tuple[Option, ...]:
-    if not note:
+def _parse_options(raw_options: str | None) -> tuple[Option, ...]:
+    if not raw_options:
         return ()
 
-    text = note.strip()
+    text = raw_options.strip()
     if not text:
         return ()
 
-    pieces: list[str]
-    if "," in text:
-        pieces = [piece.strip() for piece in text.split(",")]
-    else:
-        range_match = re.fullmatch(r"(\d+)\s*[-–—]\s*(\d+)", text)
-        if range_match:
-            start = int(range_match.group(1))
-            end = int(range_match.group(2))
-            step = 1 if end >= start else -1
-            pieces = [str(value) for value in range(start, end + step, step)]
-        elif re.fullmatch(r"(?:\d+\s+)+\d+", text):
-            pieces = text.split()
-        elif re.fullmatch(r"\d{2,}", text):
-            pieces = list(text)
-        else:
-            pieces = [text]
-
+    pieces = [segment.strip() for segment in text.split(",")]
     values = [piece for piece in pieces if piece]
     return tuple(_canonicalise_option(piece) for piece in values)
 
@@ -308,7 +308,16 @@ def _build_questions(
         except ValueError:
             log.warning("onboarding question missing type", extra={"qid": qid, "order": order})
             continue
-        options = _parse_options(row.get("note")) if qtype in {"single-select", "multi-select"} else ()
+        qid_key = qid.strip()
+        options = (
+            _parse_options(row.get("options"))
+            if qtype in {"single-select", "multi-select"}
+            else ()
+        )
+        validate_text = _normalise_whitespace(row.get("validate"))
+        override = _VALIDATION_OVERRIDES.get(qid_key)
+        if override:
+            validate_text = override
         question = Question(
             flow=flow,
             order=order.strip(),
@@ -317,10 +326,12 @@ def _build_questions(
             type=qtype,
             required=_canonicalize_required(row.get("required")),
             maxlen=_parse_int(row.get("maxlen")),
-            validate=_normalise_whitespace(row.get("validate")),
+            validate=validate_text,
             help=_normalise_whitespace(row.get("help")),
             options=options,
             multi_max=multi_max,
+            visibility_rules=_normalise_multiline(row.get("visibility_rules")),
+            nav_rules=_normalise_multiline(row.get("nav_rules")),
             rules=_normalise_whitespace(row.get("rules")),
         )
         questions.append(question)
@@ -349,6 +360,8 @@ def _hash_payload(questions: Iterable[Question]) -> str:
                 "help": question.help,
                 "options": [(option.value, option.label) for option in question.options],
                 "multi_max": question.multi_max,
+                "visibility_rules": question.visibility_rules,
+                "nav_rules": question.nav_rules,
             }
         )
     data = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")

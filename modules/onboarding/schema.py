@@ -27,6 +27,9 @@ class Question:
     help: str
     note: str
     rules: str
+    options: Tuple[str, ...]
+    visibility_rules: str
+    nav_rules: str
 
 
 def _order_key(value: str) -> Tuple[int, str]:
@@ -51,6 +54,9 @@ def _to_schema_question(raw: onboarding_questions.Question) -> Question:
         help=(raw.help or ""),
         note=note,
         rules=(raw.rules or ""),
+        options=tuple(option.value for option in raw.options),
+        visibility_rules=(raw.visibility_rules or ""),
+        nav_rules=(raw.nav_rules or ""),
     )
 
 
