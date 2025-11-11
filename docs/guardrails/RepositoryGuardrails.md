@@ -27,9 +27,6 @@ Every audit and CI check validates against this document.
 - **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
 - **C-12 No Order Targets:** Onboarding rules and evaluators must reference question IDs (no order-number or sheet-position logic).
 
-Ah, yeah — the house style in that doc uses **code-style IDs (C-01, F-01, etc.)**, single-sentence bullets, and tight spacing instead of tables or bold headers.
-Here’s your feature-toggle section rewritten to **match that exact spec layout and tone**:
-
 ### 3) Feature Toggles and Config Policy
 * **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
 * **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
@@ -42,7 +39,7 @@ Here’s your feature-toggle section rewritten to **match that exact spec layout
 * **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
 * **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
 
-## 3) Documentation
+## 4) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
 - **D-02 Footer (exact):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.x)`
 - **D-03 ENV SSoT:** `docs/ops/Config.md` is authoritative for all ENV keys; `.env.example` must match its key set.
@@ -52,7 +49,7 @@ Here’s your feature-toggle section rewritten to **match that exact spec layout
 - **D-07 Contract Priority:** CollaborationContract.md governs process and must link to this guardrails spec.
 - **D-08 No Orphan Docs:** Every doc must be linked from `docs/README.md`.
 
-## 4) Governance & Workflow
+## 5) Governance & Workflow
 - **G-01 Version Control:** Versions (bot, footers, changelog) change only on explicit instruction from the owner.
 - **G-02 Codex Scope:** Codex performs only what the PR body instructs—no implicit deletions or moves.
 - **G-03 PR Metadata:** PR bodies include the `[meta]...[/meta]` block for labels and milestone.
