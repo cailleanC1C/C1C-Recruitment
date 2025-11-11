@@ -33,3 +33,23 @@ def test_evaluate_visibility_matches_label_targets() -> None:
     visibility = rules.evaluate_visibility(questions, answers)
 
     assert visibility["hydra_score"]["state"] == "skip"
+
+
+def test_validate_rules_allows_label_targets() -> None:
+    questions = [
+        _question(
+            "101",
+            "stage",
+            "Pick the option that matches your stage best.",
+            rule="if early game skip Hydra Clash score",
+        ),
+        _question(
+            "201",
+            "hydra_score",
+            "What’s your average Hydra Clash score?",
+        ),
+    ]
+
+    errors = rules.validate_rules(questions)
+
+    assert errors == []

@@ -212,6 +212,11 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
 
     order_map = _build_order_map(questions)
     qid_lookup = {question.qid.lower(): question.qid for question in questions}
+    label_lookup = {
+        _normalise_label(getattr(question, "label", "")): question.qid
+        for question in questions
+        if getattr(question, "label", None)
+    }
 
     for question in questions:
         raw_rules = (question.rules or "").strip()
@@ -223,18 +228,18 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
         for _condition, _action, targets in parsed:
             unresolved: list[str] = []
             for target in targets:
-                normalized = target.strip().lower().rstrip(".")
-                if not normalized:
+                if not target.strip():
                     continue
+                resolved = _resolve_targets(
+                    [target], qid_lookup, order_map, label_lookup
+                )
+                if resolved:
+                    continue
+                normalized = target.strip().lower().rstrip(".")
                 if normalized.endswith("*"):
                     base = normalized[:-1]
-                    if not any(order.startswith(base) for order in order_map):
-                        unresolved.append(target)
-                    continue
-                if normalized in order_map:
-                    continue
-                if normalized in qid_lookup:
-                    continue
+                    if any(order.startswith(base) for order in order_map):
+                        continue
                 unresolved.append(target)
             if unresolved:
                 seen: set[str] = set()
