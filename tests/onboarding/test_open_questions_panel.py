@@ -260,7 +260,7 @@ def test_launch_uses_cached_questions_only(monkeypatch: pytest.MonkeyPatch) -> N
         await button.callback(interaction)
 
         controller.get_or_load_questions.assert_awaited_once()
-        thread.send.assert_awaited()
+        thread.send.assert_not_awaited()
         assert response.deferred is True
         network_guard.assert_not_awaited()
         send_exception.assert_not_awaited()

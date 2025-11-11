@@ -101,6 +101,20 @@ def _channel_path(channel: discord.abc.GuildChannel | discord.Thread | None) -> 
     return "#unknown"
 
 
+def _visible_state(visibility: dict[str, dict[str, str]] | None, qid: str | None) -> str:
+    if not visibility or not isinstance(visibility, dict) or not qid:
+        return "show"
+    entry = visibility.get(qid) or {}
+    if isinstance(entry, dict):
+        state = entry.get("state")
+        if isinstance(state, str) and state:
+            return state
+        required = entry.get("required")
+        if required is False:
+            return "optional"
+    return "show"
+
+
 def _log_followup_fallback(
     interaction: discord.Interaction,
     *,
@@ -775,14 +789,15 @@ class OpenQuestionsPanelView(discord.ui.View):
             await _hard_fail("no_questions")
             return
 
+        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
+
         try:
             content = controller.render_step(thread_id, step=0)
+            content = view._apply_requirement_suffix(content, view._question())
         except Exception as exc:
             log.warning("failed to render onboarding wizard step", exc_info=True)
             await _hard_fail("render_failed", error=exc)
             return
-
-        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
 
         message: discord.Message | None = None
         try:
@@ -1165,7 +1180,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             """Rebuild the components and re-render the wizard message if bound."""
 
             self._configure_components()
+            question = self._question()
             content = self.controller.render_step(self.thread_id, self.step)
+            content = self._apply_requirement_suffix(content, question)
             if interaction is not None:
                 response = getattr(interaction, "response", None)
                 if response is not None:
@@ -1262,6 +1279,55 @@ class OpenQuestionsPanelView(discord.ui.View):
             if isinstance(question, dict):
                 return bool(question.get("required"))
             return bool(getattr(question, "required", False))
+
+        def _question_visibility_state(self, question: Any | None) -> str:
+            key = self._question_key(question)
+            if not key:
+                return "show"
+            mapper = getattr(self.controller, "_visibility_map", None)
+            if not callable(mapper):
+                return "show"
+            try:
+                visibility = mapper(self.thread_id)
+            except Exception:
+                log.debug("failed to resolve visibility map for inline wizard", exc_info=True)
+                return "show"
+            return _visible_state(visibility, key)
+
+        def _requirement_suffix(self, question: Any | None) -> str | None:
+            if question is None:
+                return None
+            state = self._question_visibility_state(question)
+            if state == "skip":
+                return None
+            if state == "optional":
+                return "Input is optional"
+            return "Input is required"
+
+        def _apply_requirement_suffix(self, content: str, question: Any | None) -> str:
+            if not isinstance(content, str) or not content:
+                return content
+            suffix = self._requirement_suffix(question)
+            if not suffix:
+                return content
+            header_prefix = "**Onboarding • "
+            if not content.startswith(header_prefix):
+                return content
+            newline = content.find("\n")
+            if newline == -1:
+                header_line = content
+                remainder = ""
+            else:
+                header_line = content[:newline]
+                remainder = content[newline:]
+            if suffix in header_line:
+                return content
+            if header_line.endswith("**"):
+                header_line = header_line[:-2]
+                header_line = f"{header_line} • {suffix}**"
+            else:
+                header_line = f"{header_line} • {suffix}"
+            return f"{header_line}{remainder}"
 
         @staticmethod
         def _note_tokens(note: Any) -> list[str]:
