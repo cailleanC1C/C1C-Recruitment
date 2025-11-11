@@ -1,6 +1,6 @@
 # Changelog
 
-## 2025-11-08
+### v0.9.7 —2025-11-08
 - **Fix:** Restored keep-alive/web server startup by sweeping imports from the deprecated `shared.config` path to `shared.ports.get_port`.
 - **Ops:** Added canonical boot log line `web server listening • port=<n>` to confirm bind.
 - **Guardrails:** New CI check blocks reintroduction of the deprecated import path.
