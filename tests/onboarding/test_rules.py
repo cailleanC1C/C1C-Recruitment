@@ -4,14 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from modules.onboarding import rules
-
-
-@pytest.fixture(autouse=True)
-def _enable_rules_v2(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rules, "_toggle_enabled", lambda: True)
 
 
 def _question(
@@ -32,6 +25,7 @@ def _question(
         order=order,
         order_raw=order,
         rules="",
+        flow="welcome",
     )
 
 
@@ -69,8 +63,7 @@ def test_navigation_cycle_guard_breaks_loop() -> None:
     assert rules.next_index_by_rules(0, questions, {"w_cycle": "loop"}) is None
 
 
-def test_validate_rules_flags_unknown_identifiers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rules, "_toggle_enabled", lambda: True)
+def test_validate_rules_flags_unknown_identifiers() -> None:
     questions = [
         _question(
             "w_target",
@@ -82,8 +75,7 @@ def test_validate_rules_flags_unknown_identifiers(monkeypatch: pytest.MonkeyPatc
     assert any("unknown identifier" in error for error in errors)
 
 
-def test_validate_rules_accepts_valid_dsl(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rules, "_toggle_enabled", lambda: True)
+def test_validate_rules_accepts_valid_dsl() -> None:
     questions = [
         _question("w_gate"),
         _question(
@@ -93,3 +85,31 @@ def test_validate_rules_accepts_valid_dsl(monkeypatch: pytest.MonkeyPatch) -> No
         ),
     ]
     assert rules.validate_rules(questions) == []
+
+
+def test_visibility_precedence_and_flags() -> None:
+    questions = [
+        _question("w_level_detail"),
+        _question(
+            "w_hydra_detail",
+            visibility_rules=(
+                'skip_if(w_level_detail = "Beginner")\n'
+                'optional_if(w_level_detail = "Early Game")\n'
+                'require_if(w_level_detail = "Mid Game")'
+            ),
+        ),
+    ]
+
+    beginner = rules.evaluate_visibility(questions, {"w_level_detail": "Beginner"})
+    assert beginner["w_hydra_detail"]["state"] == "skip"
+    assert beginner["w_hydra_detail"].get("visible") is False
+    assert beginner["w_hydra_detail"]["required"] is False
+
+    early = rules.evaluate_visibility(questions, {"w_level_detail": "Early Game"})
+    assert early["w_hydra_detail"]["state"] == "optional"
+    assert early["w_hydra_detail"].get("visible") is True
+    assert early["w_hydra_detail"]["required"] is False
+
+    mid = rules.evaluate_visibility(questions, {"w_level_detail": "Mid Game"})
+    assert mid["w_hydra_detail"]["state"] == "show"
+    assert mid["w_hydra_detail"]["required"] is True

@@ -25,6 +25,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!refresh [bucket]` | ✅ | Admin bang alias for single-bucket refresh with the same telemetry. | `!refresh [bucket]` |
 | `!refresh all` | ✅ | Bang alias for the full cache sweep (same cooldown as the `!ops` variant). | `!refresh all` |
 | `!reload [--reboot]` | ✅ | Admin bang alias for config reload plus optional soft reboot. | `!reload [--reboot]` |
+| `!reload onboarding` | ✅ | Reload onboarding questions and log the active schema hash. | `!reload onboarding` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
 | `!perm bot list` | ✅ | Show the current bot allow/deny lists with counts and IDs. | `!perm bot list [--json]` |
 | `!perm bot sync` | ✅ | Bulk apply bot role overwrites with audit logging. | `!perm bot sync [--dry] [--threads on|off] [--include voice|stage] [--limit N]` |

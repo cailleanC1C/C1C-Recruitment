@@ -26,11 +26,6 @@ _TARGET_QIDS = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def _enable_rules_v2(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rules, "_toggle_enabled", lambda: True)
-
-
 def _question(
     qid: str,
     *,

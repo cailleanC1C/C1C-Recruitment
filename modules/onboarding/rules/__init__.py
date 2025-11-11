@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from modules.common import feature_flags
 from shared.sheets.onboarding_questions import Question
-
-from . import legacy
 from .evaluator import evaluate_navigation as _evaluate_navigation_v2
 from .evaluator import evaluate_visibility as _evaluate_visibility_v2
 from .parser import (
@@ -25,34 +22,21 @@ from .parser import (
 __all__ = ["evaluate_visibility", "next_index_by_rules", "validate_rules"]
 
 
-def _toggle_enabled() -> bool:
-    try:
-        return feature_flags.is_enabled("onboarding_rules_v2")
-    except Exception:
-        return False
-
-
 def evaluate_visibility(
     questions: Sequence[Question],
     answers: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    if _toggle_enabled():
-        return _evaluate_visibility_v2(questions, answers)
-    return legacy.evaluate_visibility(questions, answers)
+    return _evaluate_visibility_v2(questions, answers)
 
 
 def next_index_by_rules(
     current_idx: int, questions: Sequence[Question], answers: Mapping[str, Any]
 ) -> int | None:
-    if _toggle_enabled():
-        return _evaluate_navigation_v2(current_idx, questions, answers)
-    return legacy.next_index_by_rules(current_idx, list(questions), dict(answers))
+    return _evaluate_navigation_v2(current_idx, questions, answers)
 
 
 def validate_rules(questions: Sequence[Question]) -> list[str]:
-    if _toggle_enabled():
-        return _validate_v2(questions)
-    return legacy.validate_rules(questions)
+    return _validate_v2(questions)
 
 
 def _validate_v2(questions: Sequence[Question]) -> list[str]:

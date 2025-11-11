@@ -202,11 +202,30 @@ class RollingCardSession:
             )
         except Exception:
             self._visibility = {}
+        else:
+            if self.thread_id is not None:
+                self.controller._update_thread_visibility(self.thread_id, self._visibility)
 
     def _visible_state(self, qid: str | None) -> str:
         if not qid:
             return "show"
         return self._visibility.get(qid, {}).get("state", "show")
+
+    def _seek_visible_index(self, start: int, direction: int) -> int | None:
+        total = len(self._steps)
+        if direction >= 0 and start < 0:
+            start = 0
+        if direction < 0 and start >= total:
+            start = total - 1
+        idx = start
+        step = 1 if direction >= 0 else -1
+        while 0 <= idx < total:
+            question = self._steps[idx]
+            qid = getattr(question, "qid", None)
+            if not qid or self._visible_state(qid) != "skip":
+                return idx
+            idx += step
+        return None
 
     @staticmethod
     def _supports(question: SheetQuestionRecord) -> bool:
@@ -571,9 +590,16 @@ class RollingCardSession:
         except Exception:
             jump = None
         if jump is None:
-            self._current_index += 1
+            start = self._current_index + 1
+            direction = 1
         else:
-            self._current_index = jump
+            start = jump
+            direction = 1 if jump >= self._current_index else -1
+        next_index = self._seek_visible_index(start, direction)
+        if next_index is None:
+            self._current_index = len(self._steps)
+        else:
+            self._current_index = next_index
         self._current_question = None
         self._waiting = False
         await self._render_step()
@@ -888,6 +914,16 @@ class BaseWelcomeController:
     async def log_event(self, level: str, event: str, **fields: Any) -> None:
         if diag.is_enabled():
             await diag.log_event(level, event, **fields)
+
+    def _update_thread_visibility(
+        self, thread_id: int | None, visibility: Mapping[str, Mapping[str, Any]]
+    ) -> None:
+        if thread_id is None:
+            return
+        session = store.get(thread_id)
+        if session is None:
+            return
+        session.visibility = dict(visibility)
 
     def get_questions(self, thread_id: int | None) -> list[dict[str, Any]]:
         return [
@@ -2587,7 +2623,7 @@ class BaseWelcomeController:
             labels = ", ".join(f"**{question.label}**" for question in missing_required)
             await _safe_ephemeral(
                 interaction,
-                f"⚠️ Please complete {labels} before submitting.",
+                f"You missed: {labels}.",
             )
             return
 

@@ -47,7 +47,9 @@ class DummyController:
         self.completed.append(thread_id)
 
 
-def _question(order: str, qid: str, label: str, rules: str = "") -> SimpleNamespace:
+def _question(
+    order: str, qid: str, label: str, rules: str = "", nav_rules: str = ""
+) -> SimpleNamespace:
     return SimpleNamespace(
         order=order,
         order_raw=order,
@@ -57,6 +59,7 @@ def _question(order: str, qid: str, label: str, rules: str = "") -> SimpleNamesp
         type="number",
         help="",
         rules=rules,
+        nav_rules=nav_rules,
         maxlen=None,
         validate="",
         required=True,
@@ -72,6 +75,7 @@ def test_rolling_card_session_respects_goto_rules() -> None:
             "importance",
             "How important is CvC to you?",
             rules="if importance <= 2 goto min_commit",
+            nav_rules='goto_if(int(value) <= 2, target="min_commit")',
         ),
         _question("201", "min_cvc", "What’s the minimum CvC points you can commit to?"),
         _question("301", "min_commit", "Next milestone question"),
