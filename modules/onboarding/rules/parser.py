@@ -304,8 +304,12 @@ def _split_nav_body(body: str) -> tuple[str, str | None]:
     expr = parts[0] if parts else ""
     target = None
     for fragment in parts[1:]:
-        if fragment.lower().startswith("target="):
-            target = fragment[len("target=") :].strip()
+        lowered = fragment.lower()
+        if not lowered.startswith("target"):
+            continue
+        before, sep, after = fragment.partition("=")
+        if sep:
+            target = after.strip()
             break
     return expr, target
 

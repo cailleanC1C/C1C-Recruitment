@@ -39,8 +39,8 @@ def test_navigation_first_match_wins() -> None:
     questions = [
         _question(
             "w_siege",
-            nav_rules='goto_if(value = "yes", target="w_siege_detail")\n'
-            'goto_if(value = "no", target="w_cvc")',
+            nav_rules='goto_if(value = "yes", target = "w_siege_detail")\n'
+            'goto_if(value = "no", target = "w_cvc")',
         ),
         _question("w_siege_detail"),
         _question(
