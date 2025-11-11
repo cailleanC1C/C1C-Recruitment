@@ -57,19 +57,5 @@ def test_render_step_marks_optional(monkeypatch: pytest.MonkeyPatch) -> None:
     controller.answers_by_thread[thread_id] = {}
 
     text = controller.render_step(thread_id, 0)
-    assert "Input is optional" in text
-
-
-def test_render_step_marks_required(monkeypatch: pytest.MonkeyPatch) -> None:
-    session = SimpleNamespace(visibility={"ign": {"state": "show", "required": True}}, answers={})
-    monkeypatch.setattr(store, "get", lambda _thread_id: session)
-    bot = SimpleNamespace()
-    controller = WelcomeController(bot)
-    thread_id = 11
-    question = SimpleNamespace(label="IGN", qid="ign", options=[], type="short", required=True, help="")
-    controller._questions[thread_id] = [question]
-    controller.answers_by_thread[thread_id] = {}
-
-    text = controller.render_step(thread_id, 0)
-    assert text.startswith("**Onboarding • 1/1 • Input is required**")
+    assert text.startswith("**Onboarding • 1/1 • Input is optional**")
 

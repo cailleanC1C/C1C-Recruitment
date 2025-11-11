@@ -1583,12 +1583,11 @@ class BaseWelcomeController:
         progress = self._progress_label(thread_id, resolved_index)
 
         badge: str | None = None
-        visibility = self._visibility_map(thread_id)
-        state = _visible_state(visibility, key) if key else None
-        if state == "optional":
-            badge = "Input is optional"
-        elif key and _is_effectively_required(question, visibility):
-            badge = "Input is required"
+        if key:
+            visibility = self._visibility_map(thread_id)
+            state = _visible_state(visibility, key)
+            if state == "optional":
+                badge = "Input is optional"
 
         header = f"**Onboarding • {progress}"
         if badge:
