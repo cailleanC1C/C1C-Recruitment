@@ -21,6 +21,7 @@ from modules.onboarding.schema import (
 )
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.card import RollingCard
+from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_embed import build_summary_embed
@@ -1174,6 +1175,10 @@ class BaseWelcomeController:
         self._inline_message_ids: Dict[int, int] = {}
         self._next_prompt_message_ids: Dict[int, int] = {}
         self.answers_by_thread: Dict[int | None, dict[str, Any]] = {}
+        # Shared session-like state for UI helpers that need to persist
+        # per-thread metadata (e.g., the active panel message id).
+        self.session: dict[str, object] = {"_PANEL_MESSAGES": self._panel_messages}
+        self._panel_manager = PanelMessageManager(self.session)
         recruiter_attr = getattr(self, "recruiter_role_ids", None) or getattr(self, "RECRUITER_ROLE_IDS", None)
         if recruiter_attr:
             self.recruiter_role_ids = list(recruiter_attr)
@@ -1847,67 +1852,43 @@ class BaseWelcomeController:
             base_log.setdefault("parent_id", parent_id_int)
             base_log.setdefault("parent_channel_id", parent_id_int)
 
-        posted_new_message = False
-
-        if message is None and message_id:
+        prev_id = int(message_id) if message_id else None
+        try:
+            message = await self._panel_manager.get_or_create(
+                thread,
+                content=intro,
+                view=view,
+            )
+        except Exception as exc:
+            gate_log.exception(
+                "send_welcome_exception — failed to post onboarding panel • thread=%s",
+                thread.id,
+                exc_info=exc,
+            )
+            await asyncio.sleep(2)
             try:
-                message = await thread.fetch_message(message_id)
-            except discord.NotFound as exc:
-                error_text = f"{exc.__class__.__name__}: {exc}"
-                try:
-                    stale_message_id = int(message_id)
-                except (TypeError, ValueError):
-                    stale_message_id = None
-                stale_context = dict(base_log)
-                stale_context.update(
-                    {
-                        "event": "stale_panel",
-                        "result": "stale_panel",
-                        "message_id": stale_message_id,
-                        "error": error_text,
-                        "details": "view=panel; source=emoji",
-                    }
+                message = await self._panel_manager.get_or_create(
+                    thread,
+                    content=intro,
+                    view=view,
                 )
-                await logs.send_welcome_log("warn", **stale_context)
-
-                try:
-                    message = await self._send_panel_with_retry(thread, content=intro, view=view)
-                except Exception:
-                    return
-                posted_new_message = True
-                message_id = int(message.id)
-                self._panel_messages[thread_id] = message_id
-            except Exception as exc:
-                error_context = dict(base_log)
-                try:
-                    error_context.setdefault("message_id", int(message_id))
-                except (TypeError, ValueError):
-                    pass
-                error_context.update(
-                    {
-                        "event": "stale_panel",
-                        "result": "stale_panel",
-                    }
+            except Exception as retry_exc:
+                gate_log.error(
+                    "send_welcome_exception — retry failed • thread=%s",
+                    thread.id,
+                    exc_info=retry_exc,
                 )
-                await logs.send_welcome_exception("warn", exc, **error_context)
+                raise
 
-        if message is None:
+        posted_new_message = prev_id is None or int(getattr(message, "id", 0)) != prev_id
+        message_id = int(getattr(message, "id", 0))
+        self._panel_messages[thread_id] = message_id
+
+        if getattr(message, "pinned", False):
             try:
-                message = await self._send_panel_with_retry(thread, content=intro, view=view)
+                await message.unpin()
             except Exception:
-                return
-            posted_new_message = True
-            self._panel_messages[thread_id] = message.id
-            message_id = int(message.id)
-        else:
-            message_id = int(getattr(message, "id", message_id))
-            if not posted_new_message:
-                await message.edit(content=intro, view=view)
-                if getattr(message, "pinned", False):
-                    try:
-                        await message.unpin()
-                    except Exception:
-                        log.warning("failed to unpin welcome panel", exc_info=True)
+                log.warning("failed to unpin welcome panel", exc_info=True)
 
         panels.register_panel_message(thread_id, message.id)
 

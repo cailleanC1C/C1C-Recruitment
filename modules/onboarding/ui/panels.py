@@ -11,6 +11,8 @@ from typing import Any, Dict, Iterable, Optional, Sequence
 import discord
 from discord.ext import commands
 
+from modules.onboarding.ui.panel_message_manager import PanelMessageManager
+
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
 
@@ -351,6 +353,8 @@ class OpenQuestionsPanelView(discord.ui.View):
         self._error_notice_ids: set[int] = set()
         self._target_user_id: int | None = None
         self._resume_button: discord.ui.Button | None = None
+        session_state = getattr(controller, "session", {}) if controller else {}
+        self._manager = PanelMessageManager(session_state)
         if diag.is_enabled():
             diag.log_event_sync(
                 "debug",
@@ -372,6 +376,8 @@ class OpenQuestionsPanelView(discord.ui.View):
             except (TypeError, ValueError):
                 self._thread_id = thread_id
         self._update_resume_visibility(self._thread_id, self._target_user_id)
+        session_state = getattr(controller, "session", {}) if controller else {}
+        self._manager = PanelMessageManager(session_state)
 
     @staticmethod
     def _session_exists(thread_id: int, user_id: int) -> bool:
