@@ -134,7 +134,7 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'REPORTS_TAB'
 
 ### Onboarding
-- `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, note, rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
+- `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, options, visibility_rules, nav_rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
 
 ### Onboarding sheet keys
 - 'ONBOARDING_TAB'
@@ -209,4 +209,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-07 (v0.9.7)
+Doc last updated: 2025-11-11 (v0.9.7)

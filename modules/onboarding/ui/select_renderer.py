@@ -127,7 +127,7 @@ class _QuestionSelect(discord.ui.Select):
         self.question = question
         self.visibility = visibility
         existing = _extract_existing_tokens(question, answers.get(question.qid))
-        min_values = 1 if question.required and _visible_state(visibility, question.qid) != "optional" else 0
+        min_values = 1 if _is_required(question, visibility) else 0
         max_values = _resolve_max_values(question)
         options = [
             discord.SelectOption(label=option.label, value=option.value, default=option.value in existing)
@@ -255,6 +255,15 @@ def _extract_existing_tokens(question: Question, stored: object | None) -> set[s
 def _visible_state(visibility: dict[str, dict[str, str]], qid: str) -> str:
     state = visibility.get(qid, {}).get("state")
     return state or "show"
+
+
+def _is_required(question: Question, visibility: dict[str, dict[str, str]]) -> bool:
+    info = visibility.get(question.qid) or {}
+    if "required" in info:
+        return bool(info["required"])
+    if info.get("state") == "optional":
+        return False
+    return bool(question.required)
 
 
 def _resolve_max_values(question: Question) -> int:

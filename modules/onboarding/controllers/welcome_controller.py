@@ -12,7 +12,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Optional, 
 import discord
 from discord.ext import commands
 
-from modules.onboarding import diag, logs, rules
+from modules.onboarding import diag, logs, rules, submit
 from modules.onboarding.schema import (
     Question as SheetQuestionRecord,
     get_cached_welcome_questions,
@@ -2279,7 +2279,7 @@ class BaseWelcomeController:
         for question in questions:
             raw_value = values.get(question.qid, "")
             state = _visible_state(session.visibility, question.qid)
-            required = bool(question.required) and state != "optional"
+            required = _is_effectively_required(question, session.visibility)
             answer = raw_value.strip()
             if required and not answer:
                 await _safe_ephemeral(
@@ -2563,6 +2563,32 @@ class BaseWelcomeController:
                 **self._log_fields(thread_id, actor=interaction.user),
             )
             await _safe_ephemeral(interaction, "⚠️ This onboarding session expired.")
+            return
+
+        questions_for_thread = self._questions.get(thread_id, [])
+        visibility_map = session.visibility or {}
+        if not visibility_map and questions_for_thread:
+            try:
+                visibility_map = rules.evaluate_visibility(
+                    questions_for_thread,
+                    session.answers,
+                )
+            except Exception:
+                visibility_map = {}
+            else:
+                session.visibility = visibility_map
+
+        missing_required = submit.missing_required_questions(
+            questions_for_thread,
+            visibility_map,
+            session.answers,
+        )
+        if missing_required:
+            labels = ", ".join(f"**{question.label}**" for question in missing_required)
+            await _safe_ephemeral(
+                interaction,
+                f"⚠️ Please complete {labels} before submitting.",
+            )
             return
 
         await interaction.response.edit_message(view=None)
@@ -2967,6 +2993,18 @@ def _visible_state(visibility: dict[str, dict[str, str]], qid: str) -> str:
     return visibility.get(qid, {}).get("state", "show")
 
 
+def _is_effectively_required(
+    question: Question, visibility: dict[str, dict[str, str]]
+) -> bool:
+    info = visibility.get(question.qid) or {}
+    if "required" in info:
+        return bool(info["required"])
+    state = info.get("state")
+    if state == "optional":
+        return False
+    return bool(getattr(question, "required", False))
+
+
 def _preview_value_for_question(question: Question, stored: Any) -> str:
     if stored is None:
         return ""
@@ -3017,7 +3055,7 @@ def _missing_required_selects(
         state = _visible_state(visibility, question.qid)
         if state == "skip":
             continue
-        required = bool(question.required) and state != "optional"
+        required = _is_effectively_required(question, visibility)
         if not required:
             continue
         value = answers.get(question.qid)

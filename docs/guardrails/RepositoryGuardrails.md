@@ -25,6 +25,7 @@ Every audit and CI check validates against this document.
 - **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, deprecated shared CoreOps shims, `shared/utils/coreops_*`).
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 - **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
+- **C-12 No Order Targets:** Onboarding rules and evaluators must reference question IDs (no order-number or sheet-position logic).
 
 Ah, yeah — the house style in that doc uses **code-style IDs (C-01, F-01, etc.)**, single-sentence bullets, and tight spacing instead of tables or bold headers.
 Here’s your feature-toggle section rewritten to **match that exact spec layout and tone**:
@@ -36,7 +37,7 @@ Here’s your feature-toggle section rewritten to **match that exact spec layout
 * **F-04 Current Toggles:**
   `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`,
   `placement_target_select`, `placement_reservations`, `clan_profile`, `welcome_dialog`,
-  `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`.
+  `onboarding_rules_v2`, `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`.
 * **F-05 Additions:** New toggles must be added to the sheet and documented here with one-line purpose notes.
 * **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
 * **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
@@ -66,4 +67,4 @@ Here’s your feature-toggle section rewritten to **match that exact spec layout
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-11-08 (v0.9.7)
+Doc last updated: 2025-11-11 (v0.9.7)

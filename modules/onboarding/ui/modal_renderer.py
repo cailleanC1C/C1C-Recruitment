@@ -37,7 +37,7 @@ class WelcomeQuestionnaireModal(discord.ui.Modal):
         for question in self.questions:
             default = _coerce_answer_to_default(self.answers.get(question.qid))
             state = _visible_state(self.visibility, question.qid)
-            required = bool(question.required) and state != "optional"
+            required = _is_required(question, self.visibility)
             text_input = discord.ui.TextInput(
                 label=question.label,
                 custom_id=question.qid,
@@ -111,6 +111,15 @@ def _chunk(items: Sequence[Question], size: int) -> list[list[Question]]:
 def _visible_state(visibility: dict[str, dict[str, str]], qid: str) -> str:
     state = visibility.get(qid, {}).get("state")
     return state or "show"
+
+
+def _is_required(question: Question, visibility: dict[str, dict[str, str]]) -> bool:
+    info = visibility.get(question.qid) or {}
+    if "required" in info:
+        return bool(info["required"])
+    if info.get("state") == "optional":
+        return False
+    return bool(question.required)
 
 
 def _coerce_answer_to_default(value: object | None) -> str | None:
