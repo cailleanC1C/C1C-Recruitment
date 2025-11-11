@@ -62,8 +62,8 @@ class Question:
     help: str | None
     options: tuple[Option, ...]
     multi_max: int | None
-    visibility_rules: str | None
-    nav_rules: str | None
+    visibility_rules: str | None = None
+    nav_rules: str | None = None
     rules: str | None = None
 
 
@@ -223,6 +223,11 @@ def _canonicalise_option(label: str) -> Option:
     return Option(label=display, value=display)
 
 
+_RANGE_PATTERN = re.compile(r"^(?P<start>\d+)\s*[\-\u2013\u2014]\s*(?P<end>\d+)$")
+_WHITESPACE_NUMBERS = re.compile(r"^\d+(?:\s+\d+)+$")
+_COMPACT_DIGITS = re.compile(r"^\d{2,}$")
+
+
 def _parse_options(raw_options: str | None) -> tuple[Option, ...]:
     if not raw_options:
         return ()
@@ -231,9 +236,24 @@ def _parse_options(raw_options: str | None) -> tuple[Option, ...]:
     if not text:
         return ()
 
-    pieces = [segment.strip() for segment in text.split(",")]
-    values = [piece for piece in pieces if piece]
-    return tuple(_canonicalise_option(piece) for piece in values)
+    match = _RANGE_PATTERN.match(text)
+    if match:
+        start = int(match.group("start"))
+        end = int(match.group("end"))
+        if start <= end:
+            return tuple(_canonicalise_option(str(number)) for number in range(start, end + 1))
+
+    raw_segments = re.split(r"[\n,]", text)
+    segments = [segment.strip() for segment in raw_segments if segment.strip()]
+
+    if len(segments) == 1:
+        segment = segments[0]
+        if _WHITESPACE_NUMBERS.match(segment):
+            segments = segment.split()
+        elif _COMPACT_DIGITS.match(segment):
+            segments = list(segment)
+
+    return tuple(_canonicalise_option(segment) for segment in segments)
 
 
 def _normalise_type(raw_type: str | None) -> tuple[str, int | None]:
