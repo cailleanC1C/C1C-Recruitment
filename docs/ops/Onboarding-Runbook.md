@@ -35,7 +35,3 @@ After the final summary is posted, the bot deletes the user's captured answer me
 `!ops onb check` — validate the tab, headers, and required columns.
 
 Doc last updated: 2025-11-05 (v0.9.7)
-[meta]
-labels: comp:onboarding, robustness, P2, ready, docs
-milestone: Harmonize v1.0
-[/meta]
