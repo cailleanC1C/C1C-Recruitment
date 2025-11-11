@@ -21,7 +21,6 @@ All operations are Config-driven, RBAC-checked, and log-visible.
 | --- | --- |
 | Recruit | answers questionnaire only |
 | Recruiter | may reserve, change, cancel, renew spots |
-| Guardian Knight | closes threads; finalizes placements |
 | Bot | handles joins, dialogs, timers, Sheet sync |
 
 ---
