@@ -9,7 +9,9 @@ from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata
 from modules.common import runtime
+from modules.onboarding.schema import get_cached_welcome_questions
 from shared import config as cfg
+from shared.sheets import onboarding_questions
 
 logger = logging.getLogger("c1c.coreops.commands.reload")
 
@@ -69,6 +71,9 @@ class Reload(commands.Cog):
         brief="Reloads runtime configs and command modules.",
     )
     async def reload_command(self, ctx: commands.Context, *flags: str) -> None:
+        if flags and flags[0].lower() == "onboarding":
+            await self._reload_onboarding(ctx)
+            return
         reboot = any(flag == "--reboot" for flag in flags)
         # Re-parse env + re-apply config invariants at runtime.
         cfg.reload_config()
@@ -82,6 +87,28 @@ class Reload(commands.Cog):
             else:
                 message = "✅ Reloaded configuration and rebooted runtime."
         await ctx.send(message)
+
+    async def _reload_onboarding(self, ctx: commands.Context) -> None:
+        try:
+            await get_cached_welcome_questions(force=True)
+        except Exception as exc:
+            logger.exception("onboarding cache reload failed")
+            await ctx.send(f"⚠️ Onboarding reload failed: {exc}")
+            return
+        welcome_hash = onboarding_questions.schema_hash("welcome")
+        try:
+            promo_hash = onboarding_questions.schema_hash("promo")
+        except Exception:
+            promo_hash = ""
+        logger.info(
+            "onboarding reload • welcome=%s • promo=%s",
+            welcome_hash,
+            promo_hash or "n/a",
+        )
+        parts = [f"Welcome `{welcome_hash}`"]
+        if promo_hash:
+            parts.append(f"Promo `{promo_hash}`")
+        await ctx.send(f"✅ Onboarding questions reloaded. {' • '.join(parts)}")
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -31,6 +31,7 @@ log = logging.getLogger("c1c.onboarding.rules")
 
 MAX_VISIBILITY_PASSES = 5
 MAX_NAV_HOPS = 10
+_VISIBILITY_PRIORITY = {"skip": 4, "require": 3, "optional": 2, "show": 1}
 
 
 @dataclass
@@ -263,9 +264,13 @@ def evaluate_visibility(
     questions: Sequence[Question],
     answers: Mapping[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    states: dict[str, QuestionState] = {
+    base_states: dict[str, QuestionState] = {
         question.qid: QuestionState(visible=True, required=bool(question.required))
         for question in questions
+    }
+    states: dict[str, QuestionState] = {
+        qid: QuestionState(state.visible, state.required)
+        for qid, state in base_states.items()
     }
     directives_by_qid: dict[str, list[VisibilityDirective]] = {}
     for question in questions:
@@ -279,22 +284,34 @@ def evaluate_visibility(
     for _pass in range(MAX_VISIBILITY_PASSES):
         changed = False
         for question in questions:
-            current = states[question.qid]
-            directives = directives_by_qid.get(question.qid, [])
+            qid = question.qid
+            base_state = base_states[qid]
+            directives = directives_by_qid.get(qid, [])
+            selected: VisibilityDirective | None = None
+            selected_priority = -1
             for directive in directives:
                 try:
                     context_value = _evaluate(directive.expression, context)
                 except Exception as exc:
-                    _log_rule_error(question.qid, directive.raw, "eval", str(exc))
+                    _log_rule_error(qid, directive.raw, "eval", str(exc))
                     continue
                 if not _truthy(context_value):
                     continue
-                new_state = _apply_visibility(directive.kind, current)
-                if new_state != current:
-                    states[question.qid] = new_state
-                    changed = True
-                    _log_flip(question.qid, current, new_state, directive.raw)
-                    current = new_state
+                priority = _VISIBILITY_PRIORITY.get(directive.kind, 0)
+                if priority > selected_priority:
+                    selected = directive
+                    selected_priority = priority
+            current_state = states[qid]
+            if selected is None:
+                new_state = QuestionState(base_state.visible, base_state.required)
+                directive_label = "base"
+            else:
+                new_state = _apply_visibility(selected.kind, base_state)
+                directive_label = selected.raw
+            if new_state != current_state:
+                states[qid] = new_state
+                changed = True
+                _log_flip(qid, current_state, new_state, directive_label)
         if not changed:
             break
     return {
@@ -302,28 +319,23 @@ def evaluate_visibility(
             "state": "skip"
             if not state.visible
             else ("optional" if not state.required else "show"),
-            "required": bool(state.required),
+            "visible": bool(state.visible),
+            "required": bool(state.visible and state.required),
         }
         for qid, state in states.items()
     }
 
 
-def _apply_visibility(kind: str, state: QuestionState) -> QuestionState:
+def _apply_visibility(kind: str, base_state: QuestionState) -> QuestionState:
     if kind == "skip":
         return QuestionState(visible=False, required=False)
     if kind == "show":
-        if not state.visible:
-            return state
-        return QuestionState(visible=True, required=state.required)
+        return QuestionState(visible=True, required=base_state.required)
     if kind == "optional":
-        if not state.visible:
-            return state
         return QuestionState(visible=True, required=False)
     if kind == "require":
-        if not state.visible:
-            return state
         return QuestionState(visible=True, required=True)
-    return state
+    return QuestionState(base_state.visible, base_state.required)
 
 
 def evaluate_navigation(
@@ -406,9 +418,8 @@ def _log_flip(qid: str, before: QuestionState, after: QuestionState, directive: 
             "info",
             "rules.flip",
             target=qid,
-            source_state=before.humanized(),
-            target_state=after.humanized(),
             directive=directive,
+            **{"from": before.humanized(), "to": after.humanized()},
         )
 
 
@@ -420,7 +431,7 @@ def _log_nav(source: str, target: str, directive: str) -> None:
             "rules.nav",
             source=source,
             target=target,
-            directive=directive,
+            reason=directive,
         )
 
 

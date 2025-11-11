@@ -371,6 +371,8 @@ def _hash_payload(questions: Iterable[Question]) -> str:
     for question in questions:
         payload.append(
             {
+                "flow": question.flow,
+                "order": question.order,
                 "qid": question.qid,
                 "label": question.label,
                 "type": question.type,
@@ -379,7 +381,6 @@ def _hash_payload(questions: Iterable[Question]) -> str:
                 "validate": question.validate,
                 "help": question.help,
                 "options": [(option.value, option.label) for option in question.options],
-                "multi_max": question.multi_max,
                 "visibility_rules": question.visibility_rules,
                 "nav_rules": question.nav_rules,
             }
