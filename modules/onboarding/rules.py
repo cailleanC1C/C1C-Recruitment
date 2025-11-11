@@ -12,6 +12,8 @@ VisibilityState = Dict[str, Dict[str, str]]
 
 _SKIP_PRIORITY = {"show": 0, "optional": 1, "skip": 2}
 
+_LABEL_SANITIZE_RE = re.compile(r"[^a-z0-9 ]+")
+
 _OPTIONAL_ACTION = "optional"
 _SKIP_ACTION = "skip"
 
@@ -29,6 +31,11 @@ def evaluate_visibility(
 
     order_map = _build_order_map(questions)
     qid_lookup = {question.qid.lower(): question.qid for question in questions}
+    label_lookup = {
+        _normalise_label(getattr(question, "label", "")): question.qid
+        for question in questions
+        if getattr(question, "label", None)
+    }
 
     for question in questions:
         if not question.rules:
@@ -41,7 +48,7 @@ def evaluate_visibility(
             condition_tokens = _normalise_token_variants(condition)
             if not question_tokens.intersection(condition_tokens):
                 continue
-            qids = _resolve_targets(targets, qid_lookup, order_map)
+            qids = _resolve_targets(targets, qid_lookup, order_map, label_lookup)
             for qid in qids:
                 _apply_action(states, qid, action)
     return states
@@ -140,10 +147,18 @@ def _split_targets(text: str) -> list[str]:
     return [token for token in tokens if token]
 
 
+def _normalise_label(value: str | None) -> str:
+    if not value:
+        return ""
+    collapsed = " ".join(str(value).strip().lower().split())
+    return _LABEL_SANITIZE_RE.sub("", collapsed)
+
+
 def _resolve_targets(
     targets: SequenceABC[str],
     qid_lookup: MappingABC[str, str],
     order_map: MappingABC[str, SequenceABC[str]],
+    label_lookup: MappingABC[str, str] | None = None,
 ) -> set[str]:
     resolved: set[str] = set()
     for target in targets:
@@ -162,6 +177,18 @@ def _resolve_targets(
         qid = qid_lookup.get(normalized)
         if qid:
             resolved.add(qid)
+            continue
+        if label_lookup:
+            label_key = _normalise_label(normalized)
+            direct = label_lookup.get(label_key)
+            if direct:
+                resolved.add(direct)
+                continue
+            for key, candidate in label_lookup.items():
+                if not key or not label_key:
+                    continue
+                if key == label_key or key.endswith(label_key) or label_key.endswith(key) or label_key in key:
+                    resolved.add(candidate)
     return resolved
 
 
@@ -185,6 +212,11 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
 
     order_map = _build_order_map(questions)
     qid_lookup = {question.qid.lower(): question.qid for question in questions}
+    label_lookup = {
+        _normalise_label(getattr(question, "label", "")): question.qid
+        for question in questions
+        if getattr(question, "label", None)
+    }
 
     for question in questions:
         raw_rules = (question.rules or "").strip()
@@ -196,18 +228,18 @@ def validate_rules(questions: SequenceABC[Question]) -> List[str]:
         for _condition, _action, targets in parsed:
             unresolved: list[str] = []
             for target in targets:
-                normalized = target.strip().lower().rstrip(".")
-                if not normalized:
+                if not target.strip():
                     continue
+                resolved = _resolve_targets(
+                    [target], qid_lookup, order_map, label_lookup
+                )
+                if resolved:
+                    continue
+                normalized = target.strip().lower().rstrip(".")
                 if normalized.endswith("*"):
                     base = normalized[:-1]
-                    if not any(order.startswith(base) for order in order_map):
-                        unresolved.append(target)
-                    continue
-                if normalized in order_map:
-                    continue
-                if normalized in qid_lookup:
-                    continue
+                    if any(order.startswith(base) for order in order_map):
+                        continue
                 unresolved.append(target)
             if unresolved:
                 seen: set[str] = set()

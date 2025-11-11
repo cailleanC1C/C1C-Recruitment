@@ -863,6 +863,7 @@ class BaseWelcomeController:
         self._target_message_ids: Dict[int, int | None] = {}
         self.retry_message_ids: Dict[int, int] = {}
         self._inline_messages: Dict[int, discord.Message] = {}
+        self._inline_message_ids: Dict[int, int] = {}
         self._next_prompt_message_ids: Dict[int, int] = {}
         self.answers_by_thread: Dict[int | None, dict[str, Any]] = {}
         recruiter_attr = getattr(self, "recruiter_role_ids", None) or getattr(self, "RECRUITER_ROLE_IDS", None)
@@ -1294,7 +1295,13 @@ class BaseWelcomeController:
         *,
         message: discord.Message | None = None,
     ) -> None:
-        answers = self.answers_by_thread.get(thread_id, {})
+        session = store.get(thread_id)
+        answers: dict[str, Any] = {}
+        if session is not None and session.answers:
+            answers.update(session.answers)
+        inline_answers = self.answers_by_thread.get(thread_id, {})
+        if inline_answers:
+            answers.update(inline_answers)
         if message is None:
             message = getattr(interaction, "message", None)
         notice = "✅ Collected. Posting summary…"
@@ -1309,6 +1316,9 @@ class BaseWelcomeController:
         inline_map = getattr(self, "_inline_messages", None)
         if isinstance(inline_map, dict):
             inline_map.pop(thread_id, None)
+        id_map = getattr(self, "_inline_message_ids", None)
+        if isinstance(id_map, dict):
+            id_map.pop(thread_id, None)
 
         thread: discord.Thread | None = None
         if message is not None:
@@ -1782,7 +1792,15 @@ class BaseWelcomeController:
             raise
 
         if not questions_for_thread:
-            raise RuntimeError("no questions available for inline wizard")
+            store.set_pending_step(thread_id, None)
+            if diag.is_enabled():
+                await diag.log_event(
+                    "warning",
+                    "inline_launch_skipped",
+                    skip_reason="no_questions",
+                    **diag_state,
+                )
+            return
 
         if not session.visibility:
             try:
@@ -1824,6 +1842,12 @@ class BaseWelcomeController:
         message: discord.Message | None = None
         reused_existing = False
         existing_map = getattr(self, "_inline_messages", None)
+        id_map = getattr(self, "_inline_message_ids", None)
+
+        thread: discord.Thread | None = self._threads.get(thread_id)
+        if thread is None and isinstance(interaction.channel, discord.Thread):
+            thread = interaction.channel
+
         if isinstance(existing_map, dict):
             existing_message = existing_map.get(thread_id)
             if existing_message is not None:
@@ -1834,6 +1858,38 @@ class BaseWelcomeController:
                 else:
                     message = existing_message
                     reused_existing = True
+                    if isinstance(id_map, dict):
+                        try:
+                            id_map[thread_id] = int(existing_message.id)
+                        except Exception:
+                            id_map.pop(thread_id, None)
+
+        if message is None and isinstance(id_map, dict):
+            message_id = id_map.get(thread_id)
+            if message_id and thread is not None:
+                fetched: discord.Message | None = None
+                try:
+                    fetched = await thread.fetch_message(message_id)
+                except Exception:
+                    id_map.pop(thread_id, None)
+                if fetched is not None:
+                    try:
+                        await fetched.edit(content=content, view=wizard)
+                    except Exception:
+                        id_map.pop(thread_id, None)
+                        try:
+                            await fetched.delete()
+                        except Exception:
+                            log.debug("failed to delete stale inline wizard message", exc_info=True)
+                    else:
+                        message = fetched
+                        reused_existing = True
+                        if isinstance(existing_map, dict):
+                            existing_map[thread_id] = fetched
+                        try:
+                            id_map[thread_id] = int(fetched.id)
+                        except Exception:
+                            id_map.pop(thread_id, None)
 
         send_callable: Callable[..., Awaitable[Any]] | None = None
         uses_followup = False
@@ -1875,6 +1931,12 @@ class BaseWelcomeController:
                         message = await interaction.original_response()
                     except Exception:
                         message = None
+
+        if not reused_existing and message is not None and isinstance(id_map, dict):
+            try:
+                id_map[thread_id] = int(message.id)
+            except Exception:
+                id_map.pop(thread_id, None)
 
         if reused_existing and response is not None and not response_done:
             try:
@@ -2014,7 +2076,7 @@ class BaseWelcomeController:
             log.warning(
                 "failed to rehydrate welcome questions", exc_info=True
             )
-            raise
+            return False
 
         self._questions[thread_id] = list(refreshed)
         if session is not None:
@@ -2587,6 +2649,7 @@ class BaseWelcomeController:
         if panel_message_id is not None:
             panels.mark_panel_inactive_by_message(panel_message_id)
         self._prefetched_panels.pop(thread_id, None)
+        self._inline_message_ids.pop(thread_id, None)
         panels.unbind_controller(thread_id)
 
     async def _ensure_target_cached(
