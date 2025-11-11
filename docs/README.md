@@ -53,24 +53,24 @@ It exists so that contributors update the correct references after each developm
 * [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
 ### `/docs/ops/` — Operational Documentation
-* [`Architecture.md`](ops/Architecture.md) — detailed system flow, runtime design, and module topology.
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
-* [`env.md`](ops/env.md) — minimal environment checklist highlighting required sheet IDs and removed aliases.
+* [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
+* [`keepalive.md`](ops/keepalive.md) — watchdog expectations, heartbeat tuning, and stall recovery notes.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
+* [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
+* [`Onboarding.md`](ops/Onboarding.md) — onboarding sheet schema, cache lifecycle, and escalation playbook.
 * [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
-* [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
-* [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
-* [`WelcomeDiag.md`](ops/WelcomeDiag.md) — temporary welcome flow diagnostics flag and log locations.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
 * [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
 * [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
 * [`Watchers.md`](ops/Watchers.md) — environment-gated welcome/promo listeners and cache refresh scheduler notes.
+* [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
+* [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
 * [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
 * [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
-* [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
 
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.

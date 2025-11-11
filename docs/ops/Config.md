@@ -24,11 +24,13 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
 
-**Optional:** `ONBOARDING_SHEET_ID`, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
 All sheet-facing modules now require their dedicated `*_SHEET_ID` variables; 
 
 Missing any **Required** key causes the bot to exit with an error at startup. If `LOG_CHANNEL_ID` is empty, Discord channel logging is disabled and a one-time startup warning is emitted.
+
+\* Leaving `ONBOARDING_SHEET_ID` empty allows the process to boot, but onboarding watchers, cache refreshes, and questionnaire-driven commands either skip their work or emit soft errors.
 
 ### Core runtime
 | Key | Type | Default | Notes |
