@@ -317,7 +317,7 @@ class RollingCardSession:
         self._current_question = question
 
         visibility = self._visibility.get(question.qid, {})
-        required = bool(visibility.get("required"))
+        required = bool(visibility.get("required", question.required))
         state = visibility.get("state") or ("show" if required else "optional")
 
         has_answer = self._has_answer(question)
