@@ -1859,8 +1859,26 @@ class BaseWelcomeController:
                 content=intro,
                 view=view,
             )
-        except Exception:
-            return
+        except Exception as exc:
+            gate_log.exception(
+                "send_welcome_exception — failed to post onboarding panel • thread=%s",
+                thread.id,
+                exc_info=exc,
+            )
+            await asyncio.sleep(2)
+            try:
+                message = await self._panel_manager.get_or_create(
+                    thread,
+                    content=intro,
+                    view=view,
+                )
+            except Exception as retry_exc:
+                gate_log.error(
+                    "send_welcome_exception — retry failed • thread=%s",
+                    thread.id,
+                    exc_info=retry_exc,
+                )
+                raise
 
         posted_new_message = prev_id is None or int(getattr(message, "id", 0)) != prev_id
         message_id = int(getattr(message, "id", 0))
