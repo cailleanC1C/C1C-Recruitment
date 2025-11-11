@@ -97,3 +97,15 @@ def test_server_side_requiredness_matches_visibility(_visibility_questions) -> N
         answers={},
     )
     assert all(question.qid not in _TARGET_QIDS for question in missing_beginner)
+
+
+def test_boolean_literals_in_visibility_rules() -> None:
+    questions = [
+        _question("w_intro", required=True, qtype="single-select"),
+        _question("w_flag", visibility_rules="skip_if(true)"),
+    ]
+
+    visibility = rules.evaluate_visibility(questions, answers={})
+
+    assert visibility["w_flag"]["state"] == "skip"
+    assert visibility["w_flag"]["required"] is False

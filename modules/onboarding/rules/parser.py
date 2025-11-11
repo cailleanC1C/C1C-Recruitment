@@ -230,6 +230,9 @@ def _parse_term(stream: _TokenStream) -> Expression:
     if token.kind == "NAME":
         stream.advance()
         name = token.value
+        lowered = name.lower()
+        if lowered in {"true", "false"}:
+            return Literal(lowered == "true")
         if stream.match("LPAREN"):
             args: List[Expression] = []
             if not stream.match("RPAREN"):
