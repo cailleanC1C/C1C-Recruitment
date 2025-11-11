@@ -149,6 +149,16 @@ _PANEL_RETRY_DELAYS = (0.5, 1.0, 2.0)
 TEXT_TYPES = {"short", "paragraph", "number"}
 SELECT_TYPES = {"single-select", "multi-select"}
 
+STATUS_ICON_WAITING = "✍️"
+STATUS_ICON_SAVED = "✅"
+STATUS_ICON_ERROR = "⚠️"
+STATUS_TEXT_WAITING = "Press \"Enter answer\" and type your answer below."
+STATUS_TEXT_SAVED = "Saved. Click Next."
+STATUS_TEXT_NUMBER = "Use a number like 12.6M (no commas)."
+STATUS_TEXT_SELECT = "Pick one option."
+STATUS_TEXT_GENERIC = "Invalid format: {hint}"
+MAP_CHANGED_NOTE = "↪ Skipped questions updated."
+
 
 class RollingCardSession:
     """Lightweight rolling-card flow for welcome text/number questions."""
@@ -193,6 +203,10 @@ class RollingCardSession:
         self._waiting = False
         self._closed = False
         self._visibility: dict[str, dict[str, str]] = {}
+        self._status_question: str | None = None
+        self._status_state: str = "waiting"
+        self._status_hint: str | None = None
+        self._note: str | None = None
         self._recompute_visibility()
 
     def _recompute_visibility(self) -> None:
@@ -301,118 +315,177 @@ class RollingCardSession:
             return
         question = self._steps[self._current_index]
         self._current_question = question
-        self._waiting = False
-        view = self._view_for_question(question)
-        state = self._visible_state(question.qid)
-        help_text = question.help
+
+        visibility = self._visibility.get(question.qid, {})
+        required = bool(visibility.get("required"))
+        state = visibility.get("state") or ("show" if required else "optional")
+
+        has_answer = self._has_answer(question)
+        if self._status_question != question.qid:
+            self._status_question = question.qid
+            self._status_hint = None
+            self._status_state = "saved" if has_answer else "waiting"
+            self._waiting = False
+
+        view = self._view_for_question(question, required=required, has_answer=has_answer)
+        help_text = question.help or ""
+        badge_kind: str | None
         if state == "optional":
-            optional_hint = "_Optional._"
-            if help_text:
-                help_text = f"{help_text}\n{optional_hint}"
-            else:
-                help_text = optional_hint
-        prompt = self._prompt_line(question)
-        await self.card.render(
-            self._current_index + 1,
-            len(self._steps),
-            question.label,
-            help_text or "",
-            self._summary_lines(),
-            view,
-            prompt=prompt,
+            badge_kind = "optional"
+        elif state == "show" and required:
+            badge_kind = "required"
+        else:
+            badge_kind = "required" if required else None
+
+        answer_preview = None
+        if has_answer:
+            answer_preview = self._value_for_summary(self._answers.get(question.qid))
+
+        await self.card.render_question(
+            index=self._current_index + 1,
+            total=len(self._steps),
+            title=question.label,
+            help_text=help_text,
+            badge_kind=badge_kind,
+            status=self._status_payload(question),
+            view=view,
+            answer_preview=answer_preview,
+            note=self._note,
+        )
+        self._note = None
+
+    def _view_for_question(
+        self,
+        question: SheetQuestionRecord,
+        *,
+        required: bool,
+        has_answer: bool,
+    ) -> discord.ui.View:
+        qtype = (question.qtype or "").lower()
+        session = self
+        waiting_active = self._waiting and self._status_question == question.qid
+
+        class CardView(discord.ui.View):
+            def __init__(self) -> None:
+                super().__init__(timeout=None)
+
+                if qtype == "bool":
+
+                    async def submit_bool(interaction: discord.Interaction, choice: bool) -> None:
+                        await session._handle_bool_answer(interaction, question, choice)
+
+                    yes_button = discord.ui.Button(
+                        label="Yes",
+                        style=discord.ButtonStyle.success,
+                        custom_id=f"welcome.card.bool:{question.qid}:yes",
+                        disabled=waiting_active,
+                    )
+
+                    async def yes_callback(interaction: discord.Interaction) -> None:
+                        await submit_bool(interaction, True)
+
+                    yes_button.callback = yes_callback  # type: ignore[assignment]
+                    self.add_item(yes_button)
+
+                    no_button = discord.ui.Button(
+                        label="No",
+                        style=discord.ButtonStyle.danger,
+                        custom_id=f"welcome.card.bool:{question.qid}:no",
+                        disabled=waiting_active,
+                    )
+
+                    async def no_callback(interaction: discord.Interaction) -> None:
+                        await submit_bool(interaction, False)
+
+                    no_button.callback = no_callback  # type: ignore[assignment]
+                    self.add_item(no_button)
+
+                elif qtype.startswith("single-select") or qtype.startswith("multi-select"):
+                    select_view = session._select_view(question)
+                    if select_view is not None:
+                        for child in select_view.children:
+                            self.add_item(child)
+
+                include_enter = qtype.startswith("short") or qtype.startswith("paragraph") or qtype.startswith("number")
+                session._attach_nav_buttons(
+                    self,
+                    question,
+                    required=required,
+                    has_answer=has_answer,
+                    include_enter=include_enter,
+                )
+
+        return CardView()
+
+    def _attach_nav_buttons(
+        self,
+        view: discord.ui.View,
+        question: SheetQuestionRecord,
+        *,
+        required: bool,
+        has_answer: bool,
+        include_enter: bool,
+    ) -> None:
+        session = self
+        waiting_active = self._waiting and self._status_question == question.qid
+        can_back = self._seek_visible_index(self._current_index - 1, -1) is not None
+        can_next = (not waiting_active) and (has_answer or not required)
+
+        if include_enter:
+            enter_button = discord.ui.Button(
+                label="Enter answer",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"welcome.card.enter:{question.qid}",
+                disabled=waiting_active,
+            )
+
+            async def enter_callback(interaction: discord.Interaction) -> None:
+                await session._handle_enter(interaction, question)
+
+            enter_button.callback = enter_callback  # type: ignore[assignment]
+            enter_button.row = 1
+            view.add_item(enter_button)
+
+        back_button = discord.ui.Button(
+            label="Back",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"welcome.card.nav:{question.qid}:back",
+            disabled=not can_back,
         )
 
-    def _summary_lines(self) -> list[str]:
-        lines = []
-        for question in self._answer_order:
-            value = self._answers.get(question.qid)
-            if value is None:
-                continue
-            label = question.label or question.qid
-            lines.append(f"• **{label}:** {self._value_for_summary(value)}")
-        return lines
+        async def back_callback(interaction: discord.Interaction) -> None:
+            await session._handle_back(interaction)
 
-    def _view_for_question(self, question: SheetQuestionRecord) -> discord.ui.View:
-        qtype = (question.qtype or "").lower()
-        if qtype == "bool":
-            return self._bool_view(question)
-        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
-            view = self._select_view(question)
-            if view is not None:
-                return view
-        return self._enter_view(question)
+        back_button.callback = back_callback  # type: ignore[assignment]
+        back_button.row = 1
+        view.add_item(back_button)
 
-    def _prompt_line(self, question: SheetQuestionRecord) -> str:
-        qtype = (question.qtype or "").lower()
-        if qtype == "bool":
-            return "Tap **Yes** or **No** below."
-        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
-            return "Choose from the dropdown to continue."
-        return "Press **Enter answer** to respond."
+        next_button = discord.ui.Button(
+            label="Next",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"welcome.card.nav:{question.qid}:next",
+            disabled=not can_next,
+        )
 
-    def _enter_view(self, question: SheetQuestionRecord) -> discord.ui.View:
-        session = self
+        async def next_callback(interaction: discord.Interaction) -> None:
+            await session._handle_next(interaction)
 
-        class EnterAnswerView(discord.ui.View):
-            def __init__(self) -> None:
-                super().__init__(timeout=None)
+        next_button.callback = next_callback  # type: ignore[assignment]
+        next_button.row = 1
+        view.add_item(next_button)
 
-            @discord.ui.button(
-                label="Enter answer",
-                style=discord.ButtonStyle.primary,
-                custom_id=f"welcome.card.enter:{question.qid}",
-            )
-            async def _enter(  # type: ignore[override]
-                self, interaction: discord.Interaction, _: discord.ui.Button
-            ) -> None:
-                await session._handle_enter(interaction)
+        cancel_button = discord.ui.Button(
+            label="Cancel",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"welcome.card.nav:{question.qid}:cancel",
+        )
 
-        return EnterAnswerView()
+        async def cancel_callback(interaction: discord.Interaction) -> None:
+            await session._handle_cancel(interaction)
 
-    def _bool_view(self, question: SheetQuestionRecord) -> discord.ui.View:
-        session = self
-
-        async def submit(interaction: discord.Interaction, choice: bool) -> None:
-            if not session._is_owner(getattr(interaction, "user", None)):
-                try:
-                    await interaction.response.send_message(
-                        "Only the ticket owner can answer.", ephemeral=True
-                    )
-                except Exception:
-                    pass
-                return
-            try:
-                await interaction.response.defer()
-            except discord.InteractionResponded:
-                pass
-            token = "yes" if choice else "no"
-            await session._store_answer_and_advance(question, token)
-
-        class BoolView(discord.ui.View):
-            def __init__(self) -> None:
-                super().__init__(timeout=None)
-
-            @discord.ui.button(
-                label="Yes",
-                style=discord.ButtonStyle.success,
-                custom_id=f"welcome.card.bool:{question.qid}:yes",
-            )
-            async def yes(  # type: ignore[override]
-                self, interaction: discord.Interaction, _: discord.ui.Button
-            ) -> None:
-                await submit(interaction, True)
-
-            @discord.ui.button(
-                label="No",
-                style=discord.ButtonStyle.danger,
-                custom_id=f"welcome.card.bool:{question.qid}:no",
-            )
-            async def no(  # type: ignore[override]
-                self, interaction: discord.Interaction, _: discord.ui.Button
-            ) -> None:
-                await submit(interaction, False)
-
-        return BoolView()
+        cancel_button.callback = cancel_callback  # type: ignore[assignment]
+        cancel_button.row = 1
+        view.add_item(cancel_button)
 
     def _select_view(self, question: SheetQuestionRecord) -> discord.ui.View | None:
         options = parse_values_list(question.validate)
@@ -441,26 +514,6 @@ class RollingCardSession:
 
         session = self
 
-        async def submit(interaction: discord.Interaction, values: list[str]) -> None:
-            if not session._is_owner(getattr(interaction, "user", None)):
-                try:
-                    await interaction.response.send_message(
-                        "Only the ticket owner can answer.", ephemeral=True
-                    )
-                except Exception:
-                    pass
-                return
-            try:
-                await interaction.response.defer()
-            except discord.InteractionResponded:
-                pass
-            payload: Any
-            if max_values > 1:
-                payload = list(values)
-            else:
-                payload = values[0] if values else ""
-            await session._store_answer_and_advance(question, payload)
-
         class SelectPrompt(discord.ui.View):
             def __init__(self) -> None:
                 super().__init__(timeout=None)
@@ -469,7 +522,12 @@ class RollingCardSession:
             def _build_select(self) -> discord.ui.Select:
                 class AnswerSelect(discord.ui.Select):
                     async def callback(self, interaction: discord.Interaction) -> None:
-                        await submit(interaction, list(self.values))
+                        await session._handle_select_answer(
+                            interaction,
+                            question,
+                            list(self.values),
+                            multi=max_values > 1,
+                        )
 
                 select = AnswerSelect(
                     placeholder="Select…",
@@ -484,7 +542,9 @@ class RollingCardSession:
 
         return SelectPrompt()
 
-    async def _handle_enter(self, interaction: discord.Interaction) -> None:
+    async def _handle_enter(
+        self, interaction: discord.Interaction, question: SheetQuestionRecord
+    ) -> None:
         if not self._is_owner(getattr(interaction, "user", None)):
             try:
                 await interaction.response.send_message(
@@ -494,20 +554,134 @@ class RollingCardSession:
                 pass
             return
         self._waiting = True
-        owner_name = self._owner_display_name()
-        view = discord.ui.View(timeout=None)
-        view.add_item(
-            discord.ui.Button(
-                label=f"Waiting for {owner_name}…",
-                disabled=True,
-                style=discord.ButtonStyle.secondary,
-            )
-        )
-        try:
-            await interaction.response.edit_message(view=view)
-        except discord.InteractionResponded:
-            await interaction.edit_original_response(view=view)
+        self._status_question = question.qid
+        self._status_state = "waiting"
+        self._status_hint = None
+        await self._defer_interaction(interaction)
         self._log_event("⌛", "waiting")
+        await self._render_step()
+
+    async def _handle_bool_answer(
+        self,
+        interaction: discord.Interaction,
+        question: SheetQuestionRecord,
+        choice: bool,
+    ) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        await self._defer_interaction(interaction)
+        token = "yes" if choice else "no"
+        await self._store_answer(question, token)
+
+    async def _handle_select_answer(
+        self,
+        interaction: discord.Interaction,
+        question: SheetQuestionRecord,
+        values: list[str],
+        *,
+        multi: bool,
+    ) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        await self._defer_interaction(interaction)
+        payload: Any
+        if multi:
+            payload = list(values)
+        else:
+            payload = values[0] if values else ""
+        await self._store_answer(question, payload)
+
+    async def _handle_back(self, interaction: discord.Interaction) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        await self._defer_interaction(interaction)
+        await self._advance(direction=-1)
+
+    async def _handle_next(self, interaction: discord.Interaction) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        question = self._current_question
+        if question is None:
+            await self._defer_interaction(interaction)
+            return
+        waiting_active = self._waiting and self._status_question == question.qid
+        visibility = self._visibility.get(question.qid, {})
+        required = bool(visibility.get("required"))
+        has_answer = self._has_answer(question)
+        if waiting_active or (required and not has_answer):
+            await self._defer_interaction(interaction)
+            return
+        await self._defer_interaction(interaction)
+        await self._advance(direction=1)
+
+    async def _handle_cancel(self, interaction: discord.Interaction) -> None:
+        if not self._is_owner(getattr(interaction, "user", None)):
+            try:
+                await interaction.response.send_message(
+                    "Only the ticket owner can answer.", ephemeral=True
+                )
+            except Exception:
+                pass
+            return
+        await self._defer_interaction(interaction)
+        await self.close(reason="user_cancelled")
+        try:
+            message = await self.card.ensure()
+        except Exception:
+            return
+        try:
+            await message.edit(
+                content="Onboarding cancelled. You can press **Open questions** to start again.",
+                view=None,
+            )
+        except Exception:
+            pass
+
+    async def _defer_interaction(self, interaction: discord.Interaction) -> None:
+        response = getattr(interaction, "response", None)
+        if response is None:
+            return
+        is_done_attr = getattr(response, "is_done", None)
+        already_done = False
+        if callable(is_done_attr):
+            try:
+                already_done = bool(is_done_attr())
+            except Exception:
+                already_done = False
+        elif isinstance(is_done_attr, bool):
+            already_done = is_done_attr
+        if already_done:
+            return
+        try:
+            await response.defer_update()
+        except discord.InteractionResponded:
+            pass
+        except Exception:
+            pass
 
     def _value_tokens(self, value: Any) -> list[str]:
         if value is None:
@@ -552,15 +726,47 @@ class RollingCardSession:
             return lowered.capitalize()
         return token
 
+    def _has_answer(self, question: SheetQuestionRecord) -> bool:
+        if question.qid not in self._answers:
+            return False
+        return bool(self._value_tokens(self._answers[question.qid]))
+
+    def _status_payload(self, question: SheetQuestionRecord) -> tuple[str, str]:
+        if self._status_question != question.qid:
+            state = "saved" if self._has_answer(question) else "waiting"
+        else:
+            state = self._status_state
+
+        if state == "saved":
+            return STATUS_ICON_SAVED, STATUS_TEXT_SAVED
+        if state == "error":
+            return STATUS_ICON_ERROR, self._status_error_text(question)
+        return STATUS_ICON_WAITING, STATUS_TEXT_WAITING
+
+    def _status_error_text(self, question: SheetQuestionRecord) -> str:
+        qtype = (question.qtype or "").lower()
+        if qtype.startswith("number"):
+            return STATUS_TEXT_NUMBER
+        if qtype.startswith("single-select") or qtype.startswith("multi-select"):
+            return STATUS_TEXT_SELECT
+        if qtype.startswith("bool"):
+            return STATUS_TEXT_SELECT
+        if qtype.startswith("paragraph") or qtype.startswith("short"):
+            limit = question.maxlen or 300
+            return f"Text only, max {limit} chars."
+        hint = self._status_hint or "Check the format."
+        return STATUS_TEXT_GENERIC.format(hint=hint)
+
     def _answers_by_qid(self) -> dict[str, Any]:
         return dict(self._answers)
 
-    async def _store_answer_and_advance(
+    async def _store_answer(
         self,
         question: SheetQuestionRecord,
         value: Any,
         *,
         source_message_id: int | None = None,
+        advance_if_hidden: bool = True,
     ) -> None:
         self._answers[question.qid] = value
         if question not in self._answer_order:
@@ -581,26 +787,70 @@ class RollingCardSession:
             except Exception:
                 pass
         self._log_event("✅", "answer")
-        answers_by_qid = self._answers_by_qid()
+        previous_visibility = dict(self._visibility)
         self._recompute_visibility()
-        try:
-            jump = rules.next_index_by_rules(
-                self._current_index, list(self._steps), answers_by_qid
-            )
-        except Exception:
-            jump = None
-        if jump is None:
-            start = self._current_index + 1
-            direction = 1
+
+        new_state = self._visible_state(question.qid)
+        if self._visibility_flipped(previous_visibility):
+            self._note = MAP_CHANGED_NOTE
+
+        if advance_if_hidden and new_state == "skip":
+            self._status_question = None
+            self._status_state = "waiting"
+            await self._advance(direction=1)
+            return
+
+        self._waiting = False
+        self._status_question = question.qid
+        self._status_state = "saved"
+        self._status_hint = None
+        await self._render_step()
+
+    def _visibility_flipped(self, previous: dict[str, dict[str, str]]) -> bool:
+        for qid, entry in self._visibility.items():
+            state = entry.get("state")
+            prior_state = (previous.get(qid) or {}).get("state")
+            if state == prior_state:
+                continue
+            if state == "skip" or prior_state == "skip":
+                return True
+        return False
+
+    async def _advance(self, *, direction: int) -> None:
+        if direction == 0:
+            await self._render_step()
+            return
+
+        if direction > 0:
+            answers_by_qid = self._answers_by_qid()
+            try:
+                jump = rules.next_index_by_rules(
+                    self._current_index, list(self._steps), answers_by_qid
+                )
+            except Exception:
+                jump = None
+            if jump is None:
+                start = self._current_index + 1
+                seek_direction = 1
+            else:
+                start = jump
+                seek_direction = 1 if jump >= self._current_index else -1
         else:
-            start = jump
-            direction = 1 if jump >= self._current_index else -1
-        next_index = self._seek_visible_index(start, direction)
+            start = self._current_index - 1
+            seek_direction = -1
+
+        next_index = self._seek_visible_index(start, seek_direction)
         if next_index is None:
-            self._current_index = len(self._steps)
-        else:
-            self._current_index = next_index
+            if direction > 0:
+                self._current_index = len(self._steps)
+                await self._finish()
+            return
+
+        self._current_index = next_index
         self._current_question = None
+        self._status_question = None
+        self._status_state = "waiting"
+        self._status_hint = None
         self._waiting = False
         await self._render_step()
 
@@ -620,8 +870,11 @@ class RollingCardSession:
         question = self._current_question
         ok, cleaned, hint = self._validate(question, raw)
         if not ok:
-            if hint:
-                await self.card.hint(hint)
+            self._status_question = question.qid
+            self._status_state = "error"
+            self._status_hint = hint or None
+            self._waiting = True
+            await self._render_step()
             self._log_event("❌", "invalid", detail=hint)
             return True
         message_id = getattr(message, "id", None)
@@ -631,7 +884,7 @@ class RollingCardSession:
             deleted = True
         except Exception:
             deleted = False
-        await self._store_answer_and_advance(
+        await self._store_answer(
             question,
             cleaned,
             source_message_id=None if deleted else message_id,
@@ -654,15 +907,38 @@ class RollingCardSession:
 
     async def _finish(self) -> None:
         self._current_question = None
-        message = await self.card.ensure()
-        summary = self._summary_lines()
-        content = "**Onboarding — Completed**"
-        if summary:
-            content += "\n" + "\n".join(summary)
+        self._status_question = None
+        self._status_state = "saved"
+        self._status_hint = None
+        self._waiting = False
+        self._recompute_visibility()
+
+        items: list[tuple[str, str]] = []
+        for question in self._all_questions:
+            entry = self._visibility.get(question.qid, {})
+            state = entry.get("state") or ("show" if question.required else "optional")
+            visible = entry.get("visible", state != "skip")
+            required = bool(entry.get("required", question.required))
+            if not visible or state == "skip":
+                continue
+            if not self._has_answer(question):
+                if state == "optional" and not required:
+                    continue
+                continue
+            answer = self._value_for_summary(self._answers.get(question.qid))
+            if not answer:
+                continue
+            label = question.label or question.qid
+            items.append((label, answer))
+
         try:
-            await message.edit(content=content, view=None)
+            await self.card.render_summary(items=items)
         except Exception:
-            pass
+            message = await self.card.ensure()
+            try:
+                await message.edit(content="**Onboarding — Summary**", view=None)
+            except Exception:
+                pass
         await self._cleanup_captured_messages()
         self._closed = True
         self.controller._complete_rolling(self.thread_id)
