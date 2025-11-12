@@ -1544,7 +1544,24 @@ class BaseWelcomeController:
         return None, None
 
     def next_visible_step(self, thread_id: int, current_step: int) -> int | None:
-        next_index, _ = self.resolve_step(thread_id, current_step + 1, direction=1)
+        questions = self._questions.get(thread_id) or []
+        if not questions:
+            return None
+
+        answers = self.answers_by_thread.get(thread_id, {})
+        start_index = current_step + 1
+        direction = 1
+
+        try:
+            jump = rules.next_index_by_rules(current_step, list(questions), answers)
+        except Exception:
+            jump = None
+
+        if jump is not None:
+            start_index = jump
+            direction = 1 if jump >= current_step else -1
+
+        next_index, _ = self.resolve_step(thread_id, start_index, direction=direction)
         return next_index
 
     def previous_visible_step(self, thread_id: int, current_step: int) -> int | None:
@@ -1609,13 +1626,6 @@ class BaseWelcomeController:
 
         if formatted:
             lines.append(f"**Current answer:** {formatted}")
-        else:
-            options = getattr(question, "options", None)
-            if isinstance(question, dict):
-                options = question.get("options") or question.get("choices")
-            uses_text_prompt = not options
-            if uses_text_prompt and not self._answer_present(question, stored):
-                lines.append("Press **Enter answer** to respond.")
 
         return "\n\n".join(lines)
 

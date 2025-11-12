@@ -199,6 +199,124 @@ def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPat
     asyncio.run(runner())
 
 
+def test_status_row_visible_for_text_inputs() -> None:
+    async def runner() -> None:
+        thread_id = 101
+        question = SimpleNamespace(
+            qid="ign",
+            label="IGN",
+            type="short",
+            options=[],
+            required=True,
+        )
+
+        class DummyController:
+            def __init__(self) -> None:
+                self.questions_by_thread = {thread_id: [question]}
+                self.answers_by_thread = {thread_id: {}}
+
+            def render_step(self, tid: int, step: int) -> str:
+                assert tid == thread_id
+                assert step == 0
+                return "**Prompt**"
+
+            def has_answer(self, tid: int, _question: object) -> bool:
+                return bool(self.answers_by_thread.get(tid))
+
+            def _question_key(self, q: object) -> str:
+                return getattr(q, "qid", "")
+
+            def _answer_for(self, tid: int, key: str) -> object | None:
+                return self.answers_by_thread.get(tid, {}).get(key)
+
+            def _visibility_map(self, _tid: int) -> dict[str, dict[str, str]]:
+                return {}
+
+        class DummyMessage:
+            def __init__(self) -> None:
+                self.last_edit: SimpleNamespace | None = None
+
+            async def edit(self, *, content=None, view=None):
+                self.last_edit = SimpleNamespace(content=content, view=view)
+                return self
+
+        controller = DummyController()
+        wizard = panels.OnboardWizard(controller, thread_id, step=0)
+        message = DummyMessage()
+        wizard.attach(message)  # type: ignore[arg-type]
+
+        await wizard.refresh()
+
+        assert message.last_edit is not None
+        assert "Press “Enter answer”" in message.last_edit.content
+
+    asyncio.run(runner())
+
+
+def test_status_row_hidden_for_select_and_bool() -> None:
+    async def runner() -> None:
+        thread_id = 202
+        select_question = SimpleNamespace(
+            qid="clan",
+            label="Clan",
+            type="single-select",
+            options=[SimpleNamespace(label="Yes", value="yes")],
+            required=True,
+        )
+        bool_question = SimpleNamespace(
+            qid="ready",
+            label="Ready?",
+            type="bool",
+            options=[],
+            required=True,
+        )
+
+        class DummyController:
+            def __init__(self) -> None:
+                self.questions_by_thread = {thread_id: [select_question]}
+                self.answers_by_thread = {thread_id: {}}
+
+            def render_step(self, tid: int, step: int) -> str:
+                return "**Select Prompt**"
+
+            def has_answer(self, tid: int, _question: object) -> bool:
+                return False
+
+            def _question_key(self, q: object) -> str:
+                return getattr(q, "qid", "")
+
+            def _answer_for(self, tid: int, key: str) -> object | None:
+                return self.answers_by_thread.get(tid, {}).get(key)
+
+            def _visibility_map(self, _tid: int) -> dict[str, dict[str, str]]:
+                return {}
+
+        class DummyMessage:
+            def __init__(self) -> None:
+                self.last_edit: SimpleNamespace | None = None
+
+            async def edit(self, *, content=None, view=None):
+                self.last_edit = SimpleNamespace(content=content, view=view)
+                return self
+
+        controller = DummyController()
+        wizard = panels.OnboardWizard(controller, thread_id, step=0)
+        message = DummyMessage()
+        wizard.attach(message)  # type: ignore[arg-type]
+
+        await wizard.refresh()
+        assert message.last_edit is not None
+        assert "Press “Enter answer”" not in message.last_edit.content
+
+        # Swap to bool question and ensure status stays hidden
+        controller.questions_by_thread[thread_id] = [bool_question]
+        await wizard.refresh()
+        assert message.last_edit is not None
+        assert "Press “Enter answer”" not in message.last_edit.content
+
+    asyncio.run(runner())
+
+
 def test_launch_uses_cached_questions_only(monkeypatch: pytest.MonkeyPatch) -> None:
     async def runner() -> None:
         monkeypatch.setattr(panels.diag, "is_enabled", lambda: False)

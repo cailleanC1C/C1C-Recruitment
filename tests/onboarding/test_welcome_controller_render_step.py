@@ -16,7 +16,7 @@ def test_render_step_prompts_for_text_questions(monkeypatch: pytest.MonkeyPatch)
     controller.answers_by_thread[thread_id] = {}
 
     text = controller.render_step(thread_id, 0)
-    assert "Press **Enter answer** to respond." in text
+    assert "Press **Enter answer** to respond." not in text
 
     controller.answers_by_thread[thread_id] = {"ign": "Ace"}
     text_with_answer = controller.render_step(thread_id, 0)
