@@ -108,9 +108,9 @@ def inline_merge(
 
     parts: list[str] = []
     if a_value:
-        segment = f"{a_label}: {a_value}" if a_label else a_value
+        segment = f"**{a_label}:** {a_value}" if a_label else a_value
         parts.append(segment)
     if b_value:
-        segment = f"{b_label}: {b_value}" if b_label else b_value
+        segment = f"**{b_label}:** {b_value}" if b_label else b_value
         parts.append(segment)
     return " • ".join(parts)

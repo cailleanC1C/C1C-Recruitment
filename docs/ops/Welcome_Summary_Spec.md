@@ -5,11 +5,12 @@
 - No schema changes are required; all fields reuse the existing onboarding questionnaire columns.
 - The embed honours the sheet-driven visibility rules (skip/optional decisions) resolved during the welcome flow.
 - Inline formatting keeps Hydra and Chimera clash averages alongside their difficulty answers.
+- Labels render in bold for easier scanning, including inline pairs.
 
 ## Field mapping (gid → display label)
 | gid | Label | Notes |
 | --- | ----- | ----- |
-| `w_ign` | Player |  |
+| `w_ign` | Ingame Name |  |
 | `w_power` | Power | Inline with `w_level_detail`; abbreviated number formatting |
 | `w_level_detail` | Bracket | Single-select label from question 4b |
 | `w_playstyle` | Playstyle |  |
@@ -32,11 +33,11 @@
 3. **War modes** — `w_siege`, `w_siege_detail`, `w_cvc` + `w_cvc_points`
 4. **Notes** — `w_level` (optional), `w_origin`
 
-Inline pairs are rendered with a mid-dot separator (`•`) to keep paired answers on a single line:
-- `Power • Bracket`
-- `Hydra • Avg Hydra Clash`
-- `Chimera • Avg Chimera Clash`
-- `CvC priority • Minimum CvC points`
+Inline pairs are rendered with a mid-dot separator (`•`) to keep paired answers on a single line. Each sub-label stays bold for readability:
+- `**Power:** … • **Bracket:** …`
+- `**Hydra:** … • **Avg Hydra Clash:** …`
+- `**Chimera:** … • **Avg Chimera Clash:** …`
+- `**CvC priority:** … • **Minimum CvC points:** …`
 
 ## Hide rules
 - Skip any field whose rendered value is empty or matches `0`, `no`, `none`, or `dunno` (case-insensitive).
@@ -65,23 +66,23 @@ Inline pairs are rendered with a mid-dot separator (`•`) to keep paired answer
 🔥 C1C • Recruitment Summary
 Keep this thread open until a recruiter confirms placement.
 
-Player: C1C Caillean
-Power: 12.6 M • Bracket: Beginner
-Playstyle: Competitive
-Looking for: Active, social clan with Hydra focus
+**Ingame Name:** C1C Caillean
+**Power:** 12.6 M • **Bracket:** Beginner
+**Playstyle:** Competitive
+**Looking for:** Active, social clan with Hydra focus
 
 🧩 Progress & Bossing
-Clan Boss (one-key top chest): Normal
-Hydra: Normal • Avg Hydra Clash: 320 K
-Chimera: Easy • Avg Chimera Clash: 240 K
+**Clan Boss (one-key top chest):** Normal
+**Hydra:** Normal • **Avg Hydra Clash:** 320 K
+**Chimera:** Easy • **Avg Chimera Clash:** 240 K
 
 ⚔️ War Modes
-Siege participation: No
-CvC priority: High-Medium • Minimum CvC points: 60 K
+**Siege participation:** No
+**CvC priority:** High-Medium • **Minimum CvC points:** 60 K
 
 🧭 Notes
-Progression (self-feel): Late-game damage dealer refining Hydra teams.
-Heard about C1C from: A friend in global chat
+**Progression (self-feel):** Late-game damage dealer refining Hydra teams.
+**Heard about C1C from:** A friend in global chat
 ```
 
-Doc last updated: 2025-11-12 (v0.9.7)
+Doc last updated: 2025-11-12 (v0.9.8)
