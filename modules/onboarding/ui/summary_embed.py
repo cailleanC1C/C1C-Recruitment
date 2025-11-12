@@ -9,6 +9,9 @@ from typing import Any, Literal, Mapping
 import discord
 from discord.utils import utcnow
 
+from modules.recruitment.summary_embed import build_welcome_summary_embed
+from modules.recruitment.summary_map import SUMMARY_FRAME
+from shared import theme
 from shared.sheets import onboarding_questions
 
 _COLOUR = discord.Colour(0x1F8BFF)
@@ -38,6 +41,23 @@ def build_summary_embed(
 ) -> discord.Embed:
     """Return the C1C-branded summary embed for ``flow``."""
 
+    if flow == "welcome":
+        try:
+            return build_welcome_summary_embed(answers, visibility, author=author)
+        except Exception:
+            log.exception("welcome.summary.build_failed", extra={"flow": flow})
+            return _fallback_welcome_embed(author)
+
+    return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
+
+
+def _build_onboarding_summary(
+    flow: Literal["welcome", "promo"],
+    answers: Mapping[str, Any],
+    author: discord.Member,
+    schema_hash: str,
+    visibility: Mapping[str, Mapping[str, str]] | None,
+) -> discord.Embed:
     title, description = _DESCRIPTIONS[flow]
     embed = discord.Embed(title=title, description=description, colour=_COLOUR, timestamp=utcnow())
     embed.set_footer(text=_FOOTER)
@@ -81,6 +101,36 @@ def build_summary_embed(
         if len(value) > 1024:
             value = f"{value[:1021]}..."
         embed.add_field(name=qid, value=value, inline=False)
+
+    return embed
+
+
+def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
+    icon_token = theme.get_icon(SUMMARY_FRAME.get("icon", ""))
+    title = SUMMARY_FRAME.get("title", "C1C • Recruitment Summary")
+    if icon_token:
+        title = f"{icon_token} {title}"
+
+    colour_name = SUMMARY_FRAME.get("color", "c1c_blue")
+    colour = getattr(theme.colors, colour_name, theme.colors.c1c_blue)
+
+    embed = discord.Embed(
+        title=title,
+        description="Summary unavailable — see logs",
+        colour=colour,
+    )
+
+    footer = SUMMARY_FRAME.get("footer")
+    if footer:
+        embed.set_footer(text=footer)
+
+    if author:
+        display_name = getattr(author, "display_name", None) or getattr(author, "name", "")
+        avatar = getattr(author, "display_avatar", None)
+        if avatar:
+            embed.set_author(name=display_name or "", icon_url=avatar.url)
+        elif display_name:
+            embed.set_author(name=display_name)
 
     return embed
 
