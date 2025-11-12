@@ -1211,7 +1211,11 @@ class OpenQuestionsPanelView(discord.ui.View):
             question = self._question()
             content = self.controller.render_step(self.thread_id, self.step)
             content = self._apply_requirement_suffix(content, question)
-            status_text = self._status_text(question)
+            show_status = False
+            if question is not None:
+                qtype = self._question_type(question).strip().lower()
+                show_status = qtype.startswith("short") or qtype.startswith("number") or qtype.startswith("paragraph")
+            status_text = self._status_text(question) if show_status else ""
             if status_text:
                 content = f"{content}\n\n{status_text}" if content else status_text
             if interaction is not None:
