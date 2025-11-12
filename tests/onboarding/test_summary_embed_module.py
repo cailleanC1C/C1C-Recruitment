@@ -34,7 +34,7 @@ def test_summary_embed_formats_boolean_answers(monkeypatch):
     author = SimpleNamespace(display_name="Recruit", display_avatar=None)
 
     embed_true = summary_embed.build_summary_embed(
-        "welcome",
+        "promo",
         {"siege_interest": True},
         author,
         schema_hash="hash123",
@@ -42,7 +42,7 @@ def test_summary_embed_formats_boolean_answers(monkeypatch):
     assert embed_true.fields[0].value == "Yes"
 
     embed_false = summary_embed.build_summary_embed(
-        "welcome",
+        "promo",
         {"siege_interest": "no"},
         author,
         schema_hash="hash123",

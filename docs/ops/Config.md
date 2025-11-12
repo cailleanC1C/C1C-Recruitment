@@ -119,6 +119,9 @@ sync modules remain available for non-async scripts and cache warmers.
 >
 > The `/emoji-pad` proxy enforces HTTPS-only source URLs. Any HTTP attempt returns `400 invalid source host`.
 
+### Recruitment summary theme
+- The welcome summary embed resolves its title icon and colour via `shared.theme` helpers. No new environment keys are required; existing `ICON_*` or `COLOR_*` overrides apply automatically.
+
 ## Automation listeners & cron jobs
 
 Event listeners and watcher availability are controlled by FeatureToggles sheet entries rather than ENV variables.

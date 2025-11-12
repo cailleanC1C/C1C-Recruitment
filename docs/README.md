@@ -69,6 +69,7 @@ It exists so that contributors update the correct references after each developm
 * [`Watchers.md`](ops/Watchers.md) — environment-gated welcome/promo listeners and cache refresh scheduler notes.
 * [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
 * [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
+* [`Welcome_Summary_Spec.md`](ops/Welcome_Summary_Spec.md) — summary embed layout, formatting rules, and hide logic.
 * [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
 * [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
 
@@ -81,4 +82,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-11 (v0.9.7)
+Doc last updated: 2025-11-12 (v0.9.7)
