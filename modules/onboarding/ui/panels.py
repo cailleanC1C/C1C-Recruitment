@@ -1185,8 +1185,18 @@ class OpenQuestionsPanelView(discord.ui.View):
 
 
     class OnboardWizard(discord.ui.View):
+        _IDLE_REFRESH_SECONDS = 2 * 60 * 60
+        _NOTICE_GLITCH = (
+            "⚠️ Something glitched. I’ve refreshed the session. Press the button again. Your answers are safe."
+        )
+        _NOTICE_IDLE = "⏳ Session refreshed after being idle. Continue where you left off."
+        _NOTICE_REFRESH = "🔄 Session refreshed. Try again."
+        _NOTICE_MOVED = (
+            "📌 Your session was moved to this message because the previous one disappeared. Continue."
+        )
+
         def __init__(self, controller: _ControllerProtocol, thread_id: int, *, step: int = 0) -> None:
-            super().__init__(timeout=600)
+            super().__init__(timeout=None)
             self.controller = controller
             self.thread_id = thread_id
             self.step = step
@@ -1195,8 +1205,11 @@ class OpenQuestionsPanelView(discord.ui.View):
             self._status_override: str | None = None
             self._status_error_hint: str | None = None
             self._status_question_key: str | None = None
+            self._idle_task: asyncio.Task[None] | None = None
+            self._last_touch: float = time.monotonic()
             # Build the controls immediately so attach()/refresh() behave like the legacy view.
             self._configure_components()
+            self._schedule_idle_refresh()
 
         # --- Legacy surface (compat) -----------------------------------------
         def attach(self, message: discord.Message) -> None:
@@ -1204,7 +1217,13 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             self._message = message
 
-        async def refresh(self, interaction: discord.Interaction | None = None) -> None:
+        async def refresh(
+            self,
+            interaction: discord.Interaction | None = None,
+            *,
+            notice: str | None = None,
+            touch: bool = True,
+        ) -> None:
             """Rebuild the components and re-render the wizard message if bound."""
 
             self._configure_components()
@@ -1215,7 +1234,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             if question is not None:
                 qtype = self._question_type(question).strip().lower()
                 show_status = qtype.startswith("short") or qtype.startswith("number") or qtype.startswith("paragraph")
-            status_text = self._status_text(question) if show_status else ""
+            if notice:
+                self._status_override = notice
+            status_text = self._status_text(question) if show_status else (notice or "")
             if status_text:
                 content = f"{content}\n\n{status_text}" if content else status_text
             if interaction is not None:
@@ -1242,6 +1263,85 @@ class OpenQuestionsPanelView(discord.ui.View):
                 except Exception:
                     # Editing failures are non-fatal; keep the view state for retries.
                     pass
+            if touch:
+                self._touch()
+
+        def stop(self) -> None:  # pragma: no cover - network
+            self._cancel_idle_task()
+            super().stop()
+
+        def _touch(self) -> None:
+            self._last_touch = time.monotonic()
+            self._schedule_idle_refresh()
+
+        def _cancel_idle_task(self) -> None:
+            task = self._idle_task
+            if task is None:
+                return
+            self._idle_task = None
+            if not task.done():
+                task.cancel()
+
+        def _schedule_idle_refresh(self) -> None:
+            self._cancel_idle_task()
+            delay = max(0.0, (self._last_touch + self._IDLE_REFRESH_SECONDS) - time.monotonic())
+
+            async def _runner() -> None:
+                try:
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    await self._auto_refresh(notice=self._NOTICE_IDLE, reason="idle")
+                except asyncio.CancelledError:  # pragma: no cover - lifecycle cleanup
+                    return
+
+            loop = asyncio.get_running_loop()
+            self._idle_task = loop.create_task(_runner())
+
+        async def _auto_refresh(self, *, notice: str, reason: str) -> None:
+            if self._message is None:
+                return
+            try:
+                await self.refresh(notice=notice, touch=False)
+            except Exception:
+                log.warning("failed to auto-refresh onboarding wizard", exc_info=True)
+                return
+            logs.human(
+                "info",
+                "onboarding.recover",
+                reason=reason,
+                sid=self._session_id(),
+                step=self.step,
+                resumed=True,
+            )
+            self._touch()
+
+        async def on_timeout(self) -> None:  # pragma: no cover - network
+            # timeout=None keeps the view alive, but discord.py still calls on_timeout
+            # if the object is stopped manually. Maintain compatibility by clearing
+            # the idle task and delegating to the parent implementation.
+            self._cancel_idle_task()
+            await super().on_timeout()
+
+        def _session_id(self) -> str | None:
+            resolver = getattr(self.controller, "get_session_id", None)
+            if callable(resolver):
+                try:
+                    return resolver(self.thread_id)
+                except Exception:
+                    log.debug("failed to resolve session id via getter", exc_info=True)
+            attribute = getattr(self.controller, "session_id", None)
+            if callable(attribute):
+                try:
+                    return attribute(self.thread_id)
+                except Exception:
+                    log.debug("failed to resolve session id via callable attribute", exc_info=True)
+            if isinstance(attribute, (str, int)):
+                return str(attribute)
+            if isinstance(attribute, dict):
+                value = attribute.get(self.thread_id)
+                if value is not None:
+                    return str(value)
+            return None
 
         # --- Internals --------------------------------------------------------
         async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network
@@ -1546,6 +1646,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             self.add_item(self.BackButton(self))
             has_answer = self._has_current_answer(question)
             self.add_item(self.NextButton(self, question, has_answer))
+            self.add_item(self.RefreshButton(self))
             self.add_item(self.CancelButton(self))
 
         def is_last_step(self) -> bool:
@@ -1608,6 +1709,7 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 await self._wizard._handle_select(interaction, self.question, list(self.values))
+                self._wizard._touch()
 
         class BoolButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any, value: bool) -> None:
@@ -1627,6 +1729,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 wizard._status_override = None
                 wizard._last_direction = 1
                 await wizard.refresh(interaction)
+                wizard._touch()
 
         class TextPromptButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any) -> None:
@@ -1640,6 +1743,7 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             async def callback(self, interaction: discord.Interaction) -> None:
                 await self._wizard._prompt_text_answer(interaction, self.question)
+                self._wizard._touch()
 
         class BackButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard") -> None:
@@ -1661,6 +1765,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 elif wizard.step > 0:
                     wizard.step -= 1
                 await wizard.refresh(interaction)
+                wizard._touch()
 
         class NextButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard", question: Any, has_answer: bool) -> None:
@@ -1690,6 +1795,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                     return
                 wizard.step = next_index
                 await wizard.refresh(interaction)
+                wizard._touch()
 
         class CancelButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard") -> None:
@@ -1716,6 +1822,28 @@ class OpenQuestionsPanelView(discord.ui.View):
                     except Exception:
                         log.warning("failed to update wizard cancel message", exc_info=True)
                 wizard.stop()
+
+        class RefreshButton(discord.ui.Button):
+            def __init__(self, parent: "OnboardWizard") -> None:
+                super().__init__(style=discord.ButtonStyle.secondary, label="Refresh")
+                self._wizard = parent
+
+            async def callback(self, interaction: discord.Interaction) -> None:
+                await self._wizard._handle_refresh(interaction)
+
+        async def _handle_refresh(self, interaction: discord.Interaction | None) -> None:
+            try:
+                await self.refresh(interaction, notice=self._NOTICE_REFRESH, touch=False)
+            finally:
+                self._touch()
+            logs.human(
+                "info",
+                "onboarding.recover",
+                reason="user_refresh",
+                sid=self._session_id(),
+                step=self.step,
+                resumed=True,
+            )
 
         async def _prompt_text_answer(self, interaction: discord.Interaction, question: Any) -> None:
             controller = self.controller
