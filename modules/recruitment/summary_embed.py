@@ -193,7 +193,9 @@ def _resolved_value(
 
 
 def _labelled(label: str | None, value: str) -> str:
-    return f"{label}: {value}" if label else value
+    if not label:
+        return value
+    return f"**{label}:** {value}"
 
 
 def _format_value(field: Mapping[str, Any], value: Any) -> str:

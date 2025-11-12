@@ -6,7 +6,7 @@ SUMMARY_SECTIONS = [
     {
         "name": "identity",
         "fields": [
-            {"gid": "w_ign", "label": "Player"},
+            {"gid": "w_ign", "label": "Ingame Name"},
             {
                 "gid": "w_power",
                 "label": "Power",
