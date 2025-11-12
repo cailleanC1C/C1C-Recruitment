@@ -13,6 +13,31 @@ from discord.ext import commands
 
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 
+# -- inline status text helper (Waiting / Saved / Invalid) --
+def _status_for(
+    is_answered: bool,
+    is_valid: bool,
+    validation_error,
+    *,
+    override: str | None = None,
+) -> str:
+    if override:
+        return override
+    if validation_error or not is_valid:
+        if isinstance(validation_error, str) and validation_error.strip():
+            hint = validation_error.strip()
+        else:
+            hint = (
+                getattr(validation_error, "hint", None)
+                or getattr(validation_error, "message", None)
+                or (str(validation_error).strip() if validation_error else None)
+                or "Check the format."
+            )
+        return f"⚠️ Invalid format: {hint}"
+    if not is_answered:
+        return "✍️ Press “Enter answer” and type your answer below."
+    return "✅ Saved. Click Next."
+
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
 from modules.onboarding import diag, logs
 
@@ -1167,6 +1192,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             self.step = step
             self._last_direction = 1
             self._message: discord.Message | None = None
+            self._status_override: str | None = None
+            self._status_error_hint: str | None = None
+            self._status_question_key: str | None = None
             # Build the controls immediately so attach()/refresh() behave like the legacy view.
             self._configure_components()
 
@@ -1183,6 +1211,9 @@ class OpenQuestionsPanelView(discord.ui.View):
             question = self._question()
             content = self.controller.render_step(self.thread_id, self.step)
             content = self._apply_requirement_suffix(content, question)
+            status_text = self._status_text(question)
+            if status_text:
+                content = f"{content}\n\n{status_text}" if content else status_text
             if interaction is not None:
                 response = getattr(interaction, "response", None)
                 if response is not None:
@@ -1472,6 +1503,23 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return any(True for _ in stored)
             return bool(stored)
 
+        def _status_text(self, question: Any | None) -> str:
+            if question is None:
+                return ""
+            key = self._question_key(question)
+            if key != self._status_question_key:
+                self._status_question_key = key
+                self._status_error_hint = None
+                self._status_override = None
+            is_answered = self._has_current_answer(question)
+            validation_error = self._status_error_hint
+            return _status_for(
+                is_answered,
+                validation_error is None,
+                validation_error,
+                override=self._status_override,
+            )
+
         def _configure_components(self) -> None:
             """Compose the interactive controls for the current wizard step."""
 
@@ -1571,6 +1619,8 @@ class OpenQuestionsPanelView(discord.ui.View):
                 token = "yes" if self._value else "no"
                 key = wizard._question_key(self.question)
                 await wizard.controller.set_answer(wizard.thread_id, key, token)
+                wizard._status_error_hint = None
+                wizard._status_override = None
                 wizard._last_direction = 1
                 await wizard.refresh(interaction)
 
@@ -1668,39 +1718,36 @@ class OpenQuestionsPanelView(discord.ui.View):
             client = getattr(controller, "bot", None) or getattr(interaction, "client", None)
             if client is None:
                 log.warning("inline wizard text prompt missing client")
-                followup = getattr(interaction, "followup", None)
                 try:
-                    if followup is not None:
-                        await followup.send(
-                            "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
-                            ephemeral=True,
-                        )
-                    elif not interaction.response.is_done():
-                        await interaction.response.send_message(
-                            "⚠️ Can’t capture that answer right now. Please press **Enter answer** again.",
-                            ephemeral=True,
-                        )
+                    if not interaction.response.is_done():
+                        await interaction.response.defer()
                 except Exception:
-                    log.warning("failed to notify user about inline text capture error", exc_info=True)
+                    try:
+                        if not interaction.response.is_done():
+                            await interaction.response.defer_update()
+                    except Exception:
+                        pass
+                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
+                self._status_error_hint = None
+                await self.refresh()
                 return
 
             label = self._question_label(question) or "this question"
-            prompt = f"✍️ Please type your answer for **{label}** below."
-            prompt_message: discord.Message | None = None
-            used_original = False
             try:
                 if not interaction.response.is_done():
-                    await interaction.response.send_message(prompt, ephemeral=True)
-                    used_original = True
-                else:
-                    followup = getattr(interaction, "followup", None)
-                    if followup is None:
-                        log.warning("inline wizard followup handler missing for text prompt")
-                        return
-                    prompt_message = await followup.send(prompt, ephemeral=True)
+                    await interaction.response.defer()
+            except discord.InteractionResponded:
+                pass
             except Exception:
-                log.warning("failed to send inline text prompt", exc_info=True)
-                return
+                try:
+                    if not interaction.response.is_done():
+                        await interaction.response.defer_update()
+                except Exception:
+                    pass
+
+            self._status_override = f"✍️ Share your answer for **{label}** in this thread now."
+            self._status_error_hint = None
+            await self.refresh()
 
             thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
             raw_thread_id = getattr(thread, "id", None)
@@ -1716,6 +1763,8 @@ class OpenQuestionsPanelView(discord.ui.View):
                 user_id = None
             if user_id is None:
                 log.warning("inline wizard text prompt missing user context")
+                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
+                await self.refresh()
                 return
 
             def check(message: discord.Message) -> bool:
@@ -1730,17 +1779,13 @@ class OpenQuestionsPanelView(discord.ui.View):
             try:
                 message = await client.wait_for("message", check=check, timeout=300)
             except asyncio.TimeoutError:
-                notice = "⏳ Timed out waiting for your answer. Press **Enter answer** to try again."
-                try:
-                    if used_original:
-                        await interaction.edit_original_response(content=notice)
-                    elif prompt_message is not None:
-                        await prompt_message.edit(content=notice)
-                except Exception:
-                    log.debug("failed to update timeout notice", exc_info=True)
+                self._status_override = "⏳ Timed out waiting for your answer. Press **Enter answer** to try again."
+                await self.refresh()
                 return
             except Exception:
                 log.warning("inline wizard text capture failed", exc_info=True)
+                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
+                await self.refresh()
                 return
 
             value = (message.content or "").strip()
@@ -1768,18 +1813,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                 }
 
             if required and not value:
-                sender = getattr(controller, "_send_validation_error", None)
-                if callable(sender):
-                    await sender(interaction, self.thread_id, meta, "This question is required.")
-                else:
-                    warning = f"⚠️ **{self._question_label(question)}** is required."
-                    try:
-                        if used_original:
-                            await interaction.edit_original_response(content=warning)
-                        elif prompt_message is not None:
-                            await prompt_message.edit(content=warning)
-                    except Exception:
-                        log.debug("failed to send required notice", exc_info=True)
+                self._status_error_hint = "This question is required."
+                self._status_override = None
+                await self.refresh()
                 return
 
             if value:
@@ -1789,18 +1825,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                 else:
                     ok, cleaned, err = True, value, None
                 if not ok:
-                    sender = getattr(controller, "_send_validation_error", None)
-                    if callable(sender):
-                        await sender(interaction, self.thread_id, meta, err)
-                    else:
-                        notice = err or "Input does not match the required format."
-                        try:
-                            if used_original:
-                                await interaction.edit_original_response(content=f"⚠️ {notice}")
-                            elif prompt_message is not None:
-                                await prompt_message.edit(content=f"⚠️ {notice}")
-                        except Exception:
-                            log.debug("failed to send validation notice", exc_info=True)
+                    self._status_error_hint = err or "Input does not match the required format."
+                    self._status_override = None
+                    await self.refresh()
                     return
                 if diag.is_enabled():
                     checker = getattr(controller, "_has_sheet_regex", None)
@@ -1817,18 +1844,12 @@ class OpenQuestionsPanelView(discord.ui.View):
                         type=meta.get("type"),
                     )
                 await controller.set_answer(self.thread_id, key, cleaned)
-                success_notice = "✅ Saved. Click **Next** for the next question."
+                self._status_error_hint = None
+                self._status_override = None
             else:
                 await controller.set_answer(self.thread_id, key, None)
-                success_notice = "✅ Answer cleared."
-
-            try:
-                if used_original:
-                    await interaction.edit_original_response(content=success_notice)
-                elif prompt_message is not None:
-                    await prompt_message.edit(content=success_notice)
-            except Exception:
-                log.debug("failed to post success notice", exc_info=True)
+                self._status_error_hint = None
+                self._status_override = "✅ Answer cleared."
 
             await self.refresh()
 
@@ -1841,6 +1862,8 @@ class OpenQuestionsPanelView(discord.ui.View):
             key = self._question_key(question)
             if not selections:
                 await self.controller.set_answer(self.thread_id, key, None)
+                self._status_error_hint = None
+                self._status_override = "✅ Answer cleared."
                 await self.refresh(interaction)
                 return
             options: dict[str, str] = {}
@@ -1866,6 +1889,8 @@ class OpenQuestionsPanelView(discord.ui.View):
                     key,
                     {"value": token, "label": label},
                 )
+            self._status_error_hint = None
+            self._status_override = None
             await self.refresh(interaction)
 
 
