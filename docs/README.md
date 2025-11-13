@@ -36,6 +36,7 @@ It exists so that contributors update the correct references after each developm
 * [`README.md`](epic/README.md) — epic index and submission expectations.
 * [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — welcome & placement v2 thread-first onboarding flow.
 * [`EPIC_DailyRecruiterUpdate.md`](epic/EPIC_DailyRecruiterUpdate.md) — daily recruiter update reporting pipeline.
+* [Clan Seat Reservation System v1](EPIC_WelcomePlacementV2.md)
 
 ### `/docs/_meta/`
 * [`COMMAND_METADATA.md`](_meta/COMMAND_METADATA.md) — canonical command metadata export for Ops and diagnostics.
@@ -82,4 +83,4 @@ It exists so that contributors update the correct references after each developm
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-12 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.7)
