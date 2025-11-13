@@ -30,6 +30,8 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0016`](adr/ADR-0016-import-side-effects.md) — import-time side effects removal.
 * [`ADR-0017`](adr/ADR-0017-Reservations-Placement-Schema.md) — reservations & placement schema.
 * [`ADR-0018`](adr/ADR-0018_DailyRecruiterUpdate.md) — daily recruiter update schedule and sheet-driven report.
+* [ADR-0019](ADR-0019-Introduction-of-Clan-SeatReservations.md) - Clan Seet Resevation for Recruiters
+* [ADR-0020](ADR-0020-Availability-Derivation.md) - Availability Derivation (E → AF/AH/AI) & Cache Update Strategy 
 * [`README.md`](adr/README.md) — ADR index and authoring guidelines.
 
 ### `/docs/epic/` — Feature Epics
