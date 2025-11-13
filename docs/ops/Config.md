@@ -137,12 +137,28 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'FEATURE_TOGGLES_TAB'
 - 'REPORTS_TAB'
 - 'RESERVATIONS_TAB'
-- 'FEATURE_RESERVATIONS'
 
 `RESERVATIONS_TAB` defaults to `Reservations` and stores the structured reservation
-ledger used to derive availability. `FEATURE_RESERVATIONS` gates reservation-aware
-workflows; it defaults to `FALSE` when absent so new environments remain inert
-until the sheet configuration is populated.
+ledger used to derive availability. If the key is missing, the adapter falls back
+to the default name so new environments remain inert until the sheet configuration
+is populated.
+
+### Sheet-based Feature Toggles (`Feature_Toggles` tab)
+
+The `Feature_Toggles` worksheet in the Recruitment sheet stores **sheet-only
+feature flags**. These keys are **not** environment variables and must **not** be
+added to `.env.example`.
+
+Current keys include (non-exhaustive):
+
+- `FEATURE_ONBOARDING` — gates the onboarding flow.
+- `FEATURE_REPORTS` — gates recruiter reports.
+- `FEATURE_RESERVATIONS` — gates reservation-aware workflows (e.g., `!reserve`,
+  reminder jobs) once implemented.
+
+If a toggle key is missing in `Feature_Toggles`, its behaviour should default to a
+safe value (usually `FALSE`/disabled) so new environments remain inert until
+explicitly configured in the sheet.
 
 ### Onboarding
 - `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, options, visibility_rules, nav_rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
@@ -220,4 +236,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-02-14 (v0.9.7)
