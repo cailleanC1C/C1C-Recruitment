@@ -827,6 +827,10 @@ class Runtime:
             "modules.placement.reservations",
             ("feature_reservations", "placement_reservations"),
         )
+        await _load_feature_module(
+            "modules.placement.reservation_jobs",
+            ("feature_reservations", "placement_reservations"),
+        )
 
         await onboarding_ops_check.setup(self.bot)
         await onboarding_reaction_fallback.setup(self.bot)

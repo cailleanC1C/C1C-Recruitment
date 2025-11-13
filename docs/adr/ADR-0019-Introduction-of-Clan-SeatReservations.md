@@ -14,7 +14,7 @@ We introduce a fully sheet-backed reservation system with:
 * Status values: `active`, `expired`, `released` (future), `cancelled` (optional).
 * Two scheduled tasks:
   * **12:00 UTC reminder job** — warns if a reservation ends today.
-  * **18:00 UTC auto-release job** — expires outdated reservations after a 6-hour grace period.
+  * **18:00 UTC auto-release job** — expires outdated reservations after a 6-hour grace period, flips the ledger status to `expired`, and reruns `recompute_clan_availability` so `AF`/`AH`/`AI` stay in sync.
 * Thread-level user notifications for creation, reminders, expiry.
 * Recruiter-level logs posted to the configured `RECRUITERS_THREAD_ID`.
 * Admins are always permitted to use reservation features (emergency override).
@@ -35,4 +35,4 @@ This provides a controlled, predictable, auditable workflow where reservations a
   * Logging to threads + staff-log channel
 * Future extensions (release/extend/list) can be added without breaking the model.
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)
