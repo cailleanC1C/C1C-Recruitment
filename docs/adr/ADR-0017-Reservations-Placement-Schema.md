@@ -1,8 +1,12 @@
 # ADR-0017 — Reservations & Placement Schema
 **Date:** 2025-10-25
+
 **Phase:** 7 — Placement Tools
+
 **Milestone:** Harmonize v1.0
+
 **Related Epic:** Welcome & Placement v2
+
 **Status:** obsolete
 
 ---
