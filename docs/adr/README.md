@@ -13,9 +13,9 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0004](ADR-0004-help-system-short-vs-detailed.md) | Help System (Short vs Detailed View) | Accepted — 2025-10-20 |
 | [ADR-0005](ADR-0005-reload-vs-refresh.md) | Reload vs Refresh (Soft Reboot Flag) | Accepted — 2025-10-20 |
 | [ADR-0006](ADR-0006-startup-preloader-bot-info-cron.md) | Startup Preloader + `bot_info` Cron | Accepted — 2025-10-20 |
-| [ADR-0007](ADR-0007-feature-toggles-recruitment-module-boundaries.md) | Feature Toggles & Recruitment Module Boundaries | **Draft — pending implementation of `modules/common/feature_flags.py` and loader integration.** |
-| [ADR-0008](ADR-0008-emoji-pipeline-port.md) | Emoji Pipeline Port | **Draft — awaiting command integration in subsequent Phase 5 PRs.** |
-| [ADR-0009](ADR-0009-recruiter-panel-text-only.md) | Recruiter panel cards remain text-only | Draft |
+| [ADR-0007](ADR-0007-feature-toggles-recruitment-module-boundaries.md) | Feature Toggles & Recruitment Module Boundaries | Accepted |
+| [ADR-0008](ADR-0008-emoji-pipeline-port.md) | Emoji Pipeline Port |Accepted |
+| [ADR-0009](ADR-0009-recruiter-panel-text-only.md) | Recruiter panel cards remain text-only | Accepted |
 | [ADR-0010](ADR-0010-clan-profile-with-emoji.md) | Clan profile with emoji attachments | Accepted |
 | [ADR-0011](ADR-0011-Normalize-to-Modules-First.md) | Normalize to modules-first deployment | Accepted |
 | [ADR-0012](ADR-0012-coreops-package.md) | CoreOps package extraction | Accepted |
@@ -23,7 +23,8 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0014](ADR-0014-async-sheets-facade.md) | Async Sheets Facade for Event-Loop Safety | Accepted |
 | [ADR-0015](ADR-0015-config-hygiene-and-secrets.md) | Config hygiene & secrets handling | Accepted |
 | [ADR-0016](ADR-0016-import-side-effects.md) | Import-time side effects removal | Accepted |
-| [ADR-0017](ADR-0017-Reservations-Placement-Schema.md) | Reservations & placement schema | — |
+| [ADR-0017](ADR-0017-Reservations-Placement-Schema.md) | Reservations & placement schema | obsolete — 2025-11-13 |
 | [ADR-0018](ADR-0018_DailyRecruiterUpdate.md) | Daily recruiter update v1 (UTC, sheet-driven) | Accepted — 2025-10-26 |
-
-Doc last updated: 2025-10-26 (v0.9.6)
+| [ADR-0019](ADR-0019-Introduction-of-Clan-SeatReservations.md) | Clan Seet Resevation for Recruiters | Accepted — 2025-11-13 |
+| [ADR-0020](ADR-0020-Availability-Derivation.md) | Availability Derivation (E → AF/AH/AI) & Cache Update Strategy | Accepted — 2025-11-13 |
+Doc last updated: 2025-11-13 (v0.9.7)
