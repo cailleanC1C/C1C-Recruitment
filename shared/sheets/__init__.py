@@ -12,12 +12,14 @@ __all__ = [
     "open_by_key",
     "register_default_cache_buckets",
     "recruitment",
+    "reservations",
 ]
 
 _LAZY_MODULES = {
     "onboarding": "shared.sheets.onboarding",
     "onboarding_questions": "shared.sheets.onboarding_questions",
     "recruitment": "shared.sheets.recruitment",
+    "reservations": "shared.sheets.reservations",
 }
 
 _LAZY_ATTRS = {

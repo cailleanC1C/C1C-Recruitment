@@ -42,7 +42,11 @@ Every audit and CI check validates against this document.
 ## 4) Documentation
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
 - **D-02 Footer (exact):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.x)`
-- **D-03 ENV SSoT:** `docs/ops/Config.md` is authoritative for all ENV keys; `.env.example` must match its key set.
+- **D-03 ENV SSoT parity:**
+  - The **Environment variables** section in `docs/ops/Config.md` is the single source of truth for all environment variable keys.
+  - `.env.example` **must** contain matching placeholders for every key listed in that ENV section so new deployments know which variables to set.
+  - Other configuration described in `docs/ops/Config.md` — such as sheet tab names and sheet-based feature toggles (e.g., keys in the `Feature_Toggles` tab) — are **not** environment variables and must **not** be added to `.env.example`.
+  - The ENV parity check script (`scripts/ci/check_env_parity.py`) is scoped to the ENV table/section only; sheet-only keys are out of scope for D-03.
 - **D-04 Index:** `docs/README.md` lists and links every doc file under `docs/` with a 1-line blurb.
 - **D-05 ADRs:** Architectural decisions are recorded as `docs/adr/ADR-XXXX.md` and linked where relevant.
 - **D-06 Audit Discoverability:** Each audit adds files under `AUDIT/*` and a pointer in `CHANGELOG.md`.
@@ -64,4 +68,4 @@ Every audit and CI check validates against this document.
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-11-11 (v0.9.7)
+Doc last updated: 2025-02-14 (v0.9.7)
