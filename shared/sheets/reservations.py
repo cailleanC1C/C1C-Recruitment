@@ -37,7 +37,19 @@ RESERVATIONS_HEADERS: list[str] = [
     "username_snapshot",
 ]
 
-RESERVATIONS_INDEX: dict[str, int] = {name: idx for idx, name in enumerate(RESERVATIONS_HEADERS)}
+(
+    THREAD_ID_COL,
+    TICKET_USER_ID_COL,
+    RECRUITER_ID_COL,
+    CLAN_TAG_COL,
+    RESERVED_UNTIL_COL,
+    CREATED_AT_COL,
+    STATUS_COL,
+    NOTES_COL,
+    USERNAME_SNAPSHOT_COL,
+) = range(len(RESERVATIONS_HEADERS))
+
+STATUS_COLUMN_INDEX = STATUS_COL
 
 
 class ReservationSchemaError(RuntimeError):
@@ -74,10 +86,10 @@ class ReservationLedger:
     """Container for parsed reservation rows and header metadata."""
 
     rows: list[ReservationRow]
-    header_index: dict[str, int]
+    status_index: int
 
     def status_column(self) -> int | None:
-        return self.header_index.get("status")
+        return self.status_index
 
 
 async def append_reservation_row(row_values: Sequence[Any]) -> None:
@@ -106,7 +118,7 @@ async def load_reservation_ledger() -> ReservationLedger:
 
     matrix = await _fetch_reservations_matrix()
     if not matrix:
-        return ReservationLedger(rows=[], header_index=dict(RESERVATIONS_INDEX))
+        return ReservationLedger(rows=[], status_index=STATUS_COLUMN_INDEX)
 
     header = [_normalize_schema_cell(cell) for cell in matrix[0]]
     if header != RESERVATIONS_HEADERS:
@@ -135,7 +147,7 @@ async def load_reservation_ledger() -> ReservationLedger:
         )
         records.append(record)
 
-    return ReservationLedger(rows=records, header_index=dict(RESERVATIONS_INDEX))
+    return ReservationLedger(rows=records, status_index=STATUS_COLUMN_INDEX)
 
 
 async def get_active_reservations_for_clan(clan_tag: str) -> List[ReservationRow]:
@@ -307,15 +319,15 @@ def _column_label(index: int) -> str:
 
 def _parse_reservation_row(row: Sequence[Any]) -> dict[str, Any]:
     return {
-        "thread_id": _cell_text(row, RESERVATIONS_INDEX["thread_id"]),
-        "ticket_user_id": _parse_int(_cell_text(row, RESERVATIONS_INDEX["ticket_user_id"])),
-        "recruiter_id": _parse_int(_cell_text(row, RESERVATIONS_INDEX["recruiter_id"])),
-        "clan_tag": _cell_text(row, RESERVATIONS_INDEX["clan_tag"]),
-        "reserved_until": _parse_date(_cell_text(row, RESERVATIONS_INDEX["reserved_until"])),
-        "created_at": _parse_datetime(_cell_text(row, RESERVATIONS_INDEX["created_at"])),
-        "status": _cell_text(row, RESERVATIONS_INDEX["status"]),
-        "notes": _cell_text(row, RESERVATIONS_INDEX["notes"]),
-        "username_snapshot": _cell_text(row, RESERVATIONS_INDEX["username_snapshot"]) or None,
+        "thread_id": _cell_text(row, THREAD_ID_COL),
+        "ticket_user_id": _parse_int(_cell_text(row, TICKET_USER_ID_COL)),
+        "recruiter_id": _parse_int(_cell_text(row, RECRUITER_ID_COL)),
+        "clan_tag": _cell_text(row, CLAN_TAG_COL),
+        "reserved_until": _parse_date(_cell_text(row, RESERVED_UNTIL_COL)),
+        "created_at": _parse_datetime(_cell_text(row, CREATED_AT_COL)),
+        "status": _cell_text(row, STATUS_COL),
+        "notes": _cell_text(row, NOTES_COL),
+        "username_snapshot": _cell_text(row, USERNAME_SNAPSHOT_COL) or None,
     }
 
 

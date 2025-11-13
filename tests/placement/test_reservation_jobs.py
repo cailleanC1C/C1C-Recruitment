@@ -78,7 +78,7 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
 
     ledger = reservations.ReservationLedger(
         rows=[due_row, future_row],
-        header_index={"status": reservations.RESERVATIONS_HEADERS.index("status")},
+        status_index=reservations.STATUS_COLUMN_INDEX,
     )
 
     async def fake_load():
@@ -128,7 +128,7 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
 
     ledger = reservations.ReservationLedger(
         rows=[due_row, future_row, inactive_row],
-        header_index={"status": reservations.RESERVATIONS_HEADERS.index("status")},
+        status_index=reservations.STATUS_COLUMN_INDEX,
     )
 
     async def fake_load():
