@@ -91,6 +91,35 @@ def _normalize_admin_invocation(base: str, remainder: str | None) -> str:
     return normalize_command_text(" ".join(parts))
 
 
+async def _maybe_capture_onboarding_answer(message: discord.Message) -> bool:
+    channel = getattr(message, "channel", None)
+    if not isinstance(channel, discord.Thread):
+        return False
+    try:
+        thread_id = int(getattr(channel, "id", 0))
+    except (TypeError, ValueError):
+        return False
+
+    try:
+        from modules.onboarding.ui import panels
+    except Exception:
+        return False
+
+    controller = panels.get_controller(thread_id)
+    if controller is None:
+        return False
+
+    handler = getattr(controller, "handle_thread_message", None)
+    if not callable(handler):
+        return False
+
+    try:
+        return bool(await handler(message))
+    except Exception:
+        log.warning("onboarding auto-capture failed", exc_info=True)
+        return False
+
+
 def _resolve_coreops_command(lookup: str) -> commands.Command | None:
     for candidate in build_command_variants(COREOPS_SETTINGS, lookup):
         command = bot.get_command(candidate)
@@ -274,6 +303,9 @@ async def on_guild_join(_guild: discord.Guild):
 async def on_message(message: discord.Message):
     hb.touch()
     if bot.user and message.author.id == bot.user.id:
+        return
+
+    if await _maybe_capture_onboarding_answer(message):
         return
 
     log.info(

@@ -25,6 +25,10 @@ class SessionData:
 
     flow: str
     schema_hash: str | None
+    thread_id: int | None = None
+    respondent_id: int | None = None
+    status: str = "idle"
+    current_question_index: int | None = None
     answers: Dict[str, Any] = field(default_factory=dict)
     visibility: Dict[str, Dict[str, str]] = field(default_factory=dict)
     pending_step: PendingStep | None = None
@@ -66,10 +70,11 @@ class SessionStore:
             self.end(thread_id)
             session = None
         if session is None:
-            session = SessionData(flow=flow, schema_hash=schema_hash)
+            session = SessionData(flow=flow, schema_hash=schema_hash, thread_id=thread_id)
             self._sessions[thread_id] = session
         session.flow = flow
         session.schema_hash = schema_hash
+        session.thread_id = thread_id
         session.touch()
         self._schedule_timeout(thread_id, session)
         return session
