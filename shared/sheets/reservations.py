@@ -69,6 +69,17 @@ class ReservationRow:
         return _normalize_status(self.status) == "active"
 
 
+@dataclass(slots=True)
+class ReservationLedger:
+    """Container for parsed reservation rows and header metadata."""
+
+    rows: list[ReservationRow]
+    header_index: dict[str, int]
+
+    def status_column(self) -> int | None:
+        return self.header_index.get("status")
+
+
 async def append_reservation_row(row_values: Sequence[Any]) -> None:
     """Append ``row_values`` to the reservations worksheet."""
 
@@ -82,6 +93,29 @@ async def append_reservation_row(row_values: Sequence[Any]) -> None:
         payload,
         value_input_option="RAW",
     )
+
+
+async def load_reservation_ledger() -> ReservationLedger:
+    """Return the full reservations ledger with header metadata."""
+
+    matrix = await _fetch_reservations_matrix()
+    if not matrix:
+        return ReservationLedger(rows=[], header_index={})
+
+    header = matrix[0]
+    index = _build_header_index(header)
+    records: list[ReservationRow] = []
+    for offset, raw in enumerate(matrix[1:], start=2):
+        if not _row_has_content(raw):
+            continue
+        record = ReservationRow(
+            row_number=offset,
+            **_parse_reservation_row(header, raw),
+            raw=list(raw),
+        )
+        records.append(record)
+
+    return ReservationLedger(rows=records, header_index=index)
 
 
 async def get_active_reservations_for_clan(clan_tag: str) -> List[ReservationRow]:
@@ -197,22 +231,40 @@ async def _resolve_reservation_name(
 
 
 async def _load_reservations() -> List[ReservationRow]:
-    matrix = await _fetch_reservations_matrix()
-    if not matrix:
-        return []
+    ledger = await load_reservation_ledger()
+    return ledger.rows
 
-    header = matrix[0]
-    records: List[ReservationRow] = []
-    for offset, raw in enumerate(matrix[1:], start=2):
-        if not _row_has_content(raw):
-            continue
-        record = ReservationRow(
-            row_number=offset,
-            **_parse_reservation_row(header, raw),
-            raw=list(raw),
-        )
-        records.append(record)
-    return records
+
+async def update_reservation_status(
+    row_number: int,
+    status: str,
+    *,
+    status_column: int | None = None,
+) -> None:
+    """Update the ``status`` cell for the reservation at ``row_number``."""
+
+    if row_number <= 1:
+        raise ValueError("row_number must reference a data row")
+
+    column_index = status_column
+    if column_index is None or column_index < 0:
+        ledger = await load_reservation_ledger()
+        column_index = ledger.status_column()
+        if column_index is None:
+            raise ValueError("Reservations sheet missing a 'status' column")
+
+    recruitment.ensure_service_account_credentials()
+    sheet_id = recruitment.get_recruitment_sheet_id()
+    tab_name = recruitment.get_reservations_tab_name()
+    worksheet = await async_core.aget_worksheet(sheet_id, tab_name)
+
+    cell = f"{_column_label(column_index)}{row_number}"
+    await async_core.acall_with_backoff(
+        worksheet.update,
+        cell,
+        [[str(status)]],
+        value_input_option="RAW",
+    )
 
 
 async def _fetch_reservations_matrix() -> List[List[str]]:
@@ -220,6 +272,17 @@ async def _fetch_reservations_matrix() -> List[List[str]]:
     sheet_id = recruitment.get_recruitment_sheet_id()
     tab_name = recruitment.get_reservations_tab_name()
     return await async_core.afetch_values(sheet_id, tab_name)
+
+
+def _column_label(index: int) -> str:
+    if index < 0:
+        raise ValueError("column index must be non-negative")
+    value = index + 1
+    label = ""
+    while value > 0:
+        value, remainder = divmod(value - 1, 26)
+        label = chr(65 + remainder) + label
+    return label or "A"
 
 
 def _parse_reservation_row(header: Sequence[Any], row: Sequence[Any]) -> dict[str, Any]:
@@ -335,13 +398,16 @@ def _row_has_content(row: Sequence[Any]) -> bool:
 
 
 __all__ = [
+    "ReservationLedger",
     "ReservationRow",
     "SupportsMemberLookup",
     "ResolveUserFn",
     "append_reservation_row",
+    "load_reservation_ledger",
     "get_active_reservations_for_clan",
     "count_active_reservations_for_clan",
     "get_active_reservations_by_clan",
     "get_active_reservation_names_for_clan",
     "resolve_reservation_names",
+    "update_reservation_status",
 ]

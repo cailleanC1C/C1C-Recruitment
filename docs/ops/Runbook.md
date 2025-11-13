@@ -157,6 +157,18 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
   - `AF` — effective open spots (`max(E - AH, 0)`)
   - `AI` — reservation summary (`"<AH> -> usernames"`)
 - A success message posts in the thread with the refreshed `AH` and `AF` values.
+ 
+## Reservation lifecycle (daily jobs)
+- **12:00 UTC — Reminder**
+  - Finds every `active` reservation where `reserved_until == today`.
+  - Posts a reminder in the recruit’s ticket thread and pings Recruiter roles.
+  - Gives Recruiters a six-hour window to extend or intervene before expiry.
+- **18:00 UTC — Auto-release**
+  - Marks `active` reservations with `reserved_until <= today` as `expired` in `RESERVATIONS_TAB`.
+  - Calls `recompute_clan_availability` for each affected clan to refresh `AF`, `AH`, and `AI`.
+  - Posts an expiry notice in the ticket thread (when it still exists) and a summary line in `RECRUITERS_THREAD_ID`.
+
+Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` worksheet. When the flag is disabled they exit without making any changes.
 
 ## Features unexpectedly disabled at startup
 - **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
@@ -166,4 +178,4 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)
