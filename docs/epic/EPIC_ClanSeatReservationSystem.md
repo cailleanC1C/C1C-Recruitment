@@ -1,12 +1,8 @@
 # 📘 EPIC: Clan Seat Reservation System (`!reserve <clantag>`)
-
 ## 0. Purpose & Scope
-
 Recruiters need a reliable way to temporarily **hold a clan seat** for a recruit while the placement process is ongoing.
 This EPIC introduces the `!reserve <clantag>` command, a structured sheet-backed reservation ledger, scheduled reminders & auto-release, and updated availability logic across the cluster.
-
 Reservations must:
-
 * Live in a dedicated **Reservations ledger** in Google Sheets
 * Respect **ingame open spots (col E)**
 * Adjust **effective availability (AF)**
@@ -16,56 +12,31 @@ Reservations must:
 * Be fully controlled by a **feature toggle**
 * Require **Recruiter or Admin roles**
 * Update the **in-memory bot_info cache** instantly (Option A)
-
 This EPIC defines the behaviour, data model, command flow, error handling, and scheduled tasks.
-
 ---
-
 # 1. Permissions, Roles & Toggles
-
 ## 1.1 Feature Toggle
-
 In Recruitment Sheet › Config:
-
 * `FEATURE_RESERVATIONS` → `TRUE` / `FALSE`
-
 If `FALSE`:
-
 * All reservation commands politely refuse and do nothing.
-
 If `TRUE`:
-
 * Full functionality is active.
-
 ## 1.2 Who Can Use Reservation Features
-
 A user is allowed if **any** of these is true:
-
 * Has a role in `ADMIN_ROLE_IDS`
 * Has a role in `RECRUITER_ROLE_IDS`
-
 Everyone else:
-
 * If they attempt `!reserve` →
-
   > “Only Recruiters (or Admins) can reserve clan spots.”
-
 ## 1.3 Where Commands Are Allowed
-
 `!reserve <clantag>` is only valid **inside a recruit’s ticket thread**.
-
 If invoked elsewhere:
-
 > “Please run `!reserve` inside the recruit’s ticket thread so I know who you mean.”
-
 ---
-
 # 2. Sheets Structure & Data Semantics
-
 ## 2.1 CLANS_TAB (`bot_info`)
-
 Columns relevant to this EPIC:
-
 | Column | Meaning              | Edited by      |
 | ------ | -------------------- | -------------- |
 | **E**  | Ingame open spots    | Human (SSoT)   |
@@ -73,31 +44,20 @@ Columns relevant to this EPIC:
 | **AG** | Inactives            | Unchanged      |
 | **AH** | Reserved count       | Bot (computed) |
 | **AI** | Reserved summary     | Bot (computed) |
-
 ### 2.1.1 Final Availability Math
-
 Let:
-
 * `E` = ingame open spots (manual, col E)
 * `R` = count of **active** reservations for that clan
-
 The bot maintains:
-
 * **AH** = `R`
 * **AF** = `max(E - R, 0)`
 * **AI** = `"<R> -> username1, username2, …"`
-
 **Only E is edited by humans.**
 All other values (AF/AH/AI) are rewritten by the bot.
-
 AF continues to be the **SSoT for all panels & reports**.
-
 ## 2.2 RESERVATIONS_TAB
-
 Configured in Config as `RESERVATIONS_TAB`.
-
 Required columns:
-
 | Col | Name           | Type              |
 | --- | -------------- | ----------------- |
 | A   | thread_id      | string            |
@@ -108,126 +68,78 @@ Required columns:
 | F   | created_at     | UTC ISO           |
 | G   | status         | string            |
 | H   | notes          | text              |
-
 ### 2.2.1 Status Values
-
 * `active`
 * `released` (future manual feature)
 * `expired` (auto-release job)
 * `cancelled` (optional; not required in v1)
-
 Only `active` rows count toward `R`.
-
 ### 2.2.2 Active Reservation Definition
-
 A row is considered **active** if:
-
 * `status == "active"`
-
 (We do **not** auto-expire by date alone; the auto-release job changes the status.)
-
 ### 2.2.3 Summary Name Resolution (for column AI)
-
 When building AI:
-
 * For each active reservation in a clan, resolve `ticket_user_id` → display name.
 * If resolution fails, use `unknown:<ID>`.
 * AI = `"<R> -> name1, name2, …"`
 * If `R == 0`: AI is `""`.
-
 ---
-
 # 3. Command Flow — `!reserve <clantag>`
-
 Usage:
-
 ```
 !reserve C1CE
 ```
-
 ## 3.1 Preconditions
-
 1. `FEATURE_RESERVATIONS` must be TRUE
 2. User must be Admin or Recruiter
 3. Command must be inside ticket thread
 4. `clantag` must exist in `CLANS_TAB`
-
 If any fail → polite error + stop.
-
 ---
-
 ## 3.2 Dialogue Steps
-
 ### Step 1 — Ask “Who?”
-
 Bot:
-
 > “Who do you want to reserve a spot for in `<clantag>`?
 > You can @mention them or paste their Discord ID.”
-
 * Accepts @mention or raw ID
 * Validates it resolves to a user
 * If invalid: repeat
 * If `cancel`: abort workflow
-
 ### Step 2 — Ask “Until which date?”
-
 Bot:
-
 > “Until which date? Please use `YYYY-MM-DD` (no time).”
-
 Validation:
-
 * Must be a valid date
 * Must be today or later
 * If invalid: ask again
-
 ### Step 3 — Compute Effective Availability
-
 Bot reads:
-
 * `E` (col E)
 * `R` (active reservations count)
-
 Compute:
-
 ```
 effective_available = max(E - R, 0)
 ```
-
 Case 1: `> 0`
 → continue normally
-
 Case 2: `== 0`
 → warn + require reason:
-
 > “There are currently no effective open spots in `<clantag>`.
 > You can still reserve. Please provide a reason.”
-
 Store reason in `notes`.
-
 ### Step 4 — Confirmation
-
 Bot displays:
-
 > “Reserve **1 spot** in `<clantag>` for `<@user>` until **<date>**.
 > Type `yes` to save, `no` to cancel, `change` to edit.”
-
 ### Step 5 — Action Branches
-
 #### If `no`
-
 → end, no sheet writes
-
 #### If `change`
-
 → “What do you want to change: `user` or `date`?”
 → loop back appropriately
-
 #### If `yes` → **Perform reservation**
-
 1. Append new row to `RESERVATIONS_TAB`:
-
    * `thread_id`
    * `ticket_user_id`
    * `recruiter_id`
@@ -236,138 +148,86 @@ Bot displays:
    * `created_at` (UTC ISO)
    * `status = active`
    * `notes` (if any)
-
 2. Recompute `R` for that clan
-
 3. Write to `CLANS_TAB`:
-
    * `AH = R`
    * `AF = max(E - R, 0)`
    * `AI = "<R> -> usernames"`
-
 4. **Update in-memory bot_info cache entry for this clan**
    (same AH/AF/AI values)
-
 5. Respond:
-
 > “Reserved 1 spot in `<clantag>` for `<@user>` until **<date>**.
 > Reserved: `<AH>`. Effective open spots: `<AF>`.”
-
 ### Error handling
-
 If any sheet write fails:
-
 * Do **not** update cache
 * Do **not** leave partial state
 * Bot posts:
-
 > “Error saving reservation. Nothing was changed. Please try again or poke an admin.”
-
 ---
-
 # 4. Reserved With 0 Spots Scenario
-
 If `effective_available == 0` at reservation time:
-
 * Bot asks for a reason
 * Reservation **still allowed**
 * Reason stored in `notes`
 * Resulting AF becomes `max(E - R, 0)` → typically 0
-
 ---
-
 # 5. Scheduled Reservation Tasks
-
 Use existing scheduling approach (≤3/day allowed).
-
 ## 5.1 Reminder Job — **12:00 UTC**
-
 For each row where:
-
 * `status == active`
 * `reserved_until == today`
-
 Actions:
-
 1. Post reminder in ticket thread:
-
 > “Reminder: the reserved spot in `<clantag>` for `<@user>` ends today.
 > Please extend if needed, otherwise I’ll release the seat later today.”
-
 2. Tag recruiter roles
 3. Recompute AF/AH/AI for this clan (optional but safe)
-
 No status change yet.
 This begins the **6-hour grace period**.
-
 ---
-
 ## 5.2 Auto-Release Job — **18:00 UTC**
-
 For each row where:
-
 * `status == active`
 * `reserved_until <= today`
-
 Actions:
-
 1. Set status → `expired`
 2. Recompute R for the clan
 3. Write new:
-
    * `AH = R`
    * `AF = max(E - R, 0)`
    * `AI = "<R> -> usernames"`
 4. Update in-memory cache entry for this clan
 5. Post in thread:
-
 > “The reserved spot in `<clantag>` for `<@user>` has expired and the seat has been released.”
-
 6. Post summary to `RECRUITERS_THREAD_ID`:
-
 > “⚠️ Reservation expired — clan=`<clantag>` • user=`<@user>` • until=`<date>` • released at 18:00 UTC.”
-
 If thread missing, skip but log in recruiters thread with a note.
-
 ---
-
 # 6. Future Extensions (Backlog)
-
 Not required in v1 but compatible with this model:
-
 * `!reservations` — list reservations in this thread
 * `!reservations <clan>` — list clan’s active reservations
 * `!reserve release` — manual release in thread
 * `!reserve extend <YYYY-MM-DD>` — extend date
 * Maintenance: `!reserve rebuild` to recompute AF/AH/AI for all clans
-
 ---
-
 # 7. Cache Behaviour (Final)
-
 To ensure panels always show current data with minimal quota usage:
-
 **On every reservation state change:**
-
 * After writing updated AH/AF/AI to `CLANS_TAB`,
   the bot **immediately updates the in-memory cache entry** for that clan
   using the same AH/AF/AI values.
-
 This ensures:
-
 * Recruiter panel immediately reflects new seat counts
 * No global cache clears
 * No dependency on scheduled refreshes
 * Minimal performance impact
-
 If sheet write failed → do **not** update cache.
-
 ---
-
 # 8. Summary
-
 This EPIC introduces:
-
 * A recruiter/admin-only `!reserve` flow
 * A proper sheet-based reservation ledger
 * Stable availability math respecting ingame data
