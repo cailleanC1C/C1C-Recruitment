@@ -2409,7 +2409,27 @@ class BaseWelcomeController:
         except (TypeError, ValueError):
             return False
 
-        if session.respondent_id is not None and session.respondent_id != author_id:
+        if session.respondent_id is None:
+            log.debug(
+                "welcome.auto_capture.ignore_unbound",
+                extra={
+                    "thread": thread_id,
+                    "author": author_id,
+                    "status": session.status,
+                },
+            )
+            return False
+
+        if session.respondent_id != author_id:
+            log.debug(
+                "welcome.auto_capture.ignore_other_author",
+                extra={
+                    "thread": thread_id,
+                    "author": author_id,
+                    "respondent": session.respondent_id,
+                    "status": session.status,
+                },
+            )
             return False
         if session.status == "completed":
             return False
@@ -2476,7 +2496,15 @@ class BaseWelcomeController:
         session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
         session.status = "in_progress"
         session.thread_id = thread_id
-        if actor_id is not None:
+
+        if session.respondent_id is None:
+            user_identifier = getattr(getattr(interaction, "user", None), "id", None)
+            try:
+                session.respondent_id = int(user_identifier) if user_identifier is not None else None
+            except (TypeError, ValueError):
+                session.respondent_id = session.respondent_id
+
+        if session.respondent_id is None and actor_id is not None:
             try:
                 session.respondent_id = int(actor_id)
             except (TypeError, ValueError):
