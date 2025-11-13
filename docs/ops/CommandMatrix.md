@@ -42,6 +42,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!ops refresh all` | 🧩 | Warm every registered cache bucket and emit a consolidated summary (30 s guild cooldown). | `!ops refresh all` |
 | `!ops reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!ops reload [--reboot]` |
 | `!clanmatch` | 🧩 | Recruiter match workflow (requires recruiter/staff role). [gated: `recruiter_panel`] | `!clanmatch` |
+| `!reserve <clan>` | ✅ | Reserve one clan seat inside a ticket thread and update availability. [gated: `feature_reservations`] | `!reserve <clan>` |
 | `!welcome <clan> [@member] [note]` | ✅ | Post the legacy welcome embed with crest, pings, and general notice routing. [gated: `recruitment_welcome`] | `!welcome <clan> [@member] [note]` |
 
 ## User — general members
@@ -52,6 +53,6 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
 
-> Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `placement_target_select` and `placement_reservations` remain stub modules that only log when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
+> Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-11-11 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.7)

@@ -144,6 +144,20 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 - Two zero-width divider fields containing `﹘﹘﹘` separate the blocks so desktop and
   mobile layouts both show clear visual boundaries.
 
+## Reserving a clan seat (`!reserve`)
+- Confirm `FEATURE_RESERVATIONS` is enabled in the FeatureToggles worksheet before using the command.
+- Run `!reserve <clan_tag>` inside the recruit’s ticket thread (welcome or promo parent).
+- Follow the prompts:
+  - Mention the recruit or paste their Discord ID.
+  - Provide the reservation end date in `YYYY-MM-DD`.
+  - Add a short reason when no effective seats remain (`AF` = 0).
+- Reply `yes` at the confirmation step to save; `change` lets you re-enter the recruit or date.
+- The bot appends the ledger row in `RESERVATIONS_TAB`, then calls `recompute_clan_availability` to update:
+  - `AH` — active reservations
+  - `AF` — effective open spots (`max(E - AH, 0)`)
+  - `AI` — reservation summary (`"<AH> -> usernames"`)
+- A success message posts in the thread with the refreshed `AH` and `AF` values.
+
 ## Features unexpectedly disabled at startup
 - **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
   match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
@@ -152,4 +166,4 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-08 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.7)

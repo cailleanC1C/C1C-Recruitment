@@ -824,7 +824,8 @@ class Runtime:
             "modules.placement.target_select", ("placement_target_select",)
         )
         await _load_feature_module(
-            "modules.placement.reservations", ("placement_reservations",)
+            "modules.placement.reservations",
+            ("feature_reservations", "placement_reservations"),
         )
 
         await onboarding_ops_check.setup(self.bot)
