@@ -1,12 +1,10 @@
 # 📘 EPIC: Clan Seat Reservation System (`!reserve <clantag>`)
 
 ## 0. Purpose & Scope
-
 Recruiters need a reliable way to temporarily **hold a clan seat** for a recruit while the placement process is ongoing.
 This EPIC introduces the `!reserve <clantag>` command, a structured sheet-backed reservation ledger, scheduled reminders & auto-release, and updated availability logic across the cluster.
 
 Reservations must:
-
 * Live in a dedicated **Reservations ledger** in Google Sheets
 * Respect **ingame open spots (col E)**
 * Adjust **effective availability (AF)**
