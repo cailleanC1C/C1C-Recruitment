@@ -39,7 +39,7 @@ def _reservation_row(
     status: str = "active",
     thread_id: int = 1000,
     ticket_user_id: int | None = 2000,
-    ticket_username: str = "Recruit One",
+    username_snapshot: str = "Recruit One",
 ) -> reservations.ReservationRow:
     return reservations.ReservationRow(
         row_number=row_number,
@@ -51,8 +51,18 @@ def _reservation_row(
         created_at=None,
         status=status,
         notes="",
-        ticket_username=ticket_username,
-        raw=[str(thread_id), str(ticket_user_id or ""), "3000", clan_tag, "", "", status, "", ticket_username],
+        username_snapshot=username_snapshot,
+        raw=[
+            str(thread_id),
+            str(ticket_user_id or ""),
+            "3000",
+            clan_tag,
+            reserved_until.isoformat() if reserved_until else "",
+            "",
+            status,
+            "",
+            username_snapshot,
+        ],
     )
 
 
@@ -66,7 +76,10 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
         thread_id=6666,
     )
 
-    ledger = reservations.ReservationLedger(rows=[due_row, future_row], header_index={"status": 6})
+    ledger = reservations.ReservationLedger(
+        rows=[due_row, future_row],
+        header_index={"status": reservations.RESERVATIONS_HEADERS.index("status")},
+    )
 
     async def fake_load():
         return ledger
@@ -115,7 +128,7 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
 
     ledger = reservations.ReservationLedger(
         rows=[due_row, future_row, inactive_row],
-        header_index={"status": 6},
+        header_index={"status": reservations.RESERVATIONS_HEADERS.index("status")},
     )
 
     async def fake_load():

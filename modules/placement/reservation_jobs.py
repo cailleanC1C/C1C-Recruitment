@@ -354,8 +354,8 @@ def _normalize_tag(tag: str | None) -> str:
 def _user_display(row: reservations.ReservationRow) -> str:
     if row.ticket_user_id:
         return f"<@{row.ticket_user_id}>"
-    if row.ticket_username:
-        text = row.ticket_username.strip()
+    if row.username_snapshot:
+        text = row.username_snapshot.strip()
         if text:
             return text
     if row.thread_id:

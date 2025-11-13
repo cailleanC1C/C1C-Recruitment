@@ -441,6 +441,8 @@ class ReservationCog(commands.Cog):
             return
 
         now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        username_snapshot = details.ticket_username or details.ticket_display
+
         row_values = [
             str(getattr(ctx.channel, "id", "")),
             str(details.ticket_user_id or ""),
@@ -450,7 +452,7 @@ class ReservationCog(commands.Cog):
             now.isoformat(),
             ACTIVE_STATUS,
             details.notes,
-            details.ticket_username or "",
+            username_snapshot or "",
         ]
 
         try:

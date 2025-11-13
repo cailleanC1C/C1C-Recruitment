@@ -30,7 +30,7 @@ def test_recompute_clan_availability_updates_sheet(monkeypatch):
             created_at=None,
             status="active",
             notes="",
-            ticket_username="Alice",
+            username_snapshot="Alice",
             raw=[],
         )
         return [row]

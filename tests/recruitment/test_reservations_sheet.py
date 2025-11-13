@@ -2,22 +2,18 @@ import asyncio
 import datetime as dt
 import types
 
+import pytest
+
 from shared.sheets import reservations
 
 
 def test_get_active_reservations_for_clan_filters_status(monkeypatch):
-    header = [
-        "Thread ID",
-        "Clan Tag",
-        "Status",
-        "Ticket User ID",
-        "Ticket Username",
-    ]
+    header = list(reservations.RESERVATIONS_HEADERS)
     matrix = [
         header,
-        ["t1", "#AAA", "active", "1", "Alice"],
-        ["t2", "#AAA", "expired", "2", "Bob"],
-        ["t3", "#BBB", "ACTIVE", "3", "Cara"],
+        ["t1", "1", "", "#AAA", "", "", "active", "", "Alice"],
+        ["t2", "2", "", "#AAA", "", "", "expired", "", "Bob"],
+        ["t3", "3", "", "#BBB", "", "", "ACTIVE", "", "Cara"],
     ]
 
     async def fake_fetch():
@@ -29,7 +25,7 @@ def test_get_active_reservations_for_clan_filters_status(monkeypatch):
     assert len(rows) == 1
     assert rows[0].thread_id == "t1"
     assert rows[0].ticket_user_id == 1
-    assert rows[0].ticket_username == "Alice"
+    assert rows[0].username_snapshot == "Alice"
 
     rows_other = asyncio.run(reservations.get_active_reservations_for_clan("#bbb"))
     assert len(rows_other) == 1
@@ -38,17 +34,6 @@ def test_get_active_reservations_for_clan_filters_status(monkeypatch):
 
 
 def test_reservation_row_parsing_handles_dates():
-    header = [
-        "Thread ID",
-        "Ticket User ID",
-        "Recruiter ID",
-        "Clan Tag",
-        "Reserved Until",
-        "Created At",
-        "Status",
-        "Notes",
-        "Ticket Username",
-    ]
     row = [
         "12345",
         "987654321",
@@ -63,7 +48,7 @@ def test_reservation_row_parsing_handles_dates():
 
     parsed = reservations.ReservationRow(
         row_number=5,
-        **reservations._parse_reservation_row(header, row),
+        **reservations._parse_reservation_row(row),
         raw=row,
     )
 
@@ -74,20 +59,14 @@ def test_reservation_row_parsing_handles_dates():
     assert parsed.reserved_until == dt.date(2025, 12, 1)
     assert parsed.created_at == dt.datetime(2025, 11, 10, 14, 30, tzinfo=dt.timezone.utc)
     assert parsed.is_active is True
-    assert parsed.ticket_username == "TestUser"
+    assert parsed.username_snapshot == "TestUser"
 
 
 def test_resolve_reservation_names_prefers_resolver(monkeypatch):
-    header = [
-        "Thread ID",
-        "Clan Tag",
-        "Status",
-        "Ticket User ID",
-        "Ticket Username",
-    ]
+    header = list(reservations.RESERVATIONS_HEADERS)
     matrix = [
         header,
-        ["t1", "#AAA", "active", "1", "fallback"],
+        ["t1", "1", "", "#AAA", "", "", "active", "", "fallback"],
     ]
 
     async def fake_fetch():
@@ -105,15 +84,10 @@ def test_resolve_reservation_names_prefers_resolver(monkeypatch):
 
 
 def test_resolve_reservation_names_uses_guild_cache(monkeypatch):
-    header = [
-        "Thread ID",
-        "Clan Tag",
-        "Status",
-        "Ticket User ID",
-    ]
+    header = list(reservations.RESERVATIONS_HEADERS)
     matrix = [
         header,
-        ["t1", "#AAA", "active", "1"],
+        ["t1", "1", "", "#AAA", "", "", "active", "", ""],
     ]
 
     async def fake_fetch():
@@ -131,3 +105,17 @@ def test_resolve_reservation_names_uses_guild_cache(monkeypatch):
         reservations.get_active_reservation_names_for_clan("#AAA", guild=DummyGuild())
     )
     assert names == ["GuildName"]
+
+
+def test_load_reservation_ledger_rejects_bad_header(monkeypatch):
+    bad_header = ["Thread ID", "Ticket User ID", "Wrong"]
+    matrix = [bad_header, ["a", "b", "c"]]
+
+    async def fake_fetch():
+        return matrix
+
+    monkeypatch.setattr(reservations, "_fetch_reservations_matrix", fake_fetch)
+    monkeypatch.setattr(reservations.recruitment, "get_reservations_tab_name", lambda: "RESERVATIONS_TAB")
+
+    with pytest.raises(reservations.ReservationSchemaError):
+        asyncio.run(reservations.load_reservation_ledger())

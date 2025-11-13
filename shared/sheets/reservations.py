@@ -25,23 +25,23 @@ class SupportsMemberLookup(Protocol):
 ResolveUserFn = Callable[[int], Awaitable[str | None] | str | None]
 
 
-_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
-    "thread_id": ("thread id", "thread", "ticket thread", "ticket thread id"),
-    "ticket_user_id": ("ticket user id", "applicant id", "user id", "ticket_user_id"),
-    "ticket_username": ("ticket username", "applicant", "applicant name", "username"),
-    "recruiter_id": ("recruiter id", "staff id"),
-    "clan_tag": ("clan tag", "tag"),
-    "reserved_until": (
-        "reserved until",
-        "hold until",
-        "expires",
-        "reserved_until",
-        "reservation expires",
-    ),
-    "created_at": ("created at", "created", "timestamp", "created_at"),
-    "status": ("status",),
-    "notes": ("notes", "note", "comment"),
-}
+RESERVATIONS_HEADERS: list[str] = [
+    "thread_id",
+    "ticket_user_id",
+    "recruiter_id",
+    "clan_tag",
+    "reserved_until",
+    "created_at",
+    "status",
+    "notes",
+    "username_snapshot",
+]
+
+RESERVATIONS_INDEX: dict[str, int] = {name: idx for idx, name in enumerate(RESERVATIONS_HEADERS)}
+
+
+class ReservationSchemaError(RuntimeError):
+    """Raised when the reservations worksheet header does not match the schema."""
 
 
 @dataclass(slots=True)
@@ -57,7 +57,7 @@ class ReservationRow:
     created_at: Optional[dt.datetime]
     status: str
     notes: str
-    ticket_username: Optional[str]
+    username_snapshot: Optional[str]
     raw: Sequence[str]
 
     @property
@@ -83,6 +83,12 @@ class ReservationLedger:
 async def append_reservation_row(row_values: Sequence[Any]) -> None:
     """Append ``row_values`` to the reservations worksheet."""
 
+    if len(row_values) != len(RESERVATIONS_HEADERS):
+        raise ValueError(
+            "reservation row must contain exactly"
+            f" {len(RESERVATIONS_HEADERS)} values"
+        )
+
     recruitment.ensure_service_account_credentials()
     sheet_id = recruitment.get_recruitment_sheet_id()
     tab_name = recruitment.get_reservations_tab_name()
@@ -100,22 +106,36 @@ async def load_reservation_ledger() -> ReservationLedger:
 
     matrix = await _fetch_reservations_matrix()
     if not matrix:
-        return ReservationLedger(rows=[], header_index={})
+        return ReservationLedger(rows=[], header_index=dict(RESERVATIONS_INDEX))
 
-    header = matrix[0]
-    index = _build_header_index(header)
+    header = [_normalize_schema_cell(cell) for cell in matrix[0]]
+    if header != RESERVATIONS_HEADERS:
+        tab_name = recruitment.get_reservations_tab_name()
+        log.error(
+            "reservations header mismatch",
+            extra={
+                "tab": tab_name,
+                "expected": RESERVATIONS_HEADERS,
+                "actual": header,
+            },
+        )
+        raise ReservationSchemaError(
+            "RESERVATIONS_TAB header mismatch."
+            " Expected exact match to RESERVATIONS_HEADERS."
+        )
+
     records: list[ReservationRow] = []
     for offset, raw in enumerate(matrix[1:], start=2):
         if not _row_has_content(raw):
             continue
         record = ReservationRow(
             row_number=offset,
-            **_parse_reservation_row(header, raw),
+            **_parse_reservation_row(raw),
             raw=list(raw),
         )
         records.append(record)
 
-    return ReservationLedger(rows=records, header_index=index)
+    return ReservationLedger(rows=records, header_index=dict(RESERVATIONS_INDEX))
 
 
 async def get_active_reservations_for_clan(clan_tag: str) -> List[ReservationRow]:
@@ -219,8 +239,8 @@ async def _resolve_reservation_name(
                         text = str(value).strip()
                         if text:
                             return text
-    if row.ticket_username:
-        text = row.ticket_username.strip()
+    if row.username_snapshot:
+        text = row.username_snapshot.strip()
         if text:
             return text
     if row.ticket_user_id is not None:
@@ -285,40 +305,23 @@ def _column_label(index: int) -> str:
     return label or "A"
 
 
-def _parse_reservation_row(header: Sequence[Any], row: Sequence[Any]) -> dict[str, Any]:
-    index = _build_header_index(header)
+def _parse_reservation_row(row: Sequence[Any]) -> dict[str, Any]:
     return {
-        "thread_id": _cell_text(row, index.get("thread_id")),
-        "ticket_user_id": _parse_int(_cell_text(row, index.get("ticket_user_id"))),
-        "recruiter_id": _parse_int(_cell_text(row, index.get("recruiter_id"))),
-        "clan_tag": _cell_text(row, index.get("clan_tag")),
-        "reserved_until": _parse_date(_cell_text(row, index.get("reserved_until"))),
-        "created_at": _parse_datetime(_cell_text(row, index.get("created_at"))),
-        "status": _cell_text(row, index.get("status")),
-        "notes": _cell_text(row, index.get("notes")),
-        "ticket_username": _cell_text(row, index.get("ticket_username")) or None,
+        "thread_id": _cell_text(row, RESERVATIONS_INDEX["thread_id"]),
+        "ticket_user_id": _parse_int(_cell_text(row, RESERVATIONS_INDEX["ticket_user_id"])),
+        "recruiter_id": _parse_int(_cell_text(row, RESERVATIONS_INDEX["recruiter_id"])),
+        "clan_tag": _cell_text(row, RESERVATIONS_INDEX["clan_tag"]),
+        "reserved_until": _parse_date(_cell_text(row, RESERVATIONS_INDEX["reserved_until"])),
+        "created_at": _parse_datetime(_cell_text(row, RESERVATIONS_INDEX["created_at"])),
+        "status": _cell_text(row, RESERVATIONS_INDEX["status"]),
+        "notes": _cell_text(row, RESERVATIONS_INDEX["notes"]),
+        "username_snapshot": _cell_text(row, RESERVATIONS_INDEX["username_snapshot"]) or None,
     }
 
 
-def _build_header_index(header_row: Sequence[Any]) -> dict[str, int]:
-    lookup: dict[str, int] = {}
-    for idx, cell in enumerate(header_row):
-        key = _normalize_header(cell)
-        if key and key not in lookup:
-            lookup[key] = idx
-    resolved: dict[str, int] = {}
-    for field, aliases in _HEADER_ALIASES.items():
-        for alias in aliases:
-            candidate = lookup.get(alias)
-            if candidate is not None:
-                resolved[field] = candidate
-                break
-    return resolved
-
-
-def _normalize_header(value: Any) -> str:
-    text = "" if value is None else str(value).strip().lower()
-    return " ".join(text.split())
+def _normalize_schema_cell(value: Any) -> str:
+    text = "" if value is None else str(value)
+    return text.strip()
 
 
 def _normalize_tag(tag: str | None) -> str:
@@ -330,8 +333,8 @@ def _normalize_status(status: str | None) -> str:
     return (status or "").strip().lower()
 
 
-def _cell_text(row: Sequence[Any], index: Optional[int]) -> str:
-    if index is None or index < 0 or index >= len(row):
+def _cell_text(row: Sequence[Any], index: int) -> str:
+    if index < 0 or index >= len(row):
         return ""
     value = row[index]
     return "" if value is None else str(value).strip()
@@ -400,8 +403,10 @@ def _row_has_content(row: Sequence[Any]) -> bool:
 __all__ = [
     "ReservationLedger",
     "ReservationRow",
+    "ReservationSchemaError",
     "SupportsMemberLookup",
     "ResolveUserFn",
+    "RESERVATIONS_HEADERS",
     "append_reservation_row",
     "load_reservation_ledger",
     "get_active_reservations_for_clan",
