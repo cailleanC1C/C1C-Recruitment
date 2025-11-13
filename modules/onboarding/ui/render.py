@@ -8,7 +8,7 @@ import discord
 
 from modules.onboarding.ui.components import AnswerModal, BoolSelect
 
-GUIDANCE = "Use the buttons below. Don’t type answers as messages—those won’t be read."
+GUIDANCE = "You can reply in this thread or use the buttons below to continue."
 
 
 def _answer_chip(value) -> str:

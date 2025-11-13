@@ -28,7 +28,7 @@ from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
 from shared.logfmt import channel_label, user_label
-from shared.sheets.onboarding_questions import Question
+from shared.sheets.onboarding_questions import Question, schema_hash
 from shared.config import get_recruiter_role_ids
 
 log = logging.getLogger(__name__)
@@ -1637,6 +1637,9 @@ class BaseWelcomeController:
         message: discord.Message | None = None,
     ) -> None:
         session = store.get(thread_id)
+        if session is not None:
+            session.status = "completed"
+            session.current_question_index = None
         answers: dict[str, Any] = {}
         if session is not None and session.answers:
             answers.update(session.answers)
@@ -2101,6 +2104,9 @@ class BaseWelcomeController:
         session = store.get(thread_id)
         if session is None:
             session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+        if session is not None:
+            session.status = "in_progress"
+            session.thread_id = thread_id
 
         try:
             questions_for_thread = await self.get_or_load_questions(thread_id, session=session)
@@ -2143,6 +2149,8 @@ class BaseWelcomeController:
             store.set_pending_step(thread_id, None)
             content = "All onboarding questions are complete."
             wizard: panels.OnboardWizard | None = None
+            if session is not None:
+                session.current_question_index = None
         else:
             index = resolved_index
             store.set_pending_step(thread_id, {"kind": "inline", "index": index})
@@ -2152,6 +2160,9 @@ class BaseWelcomeController:
                 log.warning("failed to render inline step", exc_info=True)
                 raise
             wizard = panels.OnboardWizard(self, thread_id, step=index)
+            if session is not None:
+                session.current_question_index = index
+                session.status = "in_progress"
 
         diag_state["step_index"] = index
         diag_state["total_steps"] = total_questions
@@ -2294,6 +2305,156 @@ class BaseWelcomeController:
             **log_payload,
         )
 
+    def _record_captured_message(self, thread_id: int, message: discord.Message) -> None:
+        captured = getattr(self, "_captured_msgs", None)
+        if not isinstance(captured, dict):
+            captured = {}
+            setattr(self, "_captured_msgs", captured)
+        try:
+            message_id = int(getattr(message, "id", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if message_id <= 0:
+            return
+        captured.setdefault(thread_id, []).append(message_id)
+
+    async def _react_to_message(self, message: discord.Message, emoji: str) -> None:
+        add_reaction = getattr(message, "add_reaction", None)
+        if not callable(add_reaction):
+            return
+        try:
+            await add_reaction(emoji)
+        except Exception:
+            log.debug("failed to add reaction", exc_info=True)
+
+    async def _refresh_inline_message(self, thread_id: int, *, index: int) -> None:
+        questions = self._questions.get(thread_id) or []
+        if not questions:
+            return
+        try:
+            content = self.render_step(thread_id, index)
+        except Exception:
+            log.debug("failed to render inline content during refresh", exc_info=True)
+            return
+
+        wizard = panels.OnboardWizard(self, thread_id, step=index)
+        try:
+            content = wizard._apply_requirement_suffix(content, wizard._question())
+        except Exception:
+            pass
+
+        message_obj: discord.Message | None = None
+        inline_map = getattr(self, "_inline_messages", None)
+        if isinstance(inline_map, dict):
+            message_obj = inline_map.get(thread_id)
+
+        if message_obj is None:
+            id_map = getattr(self, "_inline_message_ids", None)
+            message_id = id_map.get(thread_id) if isinstance(id_map, dict) else None
+            thread = self._threads.get(thread_id)
+            fetcher = getattr(thread, "fetch_message", None) if thread is not None else None
+            if callable(fetcher) and message_id:
+                try:
+                    message_obj = await fetcher(message_id)
+                except Exception:
+                    message_obj = None
+                    if isinstance(id_map, dict):
+                        id_map.pop(thread_id, None)
+
+        if message_obj is None:
+            return
+
+        try:
+            await message_obj.edit(content=content, view=wizard)
+        except Exception:
+            log.debug("failed to refresh inline wizard message", exc_info=True)
+            return
+
+        try:
+            wizard.attach(message_obj)
+        except Exception:
+            pass
+
+        if isinstance(inline_map, dict):
+            inline_map[thread_id] = message_obj
+        id_map = getattr(self, "_inline_message_ids", None)
+        if isinstance(id_map, dict):
+            try:
+                id_map[thread_id] = int(getattr(message_obj, "id", 0))
+            except Exception:
+                pass
+
+    async def handle_thread_message(self, message: discord.Message) -> bool:
+        channel = getattr(message, "channel", None)
+        thread_identifier = getattr(channel, "id", None)
+        try:
+            thread_id = int(thread_identifier)
+        except (TypeError, ValueError):
+            return False
+
+        if thread_id not in self._questions:
+            return False
+
+        author = getattr(message, "author", None)
+        if author is None or getattr(author, "bot", False):
+            return False
+
+        session = store.get(thread_id)
+        if session is None:
+            return False
+
+        author_identifier = getattr(author, "id", None)
+        try:
+            author_id = int(author_identifier)
+        except (TypeError, ValueError):
+            return False
+
+        if session.respondent_id is not None and session.respondent_id != author_id:
+            return False
+        if session.status == "completed":
+            return False
+
+        pending = session.pending_step or {}
+        if not isinstance(pending, dict) or pending.get("kind") != "inline":
+            return False
+
+        try:
+            index = int(pending.get("index", 0))
+        except (TypeError, ValueError):
+            return False
+
+        questions = self._questions.get(thread_id) or []
+        if not (0 <= index < len(questions)):
+            return False
+
+        question = questions[index]
+        qtype = self._question_type_value(question).strip().lower()
+        if qtype not in {"short", "paragraph", "number"}:
+            return False
+
+        content = (message.content or "").strip()
+        if not content:
+            return False
+
+        meta = self._question_meta(question)
+        ok, cleaned, error = self.validate_answer(meta, content)
+        if not ok:
+            await self._react_to_message(message, "❌")
+            return True
+
+        value = cleaned if cleaned is not None else content
+        await self.set_answer(thread_id, self._question_key(question), value)
+
+        session.respondent_id = session.respondent_id or author_id
+        session.status = "in_progress"
+        session.current_question_index = index
+        session.touch()
+
+        self._record_captured_message(thread_id, message)
+        await self._react_to_message(message, "✅")
+        await self._refresh_inline_message(thread_id, index=index)
+        return True
+
     async def start_session_from_button(
         self,
         thread_id: int,
@@ -2311,6 +2472,16 @@ class BaseWelcomeController:
         allowed, _ = await self.check_interaction(thread_id, interaction, context=context)
         if not allowed:
             return
+
+        session = store.ensure(thread_id, flow=self.flow, schema_hash=schema_hash(self.flow))
+        session.status = "in_progress"
+        session.thread_id = thread_id
+        if actor_id is not None:
+            try:
+                session.respondent_id = int(actor_id)
+            except (TypeError, ValueError):
+                session.respondent_id = session.respondent_id
+        session.touch()
 
         try:
             await self.render_inline_step(
