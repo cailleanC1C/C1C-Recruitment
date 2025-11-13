@@ -27,4 +27,6 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0018](ADR-0018_DailyRecruiterUpdate.md) | Daily recruiter update v1 (UTC, sheet-driven) | Accepted — 2025-10-26 |
 | [ADR-0019](ADR-0019-Introduction-of-Clan-SeatReservations.md) | Clan Seet Resevation for Recruiters | Accepted — 2025-11-13 |
 | [ADR-0020](ADR-0020-Availability-Derivation.md) | Availability Derivation (E → AF/AH/AI) & Cache Update Strategy | Accepted — 2025-11-13 |
+
+
 Doc last updated: 2025-11-13 (v0.9.7)
