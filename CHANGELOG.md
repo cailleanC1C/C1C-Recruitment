@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.9.7 — 2025-11-13
+- **Audit:** Documented current reservation command flow and AF/AH/AI recompute wiring (`AUDIT/20251113_reservations-availability-wiring.md`).
+- **Audit:** Analyzed reservations cache behavior and header drift causing stale availability counts (`AUDIT/20251113_reservations-cache-and-active-rows.md`).
+- **Audit:** Investigated why recompute stays silent after `!reserve` despite the ledger append, tracing the helper call path, logging, and column drift (`AUDIT/20251113_reservations-recompute-not-triggering.md`).
+
 ### v0.9.7 —2025-11-08
 - **Fix:** Restored keep-alive/web server startup by sweeping imports from the deprecated `shared.config` path to `shared.ports.get_port`.
 - **Ops:** Added canonical boot log line `web server listening • port=<n>` to confirm bind.
