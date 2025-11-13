@@ -1,11 +1,11 @@
 # 📄 ADR-0019 — Introduction of Clan Seat Reservations
 
-**Context**
+## **Context**
 Recruiters need a reliable, auditable mechanism to temporarily hold a seat in a clan for a recruit during onboarding and placement.
 Previously, availability was manually edited, and reservations were handled by human memory or ad-hoc notes, which caused mismatches and confusion.
 The system must remain sheet-driven (Google Sheets = SSoT) and must respect existing recruitment workflows, thread-based onboarding, and render quota limits.
 
-**Decision**
+## **Decision**
 We introduce a fully sheet-backed reservation system with:
 * The new command:
   `!reserve <clantag>` — usable only by Recruiters and Admins, only inside ticket threads.
@@ -21,7 +21,7 @@ We introduce a fully sheet-backed reservation system with:
 * All reservation functionality is gated by `FEATURE_RESERVATIONS` (`TRUE`/`FALSE`).
 This provides a controlled, predictable, auditable workflow where reservations affect effective availability across the cluster.
 
-**Consequences**
+## **Consequences**
 * Recruiters have a consistent workflow for holding seats.
 * Clan leads continue updating ingame open spots normally; nothing changes for them.
 * The bot gains responsibility for deriving & updating availability values automatically.
