@@ -3,7 +3,7 @@
 **Phase:** 7 — Placement Tools
 **Milestone:** Harmonize v1.0
 **Related Epic:** Welcome & Placement v2
-**Status:** Draft
+**Status:** obsolete
 
 ---
 
