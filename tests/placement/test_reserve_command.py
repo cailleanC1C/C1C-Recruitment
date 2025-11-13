@@ -173,6 +173,7 @@ def test_reserve_success(monkeypatch):
     assert saved_row[3] == "#ABC"
     assert saved_row[6] == reserve_module.ACTIVE_STATUS
     assert saved_row[7] == ""
+    assert saved_row[8] == recruit.display_name
     assert recomputed["tag"] == "#ABC"
     assert thread.sent[-1].content.startswith("Reserved 1 spot in `#ABC`")
 
