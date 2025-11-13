@@ -48,6 +48,14 @@ class RecruitmentClanRecord:
     roster: str
 
 
+@dataclass(frozen=True, slots=True)
+class ReservationsConfig:
+    """Typed view of reservations-related sheet configuration."""
+
+    enabled: bool
+    tab_name: str
+
+
 DEFAULT_ROSTER_INDEX = 4
 # Fallback indices for legacy rows when header resolution is unavailable.
 FALLBACK_OPEN_SPOTS_INDEX = 31  # Column AF
@@ -304,12 +312,60 @@ def _config_lookup(key: str, default: Optional[str] = None) -> Optional[str]:
     return config.get(want, default)
 
 
+def _config_lookup_bool(key: str, default: bool = False) -> bool:
+    value = _config_lookup(key)
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if not text:
+        return default
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _clans_tab() -> str:
     return _config_lookup("clans_tab", os.getenv("WORKSHEET_NAME", "bot_info")) or "bot_info"
 
 
 def _templates_tab() -> str:
     return _config_lookup("welcome_templates_tab", "WelcomeTemplates") or "WelcomeTemplates"
+
+
+def get_recruitment_sheet_id() -> str:
+    """Public helper for resolving the recruitment sheet identifier."""
+
+    return _sheet_id()
+
+
+def ensure_service_account_credentials() -> None:
+    """Expose credential validation for callers performing write operations."""
+
+    _ensure_service_account_credentials()
+
+
+def get_clans_tab_name() -> str:
+    """Return the configured clan roster tab name."""
+
+    return _clans_tab()
+
+
+def get_reservations_tab_name(default: str = "Reservations") -> str:
+    value = _config_lookup("reservations_tab", default) or default
+    text = str(value or "").strip()
+    return text or default
+
+
+def get_reservations_config(force: bool = False) -> ReservationsConfig:
+    """Return reservations feature wiring from the Config worksheet."""
+
+    if force:
+        _load_config(force=True)
+    tab_name = get_reservations_tab_name()
+    enabled = _config_lookup_bool("feature_reservations", False)
+    return ReservationsConfig(enabled=enabled, tab_name=tab_name)
 
 
 def get_reports_tab_name(default: str = "Statistics") -> str:
@@ -529,3 +585,54 @@ def get_clan_by_tag(tag: str, *, force: bool = False) -> List[str] | None:
         if _normalize_tag(row[2]) == normalized:
             return row
     return None
+
+
+def find_clan_row(clan_tag: str, *, force: bool = False) -> tuple[int, List[str]] | None:
+    """Return the sheet row number and values for ``clan_tag``."""
+
+    normalized = _normalize_tag(clan_tag)
+    if not normalized:
+        return None
+
+    rows = fetch_clans(force=force)
+    for idx, row in enumerate(rows):
+        if len(row) < 3:
+            continue
+        if _normalize_tag(row[2]) == normalized:
+            sheet_row = idx + 4  # Account for the three summary/header rows.
+            return sheet_row, list(row)
+    return None
+
+
+def update_cached_clan_row(sheet_row: int, row_values: Sequence[str]) -> None:
+    """Update the in-memory caches for the clan located at ``sheet_row``."""
+
+    normalized_row = [str(cell) if cell is not None else "" for cell in row_values]
+    index = sheet_row - 4
+    if index < 0:
+        return
+
+    global _CLAN_ROWS, _CLAN_ROWS_TS, _CLAN_TAG_INDEX, _CLAN_TAG_INDEX_TS
+    global _CLAN_RECORDS, _CLAN_RECORDS_TS
+
+    now = time.time()
+
+    if _CLAN_ROWS is not None and 0 <= index < len(_CLAN_ROWS):
+        _CLAN_ROWS[index] = list(normalized_row)
+        _CLAN_ROWS_TS = now
+
+    if _CLAN_TAG_INDEX is not None:
+        tag = normalized_row[2] if len(normalized_row) > 2 else ""
+        normalized_tag = _normalize_tag(tag)
+        if normalized_tag:
+            _CLAN_TAG_INDEX[normalized_tag] = list(normalized_row)
+            _CLAN_TAG_INDEX_TS = now
+
+    if _CLAN_RECORDS is not None and 0 <= index < len(_CLAN_RECORDS):
+        header_map = get_clan_header_map()
+        _CLAN_RECORDS[index] = _make_clan_record(normalized_row, header_map)
+        _CLAN_RECORDS_TS = now
+
+    bucket = cache.get_bucket("clans")
+    if bucket and isinstance(bucket.value, list) and 0 <= index < len(bucket.value):
+        bucket.value[index] = list(normalized_row)

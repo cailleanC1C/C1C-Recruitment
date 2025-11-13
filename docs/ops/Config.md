@@ -136,6 +136,13 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'WELCOME_TEMPLATES_TAB'
 - 'FEATURE_TOGGLES_TAB'
 - 'REPORTS_TAB'
+- 'RESERVATIONS_TAB'
+- 'FEATURE_RESERVATIONS'
+
+`RESERVATIONS_TAB` defaults to `Reservations` and stores the structured reservation
+ledger used to derive availability. `FEATURE_RESERVATIONS` gates reservation-aware
+workflows; it defaults to `FALSE` when absent so new environments remain inert
+until the sheet configuration is populated.
 
 ### Onboarding
 - `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, options, visibility_rules, nav_rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
@@ -213,4 +220,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-11 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.7)
