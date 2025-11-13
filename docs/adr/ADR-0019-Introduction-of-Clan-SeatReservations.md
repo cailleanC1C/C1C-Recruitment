@@ -19,6 +19,7 @@ We introduce a fully sheet-backed reservation system with:
 * Recruiter-level logs posted to the configured `RECRUITERS_THREAD_ID`.
 * Admins are always permitted to use reservation features (emergency override).
 * All reservation functionality is gated by `FEATURE_RESERVATIONS` (`TRUE`/`FALSE`).
+* Implementation note (PR-RES-02): `!reserve <clantag>` now runs from `modules.placement.reservations`, appends rows to `RESERVATIONS_TAB` with `status=active`, and invokes `recompute_clan_availability` to refresh `AH`/`AF`/`AI` plus the in-memory cache. The command is available inside ticket threads when `FEATURE_RESERVATIONS` is enabled.
 This provides a controlled, predictable, auditable workflow where reservations affect effective availability across the cluster.
 
 ## **Consequences**
