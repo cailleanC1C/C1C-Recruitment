@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+
 import discord
 from discord import RawReactionActionEvent
 from discord.ext import commands
@@ -16,14 +21,94 @@ from shared.config import (
     get_guardian_knight_role_ids,
     get_recruitment_coordinator_role_ids,
     get_welcome_channel_id,
+    get_ticket_tool_bot_id,
 )
 from shared.logfmt import channel_label
 from shared.logs import log_lifecycle
+from modules.recruitment import availability
+from shared.sheets import onboarding as onboarding_sheets
+from shared.sheets import reservations as reservations_sheets
+from shared.sheets import recruitment as recruitment_sheets
+from shared.sheets.cache_service import cache as sheets_cache
 
 log = logging.getLogger("c1c.onboarding.welcome_watcher")
 
 _TRIGGER_PHRASE = "awake by reacting with"
 _TICKET_EMOJI = "🎫"
+
+_THREAD_NAME_RE = re.compile(r"^W(?P<ticket>\d{4})[-_\s]*(?P<body>.+)$", re.IGNORECASE)
+_CLOSED_MESSAGE_TOKEN = "ticket closed"
+_NO_PLACEMENT_TAG = "NONE"
+_WELCOME_HEADERS = ["ticket_number", "username", "clantag", "date_closed"]
+
+
+@dataclass(slots=True)
+class TicketContext:
+    thread_id: int
+    ticket_number: str
+    username: str
+    recruit_id: Optional[int] = None
+    recruit_display: Optional[str] = None
+    state: str = "open"
+    prompt_message_id: Optional[int] = None
+    final_clan: Optional[str] = None
+    reservation_label: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(frozen=True)
+class ReservationDecision:
+    label: str
+    status: Optional[str]
+    open_deltas: Dict[str, int]
+    recompute_tags: List[str]
+
+
+def _determine_reservation_decision(
+    final_tag: str,
+    reservation_row: reservations_sheets.ReservationRow | None,
+    *,
+    no_placement_tag: str,
+    final_is_real: bool,
+) -> ReservationDecision:
+    normalized_final = (final_tag or "").strip().upper()
+    open_deltas: Dict[str, int] = {}
+    recompute: List[str] = []
+
+    if reservation_row is None:
+        if final_is_real and normalized_final and normalized_final != no_placement_tag:
+            open_deltas[normalized_final] = -1
+            recompute.append(normalized_final)
+        return ReservationDecision("none", None, open_deltas, recompute)
+
+    reservation_tag = reservation_row.normalized_clan_tag
+    if not reservation_tag:
+        reservation_tag = (reservation_row.clan_tag or "").strip().upper()
+
+    if normalized_final == no_placement_tag:
+        label = "cancelled"
+        status = "cancelled"
+        if reservation_tag:
+            open_deltas[reservation_tag] = open_deltas.get(reservation_tag, 0) + 1
+            recompute.append(reservation_tag)
+        return ReservationDecision(label, status, open_deltas, recompute)
+
+    if reservation_tag and reservation_tag == normalized_final:
+        label = "same"
+        status = "closed_same_clan"
+        if reservation_tag:
+            recompute.append(reservation_tag)
+        return ReservationDecision(label, status, open_deltas, recompute)
+
+    label = "moved"
+    status = "closed_other_clan"
+    if reservation_tag:
+        open_deltas[reservation_tag] = open_deltas.get(reservation_tag, 0) + 1
+        recompute.append(reservation_tag)
+    if final_is_real and normalized_final and normalized_final != reservation_tag:
+        open_deltas[normalized_final] = open_deltas.get(normalized_final, 0) - 1
+        recompute.append(normalized_final)
+    return ReservationDecision(label, status, open_deltas, recompute)
 
 
 async def _send_runtime(message: str) -> None:
@@ -428,5 +513,508 @@ class WelcomeWatcher(commands.Cog):
         await self._post_panel(thread, actor=actor, source="emoji")
 
 
+class _ClanSelect(discord.ui.Select):
+    def __init__(self, parent_view: "ClanSelectView") -> None:
+        self._parent_view = parent_view
+        super().__init__(placeholder="Select a clan tag", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # pragma: no cover - UI callback
+        if not self.values:
+            await interaction.response.defer()
+            return
+        await self._parent_view.handle_selection(interaction, self.values[0])
+
+
+class ClanSelectView(discord.ui.View):
+    def __init__(
+        self,
+        watcher: "WelcomeTicketWatcher",
+        context: TicketContext,
+        tags: List[str],
+        *,
+        page_size: int = 20,
+    ) -> None:
+        super().__init__(timeout=300)
+        self.watcher = watcher
+        self.context = context
+        self.tags = [tag.strip().upper() for tag in tags if tag.strip()]
+        self.page_size = max(1, page_size)
+        self.page = 0
+        self.message: Optional[discord.Message] = None
+
+        self.select = _ClanSelect(self)
+        self.add_item(self.select)
+
+        self.prev_button = None
+        self.next_button = None
+        if len(self.tags) > self.page_size:
+            self.prev_button = discord.ui.Button(label="◀", style=discord.ButtonStyle.secondary)
+            self.prev_button.callback = self._on_prev  # type: ignore[assignment]
+            self.next_button = discord.ui.Button(label="▶", style=discord.ButtonStyle.secondary)
+            self.next_button.callback = self._on_next  # type: ignore[assignment]
+            self.add_item(self.prev_button)
+            self.add_item(self.next_button)
+
+        self._refresh_options()
+
+    def _page_slice(self) -> List[str]:
+        start = self.page * self.page_size
+        end = start + self.page_size
+        return self.tags[start:end]
+
+    def _refresh_options(self) -> None:
+        page_tags = self._page_slice()
+        if not page_tags:
+            self.select.options = [
+                discord.SelectOption(label="No clan tags available", value="none", default=True)
+            ]
+            self.select.disabled = True
+        else:
+            self.select.options = [discord.SelectOption(label=tag, value=tag) for tag in page_tags]
+            self.select.disabled = False
+        if self.prev_button is not None and self.next_button is not None:
+            self.prev_button.disabled = self.page <= 0
+            remaining = (self.page + 1) * self.page_size
+            self.next_button.disabled = remaining >= len(self.tags)
+
+    async def _on_prev(self, interaction: discord.Interaction) -> None:  # pragma: no cover - UI callback
+        if self.page <= 0:
+            await interaction.response.defer()
+            return
+        self.page -= 1
+        self._refresh_options()
+        await interaction.response.edit_message(view=self)
+
+    async def _on_next(self, interaction: discord.Interaction) -> None:  # pragma: no cover - UI callback
+        if (self.page + 1) * self.page_size >= len(self.tags):
+            await interaction.response.defer()
+            return
+        self.page += 1
+        self._refresh_options()
+        await interaction.response.edit_message(view=self)
+
+    async def handle_selection(self, interaction: discord.Interaction, tag: str) -> None:
+        await interaction.response.defer()
+        await self.watcher.finalize_from_interaction(self.context, tag, interaction, self)
+
+    async def on_timeout(self) -> None:  # pragma: no cover - timeout path
+        if self.message is None:
+            return
+        for child in self.children:
+            child.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            log.debug("failed to disable clan select view on timeout", exc_info=True)
+
+
+class WelcomeTicketWatcher(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        channel_id = get_welcome_channel_id()
+        try:
+            self.channel_id = int(channel_id) if channel_id is not None else None
+        except (TypeError, ValueError):
+            self.channel_id = None
+        self.ticket_tool_id = get_ticket_tool_bot_id()
+        self._tickets: Dict[int, TicketContext] = {}
+        self._clan_tags: List[str] = []
+
+        if self.channel_id is None:
+            log.warning("welcome ticket watcher disabled — invalid WELCOME_CHANNEL_ID")
+
+    @staticmethod
+    def _features_enabled() -> bool:
+        return feature_flags.is_enabled("recruitment_welcome")
+
+    def _is_ticket_thread(self, thread: discord.Thread | None) -> bool:
+        if thread is None:
+            return False
+        if self.channel_id is None:
+            return False
+        return getattr(thread, "parent_id", None) == self.channel_id
+
+    def _parse_thread(self, name: str | None) -> Optional[tuple[str, str]]:
+        if not name:
+            return None
+        match = _THREAD_NAME_RE.match(name.strip())
+        if not match:
+            return None
+        ticket = match.group("ticket")
+        body = (match.group("body") or "").strip()
+        if not body:
+            return None
+        username_token = body.split()[0]
+        username = username_token.split("-", 1)[0].strip(" -_")
+        if not username:
+            return None
+        return ticket, username
+
+    def _owner_matches(self, thread: discord.Thread) -> bool:
+        if self.ticket_tool_id is None:
+            return True
+        owner_id = getattr(thread, "owner_id", None)
+        try:
+            owner_value = int(owner_id) if owner_id is not None else None
+        except (TypeError, ValueError):
+            owner_value = None
+        return owner_value == self.ticket_tool_id
+
+    def _is_ticket_tool(self, user: discord.abc.User | None) -> bool:
+        if user is None:
+            return False
+        if self.ticket_tool_id is not None:
+            return getattr(user, "id", None) == self.ticket_tool_id
+        name = getattr(user, "name", "") or ""
+        return "ticket" in name.lower() and "tool" in name.lower()
+
+    async def _ensure_context(self, thread: discord.Thread) -> Optional[TicketContext]:
+        context = self._tickets.get(thread.id)
+        if context is not None:
+            return context
+        parsed = self._parse_thread(thread.name)
+        if not parsed:
+            return None
+        ticket, username = parsed
+        context = TicketContext(
+            thread_id=thread.id,
+            ticket_number=ticket,
+            username=username,
+            recruit_display=username,
+        )
+        self._tickets[thread.id] = context
+        return context
+
+    async def _handle_ticket_open(self, thread: discord.Thread, context: TicketContext) -> None:
+        row = [context.ticket_number, context.username, "", ""]
+        try:
+            await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
+            log.info(
+                "🧭 welcome_open — ticket=%s • user=%s", context.ticket_number, context.username
+            )
+        except Exception:
+            log.exception(
+                "failed to log welcome ticket open",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+
+    async def _load_clan_tags(self) -> List[str]:
+        if self._clan_tags:
+            return self._clan_tags
+
+        tags: List[str] = []
+        bucket = sheets_cache.get_bucket("clan_tags")
+        if bucket is not None:
+            value = bucket.value
+            if not value:
+                try:
+                    await sheets_cache.refresh_now("clan_tags", actor="welcome_watcher")
+                    value = bucket.value
+                except Exception:
+                    log.debug("failed to refresh clan_tags cache", exc_info=True)
+            if isinstance(value, list):
+                tags = [str(tag).strip().upper() for tag in value if str(tag or "").strip()]
+
+        if not tags:
+            try:
+                tags = await asyncio.to_thread(onboarding_sheets.load_clan_tags)
+                tags = [str(tag).strip().upper() for tag in tags if str(tag or "").strip()]
+            except Exception:
+                log.exception("failed to load clan tags from Sheets")
+                return []
+
+        unique = sorted({tag for tag in tags if tag})
+        if _NO_PLACEMENT_TAG not in unique:
+            unique.append(_NO_PLACEMENT_TAG)
+        self._clan_tags = unique
+        return self._clan_tags
+
+    def _tag_known(self, tag: str) -> bool:
+        normalized = (tag or "").strip().upper()
+        return normalized in self._clan_tags
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        if not self._features_enabled():
+            return
+        if not self._is_ticket_thread(thread):
+            return
+        if not self._owner_matches(thread):
+            return
+        context = await self._ensure_context(thread)
+        if context is None:
+            return
+        await self._handle_ticket_open(thread, context)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if not self._features_enabled():
+            return
+        thread = message.channel if isinstance(message.channel, discord.Thread) else None
+        if not self._is_ticket_thread(thread):
+            return
+        if thread is None:
+            return
+        context = await self._ensure_context(thread)
+        if context is None:
+            return
+
+        if self._is_ticket_tool(message.author):
+            content = (message.content or "").lower()
+            if _CLOSED_MESSAGE_TOKEN in content and context.state not in {"awaiting_clan", "closed"}:
+                await self._handle_ticket_closed(thread, context)
+            return
+
+        if getattr(message.author, "bot", False):
+            return
+
+        if context.state != "awaiting_clan" or context.final_clan:
+            return
+
+        candidate = (message.content or "").strip().upper()
+        if not candidate:
+            return
+        await self._load_clan_tags()
+        if not self._tag_known(candidate):
+            return
+        await self._finalize_clan_tag(
+            thread,
+            context,
+            candidate,
+            actor=message.author,
+            source="message",
+            prompt_message=None,
+            view=None,
+        )
+
+    async def _handle_ticket_closed(self, thread: discord.Thread, context: TicketContext) -> None:
+        tags = await self._load_clan_tags()
+        if not tags:
+            await thread.send(
+                "⚠️ I couldn't load the clan tag list right now. Please try again in a moment."
+            )
+            log.warning(
+                "⚠️ welcome_close — ticket=%s • user=%s • reason=clan_tags_unavailable",
+                context.ticket_number,
+                context.username,
+            )
+            return
+
+        context.state = "awaiting_clan"
+        content = (
+            f"Which clan tag for {context.username} (ticket {context.ticket_number})?\n"
+            "Pick one from the menu below, or simply type the tag as a message."
+        )
+        view = ClanSelectView(self, context, tags)
+        try:
+            message = await thread.send(content, view=view)
+        except Exception:
+            context.state = "open"
+            log.exception(
+                "failed to post clan selection prompt",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            return
+        view.message = message
+        context.prompt_message_id = message.id
+
+    async def finalize_from_interaction(
+        self,
+        context: TicketContext,
+        tag: str,
+        interaction: discord.Interaction,
+        view: ClanSelectView,
+    ) -> None:
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        if thread is None:
+            await interaction.followup.send(
+                "⚠️ I lost track of the ticket thread. Please try again.", ephemeral=True
+            )
+            return
+        await self._finalize_clan_tag(
+            thread,
+            context,
+            tag,
+            actor=getattr(interaction, "user", None),
+            source="select",
+            prompt_message=interaction.message,
+            view=view,
+        )
+
+    async def _finalize_clan_tag(
+        self,
+        thread: discord.Thread,
+        context: TicketContext,
+        final_tag: str,
+        *,
+        actor: discord.abc.User | None,
+        source: str,
+        prompt_message: Optional[discord.Message],
+        view: Optional[ClanSelectView],
+    ) -> None:
+        if context.state == "closed":
+            return
+
+        final_tag = (final_tag or "").strip().upper() or _NO_PLACEMENT_TAG
+        if final_tag != _NO_PLACEMENT_TAG:
+            await self._load_clan_tags()
+            if not self._tag_known(final_tag):
+                await thread.send(
+                    f"I don't recognise the clan tag `{final_tag}`. Please pick one from the menu or type a valid tag."
+                )
+                return
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        row = [context.ticket_number, context.username, final_tag, timestamp]
+
+        try:
+            result = await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
+        except Exception as exc:
+            log.exception(
+                "❌ welcome_close — ticket=%s • user=%s • final=%s • reason=sheet_write",
+                context.ticket_number,
+                context.username,
+                final_tag,
+            )
+            await thread.send(
+                "⚠️ Something went wrong while updating the onboarding log. Please try again later or contact an admin."
+            )
+            return
+
+        row_missing = result != "updated"
+        reservation_label = "none"
+        actions_ok = True
+        recompute_tags: List[str] = []
+
+        final_entry = recruitment_sheets.find_clan_row(final_tag) if final_tag != _NO_PLACEMENT_TAG else None
+        final_is_real = final_entry is not None
+
+        reservation_row: reservations_sheets.ReservationRow | None = None
+        if not row_missing:
+            try:
+                matches = await reservations_sheets.find_active_reservations_for_recruit(
+                    context.recruit_id,
+                    context.recruit_display or context.username,
+                )
+            except Exception:
+                matches = []
+                log.exception(
+                    "failed to look up reservations for recruit",
+                    extra={"ticket": context.ticket_number, "user": context.username},
+                )
+            if matches:
+                reservation_row = matches[0]
+                if len(matches) > 1:
+                    log.warning(
+                        "multiple active reservations matched",
+                        extra={
+                            "ticket": context.ticket_number,
+                            "user": context.username,
+                            "rows": [row.row_number for row in matches],
+                        },
+                    )
+
+        decision = _determine_reservation_decision(
+            final_tag,
+            reservation_row,
+            no_placement_tag=_NO_PLACEMENT_TAG,
+            final_is_real=final_is_real,
+        )
+        reservation_label = decision.label
+
+        if not row_missing and reservation_row is not None and decision.status:
+            try:
+                await reservations_sheets.update_reservation_status(
+                    reservation_row.row_number, decision.status
+                )
+            except Exception:
+                actions_ok = False
+                log.exception(
+                    "failed to update reservation status",
+                    extra={
+                        "row": reservation_row.row_number,
+                        "ticket": context.ticket_number,
+                        "status": decision.status,
+                    },
+                )
+
+        if not row_missing:
+            for tag, delta in decision.open_deltas.items():
+                try:
+                    await availability.adjust_manual_open_spots(tag, delta)
+                except Exception:
+                    actions_ok = False
+                    log.exception(
+                        "failed to adjust manual open spots",
+                        extra={"clan_tag": tag, "delta": delta, "ticket": context.ticket_number},
+                    )
+
+            recompute_tags = decision.recompute_tags
+            for tag in recompute_tags:
+                try:
+                    await availability.recompute_clan_availability(tag, guild=thread.guild)
+                except Exception:
+                    actions_ok = False
+                    log.exception(
+                        "failed to recompute clan availability",
+                        extra={"clan_tag": tag, "ticket": context.ticket_number},
+                    )
+
+        final_display = final_tag if final_tag else _NO_PLACEMENT_TAG
+        confirmation = (
+            f"Got it — set clan tag to **{final_display}** and logged to the sheet. ✅"
+        )
+        if prompt_message is None and context.prompt_message_id:
+            try:
+                prompt_message = await thread.fetch_message(context.prompt_message_id)
+            except Exception:
+                prompt_message = None
+
+        if prompt_message is not None:
+            try:
+                await prompt_message.edit(content=confirmation, view=None)
+            except Exception:
+                await thread.send(confirmation)
+        else:
+            await thread.send(confirmation)
+
+        if view is not None:
+            view.stop()
+
+        try:
+            new_name = f"Closed-{context.ticket_number}-{context.username}-{final_display}"
+            await thread.edit(name=new_name)
+        except Exception:
+            actions_ok = False
+            log.exception(
+                "failed to rename welcome thread",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+
+        context.final_clan = final_display
+        context.reservation_label = reservation_label
+        context.state = "closed"
+
+        if row_missing:
+            log.warning(
+                "⚠️ welcome_close — ticket=%s • user=%s • final=%s • reason=onboarding_row_missing",
+                context.ticket_number,
+                context.username,
+                final_display,
+            )
+            return
+
+        log_result = "ok" if actions_ok else "partial"
+        log.info(
+            "🧭 welcome_close — ticket=%s • user=%s • final=%s • reservation=%s • result=%s",
+            context.ticket_number,
+            context.username,
+            final_display,
+            reservation_label,
+            log_result,
+        )
+
+
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(WelcomeWatcher(bot))
+    await bot.add_cog(WelcomeTicketWatcher(bot))

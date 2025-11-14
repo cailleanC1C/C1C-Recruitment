@@ -157,6 +157,14 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
   - `AF` — effective open spots (`max(E - AH, 0)`)
   - `AI` — reservation summary (`"<AH> -> usernames"`)
 - A success message posts in the thread with the refreshed `AH` and `AF` values.
+
+### Welcome ticket closure sync
+- Closing a welcome ticket now triggers the same reservation + availability helpers used by `!reserve`:
+  - If the recruit joins their reserved clan, the watcher marks the ledger row `closed_same_clan` and leaves manual open spots untouched.
+  - If the recruit moves to a different clan, the watcher marks the reservation `closed_other_clan`, restores the reserved clan’s manual open spots by `+1`, and consumes one seat (`-1`) from the final clan.
+  - If no reservation existed, the final clan loses one manual open spot (`-1`).
+  - Choosing the pseudo tag `NONE` cancels any reservation and restores the reserved clan’s open spot (`+1`).
+- After every adjustment the watcher calls `recompute_clan_availability` so `AF`/`AH`/`AI` stay in sync with the ledger.
  
 ## Reservation lifecycle (daily jobs)
 - **12:00 UTC — Reminder**
@@ -178,4 +186,4 @@ Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` wor
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-14 (v0.9.7)

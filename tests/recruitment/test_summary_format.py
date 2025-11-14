@@ -38,7 +38,7 @@ def test_is_hide_value_normalises_tokens() -> None:
 
 def test_inline_merge_compacts_pairs() -> None:
     merged = inline_merge("Power", "12.6 M", "Bracket", "Beginner")
-    assert merged == "Power: 12.6 M • Bracket: Beginner"
+    assert merged == "**Power:** 12.6 M • **Bracket:** Beginner"
 
 
 def test_build_welcome_summary_embed_snapshot() -> None:

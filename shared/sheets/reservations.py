@@ -161,6 +161,41 @@ async def get_active_reservations_for_clan(clan_tag: str) -> List[ReservationRow
     return [row for row in rows if row.is_active and row.normalized_clan_tag == normalized]
 
 
+async def find_active_reservations_for_recruit(
+    ticket_user_id: Optional[int] = None,
+    username: str | None = None,
+) -> List[ReservationRow]:
+    """Return active reservations for the recruit identified by ``ticket_user_id`` or ``username``."""
+
+    rows = await _load_reservations()
+
+    matches: List[ReservationRow] = []
+    if ticket_user_id is not None:
+        matches = [
+            row
+            for row in rows
+            if row.is_active and row.ticket_user_id is not None and row.ticket_user_id == ticket_user_id
+        ]
+
+    if not matches:
+        normalized_name = _normalize_username(username)
+        if normalized_name:
+            matches = [
+                row
+                for row in rows
+                if row.is_active and _normalize_username(row.username_snapshot) == normalized_name
+            ]
+
+    if not matches:
+        return []
+
+    def _sort_key(row: ReservationRow) -> tuple[dt.datetime, int]:
+        created = row.created_at or dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        return (created, row.row_number)
+
+    return sorted(matches, key=_sort_key, reverse=True)
+
+
 async def count_active_reservations_for_clan(clan_tag: str) -> int:
     """Return the number of active reservations for ``clan_tag``."""
 
@@ -412,6 +447,10 @@ def _row_has_content(row: Sequence[Any]) -> bool:
     return any(str(cell or "").strip() for cell in row)
 
 
+def _normalize_username(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
 __all__ = [
     "ReservationLedger",
     "ReservationRow",
@@ -422,6 +461,7 @@ __all__ = [
     "append_reservation_row",
     "load_reservation_ledger",
     "get_active_reservations_for_clan",
+    "find_active_reservations_for_recruit",
     "count_active_reservations_for_clan",
     "get_active_reservations_by_clan",
     "get_active_reservation_names_for_clan",
