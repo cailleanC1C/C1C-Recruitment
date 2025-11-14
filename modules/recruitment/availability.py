@@ -13,6 +13,44 @@ from shared.sheets import reservations
 log = logging.getLogger(__name__)
 
 
+async def adjust_manual_open_spots(clan_tag: str, delta: int) -> int:
+    """Adjust manual open spots for ``clan_tag`` and return the new value."""
+
+    if delta == 0:
+        entry = recruitment.find_clan_row(clan_tag)
+        if entry is None:
+            raise ValueError(f"Unknown clan tag: {clan_tag}")
+        return _parse_manual_open_spots(entry[1])
+
+    entry = recruitment.find_clan_row(clan_tag)
+    if entry is None:
+        raise ValueError(f"Unknown clan tag: {clan_tag}")
+
+    sheet_row, row = entry
+    header_map = recruitment.get_clan_header_map()
+    open_index = header_map.get("open_spots", recruitment.FALLBACK_OPEN_SPOTS_INDEX)
+    current = _parse_manual_open_spots(row)
+    new_value = max(current + delta, 0)
+
+    updated_row = list(row)
+    _ensure_row_length(updated_row, open_index + 1)
+    updated_row[open_index] = str(new_value)
+
+    sheet_id = recruitment.get_recruitment_sheet_id()
+    tab_name = recruitment.get_clans_tab_name()
+    worksheet = await async_core.aget_worksheet(sheet_id, tab_name)
+    column = _column_label(open_index)
+    await async_core.acall_with_backoff(
+        worksheet.update,
+        f"{column}{sheet_row}",
+        [[str(new_value)]],
+        value_input_option="RAW",
+    )
+
+    recruitment.update_cached_clan_row(sheet_row, updated_row)
+    return new_value
+
+
 async def recompute_clan_availability(
     clan_tag: str,
     *,
@@ -99,6 +137,17 @@ def _ensure_row_length(row: list[str], length: int) -> None:
     row.extend("" for _ in range(length - len(row)))
 
 
+def _column_label(index: int) -> str:
+    if index < 0:
+        raise ValueError("column index must be non-negative")
+    value = index + 1
+    label = ""
+    while value > 0:
+        value, remainder = divmod(value - 1, 26)
+        label = chr(65 + remainder) + label
+    return label or "A"
+
+
 def _to_int(value: str | None) -> int:
     if not value:
         return 0
@@ -116,4 +165,4 @@ def _normalize_tag(tag: str | None) -> str:
     return "".join(ch for ch in text if ch.isalnum())
 
 
-__all__ = ["recompute_clan_availability"]
+__all__ = ["adjust_manual_open_spots", "recompute_clan_availability"]

@@ -65,6 +65,7 @@ __all__ = [
     "redact_value",
     "merge_onboarding_config_early",
     "onboarding_config_merge_count",
+    "get_ticket_tool_bot_id",
 ]
 
 # Port helper lives in shared.ports. Import there where needed.
@@ -200,6 +201,12 @@ def _parse_schedule(raw: str | None, default: Sequence[str]) -> list[str]:
     if parts:
         return parts
     return [str(item).strip() for item in default if str(item).strip()]
+
+
+def get_ticket_tool_bot_id() -> Optional[int]:
+    """Return the configured Ticket Tool bot identifier when available."""
+
+    return _first_int(os.getenv("TICKET_TOOL_BOT_ID"))
 
 
 def _int_env(
