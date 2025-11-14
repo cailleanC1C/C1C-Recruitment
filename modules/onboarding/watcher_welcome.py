@@ -36,10 +36,150 @@ log = logging.getLogger("c1c.onboarding.welcome_watcher")
 _TRIGGER_PHRASE = "awake by reacting with"
 _TICKET_EMOJI = "🎫"
 
-_THREAD_NAME_RE = re.compile(r"^W(?P<ticket>\d{4})[-_\s]*(?P<body>.+)$", re.IGNORECASE)
+_TICKET_CODE_RE = re.compile(r"(W\d{4})", re.IGNORECASE)
 _CLOSED_MESSAGE_TOKEN = "ticket closed"
 _NO_PLACEMENT_TAG = "NONE"
-_WELCOME_HEADERS = ["ticket_number", "username", "clantag", "date_closed"]
+_WELCOME_HEADERS = onboarding_sheets.WELCOME_HEADERS
+
+
+def _normalize_ticket_code(ticket: str | None) -> str:
+    token = (ticket or "").strip().lstrip("#")
+    if not token:
+        return ""
+    if not token.upper().startswith("W"):
+        token = f"W{token}"
+    prefix = token[:1].upper()
+    digits = token[1:5]
+    if len(digits) == 4 and digits.isdigit():
+        return f"{prefix}{digits}"
+    match = _TICKET_CODE_RE.search(token)
+    if match:
+        return match.group(1).upper()
+    return ""
+
+
+def parse_welcome_thread_name(name: str | None) -> Optional[ThreadNameParts]:
+    if not name:
+        return None
+
+    match = _TICKET_CODE_RE.search(name)
+    if not match:
+        return None
+
+    ticket_code = _normalize_ticket_code(match.group(1))
+    prefix = name[: match.start()].strip(" -_") or None
+    suffix = name[match.end():].strip(" -_")
+
+    username = suffix or ""
+    clan_tag: Optional[str] = None
+    if suffix:
+        parts = suffix.split("-", 1)
+        username = parts[0].strip(" -_")
+        if len(parts) > 1:
+            clan_tag = parts[1].strip(" -_") or None
+
+    if not username:
+        return None
+
+    return ThreadNameParts(
+        ticket_code=ticket_code,
+        username=username,
+        prefix=prefix,
+        clan_tag=clan_tag,
+    )
+
+
+def build_open_thread_name(ticket_code: str, username: str) -> str:
+    return f"{ticket_code}-{username}".strip("-")
+
+
+def build_reserved_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
+    tag = (clan_tag or "").strip().upper()
+    return f"Res-{ticket_code}-{username}-{tag}".strip("-")
+
+
+def build_closed_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
+    tag = (clan_tag or "").strip().upper()
+    return f"Closed-{ticket_code}-{username}-{tag}".strip("-")
+
+
+async def rename_thread_to_reserved(
+    thread: discord.Thread, clan_tag: str
+) -> bool:
+    """Rename ``thread`` to the reserved naming pattern if applicable."""
+
+    parts = parse_welcome_thread_name(getattr(thread, "name", None))
+    normalized_tag = (clan_tag or "").strip().upper()
+
+    if parts is None:
+        log.warning(
+            "⚠️ welcome_reserve_rename — ticket=unknown • tag=%s • result=skipped_unparsed",
+            normalized_tag,
+        )
+        return False
+
+    if parts.state == "closed":
+        log.info(
+            "⚠️ welcome_reserve_rename — ticket=%s • user=%s • tag=%s • result=skipped_closed",
+            parts.ticket_code,
+            parts.username,
+            normalized_tag,
+        )
+        return False
+
+    new_name = build_reserved_thread_name(parts.ticket_code, parts.username, normalized_tag)
+    if getattr(thread, "name", None) == new_name:
+        log.info(
+            "✅ welcome_reserve_rename — ticket=%s • user=%s • tag=%s • result=already_reserved",
+            parts.ticket_code,
+            parts.username,
+            normalized_tag,
+        )
+        return True
+
+    try:
+        await thread.edit(name=new_name)
+    except Exception:
+        log.exception(
+            "failed to rename welcome thread for reservation",
+            extra={
+                "thread_id": getattr(thread, "id", None),
+                "ticket": parts.ticket_code,
+                "tag": normalized_tag,
+            },
+        )
+        log.warning(
+            "⚠️ welcome_reserve_rename — ticket=%s • user=%s • tag=%s • result=rename_failed",
+            parts.ticket_code,
+            parts.username,
+            normalized_tag,
+        )
+        return False
+
+    log.info(
+        "✅ welcome_reserve_rename — ticket=%s • user=%s • tag=%s • result=renamed_to_res",
+        parts.ticket_code,
+        parts.username,
+        normalized_tag,
+    )
+    return True
+
+
+@dataclass(frozen=True)
+class ThreadNameParts:
+    ticket_code: str
+    username: str
+    prefix: Optional[str] = None
+    clan_tag: Optional[str] = None
+
+    @property
+    def state(self) -> str:
+        prefix = (self.prefix or "").strip().lower()
+        if prefix.startswith("closed"):
+            return "closed"
+        if prefix.startswith("res"):
+            return "reserved"
+        return "open"
 
 
 @dataclass(slots=True)
@@ -54,6 +194,8 @@ class TicketContext:
     final_clan: Optional[str] = None
     reservation_label: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    ticket_tool_close_detected: bool = False
+    row_created_during_close: bool = False
 
 
 @dataclass(frozen=True)
@@ -79,14 +221,14 @@ def _determine_reservation_decision(
         if final_is_real and normalized_final and normalized_final != no_placement_tag:
             open_deltas[normalized_final] = -1
             recompute.append(normalized_final)
-        return ReservationDecision("none", None, open_deltas, recompute)
+        return ReservationDecision("none_found", None, open_deltas, recompute)
 
     reservation_tag = reservation_row.normalized_clan_tag
     if not reservation_tag:
         reservation_tag = (reservation_row.clan_tag or "").strip().upper()
 
     if normalized_final == no_placement_tag:
-        label = "cancelled"
+        label = "none"
         status = "cancelled"
         if reservation_tag:
             open_deltas[reservation_tag] = open_deltas.get(reservation_tag, 0) + 1
@@ -100,7 +242,7 @@ def _determine_reservation_decision(
             recompute.append(reservation_tag)
         return ReservationDecision(label, status, open_deltas, recompute)
 
-    label = "moved"
+    label = "other"
     status = "closed_other_clan"
     if reservation_tag:
         open_deltas[reservation_tag] = open_deltas.get(reservation_tag, 0) + 1
@@ -634,21 +776,8 @@ class WelcomeTicketWatcher(commands.Cog):
             return False
         return getattr(thread, "parent_id", None) == self.channel_id
 
-    def _parse_thread(self, name: str | None) -> Optional[tuple[str, str]]:
-        if not name:
-            return None
-        match = _THREAD_NAME_RE.match(name.strip())
-        if not match:
-            return None
-        ticket = match.group("ticket")
-        body = (match.group("body") or "").strip()
-        if not body:
-            return None
-        username_token = body.split()[0]
-        username = username_token.split("-", 1)[0].strip(" -_")
-        if not username:
-            return None
-        return ticket, username
+    def _parse_thread(self, name: str | None) -> Optional[ThreadNameParts]:
+        return parse_welcome_thread_name(name)
 
     def _owner_matches(self, thread: discord.Thread) -> bool:
         if self.ticket_tool_id is None:
@@ -675,28 +804,57 @@ class WelcomeTicketWatcher(commands.Cog):
         parsed = self._parse_thread(thread.name)
         if not parsed:
             return None
-        ticket, username = parsed
         context = TicketContext(
             thread_id=thread.id,
-            ticket_number=ticket,
-            username=username,
-            recruit_display=username,
+            ticket_number=parsed.ticket_code,
+            username=parsed.username,
+            recruit_display=parsed.username,
         )
         self._tickets[thread.id] = context
         return context
 
     async def _handle_ticket_open(self, thread: discord.Thread, context: TicketContext) -> None:
-        row = [context.ticket_number, context.username, "", ""]
+        existing_row: List[str] | None = None
         try:
-            await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
-            log.info(
-                "🧭 welcome_open — ticket=%s • user=%s", context.ticket_number, context.username
+            lookup = await asyncio.to_thread(
+                onboarding_sheets.find_welcome_row, context.ticket_number
             )
+        except Exception:
+            log.exception(
+                "failed to read existing welcome row",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            lookup = None
+
+        if lookup:
+            _, existing_row = lookup
+
+        clan_value = ""
+        closed_value = ""
+        if existing_row:
+            clan_idx = onboarding_sheets.WELCOME_CLAN_TAG_INDEX
+            closed_idx = onboarding_sheets.WELCOME_DATE_CLOSED_INDEX
+            if clan_idx < len(existing_row):
+                clan_value = existing_row[clan_idx] or ""
+            if closed_idx < len(existing_row):
+                closed_value = existing_row[closed_idx] or ""
+
+        row = [context.ticket_number, context.username, clan_value, closed_value]
+        try:
+            result = await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
         except Exception:
             log.exception(
                 "failed to log welcome ticket open",
                 extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
             )
+            return
+
+        log.info(
+            "✅ welcome_ticket_open — ticket=%s • user=%s • result=row_%s",
+            context.ticket_number,
+            context.username,
+            result,
+        )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:
@@ -747,6 +905,43 @@ class WelcomeTicketWatcher(commands.Cog):
         await self._handle_ticket_open(thread, context)
 
     @commands.Cog.listener()
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
+        if not self._features_enabled():
+            return
+        if not self._is_ticket_thread(after):
+            return
+
+        context = await self._ensure_context(after)
+        if context is None:
+            return
+
+        parsed = self._parse_thread(after.name)
+        if parsed:
+            context.ticket_number = parsed.ticket_code
+            context.username = parsed.username
+
+        if context.state in {"awaiting_clan", "closed"}:
+            return
+
+        reason = ""
+        parsed_state = parsed.state if parsed else "open"
+        if parsed_state == "closed":
+            reason = "manual_close_without_ticket_tool"
+        else:
+            archived_now = bool(getattr(after, "archived", False))
+            archived_before = bool(getattr(before, "archived", False))
+            locked_now = bool(getattr(after, "locked", False))
+            locked_before = bool(getattr(before, "locked", False))
+            if (archived_now and not archived_before) or (locked_now and not locked_before):
+                if not context.ticket_tool_close_detected:
+                    reason = "manual_close_without_ticket_tool"
+
+        if not reason:
+            return
+
+        await self._handle_manual_close(after, context, reason=reason)
+
+    @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         if not self._features_enabled():
             return
@@ -762,7 +957,8 @@ class WelcomeTicketWatcher(commands.Cog):
         if self._is_ticket_tool(message.author):
             content = (message.content or "").lower()
             if _CLOSED_MESSAGE_TOKEN in content and context.state not in {"awaiting_clan", "closed"}:
-                await self._handle_ticket_closed(thread, context)
+                context.ticket_tool_close_detected = True
+                await self._handle_ticket_closed(thread, context, manual=False)
             return
 
         if getattr(message.author, "bot", False):
@@ -787,7 +983,66 @@ class WelcomeTicketWatcher(commands.Cog):
             view=None,
         )
 
-    async def _handle_ticket_closed(self, thread: discord.Thread, context: TicketContext) -> None:
+    async def _handle_manual_close(
+        self, thread: discord.Thread, context: TicketContext, *, reason: str
+    ) -> None:
+        if context.state in {"awaiting_clan", "closed"}:
+            return
+
+        parsed = self._parse_thread(thread.name)
+        if parsed:
+            context.ticket_number = parsed.ticket_code
+            context.username = parsed.username
+
+        row_info: tuple[int, List[str]] | None = None
+        try:
+            row_info = await asyncio.to_thread(
+                onboarding_sheets.find_welcome_row, context.ticket_number
+            )
+        except Exception:
+            log.exception(
+                "failed to locate onboarding row for manual close",
+                extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+            )
+
+        row_values: List[str] | None = row_info[1] if row_info else None
+        if not row_values:
+            row_values = [context.ticket_number, context.username, "", ""]
+            try:
+                await asyncio.to_thread(onboarding_sheets.upsert_welcome, row_values, _WELCOME_HEADERS)
+            except Exception:
+                log.exception(
+                    "failed to insert onboarding row during manual close",
+                    extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+                )
+                row_values = None
+            else:
+                context.row_created_during_close = True
+                log.warning(
+                    "⚠️ welcome_close_manual — ticket=%s • reason=onboarding_row_missing_manual_close • action=row_inserted_no_reconcile",
+                    context.ticket_number,
+                )
+
+        clan_value = ""
+        if row_values:
+            clan_idx = onboarding_sheets.WELCOME_CLAN_TAG_INDEX
+            if clan_idx < len(row_values):
+                clan_value = (row_values[clan_idx] or "").strip()
+
+        if clan_value:
+            return
+
+        await self._handle_ticket_closed(thread, context, manual=True)
+        log.warning(
+            "⚠️ welcome_close_manual — ticket=%s • user=%s • reason=%s • action=prompt_posted",
+            context.ticket_number,
+            context.username,
+            reason,
+        )
+
+    async def _handle_ticket_closed(
+        self, thread: discord.Thread, context: TicketContext, *, manual: bool = False
+    ) -> None:
         tags = await self._load_clan_tags()
         if not tags:
             await thread.send(
@@ -881,8 +1136,8 @@ class WelcomeTicketWatcher(commands.Cog):
             )
             return
 
-        row_missing = result != "updated"
-        reservation_label = "none"
+        row_missing = result != "updated" or context.row_created_during_close
+        reservation_label = "none_found"
         actions_ok = True
         recompute_tags: List[str] = []
 
@@ -985,7 +1240,9 @@ class WelcomeTicketWatcher(commands.Cog):
             view.stop()
 
         try:
-            new_name = f"Closed-{context.ticket_number}-{context.username}-{final_display}"
+            new_name = build_closed_thread_name(
+                context.ticket_number, context.username, final_display
+            )
             await thread.edit(name=new_name)
         except Exception:
             actions_ok = False
@@ -1009,7 +1266,7 @@ class WelcomeTicketWatcher(commands.Cog):
 
         log_result = "ok" if actions_ok else "partial"
         log.info(
-            "🧭 welcome_close — ticket=%s • user=%s • final=%s • reservation=%s • result=%s",
+            "✅ welcome_close — ticket=%s • user=%s • final=%s • reservation=%s • result=%s",
             context.ticket_number,
             context.username,
             final_display,
