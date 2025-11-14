@@ -886,11 +886,15 @@ class WelcomeTicketWatcher(commands.Cog):
         actions_ok = True
         recompute_tags: List[str] = []
 
-        final_entry = recruitment_sheets.find_clan_row(final_tag) if final_tag != _NO_PLACEMENT_TAG else None
-        final_is_real = final_entry is not None
-
-        reservation_row: reservations_sheets.ReservationRow | None = None
         if not row_missing:
+            final_entry = (
+                recruitment_sheets.find_clan_row(final_tag)
+                if final_tag != _NO_PLACEMENT_TAG
+                else None
+            )
+            final_is_real = final_entry is not None
+
+            reservation_row: reservations_sheets.ReservationRow | None = None
             try:
                 matches = await reservations_sheets.find_active_reservations_for_recruit(
                     context.recruit_id,
@@ -914,31 +918,30 @@ class WelcomeTicketWatcher(commands.Cog):
                         },
                     )
 
-        decision = _determine_reservation_decision(
-            final_tag,
-            reservation_row,
-            no_placement_tag=_NO_PLACEMENT_TAG,
-            final_is_real=final_is_real,
-        )
-        reservation_label = decision.label
+            decision = _determine_reservation_decision(
+                final_tag,
+                reservation_row,
+                no_placement_tag=_NO_PLACEMENT_TAG,
+                final_is_real=final_is_real,
+            )
+            reservation_label = decision.label
 
-        if not row_missing and reservation_row is not None and decision.status:
-            try:
-                await reservations_sheets.update_reservation_status(
-                    reservation_row.row_number, decision.status
-                )
-            except Exception:
-                actions_ok = False
-                log.exception(
-                    "failed to update reservation status",
-                    extra={
-                        "row": reservation_row.row_number,
-                        "ticket": context.ticket_number,
-                        "status": decision.status,
-                    },
-                )
+            if reservation_row is not None and decision.status:
+                try:
+                    await reservations_sheets.update_reservation_status(
+                        reservation_row.row_number, decision.status
+                    )
+                except Exception:
+                    actions_ok = False
+                    log.exception(
+                        "failed to update reservation status",
+                        extra={
+                            "row": reservation_row.row_number,
+                            "ticket": context.ticket_number,
+                            "status": decision.status,
+                        },
+                    )
 
-        if not row_missing:
             for tag, delta in decision.open_deltas.items():
                 try:
                     await availability.adjust_manual_open_spots(tag, delta)
