@@ -169,14 +169,20 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
   - `AF` — effective open spots (`max(E - AH, 0)`)
   - `AI` — reservation summary (`"<AH> -> usernames"`)
 - A success message posts in the thread with the refreshed `AH` and `AF` values.
-- Use the convenience commands below to view or manage the reservation once it exists.
+- The bot enforces **one active reservation per recruit**. If you try to hold a second seat the bot refuses, names the existing clan/thread, and tells you to update it from the recruiter control thread instead of creating a duplicate.
 
-### Reservation management commands
-- `!reservations` *(inside the recruit’s ticket thread)* — lists every active reservation for that recruit, including clan tag, expiry, recruiter, and status. If none exist you’ll receive a quick confirmation.
-- `!reservations <clan_tag>` — recruiter/admin only. Lists all active reservations for that clan, sorted by expiry and showing the ticket code for each hold.
-- `!reserve release` *(inside the recruit’s ticket thread)* — immediately cancels the active reservation, restores the clan’s manual open spot by `+1`, and recomputes availability.
-- `!reserve extend <YYYY-MM-DD>` *(inside the recruit’s ticket thread)* — updates the reservation expiry date without touching manual open spots.
-- `!reserve release` and `!reserve extend` require the ticket thread context so the bot can infer the recruit and reservation row. Both commands log to the ops channel using the `reservation_release` / `reservation_extend` events.
+### Reservation views & controls
+1. **Ticket threads (`W####-`, `Res-W####-`, `Closed-W####-`).**
+   - `!reserve <clan_tag>` still runs here, but all follow-up edits are read-only. `!reserve release`/`!reserve extend` reply with “Reservation changes must be done in `<#RECRUITERS_THREAD_ID>`” so recruiters don’t guess which row to edit.
+   - `!reservations` (no tag) lists the active hold for that recruit if the ledger matches the thread tag. If the bot detects a mismatch (thread tag vs. ledger) or multiple active rows, it stops immediately and tells the recruiter to fix things in the control thread or Sheets. Logs now include the thread name for traceability.
+
+2. **Recruiter control thread (`RECRUITERS_THREAD_ID`).**
+   - This is the only global edit surface outside of automatic ticket closures. `!reservations` here lists every reservation (active + inactive) touched in the last 28 days, including clan tag, user, ticket code (if known), status, and expiry.
+   - `!reserve release @user <clan_tag>` frees the seat, marks the ledger row released, and returns one manual open spot to the clan.
+   - `!reserve extend @user <clan_tag> <YYYY-MM-DD>` updates the expiry date in place. Both commands validate clan tags against `CLANLIST_TAB`, require a resolvable Discord member, and log `source=global` so ops can audit who changed what.
+
+3. **Recruitment interact channel (`RECRUITMENT_INTERACT_CHANNEL`).**
+   - `!reservations <clan_tag>` is scoped to this channel so clan leads (IDs listed in `CLAN_LEAD_IDS`) and recruiters can review active holds together. The output is read-only—any edits must still be made in the recruiter control thread.
 
 ### Welcome ticket closure sync
 - Closing a welcome ticket now triggers the same reservation + availability helpers used by `!reserve`:
@@ -189,7 +195,7 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 ## Reservation lifecycle (daily jobs)
 - **12:00 UTC — Reminder**
   - Finds every `active` reservation where `reserved_until == today`.
-  - Posts a reminder in the recruit’s ticket thread, pings Recruiter roles, and includes quick instructions for `!reserve extend <date>` and `!reserve release`.
+  - Posts a reminder in the recruit’s ticket thread, pings Recruiter roles, and tells them to run `!reserve extend @user <tag> <date>` or `!reserve release @user <tag>` in the recruiter control thread so edits stay centralized.
   - Gives Recruiters a six-hour window to extend or intervene before expiry. Each reminder logs `reservation_reminder` with the ticket, clan, and expiry date.
 - **18:00 UTC — Auto-release**
   - Marks `active` reservations with `reserved_until <= today` as `expired` in `RESERVATIONS_TAB`.
@@ -206,4 +212,4 @@ Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` wor
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-30 (v0.9.7)
+Doc last updated: 2025-11-15 (v0.9.7)

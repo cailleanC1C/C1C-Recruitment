@@ -21,7 +21,14 @@ from modules.onboarding.watcher_welcome import (
     parse_welcome_thread_name,
     rename_thread_to_reserved,
 )
-from shared.config import get_promo_channel_id, get_welcome_channel_id
+from shared.config import (
+    get_clan_lead_ids,
+    get_promo_channel_id,
+    get_recruiters_thread_id,
+    get_recruitment_interact_channel_id,
+    get_welcome_channel_id,
+)
+from shared.logfmt import channel_label
 from shared.sheets import recruitment, reservations
 
 log = logging.getLogger(__name__)
@@ -354,6 +361,16 @@ class _ThreadContext:
     guild: discord.Guild | None
 
 
+@dataclass(slots=True)
+class _ThreadReservationView:
+    context: _ThreadContext
+    status: str
+    reservation: reservations.ReservationRow | None
+    matches: list[reservations.ReservationRow]
+    normalized_thread_tag: str | None
+    thread_tag_display: str | None
+
+
 def _normalize_date(value: dt.date | None) -> dt.date:
     if value is not None:
         return value
@@ -450,6 +467,173 @@ def _parse_thread_context(channel: object) -> Optional[_ThreadContext]:
     )
 
 
+def _thread_clan_tag_info(thread: object) -> tuple[str | None, str | None]:
+    parts = parse_welcome_thread_name(getattr(thread, "name", None))
+    if parts is None:
+        return None, None
+    clan_tag = (parts.clan_tag or "").strip()
+    if not clan_tag:
+        return None, None
+    display = clan_tag.upper()
+    normalized = _normalize_tag(clan_tag)
+    return (normalized or None), (display or normalized or None)
+
+
+def _thread_name(thread: object) -> str:
+    name = getattr(thread, "name", None)
+    if isinstance(name, str) and name.strip():
+        return name
+    identifier = getattr(thread, "id", None)
+    return f"thread:{identifier}" if identifier is not None else "thread:unknown"
+
+
+def _control_thread_hint() -> str:
+    channel_id = get_recruiters_thread_id()
+    if channel_id:
+        return f"<#{channel_id}>"
+    return "the recruiter control thread"
+
+
+def _interact_channel_hint() -> str:
+    channel_id = get_recruitment_interact_channel_id()
+    if channel_id:
+        return f"<#{channel_id}>"
+    return "the recruitment interact channel"
+
+
+def _control_redirect_message(action: str) -> str:
+    hint = _control_thread_hint()
+    if action == "extend":
+        usage = "`!reserve extend @user <clan_tag> <YYYY-MM-DD>`"
+    elif action == "release":
+        usage = "`!reserve release @user <clan_tag>`"
+    else:
+        usage = "`!reserve`"
+    return f"Reservation changes must be done in {hint}. Please run {usage} there."
+
+
+def _is_clan_lead_user(user: object) -> bool:
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return False
+    try:
+        numeric = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    return numeric in get_clan_lead_ids()
+
+
+def _parse_member_token(token: str) -> Optional[int]:
+    text = (token or "").strip()
+    if not text:
+        return None
+    match = re.search(r"\d+", text)
+    if not match:
+        return None
+    try:
+        return int(match.group(0))
+    except ValueError:
+        return None
+
+
+async def _get_thread_reservation(
+    channel: object,
+    *,
+    parsed_username: str | None,
+) -> Optional[_ThreadReservationView]:
+    context = _parse_thread_context(channel)
+    if context is None:
+        return None
+
+    owner_id = _thread_owner_id(context.thread)
+    matches = await reservations.find_active_reservations_for_recruit(
+        ticket_user_id=owner_id,
+        username=parsed_username or context.username,
+    )
+    matches = [row for row in matches if row.is_active]
+    matches.sort(key=_reservation_sort_key)
+
+    normalized_tag, display_tag = _thread_clan_tag_info(context.thread)
+    if not matches:
+        return _ThreadReservationView(
+            context=context,
+            status="none",
+            reservation=None,
+            matches=[],
+            normalized_thread_tag=normalized_tag,
+            thread_tag_display=display_tag,
+        )
+
+    if len(matches) > 1:
+        _log_thread_anomaly(context, matches, reason="multiple_active")
+        return _ThreadReservationView(
+            context=context,
+            status="ambiguous",
+            reservation=None,
+            matches=matches,
+            normalized_thread_tag=normalized_tag,
+            thread_tag_display=display_tag,
+        )
+
+    reservation = matches[0]
+    row_tag = reservation.normalized_clan_tag or _normalize_tag(reservation.clan_tag)
+    if normalized_tag and row_tag and normalized_tag != row_tag:
+        _log_thread_anomaly(
+            context,
+            [reservation],
+            reason="mismatch",
+            extra={"thread_tag": normalized_tag, "row_tag": row_tag},
+        )
+        return _ThreadReservationView(
+            context=context,
+            status="mismatch",
+            reservation=reservation,
+            matches=matches,
+            normalized_thread_tag=normalized_tag,
+            thread_tag_display=display_tag,
+        )
+
+    return _ThreadReservationView(
+        context=context,
+        status="ok",
+        reservation=reservation,
+        matches=matches,
+        normalized_thread_tag=normalized_tag,
+        thread_tag_display=display_tag,
+    )
+
+
+def _log_thread_anomaly(
+    context: _ThreadContext,
+    rows: list[reservations.ReservationRow],
+    *,
+    reason: str,
+    extra: dict | None = None,
+) -> None:
+    row_numbers = [row.row_number for row in rows]
+    payload = {
+        "ticket": context.ticket_code,
+        "user": context.username,
+        "thread_name": _thread_name(context.thread),
+        "rows": row_numbers,
+        "reason": reason,
+    }
+    if extra:
+        payload.update(extra)
+    log.warning("thread reservation anomaly", extra=payload)
+    human_log.human(
+        "warning",
+        "⚠️ reservation_thread_check — ticket=%s • user=%s • thread=%s • reason=%s • rows=%s"
+        % (
+            context.ticket_code,
+            context.username,
+            _thread_name(context.thread),
+            reason,
+            ",".join(str(number) for number in row_numbers) or "none",
+        ),
+    )
+
+
 def _is_authorized(ctx: commands.Context) -> bool:
     return bool(is_recruiter(ctx) or is_admin_member(ctx))
 
@@ -482,11 +666,11 @@ class ReservationCog(commands.Cog):
         subcommand = (args[0] or "").strip()
 
         if subcommand.lower() == "release":
-            await self._handle_release(ctx)
+            await self._handle_release(ctx, list(args[1:]))
             return
 
         if subcommand.lower() == "extend":
-            await self._handle_extend(ctx, args[1:] if len(args) > 1 else [])
+            await self._handle_extend(ctx, list(args[1:]))
             return
 
         if len(args) > 1:
@@ -570,6 +754,53 @@ class ReservationCog(commands.Cog):
         try:
             details = await conversation.run()
         except ReservationFlowAbort:
+            return
+
+        try:
+            existing_rows = await reservations.find_active_reservations_for_recruit(
+                ticket_user_id=details.ticket_user_id,
+                username=details.ticket_username,
+            )
+        except Exception:
+            log.exception(
+                "failed to check existing reservations",
+                extra={"thread_id": getattr(ctx.channel, "id", None)},
+            )
+            await ctx.reply(
+                "Something went wrong while checking existing reservations for this recruit. Please try again later.",
+                mention_author=False,
+            )
+            return
+
+        existing_matches = [row for row in existing_rows if row.is_active]
+        if existing_matches:
+            existing_matches.sort(key=_reservation_sort_key)
+            blocker = existing_matches[0]
+            blocker_tag = blocker.normalized_clan_tag or (blocker.clan_tag or "unknown clan")
+            ticket_label = "unknown"
+            blocker_thread = await _resolve_thread(self.bot, blocker.thread_id)
+            thread_label = _thread_name(blocker_thread) if blocker_thread is not None else "unknown thread"
+            parts = parse_welcome_thread_name(getattr(blocker_thread, "name", None)) if blocker_thread else None
+            if parts and parts.ticket_code:
+                ticket_label = parts.ticket_code
+            control_hint = _control_thread_hint()
+            await ctx.reply(
+                (
+                    f"{details.ticket_display} already has an active reservation in `{blocker_tag}` "
+                    f"(ticket `{ticket_label}` / `{thread_label}`).\n"
+                    f"Please go to {control_hint} and release or extend that hold before creating a new reservation."
+                ),
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_create_blocked — thread=%s • recruit=%s • clan=%s • result=duplicate"
+                % (
+                    _thread_name(ctx.channel),
+                    details.ticket_display,
+                    blocker_tag,
+                ),
+            )
             return
 
         now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
@@ -660,7 +891,7 @@ class ReservationCog(commands.Cog):
         )
 
 
-    async def _handle_release(self, ctx: commands.Context) -> None:
+    async def _handle_release(self, ctx: commands.Context, args: list[str]) -> None:
         if not _reservations_enabled():
             await ctx.reply(
                 "Reservations are currently disabled. Please poke an admin if you think this is wrong.",
@@ -675,70 +906,116 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        if not _is_ticket_thread(ctx.channel):
+        control_thread_id = get_recruiters_thread_id()
+        channel_id = getattr(ctx.channel, "id", None)
+        if control_thread_id and control_thread_id == channel_id:
+            await self._handle_global_release(ctx, args)
+            return
+
+        await ctx.reply(_control_redirect_message("release"), mention_author=False)
+
+    async def _handle_global_release(self, ctx: commands.Context, args: list[str]) -> None:
+        if len(args) < 2:
             await ctx.reply(
-                "Please run `!reserve` commands inside the recruit’s ticket thread so I know who you’re talking about.",
+                "Usage: `!reserve release @user <clan_tag>` (run in the recruiter control thread).",
                 mention_author=False,
             )
             return
 
-        context = _parse_thread_context(ctx.channel)
-        if context is None:
+        member_id = _parse_member_token(args[0])
+        if member_id is None:
             await ctx.reply(
-                "I couldn't figure out which recruit this thread is for. Please check the thread name and try again.",
+                "Please @mention the recruit or paste their Discord ID before the clan tag.",
                 mention_author=False,
             )
             return
 
-        owner_id = _thread_owner_id(context.thread)
+        member = _resolve_member(ctx.guild, member_id)
+        if member is None:
+            await ctx.reply(
+                "I couldn't find that member in this server. Please double-check the mention and try again.",
+                mention_author=False,
+            )
+            return
+
+        clan_tag = args[1]
+        clan_entry = recruitment.find_clan_row(clan_tag)
+        if clan_entry is None:
+            await ctx.reply(
+                f"I don’t know the clan tag `{clan_tag}`. Please check the tag and try again.",
+                mention_author=False,
+            )
+            return
+
+        sheet_tag = clan_entry[1][2] if len(clan_entry[1]) > 2 and clan_entry[1][2] else clan_tag
+        normalized_tag = _normalize_tag(sheet_tag)
+        display_member = getattr(member, "mention", f"<@{member_id}>")
+        member_name = _display_name(member)
+
         try:
             matches = await reservations.find_active_reservations_for_recruit(
-                ticket_user_id=owner_id,
-                username=context.username,
+                ticket_user_id=member_id,
+                username=member_name,
             )
         except Exception:
             log.exception(
-                "failed to look up active reservations for release",
-                extra={"ticket": context.ticket_code, "user": context.username},
+                "failed to load reservations for global release",
+                extra={"clan_tag": normalized_tag, "member": member_id},
             )
             await ctx.reply(
-                "Something went wrong while checking reservations for this recruit. Please try again later.",
+                "Something went wrong while looking up reservations for that recruit. Please try again later.",
                 mention_author=False,
             )
             return
 
-        if not matches:
-            await ctx.send(
-                f"No active reservation found for {context.username}.",
+        filtered = [row for row in matches if row.normalized_clan_tag == normalized_tag]
+        if not filtered:
+            await ctx.reply(
+                f"No active reservation in `{sheet_tag}` found for {display_member}.",
                 mention_author=False,
             )
             human_log.human(
                 "warning",
-                "⚠️ reservation_release — ticket=%s • user=%s • clan=none • result=not_found"
-                % (context.ticket_code, context.username),
+                "⚠️ reservation_release — channel=%s • user=%s • clan=%s • result=not_found • source=global"
+                % (
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
+                ),
             )
             return
 
-        matches.sort(key=_reservation_sort_key)
-        if len(matches) > 1:
+        if len(filtered) > 1:
             log.warning(
-                "multiple active reservations matched for release",
+                "multiple reservations matched global release",
                 extra={
-                    "ticket": context.ticket_code,
-                    "user": context.username,
-                    "rows": [row.row_number for row in matches],
+                    "member": member_id,
+                    "clan_tag": normalized_tag,
+                    "rows": [row.row_number for row in filtered],
                 },
             )
+            await ctx.reply(
+                "Multiple reservations matched that recruit and clan. Please fix the ledger in Sheets before retrying.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_release — channel=%s • user=%s • clan=%s • result=error • reason=multiple_rows • source=global"
+                % (
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
+                ),
+            )
+            return
 
-        target = matches[0]
-        clan_tag = target.normalized_clan_tag or (target.clan_tag or "")
-
+        target = filtered[0]
         try:
             await reservations.update_reservation_status(target.row_number, "released")
         except Exception:
             log.exception(
-                "failed to update reservation status for release",
-                extra={"row": target.row_number, "ticket": context.ticket_code},
+                "failed to release reservation globally",
+                extra={"row": target.row_number, "clan_tag": normalized_tag},
             )
             await ctx.reply(
                 "I couldn't mark the reservation as released. Please try again later or contact an admin.",
@@ -746,43 +1023,38 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        if clan_tag:
+        if sheet_tag:
             try:
-                await availability.adjust_manual_open_spots(clan_tag, 1)
+                await availability.adjust_manual_open_spots(sheet_tag, 1)
             except Exception:
                 log.exception(
-                    "failed to adjust manual open spots after release",
-                    extra={"clan_tag": clan_tag, "ticket": context.ticket_code},
+                    "failed to adjust manual open spots after global release",
+                    extra={"clan_tag": normalized_tag},
                 )
             try:
-                await availability.recompute_clan_availability(clan_tag, guild=ctx.guild)
+                await availability.recompute_clan_availability(sheet_tag, guild=ctx.guild)
             except Exception:
                 log.exception(
-                    "failed to recompute availability after release",
-                    extra={"clan_tag": clan_tag, "ticket": context.ticket_code},
+                    "failed to recompute availability after global release",
+                    extra={"clan_tag": normalized_tag},
                 )
 
-        recruit_display = _thread_recruit_display(ctx.guild, [target], parsed_username=context.username)
-        display_tag = clan_tag or target.clan_tag or "the reserved clan"
         await ctx.send(
-            f"Released the reserved seat in `{display_tag}` for {recruit_display} and returned it to the open pool."
+            f"Released the reserved seat in `{sheet_tag}` for {display_member} and returned it to the open pool."
         )
 
         human_log.human(
             "info",
-            "🧭 reservation_release — ticket=%s • user=%s • clan=%s • result=ok • source=manual"
-            % (context.ticket_code, context.username, display_tag),
+            "🧭 reservation_release — channel=%s • user=%s • clan=%s • result=ok • source=global"
+            % (
+                channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                display_member,
+                sheet_tag,
+            ),
         )
 
 
     async def _handle_extend(self, ctx: commands.Context, args: list[str]) -> None:
-        if not args:
-            await ctx.reply(
-                "Usage: `!reserve extend <YYYY-MM-DD>` (run inside the recruit's ticket thread).",
-                mention_author=False,
-            )
-            return
-
         if not _reservations_enabled():
             await ctx.reply(
                 "Reservations are currently disabled. Please poke an admin if you think this is wrong.",
@@ -797,63 +1069,53 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        if not _is_ticket_thread(ctx.channel):
+        control_thread_id = get_recruiters_thread_id()
+        channel_id = getattr(ctx.channel, "id", None)
+        if control_thread_id and control_thread_id == channel_id:
+            await self._handle_global_extend(ctx, args)
+            return
+
+        await ctx.reply(_control_redirect_message("extend"), mention_author=False)
+
+    async def _handle_global_extend(self, ctx: commands.Context, args: list[str]) -> None:
+        if len(args) < 3:
             await ctx.reply(
-                "Please run `!reserve` commands inside the recruit’s ticket thread so I know who you’re talking about.",
+                "Usage: `!reserve extend @user <clan_tag> <YYYY-MM-DD>` (run in the recruiter control thread).",
                 mention_author=False,
             )
             return
 
-        context = _parse_thread_context(ctx.channel)
-        if context is None:
+        member_id = _parse_member_token(args[0])
+        if member_id is None:
             await ctx.reply(
-                "I couldn't figure out which recruit this thread is for. Please check the thread name and try again.",
+                "Please @mention the recruit or paste their Discord ID before the clan tag and date.",
                 mention_author=False,
             )
             return
 
-        owner_id = _thread_owner_id(context.thread)
-        try:
-            matches = await reservations.find_active_reservations_for_recruit(
-                ticket_user_id=owner_id,
-                username=context.username,
-            )
-        except Exception:
-            log.exception(
-                "failed to look up active reservations for extend",
-                extra={"ticket": context.ticket_code, "user": context.username},
-            )
+        member = _resolve_member(ctx.guild, member_id)
+        if member is None:
             await ctx.reply(
-                "Something went wrong while checking reservations for this recruit. Please try again later.",
+                "I couldn't find that member in this server. Please double-check the mention and try again.",
                 mention_author=False,
             )
             return
 
-        if not matches:
-            await ctx.send(
-                f"No active reservation found for {context.username}.",
+        clan_tag = args[1]
+        clan_entry = recruitment.find_clan_row(clan_tag)
+        if clan_entry is None:
+            await ctx.reply(
+                f"I don’t know the clan tag `{clan_tag}`. Please check the tag and try again.",
                 mention_author=False,
-            )
-            human_log.human(
-                "warning",
-                "⚠️ reservation_extend — ticket=%s • user=%s • clan=none • result=not_found"
-                % (context.ticket_code, context.username),
             )
             return
 
-        matches.sort(key=_reservation_sort_key)
-        target = matches[0]
-        if len(matches) > 1:
-            log.warning(
-                "multiple active reservations matched for extend",
-                extra={
-                    "ticket": context.ticket_code,
-                    "user": context.username,
-                    "rows": [row.row_number for row in matches],
-                },
-            )
+        sheet_tag = clan_entry[1][2] if len(clan_entry[1]) > 2 and clan_entry[1][2] else clan_tag
+        normalized_tag = _normalize_tag(sheet_tag)
+        display_member = getattr(member, "mention", f"<@{member_id}>")
+        member_name = _display_name(member)
 
-        date_token = (args[0] or "").strip()
+        date_token = (args[2] or "").strip()
         try:
             new_date = dt.date.fromisoformat(date_token)
         except ValueError:
@@ -866,21 +1128,79 @@ class ReservationCog(commands.Cog):
             )
             human_log.human(
                 "warning",
-                "⚠️ reservation_extend — ticket=%s • user=%s • clan=%s • result=error • reason=invalid_date"
+                "⚠️ reservation_extend — channel=%s • user=%s • clan=%s • result=error • reason=invalid_date • source=global"
                 % (
-                    context.ticket_code,
-                    context.username,
-                    target.normalized_clan_tag or (target.clan_tag or "none"),
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
                 ),
             )
             return
 
         try:
+            matches = await reservations.find_active_reservations_for_recruit(
+                ticket_user_id=member_id,
+                username=member_name,
+            )
+        except Exception:
+            log.exception(
+                "failed to load reservations for global extend",
+                extra={"clan_tag": normalized_tag, "member": member_id},
+            )
+            await ctx.reply(
+                "Something went wrong while looking up reservations for that recruit. Please try again later.",
+                mention_author=False,
+            )
+            return
+
+        filtered = [row for row in matches if row.normalized_clan_tag == normalized_tag]
+        if not filtered:
+            await ctx.reply(
+                f"No active reservation in `{sheet_tag}` found for {display_member}.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_extend — channel=%s • user=%s • clan=%s • result=not_found • source=global"
+                % (
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
+                ),
+            )
+            return
+
+        if len(filtered) > 1:
+            log.warning(
+                "multiple reservations matched global extend",
+                extra={
+                    "member": member_id,
+                    "clan_tag": normalized_tag,
+                    "rows": [row.row_number for row in filtered],
+                },
+            )
+            await ctx.reply(
+                "Multiple reservations matched that recruit and clan. Please fix the ledger in Sheets before retrying.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_extend — channel=%s • user=%s • clan=%s • result=error • reason=multiple_rows • source=global"
+                % (
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
+                ),
+            )
+            return
+
+        target = filtered[0]
+        try:
             await reservations.update_reservation_expiry(target.row_number, new_date)
         except Exception:
             log.exception(
-                "failed to update reservation expiry",
-                extra={"row": target.row_number, "ticket": context.ticket_code},
+                "failed to update reservation expiry globally",
+                extra={"row": target.row_number, "clan_tag": normalized_tag},
             )
             await ctx.reply(
                 "Something went wrong while extending the reservation. Please try again later.",
@@ -888,28 +1208,26 @@ class ReservationCog(commands.Cog):
             )
             human_log.human(
                 "error",
-                "⚠️ reservation_extend — ticket=%s • user=%s • clan=%s • result=error • reason=update_failed"
+                "⚠️ reservation_extend — channel=%s • user=%s • clan=%s • result=error • reason=update_failed • source=global"
                 % (
-                    context.ticket_code,
-                    context.username,
-                    target.normalized_clan_tag or (target.clan_tag or "none"),
+                    channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                    display_member,
+                    sheet_tag,
                 ),
             )
             return
 
-        recruit_display = _thread_recruit_display(ctx.guild, [target], parsed_username=context.username)
-        clan_label = target.normalized_clan_tag or (target.clan_tag or "the reserved clan")
         await ctx.send(
-            f"Extended the reservation in `{clan_label}` for {recruit_display} until `{new_date.isoformat()}`."
+            f"Extended the reservation in `{sheet_tag}` for {display_member} until `{new_date.isoformat()}`."
         )
 
         human_log.human(
             "info",
-            "🧭 reservation_extend — ticket=%s • user=%s • clan=%s • old=%s • new=%s • result=ok"
+            "🧭 reservation_extend — channel=%s • user=%s • clan=%s • old=%s • new=%s • result=ok • source=global"
             % (
-                context.ticket_code,
-                context.username,
-                clan_label,
+                channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+                display_member,
+                sheet_tag,
                 _reservation_display_date(target.reserved_until),
                 new_date.isoformat(),
             ),
@@ -935,18 +1253,139 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        if ctx.guild is None or not _is_authorized(ctx):
+        if ctx.guild is None:
             await ctx.reply(
                 "Only Recruiters (or Admins) can inspect reservation details.",
                 mention_author=False,
             )
             return
 
+        actor_is_staff = _is_authorized(ctx)
+        actor_is_lead = _is_clan_lead_user(ctx.author)
+        if not (actor_is_staff or actor_is_lead):
+            await ctx.reply(
+                "Only Recruiters (or Admins) can inspect reservation details.",
+                mention_author=False,
+            )
+            return
+
+        channel_id = getattr(ctx.channel, "id", None)
+        control_thread_id = get_recruiters_thread_id()
         if clan_tag is None or not str(clan_tag).strip():
+            if not actor_is_staff:
+                await ctx.reply(
+                    "Ticket-level reservation lookups are limited to Recruiters and Admins.",
+                    mention_author=False,
+                )
+                return
+            if control_thread_id and control_thread_id == channel_id:
+                await self._handle_global_reservations(ctx)
+                return
             await self._handle_thread_reservations(ctx)
             return
 
+        interact_channel_id = get_recruitment_interact_channel_id()
+        if interact_channel_id is None or interact_channel_id != channel_id:
+            await ctx.reply(
+                f"Clan-level reservation lookups are only available in {_interact_channel_hint()}.",
+                mention_author=False,
+            )
+            return
+
+        if not (actor_is_staff or actor_is_lead):
+            await ctx.reply(
+                "Only Recruiters/Admins or the configured clan leads can run this command here.",
+                mention_author=False,
+            )
+            return
+
         await self._handle_clan_reservations(ctx, clan_tag)
+
+    async def _handle_global_reservations(self, ctx: commands.Context) -> None:
+        try:
+            ledger = await reservations.load_reservation_ledger()
+        except Exception:
+            log.exception("failed to load ledger for global reservations")
+            await ctx.reply(
+                "Something went wrong while loading reservations. Please try again later.",
+                mention_author=False,
+            )
+            return
+
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=28)
+
+        def _timestamp(row: reservations.ReservationRow) -> dt.datetime | None:
+            stamp = row.created_at
+            if stamp is not None and stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=dt.timezone.utc)
+            if stamp is None and row.reserved_until is not None:
+                stamp = dt.datetime.combine(row.reserved_until, dt.time.min, dt.timezone.utc)
+            return stamp
+
+        recent: list[tuple[dt.datetime, reservations.ReservationRow]] = []
+        for row in ledger.rows:
+            stamp = _timestamp(row)
+            if stamp is None or stamp < cutoff:
+                continue
+            recent.append((stamp, row))
+
+        if not recent:
+            await ctx.send("No reservations have been created or updated in the last 28 days.")
+            human_log.human(
+                "info",
+                "🧭 reservations_global — channel=%s • count=0 • window=28d • result=empty"
+                % channel_label(ctx.guild, getattr(ctx.channel, "id", None)),
+            )
+            return
+
+        recent.sort(key=lambda item: (item[0], item[1].row_number), reverse=True)
+
+        thread_cache: dict[str, tuple[str, str]] = {}
+
+        async def _ticket_context(row: reservations.ReservationRow) -> tuple[str, str]:
+            thread_id = str(row.thread_id or "")
+            cached = thread_cache.get(thread_id)
+            if cached is not None:
+                return cached
+            ticket = "unknown"
+            thread_label = "unknown thread"
+            thread = await _resolve_thread(self.bot, row.thread_id)
+            if thread is not None:
+                thread_label = _thread_name(thread)
+                parts = parse_welcome_thread_name(getattr(thread, "name", None))
+                if parts and parts.ticket_code:
+                    ticket = parts.ticket_code
+            thread_cache[thread_id] = (ticket, thread_label)
+            return ticket, thread_label
+
+        entries: list[str] = []
+        for _, row in recent:
+            user_display = _reservation_user_display(
+                ctx.guild,
+                row,
+                fallback_username=row.username_snapshot or "unknown recruit",
+            )
+            tag = row.normalized_clan_tag or (row.clan_tag or "?")
+            status_text = _reservation_status_display(row.status)
+            expiry = _reservation_display_date(row.reserved_until)
+            ticket_code, thread_label = await _ticket_context(row)
+            entries.append(
+                "• %s — `%s` — %s — expires %s — ticket %s (%s)"
+                % (user_display, tag, status_text, expiry, ticket_code, thread_label)
+            )
+
+        header = f"Reservations in the last 28 days ({len(entries)} rows):"
+        chunk_size = 10
+        for index in range(0, len(entries), chunk_size):
+            chunk = entries[index : index + chunk_size]
+            prefix = header if index == 0 else "…continued:"
+            await ctx.send("\n".join([prefix, *chunk]))
+
+        human_log.human(
+            "info",
+            "🧭 reservations_global — channel=%s • count=%d • window=28d • result=ok"
+            % (channel_label(ctx.guild, getattr(ctx.channel, "id", None)), len(entries)),
+        )
 
 
     async def _handle_thread_reservations(self, ctx: commands.Context) -> None:
@@ -957,24 +1396,12 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        context = _parse_thread_context(ctx.channel)
-        if context is None:
-            await ctx.reply(
-                "I couldn't parse this thread's ticket information. Please check the name and try again.",
-                mention_author=False,
-            )
-            return
-
-        owner_id = _thread_owner_id(context.thread)
         try:
-            matches = await reservations.find_active_reservations_for_recruit(
-                ticket_user_id=owner_id,
-                username=context.username,
-            )
+            view = await _get_thread_reservation(ctx.channel, parsed_username=None)
         except Exception:
             log.exception(
                 "failed to look up reservations for thread listing",
-                extra={"ticket": context.ticket_code, "user": context.username},
+                extra={"thread_id": getattr(ctx.channel, "id", None)},
             )
             await ctx.reply(
                 "Something went wrong while loading reservations for this recruit. Please try again later.",
@@ -982,41 +1409,91 @@ class ReservationCog(commands.Cog):
             )
             human_log.human(
                 "error",
-                "⚠️ reservations_list — ticket=%s • user=%s • count=0 • scope=user • result=error • reason=lookup_failed"
-                % (context.ticket_code, context.username),
+                "⚠️ reservations_list — thread=%s • result=error • reason=lookup_failed"
+                % _thread_name(ctx.channel),
             )
             return
 
-        matches = [row for row in matches if row.is_active]
-        matches.sort(key=_reservation_sort_key)
+        if view is None:
+            await ctx.reply(
+                "I couldn't parse this thread's ticket information. Please check the name and try again.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservations_list — thread=%s • result=error • reason=unparsed_thread"
+                % _thread_name(ctx.channel),
+            )
+            return
 
-        recruit_display = _thread_recruit_display(ctx.guild, matches, parsed_username=context.username)
+        control_hint = _control_thread_hint()
+        recruit_display = _thread_recruit_display(
+            ctx.guild,
+            view.matches,
+            parsed_username=view.context.username,
+        )
+        thread_label = _thread_name(view.context.thread)
 
-        if not matches:
+        if view.status == "ambiguous":
+            await ctx.send(
+                f"I found multiple active reservations for {recruit_display}. Please review them in {control_hint} or fix the ledger."
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservations_list — ticket=%s • user=%s • thread=%s • result=error • reason=multiple_active"
+                % (view.context.ticket_code, view.context.username, thread_label),
+            )
+            return
+
+        if view.status == "mismatch" and view.reservation is not None:
+            ledger_tag = view.reservation.normalized_clan_tag or (view.reservation.clan_tag or "unknown")
+            thread_tag = view.thread_tag_display or "unknown"
+            await ctx.send(
+                (
+                    f"This thread is labeled for `{thread_tag}`, but the ledger shows `{ledger_tag}`.\n"
+                    f"Please confirm the correct clan in {control_hint} before making changes."
+                )
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservations_list — ticket=%s • user=%s • thread=%s • result=error • reason=tag_mismatch"
+                % (view.context.ticket_code, view.context.username, thread_label),
+            )
+            return
+
+        if view.status == "none":
             await ctx.send(f"No active reservations found for {recruit_display}.")
             human_log.human(
                 "info",
-                "🧭 reservations_list — ticket=%s • user=%s • count=0 • scope=user • result=empty"
-                % (context.ticket_code, context.username),
+                "🧭 reservations_list — ticket=%s • user=%s • thread=%s • count=0 • scope=user • result=empty"
+                % (view.context.ticket_code, view.context.username, thread_label),
             )
             return
 
-        lines = [f"Active reservations for {recruit_display}:"]
-        for row in matches:
-            tag = row.normalized_clan_tag or (row.clan_tag or "?")
-            creator = _reservation_creator_display(ctx.guild, row.recruiter_id)
-            expiry = _reservation_display_date(row.reserved_until)
-            details = [f"`{tag}` — expires {expiry}"]
-            info_bits = [f"created by {creator}", _reservation_status_display(row.status)]
-            details.append(f" ({' • '.join(info_bits)})")
-            lines.append("• " + "".join(details))
+        reservation = view.reservation
+        if reservation is None:
+            await ctx.send(f"No active reservations found for {recruit_display}.")
+            human_log.human(
+                "warning",
+                "⚠️ reservations_list — ticket=%s • user=%s • thread=%s • result=error • reason=missing_row"
+                % (view.context.ticket_code, view.context.username, thread_label),
+            )
+            return
 
+        tag = reservation.normalized_clan_tag or (reservation.clan_tag or "?")
+        creator = _reservation_creator_display(ctx.guild, reservation.recruiter_id)
+        expiry = _reservation_display_date(reservation.reserved_until)
+        status_text = _reservation_status_display(reservation.status)
+        lines = [
+            f"Active reservation for {recruit_display}:",
+            f"• `{tag}` — expires {expiry} (created by {creator} • {status_text})",
+        ]
         await ctx.send("\n".join(lines))
 
         human_log.human(
             "info",
-            "🧭 reservations_list — ticket=%s • user=%s • count=%d • scope=user • result=ok"
-            % (context.ticket_code, context.username, len(matches)),
+            "🧭 reservations_list — ticket=%s • user=%s • thread=%s • count=1 • scope=user • result=ok"
+            % (view.context.ticket_code, view.context.username, thread_label),
         )
 
 

@@ -23,6 +23,12 @@ class FakeGuild:
     def get_member(self, member_id: int):
         return self._members.get(member_id)
 
+    def get_channel(self, channel_id: int):
+        return None
+
+    def get_thread(self, thread_id: int):
+        return None
+
 
 class FakeThread:
     def __init__(
@@ -120,6 +126,20 @@ def _setup_permissions(monkeypatch, recruiter: bool, admin: bool = False) -> Non
     monkeypatch.setattr(reserve_module, "is_admin_member", lambda ctx: admin)
 
 
+def _setup_control_channels(
+    monkeypatch,
+    *,
+    recruiters_thread: int | None = None,
+    interact_channel: int | None = None,
+) -> None:
+    monkeypatch.setattr(reserve_module, "get_recruiters_thread_id", lambda: recruiters_thread)
+    monkeypatch.setattr(
+        reserve_module,
+        "get_recruitment_interact_channel_id",
+        lambda: interact_channel,
+    )
+
+
 def _make_cog(bot: FakeBot) -> reserve_module.ReservationCog:
     return reserve_module.ReservationCog(bot)  # type: ignore[arg-type]
 
@@ -134,6 +154,7 @@ def _reservation_row(
     ticket_user_id: int | None = 222,
     recruiter_id: int = 111,
     username_snapshot: str = "Recruit",
+    created_at: dt.datetime | None = None,
 ) -> reservations_sheet.ReservationRow:
     return reservations_sheet.ReservationRow(
         row_number=row_number,
@@ -142,7 +163,7 @@ def _reservation_row(
         recruiter_id=recruiter_id,
         clan_tag=clan_tag,
         reserved_until=reserved_until,
-        created_at=None,
+        created_at=created_at,
         status=status,
         notes="",
         username_snapshot=username_snapshot,
@@ -160,10 +181,17 @@ def _reservation_row(
     )
 
 
+def _reservation_ledger(
+    rows: list[reservations_sheet.ReservationRow],
+) -> reservations_sheet.ReservationLedger:
+    return reservations_sheet.ReservationLedger(rows=list(rows), status_index=0)
+
+
 def test_reserve_success(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_parents(monkeypatch, parent_id=999)
     _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
 
     recruit = FakeMember(222, "Recruit One")
     guild = FakeGuild([recruit])
@@ -202,6 +230,15 @@ def test_reserve_success(monkeypatch):
         fake_count,
     )
 
+    async def fake_find_active(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_find_active,
+    )
+
     appended: list[list[str]] = []
 
     async def fake_append(row_values):
@@ -231,10 +268,84 @@ def test_reserve_success(monkeypatch):
     assert thread.sent[-1].content.startswith("Reserved 1 spot in `#ABC`")
 
 
+def test_reserve_duplicate_blocked(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_parents(monkeypatch, parent_id=1000)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
+
+    recruit = FakeMember(3000, "Duplicate User")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(
+        thread_id=2000,
+        parent_id=1000,
+        name="W0500-Duplicate User",
+        owner_id=recruit.id,
+    )
+    author = FakeMember(3001)
+
+    mention_message = FakeMessage("reserve user", author=author, channel=thread, mentions=[recruit])
+    date_message = FakeMessage("2025-12-01", author=author, channel=thread)
+    confirm_message = FakeMessage("yes", author=author, channel=thread)
+
+    bot = FakeBot([mention_message, date_message, confirm_message])
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    clan_row = ["", "Clan", "#ZZZ", "", "5"] + [""] * 40
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (12, list(clan_row)))
+    monkeypatch.setattr(reserve_module.recruitment, "get_clan_by_tag", lambda tag: clan_row)
+    async def fake_count(*_args, **_kwargs):
+        return 0
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "count_active_reservations_for_clan",
+        fake_count,
+    )
+
+    existing_row = _reservation_row(
+        99,
+        clan_tag="#OLD",
+        reserved_until=dt.date(2025, 11, 30),
+        thread_id=5555,
+        ticket_user_id=recruit.id,
+        username_snapshot="Duplicate User",
+    )
+
+    async def fake_existing(*_args, **_kwargs):
+        return [existing_row]
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_existing,
+    )
+
+    async def fake_resolve(bot, thread_id):
+        return FakeThread(thread_id=int(thread_id), parent_id=1000, name="Res-W0499-Other-C1CM", owner_id=recruit.id)
+
+    monkeypatch.setattr(reserve_module, "_resolve_thread", fake_resolve)
+
+    appended: list[list[str]] = []
+
+    async def fake_append(row_values):
+        appended.append(list(row_values))
+
+    monkeypatch.setattr(reserve_module.reservations, "append_reservation_row", fake_append)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "ZZZ"))
+
+    assert ctx.replies, "expected duplicate warning"
+    assert "already has an active reservation" in ctx.replies[0].content
+    assert not appended, "should not append when duplicate detected"
+
+
 def test_reserve_requires_reason(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_parents(monkeypatch, parent_id=777)
     _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
 
     recruit = FakeMember(333, "Applicant")
     guild = FakeGuild([recruit])
@@ -261,6 +372,15 @@ def test_reserve_requires_reason(monkeypatch):
         reserve_module.reservations,
         "count_active_reservations_for_clan",
         fake_count,
+    )
+
+    async def fake_find_active(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_find_active,
     )
 
     appended: list[list[str]] = []
@@ -345,6 +465,7 @@ def test_reservations_thread_no_matches(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_parents(monkeypatch, parent_id=600)
     _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
 
     recruit = FakeMember(900, "Recruit Thread")
     guild = FakeGuild([recruit])
@@ -379,13 +500,14 @@ def test_reservations_thread_no_matches(monkeypatch):
     asyncio.run(cog.reservations_command.callback(cog, ctx))
 
     assert thread.sent and "No active reservations" in thread.sent[0].content
-    assert logs and "result=empty" in logs[0]
+    assert logs and "thread=W0455-Recruit Thread" in logs[0] and "result=empty" in logs[0]
 
 
 def test_reservations_thread_lists_matches(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_parents(monkeypatch, parent_id=601)
     _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
 
     recruit = FakeMember(910, "Thread User")
     guild = FakeGuild([recruit])
@@ -399,15 +521,6 @@ def test_reservations_thread_lists_matches(monkeypatch):
 
     rows = [
         _reservation_row(
-            3,
-            clan_tag="#DEF",
-            reserved_until=dt.date(2025, 11, 20),
-            thread_id=thread.id,
-            ticket_user_id=recruit.id,
-            recruiter_id=author.id,
-            username_snapshot="Thread User",
-        ),
-        _reservation_row(
             2,
             clan_tag="#ABC",
             reserved_until=dt.date(2025, 11, 18),
@@ -415,7 +528,7 @@ def test_reservations_thread_lists_matches(monkeypatch):
             ticket_user_id=recruit.id,
             recruiter_id=author.id,
             username_snapshot="Thread User",
-        ),
+        )
     ]
 
     async def fake_lookup(*_, **__):
@@ -443,19 +556,227 @@ def test_reservations_thread_lists_matches(monkeypatch):
     assert thread.sent, "expected reservation listing"
     content = thread.sent[0].content
     lines = content.splitlines()
-    assert lines[1].startswith("• `ABC`")
-    assert lines[2].startswith("• `DEF`")
-    assert any("result=ok" in entry for entry in logs)
+    assert lines[0].startswith("Active reservation for")
+    assert "`ABC`" in lines[1]
+    assert any("thread=W0460-Thread User" in entry and "result=ok" in entry for entry in logs)
+
+
+def test_reservations_thread_mismatch(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_parents(monkeypatch, parent_id=602)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
+
+    recruit = FakeMember(930, "Mismatch User")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(
+        thread_id=1150,
+        parent_id=602,
+        name="Res-W0470-Mismatch User-C1CE",
+        owner_id=recruit.id,
+    )
+    author = FakeMember(931)
+
+    row = _reservation_row(
+        4,
+        clan_tag="#C1CM",
+        reserved_until=dt.date(2025, 11, 25),
+        thread_id=thread.id,
+        ticket_user_id=recruit.id,
+        recruiter_id=author.id,
+        username_snapshot="Mismatch User",
+    )
+
+    async def fake_lookup(*_, **__):
+        return [row]
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([], channels={thread.id: thread})
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx))
+
+    assert thread.sent and "ledger shows" in thread.sent[0].content
+    assert any("result=error" in entry and "reason=tag_mismatch" in entry for entry in logs)
+
+
+def test_reservations_thread_multiple_rows(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_parents(monkeypatch, parent_id=603)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
+
+    recruit = FakeMember(940, "Multi User")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(
+        thread_id=1160,
+        parent_id=603,
+        name="W0475-Multi User",
+        owner_id=recruit.id,
+    )
+    author = FakeMember(941)
+
+    rows = [
+        _reservation_row(
+            5,
+            clan_tag="#AAA",
+            reserved_until=dt.date(2025, 11, 26),
+            thread_id=thread.id,
+            ticket_user_id=recruit.id,
+            recruiter_id=author.id,
+        ),
+        _reservation_row(
+            6,
+            clan_tag="#BBB",
+            reserved_until=dt.date(2025, 11, 27),
+            thread_id=thread.id,
+            ticket_user_id=recruit.id,
+            recruiter_id=author.id,
+        ),
+    ]
+
+    async def fake_lookup(*_, **__):
+        return rows
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([], channels={thread.id: thread})
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx))
+
+    assert thread.sent and "multiple active reservations" in thread.sent[0].content
+    assert any("reason=multiple_active" in entry for entry in logs)
+
+
+def test_reservations_global_listing_recent(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2000
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
+
+    guild = FakeGuild([])
+    channel = FakeThread(
+        thread_id=control_thread_id,
+        parent_id=0,
+        name="recruiters-control",
+        owner_id=None,
+        guild=guild,
+    )
+    author = FakeMember(955)
+
+    class _FixedDateTime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            base = dt.datetime(2025, 11, 30, tzinfo=dt.timezone.utc)
+            if tz is None:
+                return base
+            return base.astimezone(tz)
+
+    monkeypatch.setattr(reserve_module.dt, "datetime", _FixedDateTime)
+
+    recent_row = _reservation_row(
+        7,
+        clan_tag="C1CE",
+        reserved_until=dt.date(2025, 12, 15),
+        thread_id=3100,
+        ticket_user_id=author.id,
+        username_snapshot="Recent Recruit",
+        created_at=dt.datetime(2025, 11, 20, tzinfo=dt.timezone.utc),
+    )
+    old_row = _reservation_row(
+        8,
+        clan_tag="C1CM",
+        reserved_until=dt.date(2025, 10, 10),
+        thread_id=3200,
+        ticket_user_id=None,
+        username_snapshot="Old Recruit",
+        created_at=dt.datetime(2025, 9, 10, tzinfo=dt.timezone.utc),
+        status="released",
+    )
+
+    ledger = _reservation_ledger([recent_row, old_row])
+
+    async def fake_ledger():
+        return ledger
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "load_reservation_ledger",
+        fake_ledger,
+    )
+
+    thread_lookup = {
+        3100: FakeThread(3100, parent_id=0, name="W0500-Recent Recruit-C1CE", owner_id=None),
+        3200: FakeThread(3200, parent_id=0, name="W0499-Old Recruit-C1CM", owner_id=None),
+    }
+
+    async def fake_resolve(bot, thread_id):
+        return thread_lookup.get(int(thread_id))
+
+    monkeypatch.setattr(reserve_module, "_resolve_thread", fake_resolve)
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([], channels={channel.id: channel})
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx))
+
+    assert channel.sent, "expected global listing output"
+    content = "\n".join(message.content or "" for message in channel.sent)
+    assert "Recent Recruit" in content and "Old Recruit" not in content
+    assert "Reservations in the last 28 days" in channel.sent[0].content
+    assert any("reservations_global" in entry and "count=1" in entry for entry in logs)
 
 
 def test_reservations_clan_listing(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_permissions(monkeypatch, recruiter=True)
     _setup_parents(monkeypatch, parent_id=700)
+    interact_channel_id = 1200
+    _setup_control_channels(monkeypatch, interact_channel=interact_channel_id)
 
     recruit = FakeMember(920, "User One")
     guild = FakeGuild([recruit])
-    thread = FakeThread(thread_id=1200, parent_id=700, name="W0470-Other", owner_id=recruit.id)
+    channel = FakeThread(
+        thread_id=interact_channel_id,
+        parent_id=0,
+        name="recruitment-interact",
+        owner_id=None,
+        guild=guild,
+    )
     author = FakeMember(921)
 
     clan_row = ["", "Clan", "C1CE", ""] + [""] * 10
@@ -503,31 +824,138 @@ def test_reservations_clan_listing(monkeypatch):
 
     monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
 
-    bot = FakeBot([], channels=thread_lookup)
-    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+    bot = FakeBot([], channels=thread_lookup | {channel.id: channel})
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
 
     cog = _make_cog(bot)
     asyncio.run(cog.reservations_command.callback(cog, ctx, "C1CE"))
 
-    assert thread.sent, "expected clan reservation listing"
-    content = thread.sent[0].content
+    assert channel.sent, "expected clan reservation listing"
+    content = channel.sent[0].content
     assert "ticket W0471" in content
     assert "ticket unknown" not in content.splitlines()[1]
     assert any("scope=clan" in entry and "result=ok" in entry for entry in logs)
 
 
-def test_reserve_release_success(monkeypatch):
+def test_reservations_clan_listing_requires_channel(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
-    _setup_parents(monkeypatch, parent_id=800)
     _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch, interact_channel=5555)
+
+    guild = FakeGuild([])
+    channel = FakeThread(thread_id=4444, parent_id=0, name="general", owner_id=None, guild=guild)
+    author = FakeMember(950)
+
+    bot = FakeBot([], channels={channel.id: channel})
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx, "C1CE"))
+
+    assert ctx.replies, "expected channel warning"
+    assert "Clan-level reservation lookups" in ctx.replies[0].content
+
+
+def test_reservations_clan_listing_allows_lead(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=False)
+    interact_channel_id = 7777
+    _setup_control_channels(monkeypatch, interact_channel=interact_channel_id)
+
+    author = FakeMember(960)
+    monkeypatch.setattr(reserve_module, "get_clan_lead_ids", lambda: {author.id})
+
+    clan_row = ["", "Clan", "C1CM", ""] + [""] * 10
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (7, clan_row))
+
+    rows = [
+        _reservation_row(
+            9,
+            clan_tag="C1CM",
+            reserved_until=dt.date(2025, 11, 28),
+            thread_id=1500,
+            ticket_user_id=None,
+            username_snapshot="Lead Recruit",
+        )
+    ]
+
+    async def fake_clan(tag):
+        return list(rows)
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "get_active_reservations_for_clan",
+        fake_clan,
+    )
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    guild = FakeGuild([])
+    channel = FakeThread(
+        thread_id=interact_channel_id,
+        parent_id=0,
+        name="recruitment-interact",
+        owner_id=None,
+        guild=guild,
+    )
+
+    bot = FakeBot([], channels={channel.id: channel})
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx, "C1CM"))
+
+    assert channel.sent and "Lead Recruit" in channel.sent[0].content
+    assert any("scope=clan" in entry and "result=ok" in entry for entry in logs)
+
+
+def test_reservations_clan_listing_denies_non_lead(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=False)
+    interact_channel_id = 8888
+    _setup_control_channels(monkeypatch, interact_channel=interact_channel_id)
+    monkeypatch.setattr(reserve_module, "get_clan_lead_ids", lambda: set())
+
+    guild = FakeGuild([])
+    channel = FakeThread(
+        thread_id=interact_channel_id,
+        parent_id=0,
+        name="recruitment-interact",
+        owner_id=None,
+        guild=guild,
+    )
+    author = FakeMember(970)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reservations_command.callback(cog, ctx, "C1CM"))
+
+    assert ctx.replies, "expected permission warning"
+    assert "Only Recruiters (or Admins)" in ctx.replies[-1].content
+
+
+
+def test_reserve_release_global_success(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2500
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
 
     recruit = FakeMember(930, "Release User")
     guild = FakeGuild([recruit])
-    thread = FakeThread(
-        thread_id=1500,
-        parent_id=800,
-        name="Res-W0480-Release User-C1CE",
-        owner_id=recruit.id,
+    channel = FakeThread(
+        thread_id=control_thread_id,
+        parent_id=0,
+        name="recruiters-control",
+        owner_id=None,
+        guild=guild,
     )
     author = FakeMember(931)
 
@@ -535,7 +963,7 @@ def test_reserve_release_success(monkeypatch):
         8,
         clan_tag="C1CE",
         reserved_until=dt.date(2025, 11, 23),
-        thread_id=thread.id,
+        thread_id=9999,
         ticket_user_id=recruit.id,
         recruiter_id=author.id,
         username_snapshot="Release User",
@@ -561,10 +989,10 @@ def test_reserve_release_success(monkeypatch):
         fake_status,
     )
 
-    manual_adjustments: list[tuple[str, int]] = []
+    adjustments: list[tuple[str, int]] = []
 
     async def fake_adjust(tag: str, delta: int):
-        manual_adjustments.append((tag, delta))
+        adjustments.append((tag, delta))
 
     monkeypatch.setattr(reserve_module.availability, "adjust_manual_open_spots", fake_adjust)
 
@@ -575,6 +1003,8 @@ def test_reserve_release_success(monkeypatch):
 
     monkeypatch.setattr(reserve_module.availability, "recompute_clan_availability", fake_recompute)
 
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
     logs: list[str] = []
 
     def fake_log(level: str, message: str, **_):
@@ -582,39 +1012,179 @@ def test_reserve_release_success(monkeypatch):
 
     monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
 
-    bot = FakeBot([], channels={thread.id: thread})
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "release", f"<@{recruit.id}>", "C1CE"))
+
+    assert updated == [(8, "released")]
+    assert adjustments == [("C1CE", 1)]
+    assert recomputed == ["C1CE"]
+    assert channel.sent and "Released the reserved seat" in channel.sent[-1].content
+    assert any("source=global" in entry and "result=ok" in entry for entry in logs)
+
+
+def test_reserve_release_redirects_to_control(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch, recruiters_thread=3333)
+
+    recruit = FakeMember(940, "Release User")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(thread_id=8000, parent_id=600, name="W0001-Test", owner_id=recruit.id)
+    author = FakeMember(941)
+
+    bot = FakeBot([])
     ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
 
     cog = _make_cog(bot)
-    asyncio.run(cog.reserve.callback(cog, ctx, "release"))
+    asyncio.run(cog.reserve.callback(cog, ctx, "release", f"<@{recruit.id}>", "C1CE"))
 
-    assert updated == [(8, "released")]
-    assert manual_adjustments == [("C1CE", 1)]
-    assert recomputed == ["C1CE"]
-    assert thread.sent and "Released the reserved seat" in thread.sent[-1].content
-    assert any("reservation_release" in entry and "result=ok" in entry for entry in logs)
+    assert ctx.replies, "expected redirect"
+    assert "Reservation changes must be done" in ctx.replies[-1].content
 
 
-def test_reserve_extend_success(monkeypatch):
+def test_reserve_release_global_not_found(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
-    _setup_parents(monkeypatch, parent_id=801)
     _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2501
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
 
-    recruit = FakeMember(940, "Extend User")
+    recruit = FakeMember(931, "Release Missing")
     guild = FakeGuild([recruit])
-    thread = FakeThread(
-        thread_id=1600,
-        parent_id=801,
-        name="Res-W0485-Extend User-C1CE",
-        owner_id=recruit.id,
+    channel = FakeThread(
+        thread_id=control_thread_id,
+        parent_id=0,
+        name="recruiters-control",
+        owner_id=None,
+        guild=guild,
     )
-    author = FakeMember(941)
+    author = FakeMember(932)
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    async def fake_lookup(*_, **__):
+        return []
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "release", f"<@{recruit.id}>", "C1CE"))
+
+    assert ctx.replies, "expected not found reply"
+    assert "No active reservation" in ctx.replies[-1].content
+    assert any("result=not_found" in entry for entry in logs)
+
+
+def test_reserve_release_global_multiple_rows(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2502
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
+
+    recruit = FakeMember(932, "Release Multi")
+    guild = FakeGuild([recruit])
+    channel = FakeThread(control_thread_id, parent_id=0, name="recruiters-control", owner_id=None, guild=guild)
+    author = FakeMember(933)
+
+    rows = [
+        _reservation_row(
+            12,
+            clan_tag="C1CE",
+            reserved_until=dt.date(2025, 12, 1),
+            thread_id=999,
+            ticket_user_id=recruit.id,
+            username_snapshot="Release Multi",
+        ),
+        _reservation_row(
+            13,
+            clan_tag="C1CE",
+            reserved_until=dt.date(2025, 12, 2),
+            thread_id=998,
+            ticket_user_id=recruit.id,
+            username_snapshot="Release Multi",
+        ),
+    ]
+
+    async def fake_lookup(*_, **__):
+        return list(rows)
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "release", f"<@{recruit.id}>", "C1CE"))
+
+    assert ctx.replies and "Multiple reservations" in ctx.replies[-1].content
+    assert any("reason=multiple_rows" in entry for entry in logs)
+
+
+def test_reserve_extend_redirects_to_control(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch, recruiters_thread=3333)
+
+    recruit = FakeMember(960, "Extend User")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(thread_id=9000, parent_id=600, name="W0002-Test", owner_id=recruit.id)
+    author = FakeMember(961)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2999-01-01"))
+
+    assert ctx.replies, "expected extend redirect"
+    assert "Reservation changes must be done" in ctx.replies[-1].content
+
+
+def test_reserve_extend_global_success(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2600
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
+
+    recruit = FakeMember(970, "Extend User")
+    guild = FakeGuild([recruit])
+    channel = FakeThread(control_thread_id, parent_id=0, name="recruiters-control", owner_id=None, guild=guild)
+    author = FakeMember(971)
 
     row = _reservation_row(
-        10,
+        14,
         clan_tag="C1CE",
         reserved_until=dt.date(2025, 11, 25),
-        thread_id=thread.id,
+        thread_id=9999,
         ticket_user_id=recruit.id,
         recruiter_id=author.id,
         username_snapshot="Extend User",
@@ -646,38 +1216,37 @@ def test_reserve_extend_success(monkeypatch):
         logs.append(message)
 
     monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
 
-    bot = FakeBot([], channels={thread.id: thread})
-    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
 
     cog = _make_cog(bot)
-    asyncio.run(cog.reserve.callback(cog, ctx, "extend", "2999-01-01"))
+    asyncio.run(
+        cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2999-01-01")
+    )
 
-    assert updates == [(10, dt.date(2999, 1, 1))]
-    assert thread.sent and "Extended the reservation" in thread.sent[-1].content
+    assert updates == [(14, dt.date(2999, 1, 1))]
+    assert channel.sent and "Extended the reservation" in channel.sent[-1].content
     assert any("reservation_extend" in entry and "result=ok" in entry for entry in logs)
 
 
-def test_reserve_extend_invalid_date(monkeypatch):
+def test_reserve_extend_global_invalid_date(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
-    _setup_parents(monkeypatch, parent_id=802)
     _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2601
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
 
-    recruit = FakeMember(950, "Extend Fail")
+    recruit = FakeMember(980, "Extend Fail")
     guild = FakeGuild([recruit])
-    thread = FakeThread(
-        thread_id=1700,
-        parent_id=802,
-        name="Res-W0488-Extend Fail-C1CE",
-        owner_id=recruit.id,
-    )
-    author = FakeMember(951)
+    channel = FakeThread(control_thread_id, parent_id=0, name="recruiters-control", owner_id=None, guild=guild)
+    author = FakeMember(981)
 
     row = _reservation_row(
-        11,
+        15,
         clan_tag="C1CE",
         reserved_until=dt.date(2025, 11, 30),
-        thread_id=thread.id,
+        thread_id=9998,
         ticket_user_id=recruit.id,
         recruiter_id=author.id,
         username_snapshot="Extend Fail",
@@ -698,13 +1267,111 @@ def test_reserve_extend_invalid_date(monkeypatch):
         logs.append(message)
 
     monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
 
-    bot = FakeBot([], channels={thread.id: thread})
-    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
 
     cog = _make_cog(bot)
-    asyncio.run(cog.reserve.callback(cog, ctx, "extend", "2020-01-01"))
+    asyncio.run(cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2020-01-01"))
 
-    assert thread.sent, "expected invalid date message"
-    assert "valid date" in thread.sent[-1].content
+    assert ctx.replies, "expected invalid date message"
+    assert "valid date" in ctx.replies[-1].content
     assert any("invalid_date" in entry for entry in logs)
+
+
+def test_reserve_extend_global_not_found(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2602
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
+
+    recruit = FakeMember(981, "Extend Missing")
+    guild = FakeGuild([recruit])
+    channel = FakeThread(control_thread_id, parent_id=0, name="recruiters-control", owner_id=None, guild=guild)
+    author = FakeMember(982)
+
+    async def fake_lookup(*_, **__):
+        return []
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2030-01-01"))
+
+    assert ctx.replies and "No active reservation" in ctx.replies[-1].content
+    assert any("result=not_found" in entry for entry in logs)
+
+
+def test_reserve_extend_global_multiple_rows(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_permissions(monkeypatch, recruiter=True)
+    control_thread_id = 2603
+    _setup_control_channels(monkeypatch, recruiters_thread=control_thread_id)
+
+    recruit = FakeMember(982, "Extend Multi")
+    guild = FakeGuild([recruit])
+    channel = FakeThread(control_thread_id, parent_id=0, name="recruiters-control", owner_id=None, guild=guild)
+    author = FakeMember(983)
+
+    rows = [
+        _reservation_row(
+            16,
+            clan_tag="C1CE",
+            reserved_until=dt.date(2025, 11, 24),
+            thread_id=5000,
+            ticket_user_id=recruit.id,
+            username_snapshot="Extend Multi",
+        ),
+        _reservation_row(
+            17,
+            clan_tag="C1CE",
+            reserved_until=dt.date(2025, 11, 26),
+            thread_id=5001,
+            ticket_user_id=recruit.id,
+            username_snapshot="Extend Multi",
+        ),
+    ]
+
+    async def fake_lookup(*_, **__):
+        return list(rows)
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=channel, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2030-01-01"))
+
+    assert ctx.replies and "Multiple reservations" in ctx.replies[-1].content
+    assert any("reason=multiple_rows" in entry for entry in logs)
