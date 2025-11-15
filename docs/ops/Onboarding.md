@@ -108,7 +108,7 @@ Clicking it posts a final embed to the thread:
 - Sessions persist to the onboarding sheet (`OnboardingSessions` tab) so applicants can pause and return later.
 - The panel shows a **Resume** button when a saved session exists. **Open questions** also resumes automatically.
 - If the bound panel message is missing, the bot recreates it and binds the restored session to the new message.
-- Recruiters can run `!onb resume @user` inside the onboarding thread to recover a panel for that user.
+- Recruiters with **Manage Threads** can run `!onb resume @user` inside the onboarding ticket thread to recover the panel for that user.
 - Finished sessions are immutable — post-finish clicks display a "session closed" notice without changing data.
 
-Doc last updated: 2025-11-08 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

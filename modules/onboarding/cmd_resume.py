@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import discord
 from discord.ext import commands
+from c1c_coreops.helpers import help_metadata
 
 from modules.onboarding.controllers.wizard import WizardController
 
@@ -31,9 +32,18 @@ class ResumeCog(commands.Cog):
                 return candidate
         return None
 
+    @help_metadata(
+        function_group="recruitment",
+        section="recruitment",
+        access_tier="staff",
+        usage="!onb resume @member",
+    )
     @commands.command(
         name="onb",
-        help="onb resume @user — resume onboarding for a user (thread only)",
+        help=(
+            "Recruiter-only recovery for onboarding threads. Run `!onb resume @member` "
+            "inside the recruit's ticket to restore their panel (requires Manage Threads)."
+        ),
     )
     @commands.has_permissions(manage_threads=True)
     async def onb(

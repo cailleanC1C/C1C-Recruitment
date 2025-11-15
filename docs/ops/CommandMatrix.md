@@ -18,6 +18,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | Command | Status | Short text | Usage |
 | --- | --- | --- | --- |
 | `!config` | ✅ | Admin embed of the live registry with guild names and sheet linkage. | `!config` |
+| `!cfg [KEY]` | ✅ | Read-only snapshot of a merged config key with the source sheet tail (defaults to ONBOARDING_TAB). | `!cfg [KEY]` |
 | `!digest` | ✅ | Post the ops digest with cache age, next run, retries, and actor. | `!digest` |
 | `!env` | ✅ | Show masked environment snapshot for quick sanity checks. | `!env` |
 | `!health` | ✅ | Inspect cache/watchdog telemetry pulled from the public API. | `!health` |
@@ -43,6 +44,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!ops reload [--reboot]` | 🧩 | Rebuild the config registry; optionally schedule a soft reboot. | `!ops reload [--reboot]` |
 | `!clanmatch` | 🧩 | Recruiter match workflow (requires recruiter/staff role). [gated: `recruiter_panel`] | `!clanmatch` |
 | `!reserve <clan>` | ✅ | Reserve one clan seat inside a ticket thread and update availability. [gated: `feature_reservations`] | `!reserve <clan>` |
+| `!onb resume @member` | ✅ | Resume an onboarding panel for the mentioned recruit inside the active onboarding thread (Manage Threads required). | `!onb resume @member` |
 | `!welcome <clan> [@member] [note]` | ✅ | Post the legacy welcome embed with crest, pings, and general notice routing. [gated: `recruitment_welcome`] | `!welcome <clan> [@member] [note]` |
 
 ## User — general members
@@ -55,4 +57,4 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

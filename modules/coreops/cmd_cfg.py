@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import discord
 from discord.ext import commands
+from c1c_coreops.helpers import help_metadata
 from shared import config as cfg
 
 ADMIN_ROLE_IDS = set()  # resolved by existing CoreOps RBAC
@@ -18,7 +19,19 @@ class ConfigCmd(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="cfg")
+    @help_metadata(
+        function_group="operational",
+        section="config_health",
+        access_tier="admin",
+        usage="!cfg [KEY]",
+    )
+    @commands.command(
+        name="cfg",
+        help=(
+            "Admin-only snapshot of the merged config registry. Provide a key to "
+            "see the current value and source sheet tail (defaults to ONBOARDING_TAB)."
+        ),
+    )
     @commands.has_permissions(administrator=True)
     async def cfg_cmd(self, ctx: commands.Context, key: str | None = None):
         target = (key or "ONBOARDING_TAB").strip().upper()
