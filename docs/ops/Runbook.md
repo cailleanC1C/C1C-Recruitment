@@ -102,6 +102,18 @@ logging the error for follow-up.
 - **When to run:** After onboarding updates the sheet or when the welcome copy looks
   stale. Staff must ask an admin to run it; the command now enforces admin gating.
 
+### Config snapshot (`!cfg`)
+- **Audience:** Admin / Bot Ops (requires `administrator` permission)
+- **Purpose:** Quickly verify merged config values and confirm which sheet supplied them.
+- **Usage:** `!cfg [KEY]` defaults to `ONBOARDING_TAB` when no key is provided; values are echoed read-only.
+- **Notes:** Use uppercase keys from the Config tab. The response includes the masked sheet ID tail and merged-key count so you can confirm reload health without exposing secrets.
+
+### Onboarding resume helper (`!onb resume`)
+- **Audience:** Recruiters / Staff with `Manage Threads`
+- **Purpose:** Restore a recruit’s onboarding panel when the original message is missing or stale.
+- **Usage:** `!onb resume @member` must be issued inside the recruit’s onboarding ticket thread.
+- **Notes:** The command rejects non-thread channels, surfaces “not found” guidance when no saved session exists, and informs staff when the onboarding controller is offline.
+
 ### `!reload --reboot`
 - Restarts both the Discord modules and the aiohttp runtime after reloading configuration.
 - Flushes cached Sheets connections so the next command run observes fresh credentials and tabs.
@@ -186,4 +198,4 @@ Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` wor
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-14 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

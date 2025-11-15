@@ -62,12 +62,13 @@ Tip: Ask staff to escalate if latency exceeds 250 ms for more than 5 minutes.
 
 ## CoreOps / Admin Commands
 
-### `!cfg <KEY>`
-Shows the current value for a single onboarding or recruitment config key and where it originated.
+### `!cfg [KEY]`
+Read-only admin snapshot of a merged config key and the tail of the source sheet ID.
 
-- **Permission:** Admin only
-- **Usage:** `!cfg ONBOARDING_TAB`
-- **Example Response:** `🧩 Config — key=ONBOARDING_TAB • value=OnboardingQuestions • source=sheet:…Qdnb2I`
+- **Audience:** Admin / Bot Ops (requires `administrator` permission)
+- **Usage:** `!cfg [KEY]` (defaults to `ONBOARDING_TAB` when omitted)
+- **Behavior:** Replies with the resolved value, originating sheet tail, and total merged-key count so ops can confirm reloads.
+- **Tip:** Keys are case-sensitive and should match the Config tab headers; the sheet ID tail is redacted automatically.
 
 ## Recruitment commands alignment
 
@@ -109,6 +110,14 @@ Posts the cached welcome template for the provided clan tag.
 - **Usage:** `!welcome C1CE @Player`
 - **Feature Toggle:** `recruitment_welcome`
 
+### `!onb resume @member`
+Recruiter-only recovery command for onboarding ticket threads.
+
+- **Audience:** Recruiters / Staff with `Manage Threads`
+- **Usage:** `!onb resume @member` (run inside the recruit’s onboarding thread)
+- **Behavior:** Validates thread context, reconnects to the onboarding wizard, and restores the saved panel (posting a replacement message when needed).
+- **Error handling:** Responds with guidance when invoked outside a thread, when no matching session exists, or when the onboarding controller is offline.
+
 ### `@Bot ping`
 
 Mention-style health check.
@@ -118,4 +127,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-11-07 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)
