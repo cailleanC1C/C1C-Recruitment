@@ -11,15 +11,22 @@ The welcome questionnaire now runs entirely inside the ticket thread. Recruits (
 5. **Follow-up** – Coordinators pick up directly in the thread. The session can be resumed or restarted at any time by pressing either **Open questions** or the persistent **Restart** button.
 
 ## Ticket logging & placement sync
-- **Thread open → Sheet row.** When Ticket Tool creates a `W####-username…` thread, the welcome watcher parses the ticket number and username and upserts a row into the onboarding workbook (`ticket_number`, `username`, `clantag`, `date_closed`). `clantag`/`date_closed` remain blank until a recruiter closes the ticket.
-- **Ticket close → Clan prompt.** When Ticket Tool posts “Ticket Closed…”, the watcher posts a dropdown + free-text prompt listing cached clan tags (including the pseudo tag `NONE`). Recruiters can pick from the menu or type a valid tag manually.
-- **Confirmation → Sheet + rename.** Selecting a tag (or typing one) updates the onboarding row with the final clan tag and closure timestamp, confirms in-thread (`Got it — set clan tag to…`), and renames the thread to `Closed-####-username-TAG`.
-- **Reservations & availability.** The watcher resolves any active reservation for the recruit:
-  - Reservation matches final clan → status `closed_same_clan`, no manual open-spot change.
-  - Reservation differs → status `closed_other_clan`; restore the reserved clan’s manual open count (+1) and consume one seat from the final clan (-1).
-  - No reservation → consume one manual open spot from the final clan (-1).
-  - Final tag `NONE` → reservation (if any) is cancelled, restoring the reserved clan’s manual open count (+1); no manual change for the pseudo tag.
-  All adjustments call the same helpers as `!reserve`, including `adjust_manual_open_spots` and `recompute_clan_availability`, so AF/AH/AI stay in sync with the ledger.
+- **Thread naming.** Welcome threads always include the full ticket code (`W####`).
+  - Open ticket: `W####-username`
+  - Reserved seat: `Res-W####-username-TAG`
+  - Closed ticket: `Closed-W####-username-TAG`
+  The watcher derives the ticket code by locating the `W####` segment—prefixes (`Res-`, `Closed-`) are ignored for sheet lookups and reconciliation.
+- **Thread open → Sheet row.** When Ticket Tool creates a welcome thread owned by Ticket Tool, the watcher parses the ticket code + username and upserts the onboarding row (`ticket_number`, `username`, `clantag`, `date_closed`). The `ticket_number` column stores the full code (for example `W0298`). Existing rows keep their `clantag` / `date_closed` values intact; only `ticket_number` / `username` are refreshed.
+- **Ticket close → Clan prompt.** When Ticket Tool posts “Ticket Closed…”, the watcher posts the clan dropdown plus free-text fallback (tags cache + pseudo tag `NONE`). Staff can select a tag or type one.
+- **Manual close fallback.** If a welcome thread is locked/archived/renamed to `Closed-W…` without the Ticket Tool close message, the watcher reconstructs the onboarding row if necessary, flags it for “no auto reconciliation”, and reposts the clan prompt when `clantag` is still blank.
+- **Confirmation → Sheet + rename.** Once a tag is confirmed, the watcher updates the onboarding row with the chosen clan + closure timestamp, acknowledges in-thread (`Got it — set clan tag to…`), and renames the thread to `Closed-W####-username-TAG` (or `Closed-W####-username-NONE`).
+- **Reservations & availability.** The close handler reuses the same helpers as `!reserve`:
+  - Reservation matches final clan → status `closed_same_clan`; no manual open-spot change.
+  - Reservation differs → status `closed_other_clan`; restore the reserved clan’s manual count (+1) and consume one seat in the final clan (-1).
+  - No reservation → consume one manual open spot for the final clan (-1).
+  - Final tag `NONE` → status `cancelled`; restore the reserved clan’s manual count (+1) and leave the pseudo clan untouched.
+  Availability recompute calls keep AF/AH/AI aligned with the ledger.
+- **Reservation rename.** Successful `!reserve` runs rename open welcome threads to `Res-W####-username-TAG` so staff can see the hold immediately.
 
 ## Triggers
 - **Greeting phrase:** When a message in the welcome thread contains `"awake by reacting with"` (case-insensitive) the bot reacts 👍 and posts the panel.

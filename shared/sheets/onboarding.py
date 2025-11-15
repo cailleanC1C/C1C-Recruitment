@@ -24,6 +24,11 @@ _CLAN_TAG_TS: float = 0.0
 
 log = logging.getLogger(__name__)
 
+WELCOME_HEADERS: List[str] = ["ticket_number", "username", "clantag", "date_closed"]
+WELCOME_TICKET_INDEX = 0
+WELCOME_CLAN_TAG_INDEX = 2
+WELCOME_DATE_CLOSED_INDEX = 3
+
 
 def _sheet_id() -> str:
     """Resolve the onboarding sheet id – no legacy fallbacks."""
@@ -269,6 +274,25 @@ def upsert_welcome(row_values: Sequence[str], headers: Sequence[str]) -> str:
     ws = _worksheet(_welcome_tab())
     keys = [("ticket number", _fmt_ticket)]
     return _upsert(ws, keys, row_values, headers)
+
+
+def find_welcome_row(ticket: str | None) -> Optional[Tuple[int, List[str]]]:
+    """Return the (1-indexed) row number and values for ``ticket`` if present."""
+
+    if not ticket:
+        return None
+
+    ws = _worksheet(_welcome_tab())
+    header = _ensure_headers(ws, WELCOME_HEADERS)
+    ticket_col = _column_index(header, "ticket_number")
+    target = _fmt_ticket(ticket)
+
+    values = core.call_with_backoff(ws.get_all_values)
+    for row_idx, row in enumerate(values[1:], start=2):
+        current = row[ticket_col] if ticket_col < len(row) else ""
+        if _fmt_ticket(current) == target:
+            return row_idx, list(row)
+    return None
 
 
 def upsert_promo(

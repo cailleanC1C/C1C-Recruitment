@@ -16,6 +16,7 @@ from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import is_admin_member, is_recruiter
 from modules.common import feature_flags
 from modules.recruitment import availability
+from modules.onboarding.watcher_welcome import rename_thread_to_reserved
 from shared.config import get_promo_channel_id, get_welcome_channel_id
 from shared.sheets import recruitment, reservations
 
@@ -501,6 +502,19 @@ class ReservationCog(commands.Cog):
                 ]
             )
         )
+
+        thread = ctx.channel if isinstance(ctx.channel, discord.Thread) else None
+        if thread is not None:
+            try:
+                await rename_thread_to_reserved(thread, sheet_tag)
+            except Exception:
+                log.exception(
+                    "failed to rename welcome thread for reservation",
+                    extra={
+                        "thread_id": getattr(thread, "id", None),
+                        "clan_tag": _normalize_tag(sheet_tag),
+                    },
+                )
 
         log.info(
             "[reserve] reservation created",
