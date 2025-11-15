@@ -7,7 +7,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 import discord
 from discord import RawReactionActionEvent
@@ -193,6 +193,7 @@ class TicketContext:
     prompt_message_id: Optional[int] = None
     final_clan: Optional[str] = None
     reservation_label: Optional[str] = None
+    close_source: str = "ticket_tool"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     ticket_tool_close_detected: bool = False
     row_created_during_close: bool = False
@@ -221,14 +222,14 @@ def _determine_reservation_decision(
         if final_is_real and normalized_final and normalized_final != no_placement_tag:
             open_deltas[normalized_final] = -1
             recompute.append(normalized_final)
-        return ReservationDecision("none_found", None, open_deltas, recompute)
+        return ReservationDecision("none", None, open_deltas, recompute)
 
     reservation_tag = reservation_row.normalized_clan_tag
     if not reservation_tag:
         reservation_tag = (reservation_row.clan_tag or "").strip().upper()
 
     if normalized_final == no_placement_tag:
-        label = "none"
+        label = "cancelled"
         status = "cancelled"
         if reservation_tag:
             open_deltas[reservation_tag] = open_deltas.get(reservation_tag, 0) + 1
@@ -761,6 +762,7 @@ class WelcomeTicketWatcher(commands.Cog):
         self.ticket_tool_id = get_ticket_tool_bot_id()
         self._tickets: Dict[int, TicketContext] = {}
         self._clan_tags: List[str] = []
+        self._clan_tag_set: Set[str] = set()
 
         if self.channel_id is None:
             log.warning("welcome ticket watcher disabled — invalid WELCOME_CHANNEL_ID")
@@ -860,7 +862,7 @@ class WelcomeTicketWatcher(commands.Cog):
         if self._clan_tags:
             return self._clan_tags
 
-        tags: List[str] = []
+        raw_tags: List[str] = []
         bucket = sheets_cache.get_bucket("clan_tags")
         if bucket is not None:
             value = bucket.value
@@ -871,25 +873,60 @@ class WelcomeTicketWatcher(commands.Cog):
                 except Exception:
                     log.debug("failed to refresh clan_tags cache", exc_info=True)
             if isinstance(value, list):
-                tags = [str(tag).strip().upper() for tag in value if str(tag or "").strip()]
+                raw_tags = [str(tag) for tag in value]
 
-        if not tags:
+        if not raw_tags:
             try:
-                tags = await asyncio.to_thread(onboarding_sheets.load_clan_tags)
-                tags = [str(tag).strip().upper() for tag in tags if str(tag or "").strip()]
+                raw_tags = await asyncio.to_thread(onboarding_sheets.load_clan_tags)
             except Exception:
                 log.exception("failed to load clan tags from Sheets")
                 return []
 
-        unique = sorted({tag for tag in tags if tag})
-        if _NO_PLACEMENT_TAG not in unique:
-            unique.append(_NO_PLACEMENT_TAG)
-        self._clan_tags = unique
+        normalized: List[str] = []
+        seen: Set[str] = set()
+        for tag in raw_tags:
+            cleaned = str(tag or "").strip().upper()
+            if not cleaned:
+                continue
+            if cleaned in seen:
+                continue
+            normalized.append(cleaned)
+            seen.add(cleaned)
+
+        self._clan_tags = normalized
+        self._clan_tag_set = seen
         return self._clan_tags
 
     def _tag_known(self, tag: str) -> bool:
         normalized = (tag or "").strip().upper()
-        return normalized in self._clan_tags
+        if not normalized:
+            return False
+        if normalized in self._clan_tag_set:
+            return True
+        if normalized == _NO_PLACEMENT_TAG and normalized in self._clan_tags:
+            return True
+        return False
+
+    async def _send_invalid_tag_notice(
+        self,
+        thread: discord.Thread,
+        actor: Optional[discord.abc.User],
+        attempted_tag: str,
+    ) -> None:
+        notice = (
+            f"⚠️ I couldn't find the clan tag `{attempted_tag}`. "
+            "Please choose a tag from the picker or enter a valid clan tag (e.g. C1CE)."
+        )
+        if actor is not None:
+            try:
+                await actor.send(notice)
+                return
+            except Exception:
+                log.debug("failed to send invalid clan tag DM", exc_info=True)
+        try:
+            await thread.send(notice, delete_after=30)
+        except Exception:
+            log.debug("failed to send invalid clan tag notice", exc_info=True)
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
@@ -972,6 +1009,7 @@ class WelcomeTicketWatcher(commands.Cog):
             return
         await self._load_clan_tags()
         if not self._tag_known(candidate):
+            await self._send_invalid_tag_notice(thread, message.author, candidate)
             return
         await self._finalize_clan_tag(
             thread,
@@ -1019,8 +1057,9 @@ class WelcomeTicketWatcher(commands.Cog):
             else:
                 context.row_created_during_close = True
                 log.warning(
-                    "⚠️ welcome_close_manual — ticket=%s • reason=onboarding_row_missing_manual_close • action=row_inserted_no_reconcile",
+                    "⚠️ welcome_close_manual — ticket=%s • user=%s • reason=onboarding_row_missing_manual_close • action=row_inserted_no_reconcile",
                     context.ticket_number,
+                    context.username,
                 )
 
         clan_value = ""
@@ -1034,7 +1073,7 @@ class WelcomeTicketWatcher(commands.Cog):
 
         await self._handle_ticket_closed(thread, context, manual=True)
         log.warning(
-            "⚠️ welcome_close_manual — ticket=%s • user=%s • reason=%s • action=prompt_posted",
+            "⚠️ welcome_close_manual — ticket=%s • user=%s • reason=%s • action=prompt_posted • source=manual_fallback",
             context.ticket_number,
             context.username,
             reason,
@@ -1049,12 +1088,13 @@ class WelcomeTicketWatcher(commands.Cog):
                 "⚠️ I couldn't load the clan tag list right now. Please try again in a moment."
             )
             log.warning(
-                "⚠️ welcome_close — ticket=%s • user=%s • reason=clan_tags_unavailable",
+                "⚠️ welcome_close — ticket=%s • user=%s • reason=clan_tags_unavailable • result=error",
                 context.ticket_number,
                 context.username,
             )
             return
 
+        context.close_source = "manual_fallback" if manual else "ticket_tool"
         context.state = "awaiting_clan"
         content = (
             f"Which clan tag for {context.username} (ticket {context.ticket_number})?\n"
@@ -1114,9 +1154,7 @@ class WelcomeTicketWatcher(commands.Cog):
         if final_tag != _NO_PLACEMENT_TAG:
             await self._load_clan_tags()
             if not self._tag_known(final_tag):
-                await thread.send(
-                    f"I don't recognise the clan tag `{final_tag}`. Please pick one from the menu or type a valid tag."
-                )
+                await self._send_invalid_tag_notice(thread, actor, final_tag)
                 return
 
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -1124,9 +1162,9 @@ class WelcomeTicketWatcher(commands.Cog):
 
         try:
             result = await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
-        except Exception as exc:
+        except Exception:
             log.exception(
-                "❌ welcome_close — ticket=%s • user=%s • final=%s • reason=sheet_write",
+                "❌ welcome_close — ticket=%s • user=%s • final=%s • result=error • reason=sheet_write",
                 context.ticket_number,
                 context.username,
                 final_tag,
@@ -1137,7 +1175,7 @@ class WelcomeTicketWatcher(commands.Cog):
             return
 
         row_missing = result != "updated" or context.row_created_during_close
-        reservation_label = "none_found"
+        reservation_label = "unknown"
         actions_ok = True
         recompute_tags: List[str] = []
 
@@ -1257,21 +1295,31 @@ class WelcomeTicketWatcher(commands.Cog):
 
         if row_missing:
             log.warning(
-                "⚠️ welcome_close — ticket=%s • user=%s • final=%s • reason=onboarding_row_missing",
+                "⚠️ welcome_close — ticket=%s • user=%s • reason=onboarding_row_missing • action=row_inserted_no_reconcile",
                 context.ticket_number,
                 context.username,
-                final_display,
             )
             return
 
-        log_result = "ok" if actions_ok else "partial"
+        log_result = "ok" if actions_ok else "error"
+        is_manual = context.close_source == "manual_fallback"
+        event_name = "welcome_close_manual" if is_manual else "welcome_close"
+        emoji = "⚠️" if is_manual and log_result == "ok" else ("✅" if log_result == "ok" else "❌")
+        extra_bits = ""
+        if log_result != "ok":
+            extra_bits = " • reason=partial_actions"
+        if is_manual:
+            extra_bits = f"{extra_bits} • source=manual_fallback"
         log.info(
-            "✅ welcome_close — ticket=%s • user=%s • final=%s • reservation=%s • result=%s",
+            "%s %s — ticket=%s • user=%s • final=%s • reservation=%s • result=%s%s",
+            emoji,
+            event_name,
             context.ticket_number,
             context.username,
             final_display,
             reservation_label,
             log_result,
+            extra_bits,
         )
 
 

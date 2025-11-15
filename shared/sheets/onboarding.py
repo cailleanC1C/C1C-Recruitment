@@ -425,10 +425,10 @@ def load_clan_tags(force: bool = False) -> List[str]:
 
     values = core.fetch_values(_sheet_id(), _clanlist_tab())
     tags: List[str] = []
-    for row in values[1:]:
-        if not row:
+    for row in values:
+        if len(row) < 2:
             continue
-        tag = (row[0] if len(row) > 0 else "").strip().upper()
+        tag = (row[1] if len(row) > 1 else "").strip().upper()
         if tag:
             tags.append(tag)
 
@@ -449,10 +449,10 @@ async def _load_clan_tags_async() -> List[str]:
     tab = _clanlist_tab()
     values = await afetch_values(sheet_id, tab)
     tags: List[str] = []
-    for row in values[1:]:
-        if not row:
+    for row in values:
+        if len(row) < 2:
             continue
-        tag = (row[0] if len(row) > 0 else "").strip().upper()
+        tag = (row[1] if len(row) > 1 else "").strip().upper()
         if tag:
             tags.append(tag)
     return tags
