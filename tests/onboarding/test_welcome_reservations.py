@@ -95,7 +95,7 @@ def test_decision_no_reservation_final_real_clan() -> None:
         no_placement_tag=_NO_PLACEMENT_TAG,
         final_is_real=True,
     )
-    assert decision.label == "none_found"
+    assert decision.label == "none"
     assert decision.status is None
     assert decision.open_deltas == {"C1CE": -1}
     assert decision.recompute_tags == ["C1CE"]
@@ -109,7 +109,7 @@ def test_decision_reservation_cancelled_with_no_clan() -> None:
         no_placement_tag=_NO_PLACEMENT_TAG,
         final_is_real=False,
     )
-    assert decision.label == "none"
+    assert decision.label == "cancelled"
     assert decision.status == "cancelled"
     assert decision.open_deltas == {"MART": 1}
     assert decision.recompute_tags == ["MART"]
@@ -122,7 +122,7 @@ def test_decision_no_reservation_no_clan() -> None:
         no_placement_tag=_NO_PLACEMENT_TAG,
         final_is_real=False,
     )
-    assert decision.label == "none_found"
+    assert decision.label == "none"
     assert decision.status is None
     assert decision.open_deltas == {}
     assert decision.recompute_tags == []
@@ -156,6 +156,14 @@ class _DummyThread:
 
     async def fetch_message(self, message_id: int) -> _DummyMessage:
         return _DummyMessage(self, message_id, f"fetched:{message_id}")
+
+
+class _DummyUser:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    async def send(self, content: str, **_: object) -> None:
+        self.sent.append(content)
 
 
 def test_handle_ticket_open_preserves_existing_values(monkeypatch) -> None:
@@ -237,6 +245,7 @@ def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> No
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
 
         context = TicketContext(
             thread_id=1,
@@ -261,7 +270,7 @@ def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> No
         await bot.close()
 
         assert context.state == "closed"
-        assert context.reservation_label == "none_found"
+        assert context.reservation_label == "unknown"
         assert context.final_clan == "C1CE"
         assert thread.name == build_closed_thread_name("W0123", "Tester", "C1CE")
         assert thread.messages and "set clan tag" in thread.messages[-1]
@@ -271,7 +280,7 @@ def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> No
     assert any("onboarding_row_missing" in record.message for record in caplog.records)
 
 
-def test_finalize_no_reservation_consumes_open_spot(monkeypatch) -> None:
+def test_finalize_no_reservation_consumes_open_spot(monkeypatch, caplog) -> None:
     adjustments: list[tuple[str, int]] = []
     recomputed: list[str] = []
 
@@ -327,9 +336,11 @@ def test_finalize_no_reservation_consumes_open_spot(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(thread_id=1, ticket_number="W0456", username="Tester")
         context.state = "awaiting_clan"
         thread = _DummyThread()
+        caplog.set_level(logging.INFO, logger="c1c.onboarding.welcome_watcher")
         await watcher._finalize_clan_tag(
             thread,
             context,
@@ -345,6 +356,133 @@ def test_finalize_no_reservation_consumes_open_spot(monkeypatch) -> None:
 
     assert ("C1CE", -1) in adjustments
     assert "C1CE" in recomputed
+    log_messages = [
+        record.message
+        for record in caplog.records
+        if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
+    ]
+    assert log_messages[-1] == "✅ welcome_close — ticket=W0456 • user=Tester • final=C1CE • reservation=none • result=ok"
+
+
+def test_finalize_manual_logs_manual_event(monkeypatch, caplog) -> None:
+    adjustments: list[tuple[str, int]] = []
+    recomputed: list[str] = []
+
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        return "updated"
+
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    async def fail_update(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("should not update reservation status when none exist")
+
+    async def fake_adjust(tag: str, delta: int):
+        adjustments.append((tag, delta))
+
+    async def fake_recompute(tag: str, guild=None):  # type: ignore[no-untyped-def]
+        recomputed.append(tag)
+
+    def fake_find_clan(tag: str):  # type: ignore[no-untyped-def]
+        return tag, ["", "", tag]
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fake_find_reservations,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.update_reservation_status",
+        fail_update,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        fake_adjust,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fake_recompute,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fake_find_clan,
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(thread_id=1, ticket_number="W1456", username="Tester")
+        context.state = "awaiting_clan"
+        context.close_source = "manual_fallback"
+        thread = _DummyThread()
+        caplog.set_level(logging.INFO, logger="c1c.onboarding.welcome_watcher")
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CE",
+            actor=None,
+            source="test",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert ("C1CE", -1) in adjustments
+    assert "C1CE" in recomputed
+    log_messages = [
+        record.message
+        for record in caplog.records
+        if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
+    ]
+    assert log_messages[-1] == (
+        "⚠️ welcome_close_manual — ticket=W1456 • user=Tester • final=C1CE "
+        "• reservation=none • result=ok • source=manual_fallback"
+    )
+
+
+def test_finalize_rejects_unknown_tag_sends_notice(monkeypatch) -> None:
+    async def fail_to_thread(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("upsert should not run for invalid tags")
+
+    monkeypatch.setattr("asyncio.to_thread", fail_to_thread)
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(thread_id=1, ticket_number="W2000", username="Tester")
+        context.state = "awaiting_clan"
+        thread = _DummyThread()
+        actor = _DummyUser()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "unknown",
+            actor=actor,
+            source="message",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+        assert actor.sent
+        assert "clan tag" in actor.sent[0]
+        assert thread.messages == []
+
+    asyncio.run(runner())
 
 
 def test_finalize_matching_reservation(monkeypatch) -> None:
@@ -403,6 +541,7 @@ def test_finalize_matching_reservation(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(
             thread_id=1,
             ticket_number="W0007",
@@ -487,6 +626,7 @@ def test_finalize_moved_reservation(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", "MART", "VAGR", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(
             thread_id=1,
             ticket_number="W0008",
@@ -572,6 +712,7 @@ def test_finalize_none_tag_cancels_reservation(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["MART", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(
             thread_id=1,
             ticket_number="W0009",
@@ -592,7 +733,7 @@ def test_finalize_none_tag_cancels_reservation(monkeypatch) -> None:
         )
         await bot.close()
 
-        assert context.reservation_label == "none"
+        assert context.reservation_label == "cancelled"
 
     asyncio.run(runner())
 
@@ -658,6 +799,7 @@ def test_finalize_none_tag_without_reservation(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["MART", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(
             thread_id=1,
             ticket_number="W0010",
@@ -678,7 +820,7 @@ def test_finalize_none_tag_without_reservation(monkeypatch) -> None:
         )
         await bot.close()
 
-        assert context.reservation_label == "none_found"
+        assert context.reservation_label == "none"
 
     asyncio.run(runner())
 
@@ -715,6 +857,7 @@ def test_manual_close_missing_row_prompts(monkeypatch, caplog) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(thread_id=1, ticket_number="W0500", username="Tester")
         thread = _DummyThread()
         caplog.set_level(logging.WARNING, logger="c1c.onboarding.welcome_watcher")
@@ -760,6 +903,7 @@ def test_manual_close_existing_clan_skips_prompt(monkeypatch) -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
         watcher = WelcomeTicketWatcher(bot)
         watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
         context = TicketContext(thread_id=1, ticket_number="W0501", username="Tester")
         thread = _DummyThread()
         await watcher._handle_manual_close(
