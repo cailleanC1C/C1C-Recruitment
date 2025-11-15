@@ -13,6 +13,7 @@ from discord.ext import commands
 from modules.common import feature_flags
 from modules.common import runtime as runtime_mod
 from modules.common.logs import log as human_log
+from modules.onboarding.watcher_welcome import parse_welcome_thread_name
 from modules.recruitment import availability
 from shared.config import get_recruiter_role_ids, get_recruiters_thread_id
 from shared.sheets import reservations
@@ -66,6 +67,10 @@ async def reservations_reminder_daily(
         user_display = _user_display(row)
         until_display = _format_date(row.reserved_until)
         normalized_tag = _normalize_tag(row.clan_tag)
+        thread_name = getattr(thread, "name", None) if thread is not None else None
+        parts = parse_welcome_thread_name(thread_name) if thread_name else None
+        ticket_code = parts.ticket_code if parts is not None else "unknown"
+        username_label = parts.username if parts is not None else row.username_snapshot or user_display
 
         if normalized_tag and normalized_tag not in recompute_context:
             recompute_context[normalized_tag] = getattr(thread, "guild", None)
@@ -76,16 +81,20 @@ async def reservations_reminder_daily(
                 extra={"thread_id": row.thread_id, "clan_tag": clan_label},
             )
             human_log.human(
-                "warn",
-                "🧭 reservations-reminder — clan=%s • user=%s • until=%s • reason=thread_missing"
-                % (clan_label, user_display, until_display),
+                "warning",
+                "⚠️ reservation_reminder — ticket=%s • user=%s • clan=%s • expires=%s • result=error • reason=missing_channel"
+                % (ticket_code, username_label, clan_label, until_display),
             )
             continue
 
+        extend_example = (current_date + dt.timedelta(days=7)).isoformat()
         message_lines = [
             f"Reminder: The reserved spot in `{clan_label}` for {user_display} ends today.",
-            "If you still need this, please extend the reservation with a new date.",
-            "If not, you can ignore this and I’ll release the seat later today.",
+            "",
+            f"• To keep this seat, run `!reserve extend {extend_example}` in this thread with your new expiry date.",
+            "• To free it immediately, run `!reserve release` in this thread.",
+            "",
+            "If you do nothing, I’ll release the seat automatically later today.",
         ]
         content = "\n".join(message_lines)
         if recruiter_ping:
@@ -100,16 +109,16 @@ async def reservations_reminder_daily(
                 extra={"thread_id": row.thread_id, "clan_tag": clan_label},
             )
             human_log.human(
-                "warn",
-                "🧭 reservations-reminder — clan=%s • user=%s • until=%s • result=send_failed"
-                % (clan_label, user_display, until_display),
+                "warning",
+                "⚠️ reservation_reminder — ticket=%s • user=%s • clan=%s • expires=%s • result=error • reason=send_failed"
+                % (ticket_code, username_label, clan_label, until_display),
             )
             continue
 
         human_log.human(
             "info",
-            "🧭 reservations-reminder — clan=%s • user=%s • until=%s"
-            % (clan_label, user_display, until_display),
+            "🧭 reservation_reminder — ticket=%s • user=%s • clan=%s • expires=%s • result=notified"
+            % (ticket_code, username_label, clan_label, until_display),
         )
 
     for clan_tag, guild in recompute_context.items():

@@ -7,9 +7,16 @@ from shared.sheets import reservations
 
 
 class FakeChannel:
-    def __init__(self, channel_id: int, *, guild: object | None = None) -> None:
+    def __init__(
+        self,
+        channel_id: int,
+        *,
+        guild: object | None = None,
+        name: str = "W0000-Test",
+    ) -> None:
         self.id = channel_id
         self.guild = guild or SimpleNamespace(id=1234)
+        self.name = name
         self.sent: list[str] = []
 
     async def send(self, *, content: str | None = None, **_: object) -> None:
@@ -89,7 +96,7 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
     async def fake_recompute(clan_tag: str, *, guild=None):
         recomputed.append((clan_tag, guild))
 
-    fake_thread = FakeChannel(5555)
+    fake_thread = FakeChannel(5555, name="Res-W0455-ReminderUser-C1CE")
     bot = FakeBot({5555: fake_thread})
 
     monkeypatch.setattr(reservation_jobs, "_reservations_enabled", lambda: True)
@@ -97,16 +104,26 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
     monkeypatch.setattr(reservation_jobs.availability, "recompute_clan_availability", fake_recompute)
     monkeypatch.setattr(reservation_jobs, "get_recruiter_role_ids", lambda: {42})
 
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reservation_jobs.human_log, "human", fake_log)
+
     asyncio.run(reservation_jobs.reservations_reminder_daily(bot=bot, today=today))
 
     assert len(fake_thread.sent) == 1
     content = fake_thread.sent[0]
     lines = content.splitlines()
     assert lines[0] == "<@&42>"
-    assert "reserved spot" in lines[1]
-    assert "extend the reservation" in content
+    assert lines[1].startswith("Reminder: The reserved spot")
+    assert lines[2] == ""
+    assert lines[3].startswith("• To keep this seat")
+    assert "!reserve release" in content
 
     assert recomputed == [("AAA", fake_thread.guild)]
+    assert logs and "reservation_reminder" in logs[0] and "result=notified" in logs[0]
 
 
 def test_reservations_autorelease_daily_expires_overdue(monkeypatch):

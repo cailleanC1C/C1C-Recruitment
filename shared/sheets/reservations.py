@@ -334,6 +334,26 @@ async def update_reservation_status(
     )
 
 
+async def update_reservation_expiry(row_number: int, reserved_until: dt.date) -> None:
+    """Update the ``reserved_until`` cell for the reservation at ``row_number``."""
+
+    if row_number <= 1:
+        raise ValueError("row_number must reference a data row")
+
+    recruitment.ensure_service_account_credentials()
+    sheet_id = recruitment.get_recruitment_sheet_id()
+    tab_name = recruitment.get_reservations_tab_name()
+    worksheet = await async_core.aget_worksheet(sheet_id, tab_name)
+
+    cell = f"{_column_label(RESERVED_UNTIL_COL)}{row_number}"
+    await async_core.acall_with_backoff(
+        worksheet.update,
+        cell,
+        [[reserved_until.isoformat()]],
+        value_input_option="RAW",
+    )
+
+
 async def _fetch_reservations_matrix() -> List[List[str]]:
     recruitment.ensure_service_account_credentials()
     sheet_id = recruitment.get_recruitment_sheet_id()
@@ -467,4 +487,5 @@ __all__ = [
     "get_active_reservation_names_for_clan",
     "resolve_reservation_names",
     "update_reservation_status",
+    "update_reservation_expiry",
 ]
