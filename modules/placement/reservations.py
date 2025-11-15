@@ -15,8 +15,12 @@ from discord.ext import commands
 from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import is_admin_member, is_recruiter
 from modules.common import feature_flags
+from modules.common.logs import log as human_log
 from modules.recruitment import availability
-from modules.onboarding.watcher_welcome import rename_thread_to_reserved
+from modules.onboarding.watcher_welcome import (
+    parse_welcome_thread_name,
+    rename_thread_to_reserved,
+)
 from shared.config import get_promo_channel_id, get_welcome_channel_id
 from shared.sheets import recruitment, reservations
 
@@ -342,8 +346,116 @@ def _reservations_enabled() -> bool:
     return False
 
 
+@dataclass(slots=True)
+class _ThreadContext:
+    ticket_code: str
+    username: str
+    thread: object
+    guild: discord.Guild | None
+
+
+def _normalize_date(value: dt.date | None) -> dt.date:
+    if value is not None:
+        return value
+    return dt.date.max
+
+
+def _reservation_sort_key(row: reservations.ReservationRow) -> tuple[dt.date, int]:
+    return (_normalize_date(row.reserved_until), row.row_number)
+
+
+def _reservation_display_date(reserved_until: dt.date | None) -> str:
+    if reserved_until is None:
+        return "unknown"
+    return reserved_until.isoformat()
+
+
+def _reservation_creator_display(guild: discord.Guild | None, recruiter_id: Optional[int]) -> str:
+    if recruiter_id is None:
+        return "unknown recruiter"
+    if guild is not None:
+        try:
+            member = guild.get_member(recruiter_id)
+        except Exception:  # pragma: no cover - guild lookup best effort
+            member = None
+        if member is not None and getattr(member, "mention", None):
+            return getattr(member, "mention")
+    return f"<@{recruiter_id}>"
+
+
+def _reservation_user_display(
+    guild: discord.Guild | None,
+    row: reservations.ReservationRow,
+    *,
+    fallback_username: str,
+) -> str:
+    if row.ticket_user_id is not None:
+        if guild is not None:
+            try:
+                member = guild.get_member(row.ticket_user_id)
+            except Exception:  # pragma: no cover - guild lookup best effort
+                member = None
+            if member is not None and getattr(member, "mention", None):
+                return getattr(member, "mention")
+        return f"<@{row.ticket_user_id}>"
+    snapshot = (row.username_snapshot or "").strip()
+    if snapshot:
+        return snapshot
+    return fallback_username
+
+
+def _reservation_status_display(status: str) -> str:
+    status_text = (status or "").strip()
+    if not status_text:
+        return "status=unknown"
+    return f"status={status_text}"
+
+
+def _thread_recruit_display(
+    guild: discord.Guild | None,
+    rows: list[reservations.ReservationRow],
+    *,
+    parsed_username: str,
+) -> str:
+    for row in rows:
+        display = _reservation_user_display(guild, row, fallback_username=parsed_username)
+        if display:
+            return display
+    return parsed_username
+
+
+def _thread_owner_id(thread: discord.Thread | None) -> Optional[int]:
+    if thread is None:
+        return None
+    owner_id = getattr(thread, "owner_id", None)
+    try:
+        return int(owner_id) if owner_id is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_thread_context(channel: object) -> Optional[_ThreadContext]:
+    if not _is_ticket_thread(channel):
+        return None
+
+    parts = parse_welcome_thread_name(getattr(channel, "name", None))
+    if parts is None:
+        return None
+
+    return _ThreadContext(
+        ticket_code=parts.ticket_code,
+        username=parts.username,
+        thread=channel,
+        guild=getattr(channel, "guild", None),
+    )
+
+
+def _is_authorized(ctx: commands.Context) -> bool:
+    return bool(is_recruiter(ctx) or is_admin_member(ctx))
+
+
 class ReservationCog(commands.Cog):
-    """Cog hosting the `!reserve` recruiter command."""
+    """Cog hosting reservation commands for recruitment staff."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -356,16 +468,35 @@ class ReservationCog(commands.Cog):
     )
     @commands.command(
         name="reserve",
-        help="Reserve a clan seat for a recruit until a specific date.",
-        brief="Reserve a clan seat for a recruit.",
+        help="Reserve, release, or extend a clan seat for a recruit.",
+        brief="Reservation management for a recruit.",
     )
-    async def reserve(self, ctx: commands.Context, clan_tag: str | None = None) -> None:
-        if clan_tag is None or not str(clan_tag).strip():
+    async def reserve(self, ctx: commands.Context, *args: str) -> None:
+        if not args:
             await ctx.reply(
                 "Usage: `!reserve <clantag>` (run inside the recruit's ticket thread).",
                 mention_author=False,
             )
             return
+
+        subcommand = (args[0] or "").strip()
+
+        if subcommand.lower() == "release":
+            await self._handle_release(ctx)
+            return
+
+        if subcommand.lower() == "extend":
+            await self._handle_extend(ctx, args[1:] if len(args) > 1 else [])
+            return
+
+        if len(args) > 1:
+            await ctx.reply(
+                "Usage: `!reserve <clantag>` (run inside the recruit's ticket thread).",
+                mention_author=False,
+            )
+            return
+
+        clan_tag = subcommand
 
         if not _reservations_enabled():
             await ctx.reply(
@@ -527,6 +658,476 @@ class ReservationCog(commands.Cog):
                 "notes": details.notes,
             },
         )
+
+
+    async def _handle_release(self, ctx: commands.Context) -> None:
+        if not _reservations_enabled():
+            await ctx.reply(
+                "Reservations are currently disabled. Please poke an admin if you think this is wrong.",
+                mention_author=False,
+            )
+            return
+
+        if ctx.guild is None or not _is_authorized(ctx):
+            await ctx.reply(
+                "Only Recruiters (or Admins) can reserve clan spots. If you need a hold, poke the Recruitment Crew.",
+                mention_author=False,
+            )
+            return
+
+        if not _is_ticket_thread(ctx.channel):
+            await ctx.reply(
+                "Please run `!reserve` commands inside the recruit’s ticket thread so I know who you’re talking about.",
+                mention_author=False,
+            )
+            return
+
+        context = _parse_thread_context(ctx.channel)
+        if context is None:
+            await ctx.reply(
+                "I couldn't figure out which recruit this thread is for. Please check the thread name and try again.",
+                mention_author=False,
+            )
+            return
+
+        owner_id = _thread_owner_id(context.thread)
+        try:
+            matches = await reservations.find_active_reservations_for_recruit(
+                ticket_user_id=owner_id,
+                username=context.username,
+            )
+        except Exception:
+            log.exception(
+                "failed to look up active reservations for release",
+                extra={"ticket": context.ticket_code, "user": context.username},
+            )
+            await ctx.reply(
+                "Something went wrong while checking reservations for this recruit. Please try again later.",
+                mention_author=False,
+            )
+            return
+
+        if not matches:
+            await ctx.send(
+                f"No active reservation found for {context.username}.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_release — ticket=%s • user=%s • clan=none • result=not_found"
+                % (context.ticket_code, context.username),
+            )
+            return
+
+        matches.sort(key=_reservation_sort_key)
+        if len(matches) > 1:
+            log.warning(
+                "multiple active reservations matched for release",
+                extra={
+                    "ticket": context.ticket_code,
+                    "user": context.username,
+                    "rows": [row.row_number for row in matches],
+                },
+            )
+
+        target = matches[0]
+        clan_tag = target.normalized_clan_tag or (target.clan_tag or "")
+
+        try:
+            await reservations.update_reservation_status(target.row_number, "released")
+        except Exception:
+            log.exception(
+                "failed to update reservation status for release",
+                extra={"row": target.row_number, "ticket": context.ticket_code},
+            )
+            await ctx.reply(
+                "I couldn't mark the reservation as released. Please try again later or contact an admin.",
+                mention_author=False,
+            )
+            return
+
+        if clan_tag:
+            try:
+                await availability.adjust_manual_open_spots(clan_tag, 1)
+            except Exception:
+                log.exception(
+                    "failed to adjust manual open spots after release",
+                    extra={"clan_tag": clan_tag, "ticket": context.ticket_code},
+                )
+            try:
+                await availability.recompute_clan_availability(clan_tag, guild=ctx.guild)
+            except Exception:
+                log.exception(
+                    "failed to recompute availability after release",
+                    extra={"clan_tag": clan_tag, "ticket": context.ticket_code},
+                )
+
+        recruit_display = _thread_recruit_display(ctx.guild, [target], parsed_username=context.username)
+        display_tag = clan_tag or target.clan_tag or "the reserved clan"
+        await ctx.send(
+            f"Released the reserved seat in `{display_tag}` for {recruit_display} and returned it to the open pool."
+        )
+
+        human_log.human(
+            "info",
+            "🧭 reservation_release — ticket=%s • user=%s • clan=%s • result=ok • source=manual"
+            % (context.ticket_code, context.username, display_tag),
+        )
+
+
+    async def _handle_extend(self, ctx: commands.Context, args: list[str]) -> None:
+        if not args:
+            await ctx.reply(
+                "Usage: `!reserve extend <YYYY-MM-DD>` (run inside the recruit's ticket thread).",
+                mention_author=False,
+            )
+            return
+
+        if not _reservations_enabled():
+            await ctx.reply(
+                "Reservations are currently disabled. Please poke an admin if you think this is wrong.",
+                mention_author=False,
+            )
+            return
+
+        if ctx.guild is None or not _is_authorized(ctx):
+            await ctx.reply(
+                "Only Recruiters (or Admins) can reserve clan spots. If you need a hold, poke the Recruitment Crew.",
+                mention_author=False,
+            )
+            return
+
+        if not _is_ticket_thread(ctx.channel):
+            await ctx.reply(
+                "Please run `!reserve` commands inside the recruit’s ticket thread so I know who you’re talking about.",
+                mention_author=False,
+            )
+            return
+
+        context = _parse_thread_context(ctx.channel)
+        if context is None:
+            await ctx.reply(
+                "I couldn't figure out which recruit this thread is for. Please check the thread name and try again.",
+                mention_author=False,
+            )
+            return
+
+        owner_id = _thread_owner_id(context.thread)
+        try:
+            matches = await reservations.find_active_reservations_for_recruit(
+                ticket_user_id=owner_id,
+                username=context.username,
+            )
+        except Exception:
+            log.exception(
+                "failed to look up active reservations for extend",
+                extra={"ticket": context.ticket_code, "user": context.username},
+            )
+            await ctx.reply(
+                "Something went wrong while checking reservations for this recruit. Please try again later.",
+                mention_author=False,
+            )
+            return
+
+        if not matches:
+            await ctx.send(
+                f"No active reservation found for {context.username}.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_extend — ticket=%s • user=%s • clan=none • result=not_found"
+                % (context.ticket_code, context.username),
+            )
+            return
+
+        matches.sort(key=_reservation_sort_key)
+        target = matches[0]
+        if len(matches) > 1:
+            log.warning(
+                "multiple active reservations matched for extend",
+                extra={
+                    "ticket": context.ticket_code,
+                    "user": context.username,
+                    "rows": [row.row_number for row in matches],
+                },
+            )
+
+        date_token = (args[0] or "").strip()
+        try:
+            new_date = dt.date.fromisoformat(date_token)
+        except ValueError:
+            new_date = None
+        today = dt.date.today()
+        if new_date is None or new_date < today:
+            await ctx.reply(
+                "Please provide a valid date in `YYYY-MM-DD` that is today or later.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservation_extend — ticket=%s • user=%s • clan=%s • result=error • reason=invalid_date"
+                % (
+                    context.ticket_code,
+                    context.username,
+                    target.normalized_clan_tag or (target.clan_tag or "none"),
+                ),
+            )
+            return
+
+        try:
+            await reservations.update_reservation_expiry(target.row_number, new_date)
+        except Exception:
+            log.exception(
+                "failed to update reservation expiry",
+                extra={"row": target.row_number, "ticket": context.ticket_code},
+            )
+            await ctx.reply(
+                "Something went wrong while extending the reservation. Please try again later.",
+                mention_author=False,
+            )
+            human_log.human(
+                "error",
+                "⚠️ reservation_extend — ticket=%s • user=%s • clan=%s • result=error • reason=update_failed"
+                % (
+                    context.ticket_code,
+                    context.username,
+                    target.normalized_clan_tag or (target.clan_tag or "none"),
+                ),
+            )
+            return
+
+        recruit_display = _thread_recruit_display(ctx.guild, [target], parsed_username=context.username)
+        clan_label = target.normalized_clan_tag or (target.clan_tag or "the reserved clan")
+        await ctx.send(
+            f"Extended the reservation in `{clan_label}` for {recruit_display} until `{new_date.isoformat()}`."
+        )
+
+        human_log.human(
+            "info",
+            "🧭 reservation_extend — ticket=%s • user=%s • clan=%s • old=%s • new=%s • result=ok"
+            % (
+                context.ticket_code,
+                context.username,
+                clan_label,
+                _reservation_display_date(target.reserved_until),
+                new_date.isoformat(),
+            ),
+        )
+
+
+    @tier("staff")
+    @help_metadata(
+        function_group="recruitment",
+        section="recruitment",
+        access_tier="staff",
+    )
+    @commands.command(
+        name="reservations",
+        help="List active reservations for a recruit or clan.",
+        brief="Show active reservation details.",
+    )
+    async def reservations_command(self, ctx: commands.Context, clan_tag: str | None = None) -> None:
+        if not _reservations_enabled():
+            await ctx.reply(
+                "Reservations are currently disabled. Please poke an admin if you think this is wrong.",
+                mention_author=False,
+            )
+            return
+
+        if ctx.guild is None or not _is_authorized(ctx):
+            await ctx.reply(
+                "Only Recruiters (or Admins) can inspect reservation details.",
+                mention_author=False,
+            )
+            return
+
+        if clan_tag is None or not str(clan_tag).strip():
+            await self._handle_thread_reservations(ctx)
+            return
+
+        await self._handle_clan_reservations(ctx, clan_tag)
+
+
+    async def _handle_thread_reservations(self, ctx: commands.Context) -> None:
+        if not _is_ticket_thread(ctx.channel):
+            await ctx.reply(
+                "`!reservations` without a clan tag only works inside a recruit’s ticket thread.",
+                mention_author=False,
+            )
+            return
+
+        context = _parse_thread_context(ctx.channel)
+        if context is None:
+            await ctx.reply(
+                "I couldn't parse this thread's ticket information. Please check the name and try again.",
+                mention_author=False,
+            )
+            return
+
+        owner_id = _thread_owner_id(context.thread)
+        try:
+            matches = await reservations.find_active_reservations_for_recruit(
+                ticket_user_id=owner_id,
+                username=context.username,
+            )
+        except Exception:
+            log.exception(
+                "failed to look up reservations for thread listing",
+                extra={"ticket": context.ticket_code, "user": context.username},
+            )
+            await ctx.reply(
+                "Something went wrong while loading reservations for this recruit. Please try again later.",
+                mention_author=False,
+            )
+            human_log.human(
+                "error",
+                "⚠️ reservations_list — ticket=%s • user=%s • count=0 • scope=user • result=error • reason=lookup_failed"
+                % (context.ticket_code, context.username),
+            )
+            return
+
+        matches = [row for row in matches if row.is_active]
+        matches.sort(key=_reservation_sort_key)
+
+        recruit_display = _thread_recruit_display(ctx.guild, matches, parsed_username=context.username)
+
+        if not matches:
+            await ctx.send(f"No active reservations found for {recruit_display}.")
+            human_log.human(
+                "info",
+                "🧭 reservations_list — ticket=%s • user=%s • count=0 • scope=user • result=empty"
+                % (context.ticket_code, context.username),
+            )
+            return
+
+        lines = [f"Active reservations for {recruit_display}:"]
+        for row in matches:
+            tag = row.normalized_clan_tag or (row.clan_tag or "?")
+            creator = _reservation_creator_display(ctx.guild, row.recruiter_id)
+            expiry = _reservation_display_date(row.reserved_until)
+            details = [f"`{tag}` — expires {expiry}"]
+            info_bits = [f"created by {creator}", _reservation_status_display(row.status)]
+            details.append(f" ({' • '.join(info_bits)})")
+            lines.append("• " + "".join(details))
+
+        await ctx.send("\n".join(lines))
+
+        human_log.human(
+            "info",
+            "🧭 reservations_list — ticket=%s • user=%s • count=%d • scope=user • result=ok"
+            % (context.ticket_code, context.username, len(matches)),
+        )
+
+
+    async def _handle_clan_reservations(self, ctx: commands.Context, clan_tag: str) -> None:
+        entry = recruitment.find_clan_row(clan_tag)
+        if entry is None:
+            await ctx.reply(
+                f"I don’t know the clan tag `{clan_tag}`. Please check the tag and try again.",
+                mention_author=False,
+            )
+            human_log.human(
+                "warning",
+                "⚠️ reservations_list — clan=%s • count=0 • scope=clan • result=error • reason=unknown_clan"
+                % clan_tag,
+            )
+            return
+
+        sheet_tag = entry[1][2] if len(entry[1]) > 2 and entry[1][2] else clan_tag
+
+        try:
+            rows = await reservations.get_active_reservations_for_clan(sheet_tag)
+        except Exception:
+            log.exception(
+                "failed to fetch clan reservations",
+                extra={"clan_tag": _normalize_tag(sheet_tag)},
+            )
+            await ctx.reply(
+                "Something went wrong while loading reservations for that clan. Please try again later.",
+                mention_author=False,
+            )
+            human_log.human(
+                "error",
+                "⚠️ reservations_list — clan=%s • count=0 • scope=clan • result=error • reason=lookup_failed"
+                % sheet_tag,
+            )
+            return
+
+        rows = [row for row in rows if row.is_active]
+        rows.sort(key=_reservation_sort_key)
+
+        if not rows:
+            await ctx.send(f"No active reservations for `{sheet_tag}`.")
+            human_log.human(
+                "info",
+                "🧭 reservations_list — clan=%s • count=0 • scope=clan • result=empty" % sheet_tag,
+            )
+            return
+
+        lines = [f"Active reservations for `{sheet_tag}`:"]
+        for row in rows:
+            thread = await _resolve_thread(self.bot, row.thread_id)
+            ticket_code = None
+            username = row.username_snapshot or "unknown recruit"
+            if thread is not None:
+                parts = parse_welcome_thread_name(getattr(thread, "name", None))
+                if parts is not None:
+                    ticket_code = parts.ticket_code
+                    if parts.username:
+                        username = parts.username
+            user_display = _reservation_user_display(ctx.guild, row, fallback_username=username)
+            expiry = _reservation_display_date(row.reserved_until)
+            ticket_label = ticket_code or "unknown"
+            lines.append(
+                f"• {user_display} — expires {expiry} (ticket {ticket_label})"
+            )
+
+        await ctx.send("\n".join(lines))
+
+        human_log.human(
+            "info",
+            "🧭 reservations_list — clan=%s • count=%d • scope=clan • result=ok"
+            % (sheet_tag, len(rows)),
+        )
+
+
+async def _resolve_thread(bot: commands.Bot, thread_id: str | int | None) -> Optional[object]:
+    if thread_id is None:
+        return None
+    try:
+        numeric_id = int(thread_id)
+    except (TypeError, ValueError):
+        return None
+
+    getter = getattr(bot, "get_channel", None)
+    if callable(getter):
+        try:
+            channel = getter(numeric_id)
+        except Exception:  # pragma: no cover - cache lookup best effort
+            channel = None
+        if isinstance(channel, discord.Thread) or _is_ticket_thread(channel):
+            return channel
+
+    thread_getter = getattr(bot, "get_thread", None)
+    if callable(thread_getter):
+        try:
+            channel = thread_getter(numeric_id)
+        except Exception:  # pragma: no cover - cache lookup best effort
+            channel = None
+        if isinstance(channel, discord.Thread) or _is_ticket_thread(channel):
+            return channel
+
+    fetcher = getattr(bot, "fetch_channel", None)
+    if callable(fetcher):
+        try:
+            channel = await fetcher(numeric_id)
+        except Exception:
+            channel = None
+        if isinstance(channel, discord.Thread) or _is_ticket_thread(channel):
+            return channel
+
+    return None
 
 
 def _safe_cell(row: list[str], index: int, fallback: int) -> str:
