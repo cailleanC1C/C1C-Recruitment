@@ -28,6 +28,13 @@ _REMINDER_TASK: asyncio.Task | None = None
 _AUTORELEASE_TASK: asyncio.Task | None = None
 
 
+def _control_thread_hint() -> str:
+    thread_id = get_recruiters_thread_id()
+    if thread_id:
+        return f"<#{thread_id}>"
+    return "the recruiter control thread"
+
+
 async def reservations_reminder_daily(
     *,
     bot: commands.Bot | None = None,
@@ -88,11 +95,12 @@ async def reservations_reminder_daily(
             continue
 
         extend_example = (current_date + dt.timedelta(days=7)).isoformat()
+        control_hint = _control_thread_hint()
         message_lines = [
             f"Reminder: The reserved spot in `{clan_label}` for {user_display} ends today.",
             "",
-            f"• To keep this seat, run `!reserve extend {extend_example}` in this thread with your new expiry date.",
-            "• To free it immediately, run `!reserve release` in this thread.",
+            f"• To keep this seat, head to {control_hint} and run `!reserve extend {user_display} {clan_label} {extend_example}`.",
+            f"• To free it immediately, use {control_hint} and run `!reserve release {user_display} {clan_label}`.",
             "",
             "If you do nothing, I’ll release the seat automatically later today.",
         ]

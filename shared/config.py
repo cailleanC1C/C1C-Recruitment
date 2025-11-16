@@ -383,7 +383,11 @@ def _load_config() -> Dict[str, object]:
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
         "RECRUITER_ROLE_IDS": _int_set(os.getenv("RECRUITER_ROLE_IDS")),
         "LEAD_ROLE_IDS": _int_set(os.getenv("LEAD_ROLE_IDS")),
+        "CLAN_LEAD_IDS": _int_set(os.getenv("CLAN_LEAD_IDS")),
         "RECRUITERS_THREAD_ID": _first_int(os.getenv("RECRUITERS_THREAD_ID")),
+        "RECRUITMENT_INTERACT_CHANNEL": _first_int(
+            os.getenv("RECRUITMENT_INTERACT_CHANNEL")
+        ),
         "WELCOME_GENERAL_CHANNEL_ID": _first_int(os.getenv("WELCOME_GENERAL_CHANNEL_ID")),
         "WELCOME_CHANNEL_ID": _first_int(os.getenv("WELCOME_CHANNEL_ID")),
         "PROMO_CHANNEL_ID": _first_int(os.getenv("PROMO_CHANNEL_ID")),
@@ -599,6 +603,10 @@ def get_recruiters_thread_id() -> Optional[int]:
     return _optional_id("RECRUITERS_THREAD_ID")
 
 
+def get_recruitment_interact_channel_id() -> Optional[int]:
+    return _optional_id("RECRUITMENT_INTERACT_CHANNEL")
+
+
 def get_welcome_general_channel_id() -> Optional[int]:
     return _optional_id("WELCOME_GENERAL_CHANNEL_ID")
 
@@ -712,6 +720,10 @@ def get_guardian_knight_role_ids() -> Set[int]:
 
 def get_lead_role_ids() -> Set[int]:
     return _role_set("LEAD_ROLE_IDS")
+
+
+def get_clan_lead_ids() -> Set[int]:
+    return _role_set("CLAN_LEAD_IDS")
 
 
 def get_feature_toggles() -> Dict[str, bool]:

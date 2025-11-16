@@ -73,8 +73,10 @@ sync modules remain available for non-async scripts and cache warmers.
 | `STAFF_ROLE_IDS` | csv | — | Staff role IDs (welcome + refresh tools). |
 | `RECRUITER_ROLE_IDS` | csv | — | Recruiter role IDs (panels, digests). |
 | `LEAD_ROLE_IDS` | csv | — | Lead role IDs for escalations. |
+| `CLAN_LEAD_IDS` | csv | — | Discord user IDs allowed to inspect clan-level reservations in the interact channel. |
 | `ADMIN_IDS` | csv | — | Optional list of Discord user IDs treated as admins. |
 | `RECRUITERS_THREAD_ID` | snowflake | — | Thread receiving recruitment updates. |
+| `RECRUITMENT_INTERACT_CHANNEL` | snowflake | — | Channel where recruiters and clan leads review reservation rosters. |
 | `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
 | `WELCOME_CHANNEL_ID` | snowflake | — | Private welcome ticket channel ID. |
 | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
@@ -236,4 +238,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-02-14 (v0.9.7)
+Doc last updated: 2025-11-15 (v0.9.7)
