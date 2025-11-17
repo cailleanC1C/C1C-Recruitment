@@ -4,6 +4,7 @@
 The onboarding flow runs as an in-thread wizard message. Each question updates the same message with inline controls:
 
 * `short`, `paragraph`, `number` → click **Enter answer**, type in thread.
+* Forgot to click the button? If a text/number question is waiting, the bot captures answers typed directly into the thread and advances as soon as the input validates.
 * Invalid input shows a ❌ inline hint; valid answers advance automatically.
 * A compact “So far” section lists answered questions as **label → value**.
 
@@ -12,6 +13,8 @@ For `single-select` and `multi-select-N` it shows a dropdown (with max N selecti
 Options come from the sheet (`validate: values: A, B, …` or `note`).
 
 After the final summary is posted, the bot deletes the user's captured answer messages (only those), if cleanup is enabled.
+
+Closing a ticket and picking a clan tag (dropdown or typed) now runs the same reconciliation helpers as `!reserve`: it updates the onboarding sheet row, adjusts manual open spots, recomputes `AF`/`AH`/`AI`, and posts the 🧭 placement log in the ops channel so clan availability stays current.
 
 ### Testing (manual)
 1. Click **Open questions** → view disables with “Launching…”.
@@ -34,4 +37,4 @@ After the final summary is posted, the bot deletes the user's captured answer me
 
 `!ops onb check` — validate the tab, headers, and required columns.
 
-Doc last updated: 2025-11-05 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

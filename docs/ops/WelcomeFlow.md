@@ -6,6 +6,7 @@ The welcome questionnaire now runs entirely inside the ticket thread. Recruits (
 ## Flow steps
 1. **Panel posted** – The watcher listens for the welcome greeting phrase (`"awake by reacting with"`) or the 🎫 emoji. It reacts 👍 to the greeting and posts a fresh message with the persistent **Open questions** button.
 2. **In-thread wizard** – Pressing the button posts the first onboarding question directly in the thread with navigation controls. Each answer is captured inline and retains previously provided values when the wizard is resumed.
+   - For text/number prompts, recruits can also type directly into the thread even if they forget to press **Enter answer**; the watcher treats the message as the answer and advances when validation passes.
 3. **Review & Confirm** – After the final question, the wizard shows a summary in-thread with edit/submit controls so the recruit can revise any section before finalizing.
 4. **Submit** – Confirming posts a single embed in the thread. The embed lists every question and answer (split across multiple embeds if Discord field limits require) and records who submitted along with a UTC timestamp.
 5. **Follow-up** – Coordinators pick up directly in the thread. The session can be resumed or restarted at any time by pressing either **Open questions** or the persistent **Restart** button.
@@ -26,6 +27,7 @@ The welcome questionnaire now runs entirely inside the ticket thread. Recruits (
   - No reservation → consume one manual open spot for the final clan (-1).
   - Final tag `NONE` → status `cancelled`; restore the reserved clan’s manual count (+1) and leave the pseudo clan untouched.
   Availability recompute calls keep AF/AH/AI aligned with the ledger.
+  Every placement emits the 🧭 reservation log entry so ops sees holds/releases and final placements in one channel.
 - **Reservation rename.** Successful `!reserve` runs rename open welcome threads to `Res-W####-username-TAG` so staff can see the hold immediately.
 
 ## Triggers
@@ -67,4 +69,4 @@ Gate instrumentation surfaces as single-line console logs:
 
 - **Always defer first.** Defer the button interaction before posting or editing the wizard message; otherwise Discord returns `response_is_done: true` and the launch fails.
 
-Doc last updated: 2025-11-14 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

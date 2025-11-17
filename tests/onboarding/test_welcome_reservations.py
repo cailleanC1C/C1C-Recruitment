@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import logging
+from types import SimpleNamespace
 
 import discord
 from discord.ext import commands
@@ -204,15 +205,32 @@ def test_handle_ticket_open_preserves_existing_values(monkeypatch) -> None:
     assert row == ["W0123", "Tester", "MART", "2025-01-01 00:00:00"]
 
 
-def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> None:
+def test_finalize_reconciles_when_row_inserted(monkeypatch) -> None:
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
     def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
         return "inserted"
 
-    async def fail_async(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("should not be called when welcome row was missing")
+    reservation_calls: list[str] = []
+    adjustments: list[tuple[str, int]] = []
+    recomputed: list[str] = []
+    human_logs: list[str] = []
 
-    def fail_sync(*_args, **_kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("should not be called when welcome row was missing")
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        reservation_calls.append("lookup")
+        return []
+
+    async def fake_adjust(tag: str, delta: int):
+        adjustments.append((tag, delta))
+
+    async def fake_recompute(tag: str, *, guild=None):  # type: ignore[no-untyped-def]
+        recomputed.append(tag)
+
+    def fake_find_clan(tag: str):  # type: ignore[no-untyped-def]
+        return tag, ["", "", tag]
 
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
@@ -220,26 +238,24 @@ def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> No
     )
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
-        fail_async,
-    )
-    monkeypatch.setattr(
-        "modules.onboarding.watcher_welcome.reservations_sheets.update_reservation_status",
-        fail_async,
+        fake_find_reservations,
     )
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
-        fail_async,
+        fake_adjust,
     )
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
-        fail_async,
+        fake_recompute,
     )
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
-        fail_sync,
+        fake_find_clan,
     )
-
-    caplog.set_level(logging.WARNING, logger="c1c.onboarding.welcome_watcher")
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.human_log",
+        SimpleNamespace(human=lambda level, message: human_logs.append(f"{level}:{message}")),
+    )
 
     async def runner() -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
@@ -269,15 +285,70 @@ def test_finalize_skips_reservations_when_row_missing(monkeypatch, caplog) -> No
 
         await bot.close()
 
-        assert context.state == "closed"
-        assert context.reservation_label == "unknown"
-        assert context.final_clan == "C1CE"
-        assert thread.name == build_closed_thread_name("W0123", "Tester", "C1CE")
-        assert thread.messages and "set clan tag" in thread.messages[-1]
+    asyncio.run(runner())
+
+    assert reservation_calls, "should look up reservations even when the row was inserted"
+    assert adjustments == [("C1CE", -1)]
+    assert recomputed == ["C1CE"]
+    assert human_logs, "human log entry should be emitted"
+
+
+def test_finalize_skips_when_upsert_unexpected(monkeypatch, caplog) -> None:
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        return "unknown"
+
+    async def fail_async(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("should not run reconciliation when row is unknown")
+
+    def fail_sync(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("should not read clan rows when row is unknown")
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fail_async,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        fail_async,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fail_async,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fail_sync,
+    )
+
+    caplog.set_level(logging.WARNING, logger="c1c.onboarding.welcome_watcher")
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(thread_id=1, ticket_number="W0999", username="Tester")
+        thread = _DummyThread()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CE",
+            actor=None,
+            source="test",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
 
     asyncio.run(runner())
 
-    assert any("onboarding_row_missing" in record.message for record in caplog.records)
+    assert any(
+        "onboarding_row_missing" in record.message for record in caplog.records
+    ), "should log skip reason when row cannot be confirmed"
 
 
 def test_finalize_no_reservation_consumes_open_spot(monkeypatch, caplog) -> None:
@@ -361,7 +432,10 @@ def test_finalize_no_reservation_consumes_open_spot(monkeypatch, caplog) -> None
         for record in caplog.records
         if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
     ]
-    assert log_messages[-1] == "✅ welcome_close — ticket=W0456 • user=Tester • final=C1CE • reservation=none • result=ok"
+    assert (
+        "✅ welcome_close — ticket=W0456 • user=Tester • final=C1CE • reservation=none • result=ok"
+        in log_messages
+    )
 
 
 def test_finalize_manual_logs_manual_event(monkeypatch, caplog) -> None:
@@ -446,9 +520,10 @@ def test_finalize_manual_logs_manual_event(monkeypatch, caplog) -> None:
         for record in caplog.records
         if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
     ]
-    assert log_messages[-1] == (
+    assert (
         "⚠️ welcome_close_manual — ticket=W1456 • user=Tester • final=C1CE "
         "• reservation=none • result=ok • source=manual_fallback"
+        in log_messages
     )
 
 

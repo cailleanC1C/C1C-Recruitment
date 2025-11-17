@@ -15,6 +15,7 @@ from discord.ext import commands
 
 from modules.common import feature_flags
 from modules.common import runtime as rt
+from modules.common.logs import log as human_log
 from modules.onboarding import logs, thread_membership, thread_scopes
 from modules.onboarding.ui import panels
 from shared.config import (
@@ -301,6 +302,40 @@ def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> 
 
     # discord.py 2.x restricts accessing Client.loop here; schedule via asyncio
     asyncio.create_task(runner())
+
+
+def _log_finalize_summary(
+    context: TicketContext,
+    thread: discord.Thread,
+    *,
+    final_display: str,
+    reservation_label: str,
+    result: str,
+    reason: str | None = None,
+) -> None:
+    channel_ref = _channel_readable_label(getattr(thread, "guild", None), getattr(thread, "id", None))
+    reason_suffix = f" • reason={reason}" if reason else ""
+    log.info(
+        "ℹ️ onboarding_finalize_reconcile — ticket=%s • user=%s • clan=%s • reservation=%s • channel=%s • result=%s%s",
+        context.ticket_number,
+        context.username,
+        final_display,
+        reservation_label,
+        channel_ref,
+        result,
+        reason_suffix,
+    )
+    human_level = "info" if result == "ok" else "warning"
+    emoji = "🧭" if result == "ok" else "⚠️"
+    source_suffix = "" if context.close_source == "ticket_tool" else f" • source={context.close_source}"
+    human_log.human(
+        human_level,
+        (
+            f"{emoji} onboarding_finalize — ticket={context.ticket_number} "
+            f"• user={context.username} • clan={final_display} • reservation={reservation_label} "
+            f"• result={result}{source_suffix}{reason_suffix}"
+        ),
+    )
 
 
 def _actor_id(actor: discord.abc.User | None) -> int | None:
@@ -1174,7 +1209,7 @@ class WelcomeTicketWatcher(commands.Cog):
             )
             return
 
-        row_missing = result != "updated" or context.row_created_during_close
+        row_missing = result not in {"updated", "inserted"}
         reservation_label = "unknown"
         actions_ok = True
         recompute_tags: List[str] = []
@@ -1299,6 +1334,14 @@ class WelcomeTicketWatcher(commands.Cog):
                 context.ticket_number,
                 context.username,
             )
+            _log_finalize_summary(
+                context,
+                thread,
+                final_display=final_display,
+                reservation_label=reservation_label,
+                result="skipped",
+                reason="onboarding_row_missing",
+            )
             return
 
         log_result = "ok" if actions_ok else "error"
@@ -1320,6 +1363,15 @@ class WelcomeTicketWatcher(commands.Cog):
             reservation_label,
             log_result,
             extra_bits,
+        )
+        summary_reason = "partial_actions" if log_result != "ok" else None
+        _log_finalize_summary(
+            context,
+            thread,
+            final_display=final_display,
+            reservation_label=reservation_label,
+            result=log_result,
+            reason=summary_reason,
         )
 
 
