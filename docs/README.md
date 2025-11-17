@@ -30,17 +30,17 @@ It exists so that contributors update the correct references after each developm
 * [`ADR-0016`](adr/ADR-0016-import-side-effects.md) — import-time side effects removal.
 * [`ADR-0017`](adr/ADR-0017-Reservations-Placement-Schema.md) — reservations & placement schema.
 * [`ADR-0018`](adr/ADR-0018_DailyRecruiterUpdate.md) — daily recruiter update schedule and sheet-driven report.
-* [`ADR-0019`](ADR-0019-Introduction-of-Clan-SeatReservations.md) — Clan Seet Resevation for Recruiters
-* [`ADR-0020`](ADR-0020-Availability-Derivation.md) — Availability Derivation (E → AF/AH/AI) & Cache Update Strategy
-* [ADR-0021](ADR-0021-availability-recompute-helper.md)	— Reservations Sheet Adapter & Availability Recompute Helper
-* [ADR-0022](ADR-0022-Module-Boundaries.md) — Module Boundaries: Onboarding vs Welcome (and Update Discipline) 
+* [`ADR-0019 — Introduction of Clan Seat Reservations`](adr/ADR-0019-Introduction-of-Clan-SeatReservations.md) — clan seat reservation system rollout for recruiters.
+* [`ADR-0020 — Availability Derivation`](adr/ADR-0020-Availability-Derivation.md) — derivation of availability states from reservation data.
+* [`ADR-0021 — Availability Recompute Helper`](adr/ADR-0021-availability-recompute-helper.md) — reservations sheet adapter and recompute helper.
+* [`ADR-0022 — Module Boundaries`](adr/ADR-0022-Module-Boundaries.md) — onboarding vs welcome module boundaries and update discipline.
 * [`README.md`](adr/README.md) — ADR index and authoring guidelines.
 
 ### `/docs/epic/` — Feature Epics
 * [`README.md`](epic/README.md) — epic index and submission expectations.
 * [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — welcome & placement v2 thread-first onboarding flow.
 * [`EPIC_DailyRecruiterUpdate.md`](epic/EPIC_DailyRecruiterUpdate.md) — daily recruiter update reporting pipeline.
-* [Clan Seat Reservation System v1](EPIC_WelcomePlacementV2.md)
+* [`EPIC_ClanSeatReservationSystem.md`](epic/EPIC_ClanSeatReservationSystem.md) — Clan Seat Reservation System v1
 
 ### `/docs/_meta/`
 * [`COMMAND_METADATA.md`](_meta/COMMAND_METADATA.md) — canonical command metadata export for Ops and diagnostics.

@@ -54,6 +54,17 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 | `docs/guardrails/` | Guardrail & CI policy specs (e.g., `RepositoryGuardrails.md`).              |
 | `docs/compliance/` | Audit and guardrail reports (e.g., `REPORT_GUARDRAILS.md`).                 |
 
+**Seat reservation architecture references (keep in sync with `docs/README.md`):**
+
+* [`ADR-0019 — Introduction of Clan Seat Reservations`](../adr/ADR-0019-Introduction-of-Clan-SeatReservations.md)
+* [`ADR-0020 — Availability Derivation`](../adr/ADR-0020-Availability-Derivation.md)
+* [`ADR-0021 — Availability Recompute Helper`](../adr/ADR-0021-availability-recompute-helper.md)
+* [`ADR-0022 — Module Boundaries`](../adr/ADR-0022-Module-Boundaries.md)
+
+**Related epic:**
+
+* [`EPIC — Clan Seat Reservation System`](../epic/EPIC_ClanSeatReservationSystem.md)
+
 ### 3.3 ADR template
 Ask for current number if unsure! 
 ```
