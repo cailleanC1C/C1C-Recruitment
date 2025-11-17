@@ -25,7 +25,7 @@ entry points, feature toggles, and the deep-dive doc for each surface.
 | **Welcome** | Persistent welcome panel, template cache, and watcher-controlled ticket creation. | `!welcome`, `!welcome-refresh`, promo/welcome watchers. | [`Welcome.md`](Welcome.md), [`WelcomeFlow.md`](WelcomeFlow.md), [`Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
 | **Recruitment** | Clan search panels, recruiter dashboard, emoji rendering helpers, and report embeds. | `!clanmatch`, recruiter panel UI, daily recruiter report cron. | [`Module-Recruitment.md`](Module-Recruitment.md), [`commands.md`](commands.md)
 | **Placement** | Reservations and seat reconciliation when onboarding closes tickets. Shares adapters with recruitment sheets. | `!reserve`, placement watcher hooks, placement summaries in ops channel. | [`Watchers.md`](Watchers.md), [`Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
-| **Shared / OBS** | Sheets adapters, cache warming, logging templates, watchdog tuning, and feature toggles. Supports every module. | Scheduler refresh jobs, structured logging pipeline, feature toggle bootstrap. | [`Config.md`](Config.md), [`keepalive.md`](keepalive.md), [`Logging.md`](Logging.md), [`module-toggles.md`](module-toggles.md)
+| **Shared / OBS** | Sheets adapters, cache warming, logging templates, watchdog tuning, and feature toggles. Supports every module. | Scheduler refresh jobs, structured logging pipeline, feature toggle bootstrap. | [`Config.md`](Config.md), [`Watchers.md`](Watchers.md), [`Logging.md`](Logging.md), [`module-toggles.md`](module-toggles.md)
 
 ### Module relationships
 - All modules import Sheets data exclusively through the async façade described in

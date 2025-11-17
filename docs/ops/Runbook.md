@@ -84,11 +84,11 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
      the feature toggle and scheduler health.
 
 ### Watchers & keepalive
-- `keepalive.md` documents the watchdog thresholds. If heartbeats stall, expect
-  WARN logs followed by a controlled exit; Render restarts the container.
+- [`Watchers.md`](Watchers.md) is the canonical source for watcher gating,
+  scheduler cadences, watchdog thresholds, and keepalive expectations.
 - Promo/welcome watchers are gated by sheet toggles (`enable_promo_watcher`,
-  `enable_welcome_hook`). Disable the toggle first during incidents, then file a
-  follow-up in `docs/ops/Watchers.md`.
+  `enable_welcome_hook`). Disable the toggle first during incidents, then follow
+  the escalation steps in `docs/ops/Watchers.md`.
 
 ## Maintenance cadence
 - **Per deploy:** Verify `/ready`, `/health`, and `!ops digest` after redeploying.

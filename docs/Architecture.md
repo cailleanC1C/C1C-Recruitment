@@ -26,7 +26,8 @@ flowchart TD
 - **Scheduler & watchdog.** `Runtime.scheduler` drives cache refresh jobs and
   timed digests, while the watchdog monitors gateway heartbeats using the
   `WATCHDOG_*` thresholds and exits the process when the Discord connection is
-  stale.
+  stale. See [`docs/ops/Watchers.md`](ops/Watchers.md) for the watcher inventory,
+  keepalive behaviour, and cadence details.
 - **Sheets façade.** `shared.sheets.async_facade` wraps the synchronous Sheets
   adapters so cache misses and writes never block the event loop. CoreOps and the
   feature modules only call the async façade.
