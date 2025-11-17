@@ -72,10 +72,16 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
 1. `!clanmatch` and recruiter panel commands rely on the recruitment caches.
    After editing the sheet, run `!ops refresh clans templates` to pick up the
    changes and watch for `[refresh] trigger=manual` logs.
-2. Reservations use `!reserve` plus the reservations adapter.
+2. Reservations use `!reserve`, `!reservations`, and the recruiter control
+   thread documented in [`Module-Placement.md`](Module-Placement.md).
    - Check the FeatureToggles keys `placement_reservations` and
      `placement_target_select` before enabling.
-   - Use `!ops digest` to inspect availability columns (`AF/AH/AI`) and retries.
+   - Use `!ops digest` to inspect availability columns (`AF/AH/AI`) and retries,
+     and `!reservations <clan>` in the interact channel when you need a live
+     roster of active holds.
+   - Reminder and auto-release jobs post 🧭 logs (`reservation_reminder`,
+     `reservations-autorelease`) around 12:00Z/18:00Z; if those disappear, verify
+     the feature toggle and scheduler health.
 
 ### Watchers & keepalive
 - `keepalive.md` documents the watchdog thresholds. If heartbeats stall, expect

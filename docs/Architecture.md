@@ -56,9 +56,11 @@ flowchart TD
    recruitment caches, render embeds (including emoji pipeline fallbacks), and
    record telemetry for every refresh.
 3. **Reservations and placement.** `!reserve` and the watcher-driven placement
-   reconciliation share the reservations sheet adapter. Manual adjustments update
-   the sheet, recompute availability columns (`AF/AH/AI`), and post placement
-   summaries.
+   reconciliation share the reservations sheet adapter documented in
+   [`Module-Placement.md`](ops/Module-Placement.md). Manual adjustments update the
+   sheet, recompute availability columns (`AF/AH/AI`), post placement summaries,
+   and feed the reminder/auto-release cron jobs that keep stale reservations from
+   blocking capacity.
 4. **Feature toggles.** Module boot calls
    `modules.common.feature_flags.is_enabled()` for each toggle. Missing tabs or
    unset keys fail closed so disabled modules never partially load.
