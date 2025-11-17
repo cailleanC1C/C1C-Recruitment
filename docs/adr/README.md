@@ -28,6 +28,6 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0019](ADR-0019-Introduction-of-Clan-SeatReservations.md) | Clan Seet Resevation for Recruiters | Accepted — 2025-11-13 |
 | [ADR-0020](ADR-0020-Availability-Derivation.md) | Availability Derivation (E → AF/AH/AI) & Cache Update Strategy | Accepted — 2025-11-13 |
 | [ADR-0021](ADR-0021-availability-recompute-helper.md) | Reservations Sheet Adapter & Availability Recompute Helper | Accepted — 2025-11-13 |
-
+| [ADR-0022](ADR-0022-Module-Boundaries.md) | Module Boundaries: Onboarding vs Welcome (and Update Discipline) | Accepted — 2025-11-17 |
 
 Doc last updated: 2025-11-13 (v0.9.7)
