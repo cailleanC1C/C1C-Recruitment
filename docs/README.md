@@ -5,17 +5,12 @@ This index explains the intent and ownership of every file in the documentation 
 It exists so that contributors update the correct references after each development wave or PR.
 
 ## Folder Map
-
 ### Root docs
-# 📘 Global Documentation (`/docs`)
-These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
-### 🔹 [`Architecture.md`](Architecture.md)
-Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
-### 🔹 [`Runbook.md`](Runbook.md)
-Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
-### 🔹 [`Troubleshooting.md`](Troubleshooting.md)
-How to diagnose common issues, logs to check, and recovery steps.
-### 🔹 [`README.md`](README.md) — you are here; master index for the documentation tree.
+# 📘 Global Documentation (`/docs`) - These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
+🔹 [`Architecture.md`](Architecture.md) - Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
+🔹 [`Runbook.md`](Runbook.md) - Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
+🔹 [`Troubleshooting.md`](Troubleshooting.md) - How to diagnose common issues, logs to check, and recovery steps.
+🔹 [`README.md`](README.md) — you are here; master index for the documentation tree.
 
 ### `/docs/adr/` — Architectural Decision Records
 Historical decisions and contracts.
