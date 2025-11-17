@@ -4,15 +4,14 @@
 This index explains the intent and ownership of every file in the documentation tree.
 It exists so that contributors update the correct references after each development wave or PR.
 
-## Folder Map
-### Root docs
-### 📘 Global Documentation (`/docs`) - These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
+## 📘 Global Documentation `/docs`
+These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
 * [`Architecture.md`](Architecture.md) - Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
 * [`Runbook.md`](Runbook.md) - Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
 * [`Troubleshooting.md`](Troubleshooting.md) - How to diagnose common issues, logs to check, and recovery steps.
 * [`README.md`](README.md) — you are here; master index for the documentation tree.
 
-### `/docs/adr/` — Architectural Decision Records
+##   Architectural Decision Records `/docs/adr/`
 Historical decisions and contracts.
 * [`README.md`](adr/README.md) — ADR index and authoring guidelines.
 * [`ADR-0000`](adr/ADR-0000-template.md) — template for proposing new architecture decisions.
@@ -39,32 +38,32 @@ Historical decisions and contracts.
 * [`ADR-0021 — Availability Recompute Helper`](adr/ADR-0021-availability-recompute-helper.md) — reservations sheet adapter and recompute helper.
 * [`ADR-0022 — Module Boundaries`](adr/ADR-0022-Module-Boundaries.md) — onboarding vs welcome module boundaries and update discipline.
 
-### `/docs/epic/` — Feature Epics
+## Feature Epics `/docs/epic/`
 High-level design documents.
 * [`README.md`](epic/README.md) — epic index and submission expectations.
 * [`EPIC_WelcomePlacementV2.md`](epic/EPIC_WelcomePlacementV2.md) — welcome & placement v2 thread-first onboarding flow.
 * [`EPIC_DailyRecruiterUpdate.md`](epic/EPIC_DailyRecruiterUpdate.md) — daily recruiter update reporting pipeline.
 * [`EPIC_ClanSeatReservationSystem.md`](epic/EPIC_ClanSeatReservationSystem.md) — Clan Seat Reservation System v1
 
-### `/docs/_meta/`
+## `/docs/_meta/`
 Formatting, embed style, log style, help text tone, and documentation conventions.
 * [`COMMAND_METADATA.md`](_meta/COMMAND_METADATA.md) — canonical command metadata export for Ops and diagnostics.
 * [`DocStyle.md`](_meta/DocStyle.md) — single source for doc formatting plus log/embed/help UX style.
 
-### `/docs/guardrails/`
+## `/docs/guardrails/`
 * [`README.md`](guardrails/README.md) — high-level summary of CI-enforced guardrails surfaced on pull requests.
 * [`RepositoryGuardrails.md`](guardrails/RepositoryGuardrails.md) — canonical guardrails specification covering structure, coding, documentation, and governance rules.
 
-### `/docs/compliance/`
+## `/docs/compliance/`
 Generated reports used by CI.
 * [`REPORT_GUARDRAILS.md`](compliance/REPORT_GUARDRAILS.md) — guardrail compliance report template and severity mapping.
 
-### `/docs/contracts/`
+## `/docs/contracts/`
 Collaboration Contract and core infra conventions.
 * [`core_infra.md`](contracts/core_infra.md) — runtime, Sheets access, and cache relationships.
 * [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
-### `/docs/ops/` — Operational Documentation
+## Operational Documentation `/docs/ops/` 
 Collaboration Contract and core infra conventions.
 * [`CoreOps.md`](ops/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
 * [`Modules.md`](ops/Modules.md) — module inventory with entry points and links to each deep dive.
@@ -91,7 +90,7 @@ Collaboration Contract and core infra conventions.
 * [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
 * [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
 
-* # 🧩 Module Documentation (`/docs/modules`)
+## 🧩 Module Documentation `/docs/modules`
 Each module has a **dedicated deep-dive file** describing its scope, flows, data sources, and integrations.
 * [`modules/CoreOps.md`](modules/CoreOps.md) - Scheduler, bootstrap, cache facade, runtime responsibilities.
 * [`modules/CoreOps-Development.md`](modules/CoreOps-Development.md) - Developer notes for CoreOps: telemetry, preloader rules, caveats, dev behaviour, testing commands.
@@ -101,7 +100,7 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 * [`modules/Placement.md`](modules/Placement.md) - Placement logic: clan matching, ledger, seat availability, recomputations.
 * [`modules/PermissionsSync.md`](modules/PermissionsSync.md) - Permission sync module: ACL workflows, overwrite syncing. All commands referenced here **must** also be present in the CommandMatrix.
 
-# 🔧 Maintenance Rules
+## 🔧 Maintenance Rules
 * Any PR touching documentation must update this index and all affected references.  
 * All docs must end with:  
   `Doc last updated: YYYY-MM-DD (v0.9.7)`  
