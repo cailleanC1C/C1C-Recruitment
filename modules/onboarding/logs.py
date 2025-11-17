@@ -219,6 +219,7 @@ _RESULT_SEVERITY = {
     "failure": "error",
     "exception": "error",
     "skipped": "warning",
+    "not_eligible": "warning",
     "partial": "warning",
     "retry": "warning",
     "deduped": "warning",
@@ -329,6 +330,8 @@ async def log_onboarding_panel_lifecycle(
             actor=actor_field,
             channel=channel_field,
             questions=questions_field,
+            result=result_text,
+            reason=reason_text,
             extras=extras_payload,
         )
     elif event_slug == "start":

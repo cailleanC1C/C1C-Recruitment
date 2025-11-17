@@ -467,7 +467,6 @@ class LogTemplates:
     def _welcome_panel_event(
         *,
         event: str,
-        emoji: str,
         ticket: Optional[str],
         actor: Optional[str],
         channel: Optional[str],
@@ -478,6 +477,7 @@ class LogTemplates:
         reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
+        emoji = LogTemplates._resolve_welcome_panel_emoji(event, result)
         summary_fields = [("ticket", ticket), ("actor", actor)]
         summary_text = " • ".join(_format_pairs(summary_fields)) or "-"
         detail_fields = [
@@ -486,9 +486,10 @@ class LogTemplates:
             ("schema", schema),
             ("level_detail", level_detail),
             ("result", result),
-            ("reason", reason),
         ]
         details = _format_pairs(detail_fields)
+        if reason and emoji in (LOG_EMOJI["warning"], LOG_EMOJI["error"]):
+            details.append(f"reason={reason}")
         if extras:
             details.extend(item for item in extras if item)
         lines = [f"{emoji} {event} — {summary_text}"]
@@ -497,21 +498,38 @@ class LogTemplates:
         return "\n".join(lines)
 
     @staticmethod
+    def _resolve_welcome_panel_emoji(event: str, result: Optional[str]) -> str:
+        normalized_result = (result or "").strip().lower()
+        if normalized_result in {"error", "failed", "exception"}:
+            return LOG_EMOJI["error"]
+        if normalized_result in {"skipped", "not_eligible", "partial"}:
+            return LOG_EMOJI["warning"]
+        event_lower = event.strip().lower()
+        if event_lower.endswith("_restart"):
+            return LOG_EMOJI["refresh"]
+        if event_lower.endswith("_complete"):
+            return LOG_EMOJI["success"]
+        return LOG_EMOJI["lifecycle"]
+
+    @staticmethod
     def welcome_panel_open(
         *,
         ticket: Optional[str],
         actor: Optional[str],
         channel: Optional[str],
         questions: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
         return LogTemplates._welcome_panel_event(
             event="welcome_panel_open",
-            emoji=LOG_EMOJI["lifecycle"],
             ticket=ticket,
             actor=actor,
             channel=channel,
             questions=questions,
+            result=result,
+            reason=reason,
             extras=extras,
         )
 
@@ -523,13 +541,12 @@ class LogTemplates:
         channel: Optional[str],
         questions: Optional[str],
         schema: Optional[str],
-        result: Optional[str],
-        reason: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
         return LogTemplates._welcome_panel_event(
             event="welcome_panel_start",
-            emoji=LOG_EMOJI["lifecycle"],
             ticket=ticket,
             actor=actor,
             channel=channel,
@@ -548,13 +565,12 @@ class LogTemplates:
         channel: Optional[str],
         questions: Optional[str],
         schema: Optional[str],
-        result: Optional[str],
-        reason: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
         return LogTemplates._welcome_panel_event(
             event="welcome_panel_restart",
-            emoji=LOG_EMOJI["refresh"],
             ticket=ticket,
             actor=actor,
             channel=channel,
@@ -573,13 +589,12 @@ class LogTemplates:
         channel: Optional[str],
         questions: Optional[str],
         level_detail: Optional[str],
-        result: Optional[str],
-        reason: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
         return LogTemplates._welcome_panel_event(
             event="welcome_panel_complete",
-            emoji=LOG_EMOJI["success"],
             ticket=ticket,
             actor=actor,
             channel=channel,
@@ -600,13 +615,12 @@ class LogTemplates:
         questions: Optional[str],
         schema: Optional[str],
         level_detail: Optional[str],
-        result: Optional[str],
-        reason: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
         extras: Sequence[str] | None = None,
     ) -> str:
         return LogTemplates._welcome_panel_event(
             event=f"welcome_panel_{event}",
-            emoji=LOG_EMOJI["info"],
             ticket=ticket,
             actor=actor,
             channel=channel,
