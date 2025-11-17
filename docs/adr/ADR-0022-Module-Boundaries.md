@@ -66,7 +66,7 @@ layout, watchers/schedules, or feature toggles—then the PR must update:
 - `docs/ops/Module-<Module>.md`
 - `docs/ops/Config.md`
 - `docs/_meta/DocStyle.md` (if formatting changed)
-- `docs/ops/Architecture.md` (if flows changed)
+- `docs/Architecture.md` (if flows changed)
 - `CHANGELOG.md`
 
 New docs may only be created with explicit ADR approval.
