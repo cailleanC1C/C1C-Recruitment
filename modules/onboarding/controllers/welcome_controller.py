@@ -2435,13 +2435,25 @@ class BaseWelcomeController:
             return False
 
         pending = session.pending_step or {}
-        if not isinstance(pending, dict) or pending.get("kind") != "inline":
+        pending_kind = pending.get("kind") if isinstance(pending, dict) else None
+        if pending_kind == "select":
             return False
 
+        capture_mode = "pending"
         try:
-            index = int(pending.get("index", 0))
+            index = int(pending.get("index", 0)) if pending_kind == "inline" else None
         except (TypeError, ValueError):
-            return False
+            index = None
+
+        if index is None:
+            try:
+                index = int(session.current_question_index) if session.current_question_index is not None else None
+            except (TypeError, ValueError):
+                index = None
+            if index is None:
+                return False
+            capture_mode = "current_index"
+            store.set_pending_step(thread_id, {"kind": "inline", "index": index})
 
         questions = self._questions.get(thread_id) or []
         if not (0 <= index < len(questions)):
@@ -2473,6 +2485,17 @@ class BaseWelcomeController:
         self._record_captured_message(thread_id, message)
         await self._react_to_message(message, "✅")
         await self._refresh_inline_message(thread_id, index=index)
+        try:
+            qkey = self._question_key(question)
+        except Exception:
+            qkey = "unknown"
+        log.info(
+            "onboarding_fallback_answer_captured — thread=%s • question=%s • len=%d • mode=%s",
+            thread_id,
+            qkey,
+            len(content),
+            capture_mode,
+        )
         return True
 
     async def start_session_from_button(

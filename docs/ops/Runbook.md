@@ -159,6 +159,7 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
 ## Reserving a clan seat (`!reserve`)
 - Confirm `FEATURE_RESERVATIONS` is enabled in the FeatureToggles worksheet before using the command.
 - Run `!reserve <clan_tag>` inside the recruit’s ticket thread (welcome or promo parent).
+- Optional: `!reserve <clan_tag> @recruit` skips the “Who do you want to reserve a spot for?” prompt. The mention/ID is validated before the date prompt begins.
 - Follow the prompts:
   - Mention the recruit or paste their Discord ID.
   - Provide the reservation end date in `YYYY-MM-DD`.
@@ -191,6 +192,7 @@ This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports 
   - If no reservation existed, the final clan loses one manual open spot (`-1`).
   - Choosing the pseudo tag `NONE` cancels any reservation and restores the reserved clan’s open spot (`+1`).
 - After every adjustment the watcher calls `recompute_clan_availability` so `AF`/`AH`/`AI` stay in sync with the ledger.
+- Finalizing a clan tag also emits the 🧭 placement log (same format as `!reserve`) so ops can audit reconciliations in one channel.
  
 ## Reservation lifecycle (daily jobs)
 - **12:00 UTC — Reminder**
@@ -212,4 +214,4 @@ Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` wor
 - **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
   verify the tab with `!checksheet` before retrying the feature.
 
-Doc last updated: 2025-11-15 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

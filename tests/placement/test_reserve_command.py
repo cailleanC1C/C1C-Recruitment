@@ -268,6 +268,87 @@ def test_reserve_success(monkeypatch):
     assert thread.sent[-1].content.startswith("Reserved 1 spot in `#ABC`")
 
 
+def test_reserve_accepts_inline_recruit(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_parents(monkeypatch, parent_id=999)
+    _setup_permissions(monkeypatch, recruiter=True)
+    _setup_control_channels(monkeypatch)
+
+    recruit = FakeMember(222, "Recruit Inline")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(thread_id=556, parent_id=999)
+
+    date_message = FakeMessage("2025-12-05", author=None, channel=thread)
+    confirm_message = FakeMessage("yes", author=None, channel=thread)
+    author = FakeMember(111, "Recruiter")
+    for message in (date_message, confirm_message):
+        message.author = author
+
+    bot = FakeBot([date_message, confirm_message])
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    clan_row = ["", "Clan", "#ABC", "", "3"] + [""] * 40
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (10, list(clan_row)))
+    monkeypatch.setattr(reserve_module.recruitment, "get_clan_by_tag", lambda tag: clan_row)
+
+    async def fake_count(tag):
+        return 0
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "count_active_reservations_for_clan",
+        fake_count,
+    )
+
+    async def fake_find_active(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_find_active,
+    )
+
+    appended: list[list[str]] = []
+
+    async def fake_append(row_values):
+        appended.append(list(row_values))
+
+    monkeypatch.setattr(reserve_module.reservations, "append_reservation_row", fake_append)
+    monkeypatch.setattr(
+        reserve_module.availability,
+        "recompute_clan_availability",
+        lambda *args, **kwargs: asyncio.sleep(0),
+    )
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "ABC", f"<@{recruit.id}>"))
+
+    assert appended, "reservation row should be appended"
+    assert appended[0][1] == str(recruit.id)
+    assert any("Reserving a spot for" in sent.content for sent in thread.sent[:1])
+
+
+def test_reserve_inline_recruit_validation_error(monkeypatch):
+    _enable_feature(monkeypatch, enabled=True)
+    _setup_parents(monkeypatch, parent_id=999)
+    _setup_permissions(monkeypatch, recruiter=True)
+
+    recruit = FakeMember(222, "Recruit Inline")
+    guild = FakeGuild([recruit])
+    thread = FakeThread(thread_id=556, parent_id=999)
+    author = FakeMember(111, "Recruiter")
+
+    bot = FakeBot([])
+    ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
+
+    cog = _make_cog(bot)
+    asyncio.run(cog.reserve.callback(cog, ctx, "ABC", "nonsense"))
+
+    assert ctx.replies, "should respond with guidance when recruit argument is invalid"
+    assert "understand" in ctx.replies[0].content
+
+
 def test_reserve_duplicate_blocked(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_parents(monkeypatch, parent_id=1000)

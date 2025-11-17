@@ -69,6 +69,7 @@ class ReservationConversation:
         manual_open: int,
         active_reservations: int,
         wait_for: Callable[..., Awaitable[discord.Message]],
+        preset_user: tuple[Optional[int], str, Optional[str]] | None = None,
     ) -> None:
         self.ctx = ctx
         self._clan_label = clan_label
@@ -77,6 +78,7 @@ class ReservationConversation:
         self._wait_for = wait_for
         self._author_id = getattr(ctx.author, "id", None)
         self._channel_id = getattr(ctx.channel, "id", None)
+        self._preset_user = preset_user
 
     async def run(self) -> ReservationDetails:
         """Execute the full conversation flow and return reservation details."""
@@ -116,6 +118,13 @@ class ReservationConversation:
             f"Who do you want to reserve a spot for in `{self._clan_label}`?\n"
             "You can @mention them or paste their Discord ID. Type `cancel` to abort."
         )
+        if not reprompt and self._preset_user is not None:
+            preset = self._preset_user
+            self._preset_user = None
+            display = preset[1] or (f"<@{preset[0]}>" if preset[0] else "the recruit")
+            await self.ctx.send(f"Reserving a spot for {display}.")
+            return preset
+
         if not reprompt:
             await self.ctx.send(prompt)
         else:
@@ -673,14 +682,15 @@ class ReservationCog(commands.Cog):
             await self._handle_extend(ctx, list(args[1:]))
             return
 
-        if len(args) > 1:
+        if len(args) > 2:
             await ctx.reply(
-                "Usage: `!reserve <clantag>` (run inside the recruit's ticket thread).",
+                "Usage: `!reserve <clantag>` or `!reserve <clantag> @recruit` (run inside the recruit's ticket thread).",
                 mention_author=False,
             )
             return
 
         clan_tag = subcommand
+        recruit_token = args[1] if len(args) == 2 else None
 
         if not _reservations_enabled():
             await ctx.reply(
@@ -709,6 +719,20 @@ class ReservationCog(commands.Cog):
                 mention_author=False,
             )
             return
+
+        preset_user: tuple[Optional[int], str, Optional[str]] | None = None
+        if recruit_token:
+            member_id = _parse_member_token(recruit_token)
+            if member_id is None:
+                await ctx.reply(
+                    "I couldn’t understand that recruit reference. Mention them directly (for example `!reserve C1C9 @user`) "
+                    "or just run `!reserve C1C9` and I’ll ask who it’s for.",
+                    mention_author=False,
+                )
+                return
+            member = _resolve_member(ctx.guild, member_id)
+            mention_text = getattr(member, "mention", f"<@{member_id}>")
+            preset_user = (member_id, mention_text, _display_name(member))
 
         clan_entry = recruitment.find_clan_row(clan_tag)
         if clan_entry is None:
@@ -749,6 +773,7 @@ class ReservationCog(commands.Cog):
             manual_open=manual_open,
             active_reservations=active_reservations,
             wait_for=wait_for,
+            preset_user=preset_user,
         )
 
         try:

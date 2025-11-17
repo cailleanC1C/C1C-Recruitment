@@ -192,6 +192,56 @@ def test_handle_thread_message_flags_invalid_answer() -> None:
     asyncio.run(runner())
 
 
+def test_handle_thread_message_falls_back_to_current_index() -> None:
+    async def runner() -> None:
+        loop = asyncio.get_running_loop()
+        controller = WelcomeController(SimpleNamespace(loop=loop, logger=None))
+
+        thread_id = 7000
+        question = SimpleNamespace(
+            qid="w_power",
+            label="Power",
+            type="short",
+            required=True,
+            validate="",
+            help="",
+            options=(),
+        )
+        controller._questions[thread_id] = [question]
+        controller._threads[thread_id] = SimpleNamespace(id=thread_id)
+
+        session = store.ensure(thread_id, flow=controller.flow, schema_hash="hash")
+        session.pending_step = None
+        session.current_question_index = 0
+        session.status = "in_progress"
+        session.respondent_id = 123
+        session.thread_id = thread_id
+        session.answers = {}
+
+        message = SimpleNamespace(
+            channel=SimpleNamespace(id=thread_id),
+            author=SimpleNamespace(id=123, bot=False),
+            content="99",
+            id=42,
+            add_reaction=AsyncMock(),
+        )
+
+        controller._react_to_message = AsyncMock()
+        controller._refresh_inline_message = AsyncMock()
+
+        handled = await controller.handle_thread_message(message)
+
+        assert handled is True
+        stored = controller.answers_by_thread.get(thread_id, {})
+        assert stored.get("w_power") == "99"
+        controller._react_to_message.assert_called_with(message, "✅")
+        controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+
+        store.end(thread_id)
+
+    asyncio.run(runner())
+
+
 def test_start_session_from_button_seeds_respondent() -> None:
     async def runner() -> None:
         loop = asyncio.get_running_loop()
