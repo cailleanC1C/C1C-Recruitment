@@ -79,6 +79,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `RECRUITMENT_INTERACT_CHANNEL` | snowflake | — | Channel where recruiters and clan leads review reservation rosters. |
 | `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
 | `WELCOME_CHANNEL_ID` | snowflake | — | Private welcome ticket channel ID. |
+| `TICKET_TOOL_BOT_ID` | snowflake | — | Discord user ID of the Ticket Tool bot. Required when Ticket Tool-driven ticket workflows (welcome/onboarding/reservations) are enabled so threads can be associated with the correct bot. |
 | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
@@ -238,4 +239,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-15 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)
