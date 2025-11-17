@@ -44,7 +44,7 @@ It exists so that contributors update the correct references after each developm
 
 ### `/docs/_meta/`
 * [`COMMAND_METADATA.md`](_meta/COMMAND_METADATA.md) — canonical command metadata export for Ops and diagnostics.
-* [`DocStyle.md`](_meta/DocStyle.md) — documentation formatting conventions.
+* [`DocStyle.md`](_meta/DocStyle.md) — single source for doc formatting plus log/embed/help UX style.
 
 ### `/docs/guardrails/`
 * [`README.md`](guardrails/README.md) — high-level summary of CI-enforced guardrails surfaced on pull requests.

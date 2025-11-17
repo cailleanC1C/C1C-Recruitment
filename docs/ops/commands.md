@@ -6,6 +6,10 @@ reports from staff and recruiters. Command copy and usage strings should origina
 [`../_meta/COMMAND_METADATA.md`](../_meta/COMMAND_METADATA.md); update that export first, then
 mirror the changes here and in the matrix to keep a single source of truth.
 
+> **Style reference:** Logging, embed, and help text conventions are centralized in
+> [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md). This runbook only documents the
+> layout and runtime behavior for each help surface.
+
 ## `@Bot help` — overview layout
 - **Audience:** Everyone; the embed set filters to the caller’s access tier.
 - **Behavior:** Sends one message containing four embeds in fixed order:
@@ -15,7 +19,7 @@ mirror the changes here and in the matrix to keep a single source of truth.
   4. **User** — Recruitment, Milestones, General (includes `@Bot help` and `@Bot ping`).
 - **Empty sections:** Hidden by default; set `SHOW_EMPTY_SECTIONS=true` to render a
   “Coming soon” placeholder.
-- **Footer:** `Bot vX.Y.Z · CoreOps vA.B.C • For details: @Bot help` on every embed.
+- **Footer:** Uses the standard version line defined in `DocStyle.md`.
 - **Tip:** Trigger this after reloads to confirm the tier catalog hydrated from the live
   cache.
 
@@ -30,7 +34,7 @@ Admin / Operational — Config & Health
 - **Audience:** Any tier that can see the command in the short index.
 - **Behavior:** Expands the command with the detailed copy from the Command Matrix,
   including a **Usage** line and contextual tip.
-- **Footer:** Version info only; embeds omit timestamps to match the new audit policy.
+- **Footer:** Standard version-only line per `DocStyle.md`; embeds omit timestamps to match the audit policy.
 - **Reminder:** The detailed embed highlights when the caller lacks the required tier.
 
 ### Example (Admin)
@@ -127,4 +131,4 @@ Mention-style health check.
 - **Usage:** `@Bot ping`
 - **Notes:** Admins still have access to the hidden `!ping` reaction command; the mention route keeps user help consistent.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

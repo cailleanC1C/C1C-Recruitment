@@ -1,114 +1,49 @@
 # Logging
 
-Humanized logging makes the Discord-facing operational feed readable without losing the structured context that the console logs already provide. All Discord posts now share a single set of helpers, templates, and emoji so the channel reads like a dashboard instead of a firehose of raw IDs.
+Humanized Discord logs keep operators informed without duplicating the structured
+JSON logs already written to stdout. Style, emoji selection, and formatting rules
+now live in [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md); this file focuses on
+configuration, helper wiring, and runtime policy.
 
-## Style rules
-- Prefer labels over numeric IDs. Helpers automatically resolve guilds, channels, and users from the cache; if an object is missing, a `#unknown`/`unknown guild` placeholder is emitted instead.
-- Use concise human units: `fmt_duration` emits seconds, minutes, or hours; `fmt_count` adds thousands separators.
-- Hide empty values with `-` and avoid repeating redundant context (e.g., do not repeat the scope when it is part of the emoji/title).
-- Emoji prefix the message and communicate status: ✅ success, ⚠️ warning/partial, ❌ error, ♻️ refresh/restart, 🧭 scheduler, 🐶 watchdog, 🔐 permissions, 📋 neutral/info, 📘 lifecycle.
-- Structured logs (JSON/stdout) remain unchanged—only the Discord line format is affected.
+## Destinations & configuration
+- **Channel:** `LOG_CHANNEL_ID` controls which channel receives the humanized
+  feed. The same ID must appear in `.env.example` and Render’s environment.
+- **Verbosity:** `LOG_LEVEL` determines which structured messages reach stdout.
+  Discord posts always use the curated templates regardless of level.
+- **Identity:** `BOT_NAME`, `BOT_VERSION`, and `ENV_NAME` populate log titles and
+  footers so operators know which deployment emitted each line.
+- **Transport:** All log posts route through the CoreOps cog and inherit the
+  thread/channel context of the configured destination.
 
-## Multi-line formatting
-
-- Long-form Discord logs share a common shape:
-  - **Line 1** — emoji + title + scope/primary fields (e.g., intervals for scheduler).
-  - **Subsequent lines** — start with `•` and group related key/value pairs. Join additional pairs on the same line with ` • ` when they describe the same bucket.
-- Keep the key ordering stable across runs so humans can scan the log stack quickly.
-
-## Templates
-Each template lives in `shared/logfmt.LogTemplates` and is consumed by the relevant modules. Examples below show the expected output shape.
-
-### Scheduler
-```
-🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • onboarding_questions=7d
-• clans=2025-11-17 21:00 UTC
-• templates=2025-11-20 00:00 UTC
-• clan_tags=2025-11-20 00:00 UTC
-• onboarding_questions=2025-11-20 00:00 UTC
-```
-
-### Allow-list
-```
-✅ **Guild allow-list** — verified • allowed=[C1C Cluster] • connected=[C1C Cluster]
-❌ **Guild allow-list** — violation • connected=[Other Guild] • allowed=[C1C Cluster]
-```
-
-### Watchdog
-```
-🐶 **Watchdog started** — interval=300s • stall=1200s • disconnect_grace=6000s
-```
-
-### Refresh
-```
-♻️ **Refresh** — scope=startup
-• clan_tags ok (2.7s, 31, ttl)
-• clans ok (1.0s, 24, ttl)
-• templates ok (1.3s, 25, ttl)
-• total=5.8s
-```
-
-### Reports
-```
-✅ **Report: recruiters** — actor=manual • user=Caillean • guild=C1C Cluster • dest=#ops › recruiters-log • date=2025-10-28 • reason=-
-```
-
-### Cache
-```
-♻️ **Cache: clans** — OK • 3.7s
-♻️ **Cache: templates** — FAIL • 0.5s • Missing Access (403/50001)
-```
-
-### Command errors
-```
-⚠️ **Command error** — cmd=help • user=Caillean • reason=TypeError: unexpected kwarg `log_failures`
-```
-
-### Permission sync
-```
-🔐 **Permission sync** — applied=57 • errors=0 • threads=on • details: -
-🔐 **Permission sync** — applied=0 • errors=57 • threads=on • details: 50× Missing Access (403/50001), 7× Missing Permissions (403/50013)
-```
-
-### Welcome
-```
-✅ Welcome panel — actor=@Recruit • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=posted • details:view=panel; source=phrase
-✅ Welcome panel — actor=@Guardian • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=posted • details:view=panel; source=emoji; emoji=🎫
-⚠️ Welcome panel — actor=@Member • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=not_eligible • details:view=panel; source=emoji; reason=missing_role_or_owner; emoji=🎫
-✅ Welcome panel — actor=@Recruit • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=completed • details:view=preview; questions=16; source=panel
-❌ Welcome panel — actor=@Recruit • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=error • details:view=panel; source=panel; reason=panel_send
-```
-
-### Onboarding panel lifecycle logs
-Treat “onboarding panel” and “Welcome panel” as a single lifecycle surface. Neutral lifecycle events (open, start, restart) use the 📘 icon so the feed stays calm, ♻️ highlights restarts/refresh actions, and ✅ marks a complete run. All lines resolve human labels (ticket tag, actor handle, channel) and avoid raw snowflake IDs.
-
-```
-📘 welcome_panel_open — ticket=W0488-smurf • actor=@Recruit
-• channel=#WELCOME CENTER › welcome • questions=16
-📘 welcome_panel_start — ticket=W0488-smurf • actor=@Recruit
-• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976
-♻️ welcome_panel_restart — ticket=W0488-smurf • actor=@Recruit
-• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976
-✅ welcome_panel_complete — ticket=W0488-smurf • actor=@Recruit
-• channel=#WELCOME CENTER › welcome • questions=16 • level_detail=Beginner
-```
-
-The `schema=` field uses the onboarding question schema short code so humans can confirm which questionnaire was used without dumping hashes. The `level_detail=` field is the single high-signal progression bucket for the run; the full answer set remains in Sheets. Only include `reason=` when the emoji is ⚠️ or ❌. For anything more detailed (IDs, embeds, traces), use the structured console logs.
+## Template helpers
+- Templates live in `shared/logfmt.LogTemplates` and are consumed by the Welcome,
+  CoreOps, and scheduler modules.
+- New templates must follow the DocStyle guide before being added here.
+- Logging helpers only rely on cached Discord objects; never issue `fetch_*`
+  calls purely for logging purposes.
 
 ## Dedupe policy
 - Window: fixed at 5 seconds. All dedupe is in-memory and process-local.
 - Keys:
-  - Refresh summaries: `refresh:{scope}:{snapshot_id}` (snapshot ID optional; falls back to a timestamp bucket hash of the bucket list).
-  - Welcome summaries: `welcome:{tag}:{recruit_id}` (recruit ID falls back to `0` when unavailable).
-  - Permission sync: `permsync:{guild_id}:{ts_bucket}` where `ts_bucket` is derived from the dedupe window.
-- Within the window, only the first event is emitted; later duplicates are ignored to keep the Discord channel readable.
+  - Refresh summaries: `refresh:{scope}:{snapshot_id}` (snapshot ID optional;
+    falls back to a timestamp bucket hash of the bucket list).
+  - Welcome summaries: `welcome:{tag}:{recruit_id}` (recruit ID falls back to
+    `0` when unavailable).
+  - Permission sync: `permsync:{guild_id}:{ts_bucket}` where `ts_bucket` is
+    derived from the dedupe window.
+- Within the window, only the first event is emitted; later duplicates are
+  ignored to keep the Discord channel readable.
 
 ## Configuration knobs
-No runtime environment flags affect logging templates. Numeric snowflake IDs stay hidden, and refresh summaries always use the concise inline layout.
+No runtime environment flags affect logging templates. Numeric snowflake IDs stay
+hidden, and refresh summaries always use the concise inline layout.
 
 ## Operational rules
-- Do not call Discord `fetch_*` APIs purely for logging; the helpers rely on cached objects and gracefully degrade to `#unknown` placeholders.
-- Continue emitting structured logs (JSON/stdout) for auditability—only the human-facing Discord posts use the templates above.
----
+- Do not call Discord `fetch_*` APIs purely for logging; the helpers rely on
+  cached objects and gracefully degrade to `#unknown` placeholders.
+- Continue emitting structured logs (JSON/stdout) for auditability—only the
+  human-facing Discord posts use the templates above.
+- The watchtower (scheduler/watchdog) modules treat log posting failures as
+  retryable errors and will raise alerts if the ops channel becomes unavailable.
 
 Doc last updated: 2025-11-17 (v0.9.7)
