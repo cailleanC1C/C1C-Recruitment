@@ -52,8 +52,6 @@ Every audit and CI check validates against this document.
 - **D-06 Audit Discoverability:** Each audit adds files under `AUDIT/*` and a pointer in `CHANGELOG.md`.
 - **D-07 Contract Priority:** CollaborationContract.md governs process and must link to this guardrails spec.
 - **D-08 No Orphan Docs:** Every doc must be linked from `docs/README.md`.
-
-### **(NEW) D-09 Behaviour-Linked Tests**
 - **D-09 Behaviour-Linked Tests:**  
   Any PR that modifies functional behaviour in `modules/**`, `coreops/**`, or `shared/**`  
   **must also update or add tests** in the matching test folder:
@@ -68,20 +66,16 @@ Every audit and CI check validates against this document.
 
   Exceptions are allowed only for docs-only, CI-only, or comment/typo fixes, and must be  
   explicitly justified in the PR body. Silent omissions fail guardrails.
-
-### **(NEW) D-10 User-Facing Behaviour Requires Doc Updates**
 - **D-10 User-Facing Behaviour = Mandatory Doc Updates:**  
   If a PR changes commands, help text, onboarding questions, summary formatting, watcher  
   schedules, feature toggles, or any user-visible flow, the PR **must** update the relevant  
   SSoT docs:
-
     • `docs/ops/CommandMatrix.md`  
     • `docs/ops/Module-<Module>.md`  
     • `docs/ops/Config.md`  
     • `docs/_meta/DocStyle.md` (if formatting changed)  
     • `docs/ops/Architecture.md` (if data flows changed)  
     • `CHANGELOG.md`
-
   No new docs may be created unless an ADR authorises it.
 
 ## 5) Governance & Workflow
