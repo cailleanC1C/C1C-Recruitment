@@ -552,44 +552,45 @@ class WelcomeWatcher(commands.Cog):
         actor: discord.abc.User | None,
         source: str,
     ) -> None:
+        parts = parse_welcome_thread_name(getattr(thread, "name", None))
+        ticket_code = getattr(parts, "ticket_code", None)
+        parent_channel = getattr(thread, "parent", None)
+        question_count, schema_version = logs.question_stats("welcome")
+
+        async def _emit(result: str | None = None, reason: str | None = None) -> None:
+            payload: dict[str, object] = {
+                "ticket": ticket_code or thread,
+                "actor": actor,
+                "channel": parent_channel,
+                "questions": question_count,
+                "schema_version": schema_version,
+            }
+            if result is not None:
+                payload["result"] = result
+            if reason is not None:
+                payload["reason"] = reason
+            await logs.log_onboarding_panel_lifecycle(event="open", **payload)
+
         joined, join_error = await thread_membership.ensure_thread_membership(thread)
         if not joined:
-            context = self._log_context(
-                thread,
-                actor,
-                source=source,
-                result="thread_join_failed",
-                reason="thread_join",
-            )
             if join_error is not None:
-                await logs.send_welcome_exception("error", join_error, **context)
-            else:
-                await logs.send_welcome_log("error", **context)
+                log.warning("failed to join welcome thread", exc_info=True)
+            await _emit(result="error", reason="thread_join_failed")
             return
 
         view = panels.OpenQuestionsPanelView()
         content = "Ready when you are — tap below to open the onboarding questions."
         try:
-            message = await thread.send(content, view=view)
-        except Exception as exc:  # pragma: no cover - network
-            await logs.send_welcome_exception(
-                "error",
-                exc,
-                **self._log_context(thread, actor, source=source, result="error", reason="panel_send"),
-            )
+            await thread.send(content, view=view)
+        except Exception:
+            log.exception("failed to post onboarding panel message")
+            await _emit(result="error", reason="panel_send_failed")
             return
 
-        context = self._log_context(
-            thread,
-            actor,
-            source=source,
-            result="posted",
-            message_id=getattr(message, "id", None),
-            details={"view": "panel", "source": source},
-        )
-        if source == "emoji":
-            context["emoji"] = _TICKET_EMOJI
-        await logs.send_welcome_log("info", **context)
+        if ticket_code:
+            await _emit()
+        else:
+            await _emit(result="skipped", reason="ticket_not_parsed")
 
     # ---- listeners ----------------------------------------------------------------
     @commands.Cog.listener()

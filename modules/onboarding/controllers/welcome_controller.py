@@ -1713,14 +1713,12 @@ class BaseWelcomeController:
         except Exception:
             log.warning("failed to post onboarding summary", exc_info=True)
         else:
-            await logs.send_welcome_log(
-                "info",
-                result="completed",
-                view="inline",
-                source=self._sources.get(thread_id, "unknown"),
-                schema=session.schema_hash if session else None,
-                details=_final_fields(self._questions.get(thread_id, []), dict(answers)),
-                **self._log_fields(thread_id, actor=getattr(interaction, "user", None)),
+            await self._log_panel_completion(
+                thread_id,
+                thread=thread,
+                actor=getattr(interaction, "user", None),
+                session=session,
+                answers=dict(answers),
             )
 
         self.answers_by_thread.pop(thread_id, None)
@@ -1745,6 +1743,33 @@ class BaseWelcomeController:
         if handle:
             context["actor_name"] = handle
         return context
+
+    async def _log_panel_completion(
+        self,
+        thread_id: int,
+        *,
+        thread: discord.Thread | None,
+        actor: discord.abc.User | discord.Member | None,
+        session: SessionData | None,
+        answers: Mapping[str, Any],
+    ) -> None:
+        if self.flow != "welcome":
+            return
+        question_count = len(self._questions.get(thread_id, [])) if hasattr(self, "_questions") else None
+        schema_version = getattr(session, "schema_hash", None)
+        extras: dict[str, Any] | None = None
+        level_detail = _extract_level_detail(answers)
+        if level_detail:
+            extras = {"level_detail": level_detail}
+        await logs.log_onboarding_panel_lifecycle(
+            event="complete",
+            ticket=thread,
+            actor=actor,
+            channel=getattr(thread, "parent", None),
+            questions=question_count,
+            schema_version=schema_version,
+            extras=extras,
+        )
 
     async def _send_panel_with_retry(
         self,
@@ -3154,14 +3179,12 @@ class BaseWelcomeController:
         await thread.send(embed=summary_embed)
         await thread.send("@RecruitmentCoordinator")
 
-        await logs.send_welcome_log(
-            "info",
-            result="completed",
-            view="preview",
-            source=self._sources.get(thread_id, "unknown"),
-            schema=session.schema_hash,
-            details=_final_fields(self._questions[thread_id], session.answers),
-            **self._log_fields(thread_id, actor=interaction.user),
+        await self._log_panel_completion(
+            thread_id,
+            thread=thread,
+            actor=interaction.user,
+            session=session,
+            answers=dict(session.answers),
         )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
@@ -3668,6 +3691,29 @@ def _convert_to_labels(value: Any, mapping: dict[str, str]) -> Any:
     if isinstance(value, str):
         return mapping.get(value, value)
     return value
+
+
+def _extract_level_detail(answers: Mapping[str, Any]) -> str | None:
+    raw = answers.get("w_level_detail") if isinstance(answers, Mapping) else None
+    if isinstance(raw, Mapping):
+        for key in ("label", "value", "text"):
+            candidate = raw.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    if isinstance(raw, (list, tuple)):
+        for item in raw:
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+            if isinstance(item, Mapping):
+                for key in ("label", "value", "text"):
+                    candidate = item.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+    if raw is not None:
+        text = str(raw).strip()
+        if text:
+            return text
+    return None
 
 
 def _safe_followup(interaction: discord.Interaction, message: str) -> Awaitable[None]:

@@ -65,6 +65,17 @@ Line mode:
 ❌ Welcome panel — actor=@Recruit • thread=#welcome › ticket-123 • channel=#WELCOME CENTER › welcome • result=error • details:view=panel; source=panel; reason=panel_send
 ```
 
+### Onboarding panel lifecycle logs
+Neutral lifecycle events (open, start, restart) now use the 📘 icon so the feed is quieter, while ✅ still marks a complete run and ⚠️/❌ remain reserved for odd or error conditions. These logs summarize the state change with human labels and omit raw message/thread IDs.
+
+```
+📘 onboarding_panel_open — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16
+📘 onboarding_panel_restart — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16 • schema=v1
+✅ onboarding_panel_complete — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16 • level_detail=Late Game
+```
+
+Only include `reason=` when the emoji is ⚠️ or ❌; keep tickets, actors, and channels readable, and rely on schema short codes (e.g., `v1`) instead of raw hashes. IDs are intentionally hidden—if a one-off investigation needs snowflakes, fall back to the structured console logs.
+
 ## Dedupe policy
 - Window: fixed at 5 seconds. All dedupe is in-memory and process-local.
 - Keys:
@@ -81,4 +92,4 @@ No runtime environment flags affect logging templates. Numeric snowflake IDs sta
 - Continue emitting structured logs (JSON/stdout) for auditability—only the human-facing Discord posts use the templates above.
 ---
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)
