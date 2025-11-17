@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
@@ -19,6 +20,7 @@ from modules.common.logs import log as human_log
 from modules.onboarding import logs, thread_membership, thread_scopes
 from modules.onboarding.ui import panels
 from shared.config import (
+    get_admin_role_ids,
     get_guardian_knight_role_ids,
     get_recruitment_coordinator_role_ids,
     get_welcome_channel_id,
@@ -208,6 +210,13 @@ class ReservationDecision:
     recompute_tags: List[str]
 
 
+@dataclass(slots=True)
+class _ClanMathRowSnapshot:
+    tag: str
+    row_number: int | None
+    values: Dict[str, str]
+
+
 def _determine_reservation_decision(
     final_tag: str,
     reservation_row: reservations_sheets.ReservationRow | None,
@@ -255,6 +264,195 @@ def _determine_reservation_decision(
     return ReservationDecision(label, status, open_deltas, recompute)
 
 
+def _normalize_clan_tag_key(tag: str | None) -> str:
+    text = "" if tag is None else str(tag).strip().upper()
+    normalized = "".join(ch for ch in text if ch.isalnum())
+    return normalized
+
+
+def _clan_tags_for_logging(
+    final_tag: str,
+    decision: ReservationDecision,
+    *,
+    no_placement_tag: str,
+    final_is_real: bool,
+) -> set[str]:
+    tags: set[str] = set(decision.open_deltas)
+    tags.update(decision.recompute_tags)
+    if final_is_real and final_tag and final_tag != no_placement_tag:
+        tags.add(final_tag)
+    return {tag for tag in tags if tag and tag != no_placement_tag}
+
+
+def _normalize_clan_math_targets(tags: set[str]) -> OrderedDict[str, str]:
+    ordered: "OrderedDict[str, str]" = OrderedDict()
+    for tag in sorted(tags):
+        key = _normalize_clan_tag_key(tag)
+        if not key or key in ordered:
+            continue
+        ordered[key] = tag
+    return ordered
+
+
+def _clan_math_column_indices() -> Dict[str, int]:
+    header_map = recruitment_sheets.get_clan_header_map()
+    open_index = header_map.get(
+        "open_spots", recruitment_sheets.FALLBACK_OPEN_SPOTS_INDEX
+    )
+    return {
+        "open_spots": open_index,
+        "AF": 31,
+        "AG": 32,
+        "AH": 33,
+        "AI": 34,
+    }
+
+
+def _capture_clan_snapshots(
+    targets: "OrderedDict[str, str]",
+    column_map: Dict[str, int],
+) -> Dict[str, _ClanMathRowSnapshot]:
+    snapshots: Dict[str, _ClanMathRowSnapshot] = {}
+    for key, tag in targets.items():
+        if not key:
+            continue
+        try:
+            entry = recruitment_sheets.find_clan_row(tag)
+        except Exception:
+            log.exception(
+                "failed to capture clan row for logging",
+                extra={"clan_tag": tag},
+            )
+            continue
+        if entry is None:
+            continue
+        sheet_row, row_values = entry
+        tag_cell = row_values[2] if len(row_values) > 2 else tag
+        display_tag = (tag_cell or tag or "").strip() or tag
+        values: Dict[str, str] = {}
+        for label, index in column_map.items():
+            if index < 0:
+                values[label] = ""
+                continue
+            cell_value = row_values[index] if index < len(row_values) else ""
+            values[label] = str(cell_value or "").strip()
+        snapshots[key] = _ClanMathRowSnapshot(
+            tag=display_tag,
+            row_number=sheet_row,
+            values=values,
+        )
+    return snapshots
+
+
+def _format_snapshot_value(value: str | None) -> str:
+    if value is None:
+        return "-"
+    text = " ".join(str(value).split())
+    return text or "-"
+
+
+def _format_metric(
+    label: str,
+    before: _ClanMathRowSnapshot | None,
+    after: _ClanMathRowSnapshot | None,
+) -> str:
+    before_value = before.values.get(label) if before else None
+    after_value = after.values.get(label) if after else None
+    return (
+        f"{label}: {_format_snapshot_value(before_value)} → "
+        f"{_format_snapshot_value(after_value)}"
+    )
+
+
+def _format_clan_row_line(
+    fallback_tag: str,
+    before: _ClanMathRowSnapshot | None,
+    after: _ClanMathRowSnapshot | None,
+) -> str:
+    tag_label = (after.tag if after else (before.tag if before else fallback_tag)).strip()
+    tag_label = tag_label or fallback_tag or "unknown"
+    row_number = after.row_number if after else (before.row_number if before else None)
+    row_label = f"row {row_number}" if row_number else "row ?"
+    if before is None and after is None:
+        return f"- {tag_label} {row_label}: snapshot unavailable"
+    metrics: List[str] = []
+    if before is not None or after is not None:
+        metrics.append(_format_metric("open_spots", before, after))
+    for column in ("AF", "AG", "AH", "AI"):
+        metrics.append(_format_metric(column, before, after))
+    primary = metrics[0] if metrics else "open_spots: - → -"
+    extras = ", ".join(metrics[1:]) if len(metrics) > 1 else ""
+    if extras:
+        return f"- {tag_label} {row_label}: {primary} ({extras})"
+    return f"- {tag_label} {row_label}: {primary}"
+
+
+def _build_clan_math_row_lines(
+    targets: "OrderedDict[str, str]",
+    before: Dict[str, _ClanMathRowSnapshot],
+    after: Dict[str, _ClanMathRowSnapshot],
+) -> List[str]:
+    lines: List[str] = []
+    for key, original in targets.items():
+        lines.append(
+            _format_clan_row_line(original, before.get(key), after.get(key))
+        )
+    return lines
+
+
+def _normalize_finalize_result(result: str | None) -> str:
+    token = (result or "").strip().lower()
+    if token in {"ok", "fail", "error"}:
+        return token
+    if token in {"skip", "skipped"}:
+        return "fail"
+    return "error"
+
+
+async def _log_clan_math_event(
+    context: TicketContext,
+    *,
+    final_display: str,
+    reservation_label: str,
+    reservation_row: reservations_sheets.ReservationRow | None,
+    result: str,
+    reason: str | None,
+    row_change_lines: List[str],
+) -> None:
+    normalized_result = _normalize_finalize_result(result)
+    source = (context.close_source or "ticket_tool").strip() or "ticket_tool"
+    if reservation_row is not None:
+        reservation_field = (
+            f"reservation=row{reservation_row.row_number}"
+            f"({reservation_label or 'unknown'})"
+        )
+    else:
+        reservation_field = f"reservation={reservation_label or 'none'}"
+    reason_suffix = f", reason={reason}" if reason else ""
+    header = (
+        f"{context.ticket_number} • {context.username} → {final_display} "
+        f"(source={source}, {reservation_field}, result={normalized_result}{reason_suffix})"
+    )
+    mentions: str = ""
+    if normalized_result in {"fail", "error"}:
+        role_ids = sorted(get_admin_role_ids())
+        if role_ids:
+            mentions = " " + " ".join(f"<@&{rid}>" for rid in role_ids)
+    if mentions:
+        header = f"{header}{mentions}"
+    lines = [header]
+    if not row_change_lines:
+        lines.append("- no clan rows updated")
+    else:
+        lines.extend(row_change_lines)
+    message = "\n".join(lines)
+    try:
+        await rt.send_log_message(message)
+    except Exception:
+        log.exception(
+            "failed to send clan math log",
+            extra={"ticket": context.ticket_number, "result": normalized_result},
+        )
 async def _send_runtime(message: str) -> None:
     try:
         await rt.send_log_message(message)
@@ -1211,9 +1409,14 @@ class WelcomeTicketWatcher(commands.Cog):
             return
 
         row_missing = result not in {"updated", "inserted"}
-        reservation_label = "unknown"
+        reservation_label = "none"
+        reservation_row: reservations_sheets.ReservationRow | None = None
         actions_ok = True
         recompute_tags: List[str] = []
+        row_change_lines: List[str] = []
+        row_targets: "OrderedDict[str, str]" = OrderedDict()
+        before_snapshots: Dict[str, _ClanMathRowSnapshot] = {}
+        column_map: Dict[str, int] | None = None
 
         if not row_missing:
             final_entry = (
@@ -1223,7 +1426,6 @@ class WelcomeTicketWatcher(commands.Cog):
             )
             final_is_real = final_entry is not None
 
-            reservation_row: reservations_sheets.ReservationRow | None = None
             try:
                 matches = await reservations_sheets.find_active_reservations_for_recruit(
                     context.recruit_id,
@@ -1254,6 +1456,25 @@ class WelcomeTicketWatcher(commands.Cog):
                 final_is_real=final_is_real,
             )
             reservation_label = decision.label
+
+            target_tags = _clan_tags_for_logging(
+                final_tag,
+                decision,
+                no_placement_tag=_NO_PLACEMENT_TAG,
+                final_is_real=final_is_real,
+            )
+            if target_tags:
+                row_targets = _normalize_clan_math_targets(target_tags)
+                try:
+                    column_map = _clan_math_column_indices()
+                    before_snapshots = _capture_clan_snapshots(row_targets, column_map)
+                except Exception:
+                    column_map = None
+                    row_targets = OrderedDict()
+                    log.exception(
+                        "failed to capture clan math before-state",
+                        extra={"ticket": context.ticket_number},
+                    )
 
             if reservation_row is not None and decision.status:
                 try:
@@ -1291,6 +1512,12 @@ class WelcomeTicketWatcher(commands.Cog):
                         "failed to recompute clan availability",
                         extra={"clan_tag": tag, "ticket": context.ticket_number},
                     )
+
+            if row_targets and column_map is not None:
+                after_snapshots = _capture_clan_snapshots(row_targets, column_map)
+                row_change_lines = _build_clan_math_row_lines(
+                    row_targets, before_snapshots, after_snapshots
+                )
 
         final_display = final_tag if final_tag else _NO_PLACEMENT_TAG
         confirmation = (
@@ -1340,9 +1567,24 @@ class WelcomeTicketWatcher(commands.Cog):
                 thread,
                 final_display=final_display,
                 reservation_label=reservation_label,
-                result="skipped",
+                result="fail",
                 reason="onboarding_row_missing",
             )
+            try:
+                await _log_clan_math_event(
+                    context,
+                    final_display=final_display,
+                    reservation_label=reservation_label,
+                    reservation_row=reservation_row,
+                    result="fail",
+                    reason="onboarding_row_missing",
+                    row_change_lines=row_change_lines,
+                )
+            except Exception:
+                log.exception(
+                    "failed to emit clan math log after row insert",
+                    extra={"ticket": context.ticket_number},
+                )
             return
 
         log_result = "ok" if actions_ok else "error"
@@ -1374,6 +1616,21 @@ class WelcomeTicketWatcher(commands.Cog):
             result=log_result,
             reason=summary_reason,
         )
+        try:
+            await _log_clan_math_event(
+                context,
+                final_display=final_display,
+                reservation_label=reservation_label,
+                reservation_row=reservation_row,
+                result=log_result,
+                reason=summary_reason,
+                row_change_lines=row_change_lines,
+            )
+        except Exception:
+            log.exception(
+                "failed to emit clan math log",
+                extra={"ticket": context.ticket_number, "result": log_result},
+            )
 
 
 async def setup(bot: commands.Bot) -> None:

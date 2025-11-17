@@ -16,6 +16,11 @@ After the final summary is posted, the bot deletes the user's captured answer me
 
 Closing a ticket and picking a clan tag (dropdown or typed) now runs the same reconciliation helpers as `!reserve`: it updates the onboarding sheet row, adjusts manual open spots, recomputes `AF`/`AH`/`AI`, and posts the 🧭 placement log in the ops channel so clan availability stays current.
 
+### Clan math logging
+Each welcome ticket close now emits a “clan math” entry in the onboarding/recruitment logging channel. The log summarizes the ticket ID, Discord user, final clan tag, and reservation identifier (or `reservation=none`) plus before/after values for every CLANS row touched. Those row snapshots cover the manual open-spot column and the `AF`/`AG`/`AH`/`AI` fields so you can see exactly how the reconcile changed the sheet.
+
+If the reconcile fails (`result=fail` or `result=error`), the same log entry automatically mentions every role listed in `ADMIN_ROLE_IDS` so the admin team gets an immediate ping.
+
 ### Testing (manual)
 1. Click **Open questions** → view disables with “Launching…”.
 2. First question appears on the wizard card.
