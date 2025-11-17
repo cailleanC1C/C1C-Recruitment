@@ -904,6 +904,365 @@ def test_finalize_none_tag_without_reservation(monkeypatch) -> None:
     assert recomputed == []
 
 
+def test_finalize_posts_clan_math_log(monkeypatch) -> None:
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        return "updated"
+
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    base_row = [""] * 35
+    base_row[2] = "C1CE"
+    base_row[4] = "3"
+    base_row[31] = "3"
+    base_row[32] = "0"
+    base_row[33] = "0"
+    base_row[34] = ""
+    clan_rows: dict[str, dict[str, object]] = {
+        "C1CE": {"row_number": 12, "values": list(base_row)}
+    }
+
+    def _normalize(tag: str) -> str:
+        return "".join(ch for ch in tag.upper() if ch.isalnum())
+
+    def fake_find_clan_row(tag: str):  # type: ignore[no-untyped-def]
+        entry = clan_rows.get(_normalize(tag))
+        if not entry:
+            return None
+        return entry["row_number"], list(entry["values"])
+
+    async def fake_adjust(tag: str, delta: int):
+        entry = clan_rows[_normalize(tag)]
+        values = entry["values"]  # type: ignore[assignment]
+        current = int(values[4])
+        new_value = current + delta
+        values[4] = str(new_value)
+        return new_value
+
+    async def fake_recompute(tag: str, guild=None):  # type: ignore[no-untyped-def]
+        entry = clan_rows[_normalize(tag)]
+        values = entry["values"]  # type: ignore[assignment]
+        manual = int(values[4])
+        values[31] = str(manual)
+        values[33] = "0"
+        values[34] = ""
+
+    log_messages: list[str] = []
+
+    async def fake_send_log(message: str) -> None:
+        log_messages.append(message)
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fake_find_reservations,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        fake_adjust,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fake_recompute,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fake_find_clan_row,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.get_clan_header_map",
+        lambda: {"open_spots": 4},
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.rt.send_log_message", fake_send_log
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.get_admin_role_ids", lambda: set()
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(
+            thread_id=1,
+            ticket_number="W0456",
+            username="Tester",
+            recruit_id=333,
+            recruit_display="Tester",
+        )
+        context.state = "awaiting_clan"
+        thread = _DummyThread()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CE",
+            actor=None,
+            source="select",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert log_messages, "clan math log should be emitted"
+    message = log_messages[-1]
+    assert "W0456" in message
+    assert "Tester" in message
+    assert "→ C1CE" in message
+    assert "source=ticket_tool" in message
+    assert "reservation=none" in message
+    assert "result=ok" in message
+    assert "- C1CE row 12" in message
+    assert "open_spots: 3 → 2" in message
+    assert "AF: 3 → 2" in message
+    assert "<@&" not in message
+
+
+def test_finalize_error_pings_admins(monkeypatch) -> None:
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        return "updated"
+
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    base_row = [""] * 35
+    base_row[2] = "C1CM"
+    base_row[4] = "4"
+    base_row[31] = "4"
+    clan_rows: dict[str, dict[str, object]] = {
+        "C1CM": {"row_number": 7, "values": list(base_row)}
+    }
+
+    def _normalize(tag: str) -> str:
+        return "".join(ch for ch in tag.upper() if ch.isalnum())
+
+    def fake_find_clan_row(tag: str):  # type: ignore[no-untyped-def]
+        entry = clan_rows.get(_normalize(tag))
+        if not entry:
+            return None
+        return entry["row_number"], list(entry["values"])
+
+    async def failing_adjust(tag: str, delta: int):
+        raise RuntimeError("boom")
+
+    async def fake_recompute(tag: str, guild=None):  # type: ignore[no-untyped-def]
+        return None
+
+    log_messages: list[str] = []
+
+    async def fake_send_log(message: str) -> None:
+        log_messages.append(message)
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fake_find_reservations,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        failing_adjust,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fake_recompute,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fake_find_clan_row,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.get_clan_header_map",
+        lambda: {"open_spots": 4},
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.rt.send_log_message", fake_send_log
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.get_admin_role_ids",
+        lambda: {111, 222},
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CM", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(
+            thread_id=1,
+            ticket_number="W0990",
+            username="Tester",
+            recruit_id=444,
+            recruit_display="Tester",
+        )
+        context.state = "awaiting_clan"
+        thread = _DummyThread()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CM",
+            actor=None,
+            source="message",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert log_messages, "failure should produce clan math log"
+    message = log_messages[-1]
+    assert "result=error" in message
+    assert "reason=partial_actions" in message
+    assert "<@&111>" in message and "<@&222>" in message
+    assert "open_spots: 4 → 4" in message
+
+
+def test_finalize_manual_path_logs_source(monkeypatch) -> None:
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        return "updated"
+
+    reservation = _make_reservation("C1CE")
+
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return [reservation]
+
+    async def fake_update(row_number: int, status: str):
+        assert row_number == reservation.row_number
+        assert status == "closed_same_clan"
+
+    base_row = [""] * 35
+    base_row[2] = "C1CE"
+    base_row[4] = "2"
+    base_row[31] = "2"
+    base_row[32] = "0"
+    base_row[33] = "1"
+    base_row[34] = "1 -> Test"
+    clan_rows: dict[str, dict[str, object]] = {
+        "C1CE": {"row_number": 9, "values": list(base_row)}
+    }
+
+    def _normalize(tag: str) -> str:
+        return "".join(ch for ch in tag.upper() if ch.isalnum())
+
+    def fake_find_clan_row(tag: str):  # type: ignore[no-untyped-def]
+        entry = clan_rows.get(_normalize(tag))
+        if not entry:
+            return None
+        return entry["row_number"], list(entry["values"])
+
+    adjustments: list[tuple[str, int]] = []
+
+    async def fake_adjust(tag: str, delta: int):
+        adjustments.append((tag, delta))
+
+    async def fake_recompute(tag: str, guild=None):  # type: ignore[no-untyped-def]
+        entry = clan_rows[_normalize(tag)]
+        values = entry["values"]  # type: ignore[assignment]
+        values[31] = values[31]
+        values[33] = "1"
+
+    log_messages: list[str] = []
+
+    async def fake_send_log(message: str) -> None:
+        log_messages.append(message)
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fake_find_reservations,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.update_reservation_status",
+        fake_update,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        fake_adjust,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fake_recompute,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fake_find_clan_row,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.get_clan_header_map",
+        lambda: {"open_spots": 4},
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.rt.send_log_message", fake_send_log
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.get_admin_role_ids", lambda: set()
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(
+            thread_id=1,
+            ticket_number="W0666",
+            username="Tester",
+            recruit_id=555,
+            recruit_display="Tester",
+        )
+        context.state = "awaiting_clan"
+        context.close_source = "manual_fallback"
+        thread = _DummyThread()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CE",
+            actor=None,
+            source="message",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert log_messages, "manual path should log clan math"
+    message = log_messages[-1]
+    assert "source=manual_fallback" in message
+    assert f"reservation=row{reservation.row_number}(same)" in message
+    assert "result=ok" in message
+    assert "- C1CE row 9" in message
+    assert "open_spots: 2 → 2" in message
+    assert adjustments == []
+    assert "<@&" not in message
+
 def test_manual_close_missing_row_prompts(monkeypatch, caplog) -> None:
     inserted_rows: list[list[str]] = []
 
