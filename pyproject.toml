@@ -1,2 +1,15 @@
 [tool.ruff]
 extend-exclude = ["AUDIT/"]
+
+[tool.mypy]
+exclude = ["^AUDIT/"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+filterwarnings = [
+  "ignore::DeprecationWarning:aiohttp.*",
+]
+norecursedirs = ["AUDIT"]
+pythonpath = ["."]
+testpaths = ["tests"]
