@@ -60,10 +60,13 @@ It exists so that contributors update the correct references after each developm
 ### `/docs/ops/` — Operational Documentation
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
+* [`Modules.md`](ops/Modules.md) — quick links to module deep dives (Onboarding, Welcome) and their responsibility summaries.
 * [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
 * [`keepalive.md`](ops/keepalive.md) — watchdog expectations, heartbeat tuning, and stall recovery notes.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
+* [`Module-Onboarding.md`](ops/Module-Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
+* [`Module-Welcome.md`](ops/Module-Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
 * [`Onboarding.md`](ops/Onboarding.md) — onboarding sheet schema, cache lifecycle, and escalation playbook.
 * [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
