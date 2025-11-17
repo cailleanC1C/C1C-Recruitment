@@ -70,6 +70,7 @@ It exists so that contributors update the correct references after each developm
 * [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
 * [`Module-Onboarding.md`](ops/Module-Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
 * [`Module-Welcome.md`](ops/Module-Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
+* [`Module-Placement.md`](ops/Module-Placement.md) — placement ledger, clan math reconciliation, and reservation upkeep (commands + cron jobs).
 * [`Onboarding.md`](ops/Onboarding.md) — onboarding sheet schema, cache lifecycle, and escalation playbook.
 * [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.

@@ -8,6 +8,9 @@ This index lists the primary operational modules. Each entry summarizes responsi
 ## Welcome
 - [`Module-Welcome.md`](Module-Welcome.md) — Discord UX: posts the welcome panel, renders onboarding prompts inside ticket threads, formats recruiter summaries, and orchestrates ticket closure → placement hand-offs.
 
+## Placement
+- [`Module-Placement.md`](Module-Placement.md) — reservations ledger, clan math reconciliation, reminder/auto-release jobs, and integration glue between Welcome threads and the recruitment sheets.
+
 ## Recruitment
 - [`Module-Recruitment.md`](Module-Recruitment.md) — sheet-driven clan roster cache, recruiter/member panels, reservation context, and reporting surfaces.
 # Modules Overview
