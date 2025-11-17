@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import traceback
+from functools import lru_cache
 from typing import Any, Callable, Iterable, Mapping
 
 import discord
@@ -12,8 +13,10 @@ from c1c_coreops.tags import lifecycle_tag
 from modules.common import runtime as rt
 from shared import logfmt
 from shared.dedupe import EventDeduper
+from shared.sheets import onboarding_questions
 
 __all__ = [
+    "channel_path",
     "format_actor",
     "format_actor_handle",
     "format_channel",
@@ -21,6 +24,8 @@ __all__ = [
     "format_match",
     "format_parent",
     "format_thread",
+    "log_onboarding_panel_lifecycle",
+    "question_stats",
     "thread_context",
     "send_welcome_log",
     "send_welcome_exception",
@@ -107,6 +112,232 @@ def _stringify(value: Any) -> str:
     if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
         return ", ".join(_stringify(item) for item in value) or "-"
     return str(value)
+
+
+def channel_path(
+    channel: discord.abc.GuildChannel | discord.Thread | None,
+) -> str:
+    """Return a ``#category › channel`` style label without numeric IDs."""
+
+    if isinstance(channel, discord.Thread):
+        parent = getattr(channel, "parent", None)
+        return channel_path(parent)
+    if isinstance(channel, discord.abc.GuildChannel):
+        channel_name = (getattr(channel, "name", None) or "channel").strip() or "channel"
+        category = getattr(channel, "category", None)
+        if category is not None:
+            category_name = (getattr(category, "name", None) or "category").strip() or "category"
+            return f"#{category_name} › {channel_name}"
+        return f"#{channel_name}"
+    return "#unknown"
+
+
+def _short_schema_version(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    token = str(raw).strip()
+    if not token:
+        return None
+    if token.startswith("v") and len(token) <= 8:
+        return token
+    slug = "".join(ch for ch in token if ch.isalnum()) or token
+    return f"v{slug[:6]}"
+
+
+def _resolve_ticket_from_thread(thread: discord.Thread | None) -> str | None:
+    if thread is None:
+        return None
+    name = getattr(thread, "name", None)
+    if not name:
+        return None
+    try:
+        from modules.onboarding.watcher_welcome import parse_welcome_thread_name
+    except Exception:
+        return None
+
+    try:
+        parts = parse_welcome_thread_name(name)
+    except Exception:
+        return None
+    if not parts:
+        return None
+    return getattr(parts, "ticket_code", None)
+
+
+@lru_cache(maxsize=4)
+def question_stats(flow: str) -> tuple[int | None, str | None]:
+    """Return the cached ``(question_count, schema_version)`` for ``flow``."""
+
+    count: int | None = None
+    schema: str | None = None
+    try:
+        count = len(onboarding_questions.get_questions(flow))
+    except Exception:
+        log.debug("failed to load onboarding questions for stats", exc_info=True)
+    try:
+        schema = onboarding_questions.schema_hash(flow)
+    except Exception:
+        log.debug("failed to resolve onboarding schema hash", exc_info=True)
+    return count, _short_schema_version(schema)
+
+
+def _normalize_actor(actor: Any) -> str | None:
+    if not actor:
+        return None
+    if isinstance(actor, str):
+        text = actor.strip()
+        return text or None
+    if isinstance(actor, (discord.Member, discord.abc.User)):
+        return format_actor_handle(actor)
+    handle = getattr(actor, "mention", None)
+    if isinstance(handle, str):
+        text = handle.strip()
+        return text or None
+    return None
+
+
+def _normalize_channel(target: Any) -> str | None:
+    if not target:
+        return None
+    if isinstance(target, str):
+        text = target.strip()
+        return text or None
+    if isinstance(target, discord.Thread):
+        parent = getattr(target, "parent", None)
+        return channel_path(parent)
+    if isinstance(target, discord.abc.GuildChannel):
+        return channel_path(target)
+    parent = getattr(target, "parent", None)
+    if parent is not None:
+        return channel_path(parent)
+    return None
+
+
+_RESULT_SEVERITY = {
+    "error": "error",
+    "failed": "error",
+    "failure": "error",
+    "exception": "error",
+    "skipped": "warning",
+    "partial": "warning",
+    "retry": "warning",
+    "deduped": "warning",
+    "completed": "success",
+    "complete": "success",
+    "ok": "success",
+    "success": "success",
+}
+
+_EVENT_SEVERITY = {
+    "complete": "success",
+    "error": "error",
+}
+
+_SEVERITY_LEVEL = {
+    "info": logging.INFO,
+    "success": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+}
+
+_SEVERITY_EMOJI = {
+    "info": "📘",
+    "success": "✅",
+    "warning": "⚠️",
+    "error": "❌",
+}
+
+
+def _resolve_severity(event: str, result: str | None) -> str:
+    normalized_result = (result or "").strip().lower()
+    if normalized_result in _RESULT_SEVERITY:
+        return _RESULT_SEVERITY[normalized_result]
+    normalized_event = event.strip().lower()
+    return _EVENT_SEVERITY.get(normalized_event, "info")
+
+
+async def log_onboarding_panel_lifecycle(
+    *,
+    event: str,
+    ticket: str | discord.Thread | None = None,
+    actor: str | discord.abc.User | discord.Member | None = None,
+    channel: str | discord.abc.GuildChannel | discord.Thread | None = None,
+    questions: int | None = None,
+    schema_version: str | None = None,
+    result: str | None = None,
+    reason: str | None = None,
+    extras: Mapping[str, Any] | None = None,
+) -> None:
+    """Emit a single lifecycle log entry for onboarding panel events."""
+
+    event_slug = (event or "event").strip().lower() or "event"
+    ticket_code: str | None
+    if isinstance(ticket, discord.Thread):
+        ticket_code = _resolve_ticket_from_thread(ticket)
+    else:
+        ticket_code = ticket
+    missing_ticket = ticket is not None and ticket_code is None
+    if ticket_code is None and isinstance(channel, discord.Thread):
+        ticket_code = _resolve_ticket_from_thread(channel)
+
+    actor_label = _normalize_actor(actor)
+    channel_label = _normalize_channel(channel) or "#unknown"
+
+    question_label: str | None = None
+    if questions is not None:
+        try:
+            question_label = str(int(questions))
+        except (TypeError, ValueError):
+            question_label = str(questions)
+
+    schema_label = _short_schema_version(schema_version)
+
+    segments: list[str] = []
+    if ticket_code:
+        segments.append(f"ticket={ticket_code}")
+    if actor_label:
+        segments.append(f"actor={actor_label}")
+    if channel_label:
+        segments.append(f"channel={channel_label}")
+    if question_label:
+        segments.append(f"questions={question_label}")
+    if schema_label:
+        segments.append(f"schema={schema_label}")
+    resolved_result = result
+    resolved_reason = reason
+    if missing_ticket and resolved_result is None:
+        resolved_result = "skipped"
+        if not resolved_reason:
+            resolved_reason = "ticket_not_parsed"
+
+    if extras:
+        for key, value in extras.items():
+            if value is None:
+                continue
+            cleaned = _stringify(value)
+            if cleaned and cleaned != "-":
+                segments.append(f"{key}={cleaned}")
+    severity = _resolve_severity(event_slug, resolved_result)
+    emoji = _SEVERITY_EMOJI.get(severity, "📘")
+    level = _SEVERITY_LEVEL.get(severity, logging.INFO)
+
+    if resolved_result:
+        segments.append(f"result={resolved_result}")
+    include_reason = severity in {"warning", "error"} and resolved_reason
+    if include_reason:
+        segments.append(f"reason={resolved_reason}")
+
+    if segments:
+        message = f"{emoji} onboarding_panel_{event_slug} — " + " • ".join(segments)
+    else:
+        message = f"{emoji} onboarding_panel_{event_slug}"
+
+    log.log(level, "%s", message)
+    tagged = f"{lifecycle_tag()} {message}"
+    try:
+        await rt.send_log_message(tagged)
+    except Exception:
+        log.warning("failed to emit onboarding lifecycle log", exc_info=True)
 
 
 def format_actor(actor: discord.abc.User | discord.Member | None) -> str:

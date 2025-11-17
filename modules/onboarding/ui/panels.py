@@ -1024,19 +1024,44 @@ class OpenQuestionsPanelView(discord.ui.View):
         message = getattr(interaction, "message", None)
         message_id = getattr(message, "id", None)
 
-        restart_context = dict(log_context)
-        restart_context["result"] = "restarted"
-
         await self._notify_restart(interaction)
 
-        await logs.send_welcome_log("info", **restart_context)
+        controller = getattr(self, "controller", None)
+        flow = getattr(controller, "flow", "welcome") if controller is not None else "welcome"
+
+        async def _log_restart(result: str | None = None, reason: str | None = None) -> None:
+            if flow != "welcome":
+                return
+            parent_channel = getattr(thread, "parent", None)
+            question_count, schema_version = logs.question_stats("welcome")
+            await logs.log_onboarding_panel_lifecycle(
+                event="restart",
+                ticket=thread,
+                actor=getattr(interaction, "user", None),
+                channel=parent_channel,
+                questions=question_count,
+                schema_version=schema_version,
+                result=result,
+                reason=reason,
+            )
+
+        restart_context = dict(log_context)
+        restart_context["result"] = "restarted"
+        if flow != "welcome":
+            await logs.send_welcome_log("info", **restart_context)
 
         if not isinstance(thread, discord.Thread):
-            failure_context = dict(restart_context)
-            failure_context["result"] = "error"
-            failure_context["reason"] = "thread_missing"
-            await logs.send_welcome_log("error", **failure_context)
+            if flow == "welcome":
+                await _log_restart(result="error", reason="thread_missing")
+            else:
+                failure_context = dict(restart_context)
+                failure_context["result"] = "error"
+                failure_context["reason"] = "thread_missing"
+                await logs.send_welcome_log("error", **failure_context)
             return
+
+        if flow == "welcome":
+            await _log_restart()
 
         try:
             from modules.onboarding.welcome_flow import start_welcome_dialog
@@ -1057,9 +1082,13 @@ class OpenQuestionsPanelView(discord.ui.View):
                 panel_message=panel_message,
             )
         except Exception as exc:  # pragma: no cover - defensive logging path
-            error_context = dict(restart_context)
-            error_context["result"] = "error"
-            await logs.send_welcome_exception("error", exc, **error_context)
+            if flow == "welcome":
+                log.exception("failed to restart welcome panel")
+                await _log_restart(result="error", reason="restart_failed")
+            else:
+                error_context = dict(restart_context)
+                error_context["result"] = "error"
+                await logs.send_welcome_exception("error", exc, **error_context)
 
     async def _ensure_error_notice(self, interaction: discord.Interaction) -> None:
         identifier = getattr(interaction, "id", None)

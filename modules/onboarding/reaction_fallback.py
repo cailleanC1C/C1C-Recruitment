@@ -300,17 +300,13 @@ class OnboardingReactionFallbackCog(commands.Cog):
             restart_context = _base_context(member=member, thread=thread)
             restart_context.update({"trigger": trigger, "result": "restarted"})
             restart_context.update(target_extra)
-            await logs.send_welcome_log("info", **restart_context)
             try:
                 await existing_panel.delete()
             except Exception as exc:
                 await logs.send_welcome_exception("warn", exc, **restart_context)
             panels.mark_panel_inactive_by_message(existing_panel.id)
         else:
-            start_context = _base_context(member=member, thread=thread)
-            start_context.update({"trigger": trigger, "result": "started"})
-            start_context.update(target_extra)
-            await logs.send_welcome_log("info", **start_context)
+            pass
 
         try:
             await start_welcome_dialog(
