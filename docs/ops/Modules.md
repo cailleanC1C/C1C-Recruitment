@@ -7,6 +7,9 @@ This index lists the primary operational modules. Each entry summarizes responsi
 
 ## Welcome
 - [`Module-Welcome.md`](Module-Welcome.md) — Discord UX: posts the welcome panel, renders onboarding prompts inside ticket threads, formats recruiter summaries, and orchestrates ticket closure → placement hand-offs.
+
+## Recruitment
+- [`Module-Recruitment.md`](Module-Recruitment.md) — sheet-driven clan roster cache, recruiter/member panels, reservation context, and reporting surfaces.
 # Modules Overview
 
 This catalog lists the runtime modules that plug into CoreOps. Use it to locate
@@ -17,7 +20,7 @@ entry points, feature toggles, and the deep-dive doc for each surface.
 | **CoreOps** | Routing cog, scheduler, cache façade, health/log surfaces. Owns RBAC checks and lifecycle commands. | `!ops …`, `!perm …`, `/health`, `/ready`, watchdog exits. | [`CoreOps.md`](CoreOps.md)
 | **Onboarding** | Thread-first wizard for recruiter questionnaires plus sheet reconciliation. | `!ops onb reload`, `!ops onb check`, `!onb resume`, welcome ticket close handler. | [`Onboarding.md`](Onboarding.md), [`Onboarding-Runbook.md`](Onboarding-Runbook.md)
 | **Welcome** | Persistent welcome panel, template cache, and watcher-controlled ticket creation. | `!welcome`, `!welcome-refresh`, promo/welcome watchers. | [`Welcome.md`](Welcome.md), [`WelcomeFlow.md`](WelcomeFlow.md), [`Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
-| **Recruitment** | Clan search panels, recruiter dashboard, emoji rendering helpers, and report embeds. | `!clanmatch`, recruiter panel UI, daily recruiter report cron. | [`RecruiterPanel.md`](RecruiterPanel.md), [`commands.md`](commands.md)
+| **Recruitment** | Clan search panels, recruiter dashboard, emoji rendering helpers, and report embeds. | `!clanmatch`, recruiter panel UI, daily recruiter report cron. | [`Module-Recruitment.md`](Module-Recruitment.md), [`commands.md`](commands.md)
 | **Placement** | Reservations and seat reconciliation when onboarding closes tickets. Shares adapters with recruitment sheets. | `!reserve`, placement watcher hooks, placement summaries in ops channel. | [`Watchers.md`](Watchers.md), [`Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
 | **Shared / OBS** | Sheets adapters, cache warming, logging templates, watchdog tuning, and feature toggles. Supports every module. | Scheduler refresh jobs, structured logging pipeline, feature toggle bootstrap. | [`Config.md`](Config.md), [`keepalive.md`](keepalive.md), [`Logging.md`](Logging.md), [`module-toggles.md`](module-toggles.md)
 
