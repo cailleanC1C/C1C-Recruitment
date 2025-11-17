@@ -27,7 +27,7 @@ Every audit and CI check validates against this document.
 - **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
 - **C-12 No Order Targets:** Onboarding rules and evaluators must reference question IDs (no order-number or sheet-position logic).
 
-### 3) Feature Toggles and Config Policy
+## 3) Feature Toggles and Config Policy
 * **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
 * **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
 * **F-03 Scope:** Toggles control runtime activation of recruitment modules and experiments. They do not alter infrastructure or cluster-wide settings.
@@ -53,6 +53,37 @@ Every audit and CI check validates against this document.
 - **D-07 Contract Priority:** CollaborationContract.md governs process and must link to this guardrails spec.
 - **D-08 No Orphan Docs:** Every doc must be linked from `docs/README.md`.
 
+### **(NEW) D-09 Behaviour-Linked Tests**
+- **D-09 Behaviour-Linked Tests:**  
+  Any PR that modifies functional behaviour in `modules/**`, `coreops/**`, or `shared/**`  
+  **must also update or add tests** in the matching test folder:
+
+    • `tests/onboarding/**`  
+    • `tests/welcome/**`  
+    • `tests/recruitment/**`  
+    • `tests/placement/**`  
+    • `tests/coreops/**` or `tests/shared/**`  
+    • `tests/integration/**` (cross-module flows)  
+    • `tests/config/**` (config-loading behaviour)
+
+  Exceptions are allowed only for docs-only, CI-only, or comment/typo fixes, and must be  
+  explicitly justified in the PR body. Silent omissions fail guardrails.
+
+### **(NEW) D-10 User-Facing Behaviour Requires Doc Updates**
+- **D-10 User-Facing Behaviour = Mandatory Doc Updates:**  
+  If a PR changes commands, help text, onboarding questions, summary formatting, watcher  
+  schedules, feature toggles, or any user-visible flow, the PR **must** update the relevant  
+  SSoT docs:
+
+    • `docs/ops/CommandMatrix.md`  
+    • `docs/ops/Module-<Module>.md`  
+    • `docs/ops/Config.md`  
+    • `docs/_meta/DocStyle.md` (if formatting changed)  
+    • `docs/ops/Architecture.md` (if data flows changed)  
+    • `CHANGELOG.md`
+
+  No new docs may be created unless an ADR authorises it.
+
 ## 5) Governance & Workflow
 - **G-01 Version Control:** Versions (bot, footers, changelog) change only on explicit instruction from the owner.
 - **G-02 Codex Scope:** Codex performs only what the PR body instructs—no implicit deletions or moves.
@@ -62,10 +93,21 @@ Every audit and CI check validates against this document.
 - **G-06 Naming:** Filenames are `lower_snake_case.md` (no spaces, no “Phase”).
 - **G-07 CI Required:** Guardrail checks must be required status checks on PRs.
 - **G-08 Secrets:** No secrets in repo or `.env.example`; use deployment envs.
+- **G-09 PR Requirements — Tests/Docs Declaration** Every PR body must contain a section explicitly stating whether tests and docs were updated. 
+    One of the following formats is required:
+    Tests:
+    Updated: <file-path>
+    Docs:
+    Updated: <file-path>
+      or (for allowed exceptions):
+    Tests:
+    Not required (reason: docs-only / CI-only / comment-only)
+    Docs:
+    Not required (reason: non-user-facing change)
 
 ---
 
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-11-14 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)
