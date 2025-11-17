@@ -65,7 +65,6 @@ It exists so that contributors update the correct references after each developm
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`Modules.md`](ops/Modules.md) — quick links to module deep dives (Onboarding, Welcome) and their responsibility summaries.
 * [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
-* [`keepalive.md`](ops/keepalive.md) — watchdog expectations, heartbeat tuning, and stall recovery notes.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
 * [`Module-Onboarding.md`](ops/Module-Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
@@ -76,7 +75,7 @@ It exists so that contributors update the correct references after each developm
 * [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
 * [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
-* [`Watchers.md`](ops/Watchers.md) — environment-gated welcome/promo listeners and cache refresh scheduler notes.
+* [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
 * [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
 * [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
 * [`Welcome_Summary_Spec.md`](ops/Welcome_Summary_Spec.md) — summary embed layout, formatting rules, and hide logic.
