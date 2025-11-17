@@ -347,7 +347,7 @@ def test_finalize_skips_when_upsert_unexpected(monkeypatch, caplog) -> None:
     asyncio.run(runner())
 
     assert any(
-        "onboarding_row_missing" in record.message for record in caplog.records
+        "onboarding_row_missing" in record.getMessage() for record in caplog.records
     ), "should log skip reason when row cannot be confirmed"
 
 
@@ -428,7 +428,7 @@ def test_finalize_no_reservation_consumes_open_spot(monkeypatch, caplog) -> None
     assert ("C1CE", -1) in adjustments
     assert "C1CE" in recomputed
     log_messages = [
-        record.message
+        record.getMessage()
         for record in caplog.records
         if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
     ]
@@ -516,7 +516,7 @@ def test_finalize_manual_logs_manual_event(monkeypatch, caplog) -> None:
     assert ("C1CE", -1) in adjustments
     assert "C1CE" in recomputed
     log_messages = [
-        record.message
+        record.getMessage()
         for record in caplog.records
         if record.name == "c1c.onboarding.welcome_watcher" and record.levelno == logging.INFO
     ]
@@ -1309,7 +1309,7 @@ def test_manual_close_missing_row_prompts(monkeypatch, caplog) -> None:
     asyncio.run(runner())
 
     assert inserted_rows and inserted_rows[0][:2] == ["W0500", "Tester"]
-    assert any("onboarding_row_missing_manual_close" in record.message for record in caplog.records)
+    assert any("onboarding_row_missing_manual_close" in record.getMessage() for record in caplog.records)
 
 
 def test_manual_close_existing_clan_skips_prompt(monkeypatch) -> None:

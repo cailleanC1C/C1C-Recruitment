@@ -102,7 +102,7 @@ def test_startup_preload_success(monkeypatch: pytest.MonkeyPatch, caplog: pytest
         assert bucket.last_result in {"ok", "retry_ok"}
         assert bucket.last_item_count == 1
 
-        messages = [record.message for record in caplog.records if "bucket=onboarding_questions" in record.message]
+        messages = [record.getMessage() for record in caplog.records if "bucket=onboarding_questions" in record.getMessage()]
         assert messages, "expected refresh log entry"
         line = messages[-1]
         assert "trigger=manual" in line
@@ -143,7 +143,7 @@ def test_startup_preload_missing_config(monkeypatch: pytest.MonkeyPatch, caplog:
         assert bucket.last_result == "fail"
         assert str(bucket.last_error or "").startswith("missing config key: ONBOARDING_TAB")
 
-        messages = [record.message for record in caplog.records if "bucket=onboarding_questions" in record.message]
+        messages = [record.getMessage() for record in caplog.records if "bucket=onboarding_questions" in record.getMessage()]
         assert messages, "expected refresh log entry"
         line = messages[-1]
         assert "trigger=manual" in line

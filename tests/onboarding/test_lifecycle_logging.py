@@ -55,7 +55,7 @@ def test_lifecycle_helper_formats_neutral(monkeypatch, caplog):
     assert "\n• channel=#WELCOME CENTER › welcome • questions=16" in sent[0]
     assert "schema=" not in sent[0]
     assert "message_id" not in sent[0]
-    assert any("📘 welcome_panel_open" in record.message for record in caplog.records)
+    assert any("📘 welcome_panel_open" in record.getMessage() for record in caplog.records)
 
 
 def test_lifecycle_helper_hides_reason_when_info(monkeypatch):
