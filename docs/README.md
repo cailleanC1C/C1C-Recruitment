@@ -7,10 +7,10 @@ It exists so that contributors update the correct references after each developm
 ## Folder Map
 ### Root docs
 ### 📘 Global Documentation (`/docs`) - These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
-🔹 [`Architecture.md`](Architecture.md) - Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
-🔹 [`Runbook.md`](Runbook.md) - Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
-🔹 [`Troubleshooting.md`](Troubleshooting.md) - How to diagnose common issues, logs to check, and recovery steps.
-🔹 [`README.md`](README.md) — you are here; master index for the documentation tree.
+* [`Architecture.md`](Architecture.md) - Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
+* [`Runbook.md`](Runbook.md) - Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
+* [`Troubleshooting.md`](Troubleshooting.md) - How to diagnose common issues, logs to check, and recovery steps.
+* [`README.md`](README.md) — you are here; master index for the documentation tree.
 
 ### `/docs/adr/` — Architectural Decision Records
 Historical decisions and contracts.
@@ -93,29 +93,21 @@ Collaboration Contract and core infra conventions.
 
 * # 🧩 Module Documentation (`/docs/modules`)
 Each module has a **dedicated deep-dive file** describing its scope, flows, data sources, and integrations.
-### 🔹 [`modules/CoreOps.md`](modules/CoreOps.md)
-Scheduler, bootstrap, cache facade, runtime responsibilities.
-### 🔹 [`modules/CoreOps-Development.md`](modules/CoreOps-Development.md)
-Developer notes for CoreOps: telemetry, preloader rules, caveats, dev behaviour, testing commands.
-### 🔹 [`modules/Onboarding.md`](modules/Onboarding.md)
-Onboarding engine: sessions, rules, skip-logic, persistence, sheet mapping.
-### 🔹 [`modules/Welcome.md`](modules/Welcome.md)
-Discord-facing onboarding UX: threads, panels, summary embed, hand-off into recruitment.
-### 🔹 [`modules/Recruitment.md`](modules/Recruitment.md)
-Recruitment workflow: reservations, sheet mapping, recruiter tools.
-### 🔹 [`modules/Placement.md`](modules/Placement.md)
-Placement logic: clan matching, ledger, seat availability, recomputations.
-### 🔹 [`modules/PermissionsSync.md`](modules/PermissionsSync.md)
-Permission sync module: ACL workflows, overwrite syncing.  
-All commands referenced here **must** also be present in the CommandMatrix.
+* [`modules/CoreOps.md`](modules/CoreOps.md) - Scheduler, bootstrap, cache facade, runtime responsibilities.
+* [`modules/CoreOps-Development.md`](modules/CoreOps-Development.md) - Developer notes for CoreOps: telemetry, preloader rules, caveats, dev behaviour, testing commands.
+* [`modules/Onboarding.md`](modules/Onboarding.md) - Onboarding engine: sessions, rules, skip-logic, persistence, sheet mapping.
+* [`modules/Welcome.md`](modules/Welcome.md) - Discord-facing onboarding UX: threads, panels, summary embed, hand-off into recruitment.
+* [`modules/Recruitment.md`](modules/Recruitment.md) - Recruitment workflow: reservations, sheet mapping, recruiter tools.
+* [`modules/Placement.md`](modules/Placement.md) - Placement logic: clan matching, ledger, seat availability, recomputations.
+* [`modules/PermissionsSync.md`](modules/PermissionsSync.md) - Permission sync module: ACL workflows, overwrite syncing. All commands referenced here **must** also be present in the CommandMatrix.
 
 # 🔧 Maintenance Rules
-- Any PR touching documentation must update this index and all affected references.  
-- All docs must end with:  
+* Any PR touching documentation must update this index and all affected references.  
+* All docs must end with:  
   `Doc last updated: YYYY-MM-DD (v0.9.7)`  
-- `.env.example` must stay in `docs/ops/`.  
-- No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.  
-- Module docs must exclusively live under `docs/modules/`.
+* `.env.example` must stay in `docs/ops/`.  
+* No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.  
+* Module docs must exclusively live under `docs/modules/`.
 
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
