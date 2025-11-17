@@ -21,7 +21,8 @@ __all__ = [
 
 LOG_EMOJI = {
     "success": "✅",
-    "info": "🛈",
+    "info": "📋",
+    "lifecycle": "📘",
     "refresh": "♻️",
     "watchdog": "🐶",
     "security": "🔐",
@@ -30,16 +31,12 @@ LOG_EMOJI = {
     "error": "❌",
 }
 
-
-def _append_id(label: str, numeric_id: Optional[int]) -> str:
-    if numeric_id is None:
-        return label
-    try:
-        normalized = int(numeric_id)
-    except (TypeError, ValueError):
-        return label
-    return f"{label} ({normalized})"
-
+_DEFAULT_SCHEDULER_BUCKETS: tuple[str, ...] = (
+    "clans",
+    "templates",
+    "clan_tags",
+    "onboarding_questions",
+)
 
 def _clean_name(name: Optional[str], default: str) -> str:
     if not name:
@@ -52,7 +49,7 @@ def channel_label(guild: Optional[discord.Guild], cid: Optional[int]) -> str:
     """Return a human-friendly label for a guild channel or thread."""
 
     if guild is None or cid is None:
-        return _append_id("#unknown", cid)
+        return "#unknown"
 
     channel = guild.get_channel(cid)
     thread: Optional[discord.Thread] = None
@@ -71,7 +68,7 @@ def channel_label(guild: Optional[discord.Guild], cid: Optional[int]) -> str:
         parent_name = _clean_name(getattr(parent, "name", None), "unknown")
         thread_name = _clean_name(channel.name, "thread")
         label = f"#{parent_name} › {thread_name}"
-        return _append_id(label, cid)
+        return label
 
     if isinstance(channel, discord.abc.GuildChannel):
         name = _clean_name(getattr(channel, "name", None), "channel")
@@ -81,9 +78,9 @@ def channel_label(guild: Optional[discord.Guild], cid: Optional[int]) -> str:
             label = f"#{cat_name} › {name}"
         else:
             label = f"#{name}"
-        return _append_id(label, cid)
+        return label
 
-    return _append_id("#unknown", cid)
+    return "#unknown"
 
 
 def user_label(guild: Optional[discord.Guild], uid: Optional[int]) -> str:
@@ -92,13 +89,13 @@ def user_label(guild: Optional[discord.Guild], uid: Optional[int]) -> str:
     if uid is None:
         return "unknown"
     if guild is None:
-        return _append_id("unknown", uid)
+        return "unknown"
     getter = getattr(guild, "get_member", None)
     member = getter(uid) if callable(getter) else None
     if member is None:
-        return _append_id("unknown", uid)
+        return "unknown"
     display = _clean_name(getattr(member, "display_name", None), "unknown")
-    return _append_id(display, uid)
+    return display
 
 
 def guild_label(bot: discord.Client, gid: Optional[int]) -> str:
@@ -108,9 +105,9 @@ def guild_label(bot: discord.Client, gid: Optional[int]) -> str:
         return "unknown guild"
     guild = bot.get_guild(gid)
     if guild is None:
-        return _append_id("unknown guild", gid)
+        return "unknown guild"
     name = _clean_name(getattr(guild, "name", None), "guild")
-    return _append_id(name, gid)
+    return name
 
 
 def _format_unit(value: float, unit: str) -> str:
@@ -147,6 +144,39 @@ def fmt_count(value: Optional[int]) -> str:
         return f"{int(value):,}"
     except (TypeError, ValueError):
         return "-"
+
+
+def _ordered_scheduler_buckets(
+    intervals: Mapping[str, str], upcoming: Mapping[str, str]
+) -> list[str]:
+    order: list[str] = []
+    seen: set[str] = set()
+    for key in _DEFAULT_SCHEDULER_BUCKETS:
+        if key in intervals or key in upcoming:
+            order.append(key)
+            seen.add(key)
+    for mapping in (intervals, upcoming):
+        for key in mapping:
+            if key not in seen:
+                order.append(key)
+                seen.add(key)
+    if not order:
+        order = list(_DEFAULT_SCHEDULER_BUCKETS)
+    return order
+
+
+def _format_pairs(pairs: Sequence[tuple[str, Optional[str]]]) -> list[str]:
+    formatted: list[str] = []
+    for key, value in pairs:
+        if not key:
+            continue
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text or text == "-":
+            continue
+        formatted.append(f"{key}={text}")
+    return formatted
 
 
 _HTTP_ERROR_CODES = {
@@ -206,12 +236,17 @@ class LogTemplates:
 
     @staticmethod
     def scheduler(*, intervals: Mapping[str, str], upcoming: Mapping[str, str]) -> str:
-        cadence = " • ".join(f"{key}={value}" for key, value in intervals.items()) or "-"
-        next_parts = " • ".join(f"{key}={value}" for key, value in upcoming.items()) or "-"
-        return (
-            f"{LOG_EMOJI['scheduler']} **Scheduler** — "
-            f"intervals: {cadence} • next: {next_parts}"
+        bucket_order = _ordered_scheduler_buckets(intervals, upcoming)
+        interval_pairs = _format_pairs(
+            [(bucket, intervals.get(bucket, "-")) for bucket in bucket_order]
         )
+        cadence = " • ".join(interval_pairs) or "-"
+        lines = [f"{LOG_EMOJI['scheduler']} **Scheduler** — intervals: {cadence}"]
+        for bucket in bucket_order:
+            next_value = upcoming.get(bucket)
+            text = str(next_value).strip() if next_value else "-"
+            lines.append(f"• {bucket}={text or '-'}")
+        return "\n".join(lines)
 
     @staticmethod
     def scheduler_failure(*, job: str, reason: str) -> str:
@@ -249,7 +284,7 @@ class LogTemplates:
 
     @staticmethod
     def refresh(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
-        bucket_parts: list[str] = []
+        lines = [f"{LOG_EMOJI['refresh']} **Refresh** — scope={scope}"]
         for result in buckets:
             details: list[str] = [fmt_duration(result.duration_s)]
             if result.item_count is not None:
@@ -266,13 +301,10 @@ class LogTemplates:
                 for key, value in sorted(result.metadata.items()):
                     if key and value:
                         details.append(f"{key}={value}")
-            detail_text = ", ".join(details)
-            bucket_parts.append(f"{result.name} {result.status} ({detail_text})")
-        buckets_text = " • ".join(bucket_parts) if bucket_parts else "-"
-        return (
-            f"{LOG_EMOJI['refresh']} **Refresh** — "
-            f"scope={scope} • {buckets_text} • total={fmt_duration(total_s)}"
-        )
+            detail_text = ", ".join(details) if details else "-"
+            lines.append(f"• {result.name} {result.status} ({detail_text})")
+        lines.append(f"• total={fmt_duration(total_s)}")
+        return "\n".join(lines)
 
     @staticmethod
     def refresh_table(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:
@@ -429,7 +461,176 @@ class LogTemplates:
 
         if segments:
             return f"{emoji} Welcome panel — " + " • ".join(segments)
-        return f"{emoji} Welcome panel"
+            return f"{emoji} Welcome panel"
+
+    @staticmethod
+    def _welcome_panel_event(
+        *,
+        event: str,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        schema: Optional[str] = None,
+        level_detail: Optional[str] = None,
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        emoji = LogTemplates._resolve_welcome_panel_emoji(event, result)
+        summary_fields = [("ticket", ticket), ("actor", actor)]
+        summary_text = " • ".join(_format_pairs(summary_fields)) or "-"
+        detail_fields = [
+            ("channel", channel),
+            ("questions", questions),
+            ("schema", schema),
+            ("level_detail", level_detail),
+            ("result", result),
+        ]
+        details = _format_pairs(detail_fields)
+        if reason and emoji in (LOG_EMOJI["warning"], LOG_EMOJI["error"]):
+            details.append(f"reason={reason}")
+        if extras:
+            details.extend(item for item in extras if item)
+        lines = [f"{emoji} {event} — {summary_text}"]
+        if details:
+            lines.append(f"• {' • '.join(details)}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _resolve_welcome_panel_emoji(event: str, result: Optional[str]) -> str:
+        normalized_result = (result or "").strip().lower()
+        if normalized_result in {"error", "failed", "exception"}:
+            return LOG_EMOJI["error"]
+        if normalized_result in {"skipped", "not_eligible", "partial"}:
+            return LOG_EMOJI["warning"]
+        event_lower = event.strip().lower()
+        if event_lower.endswith("_restart"):
+            return LOG_EMOJI["refresh"]
+        if event_lower.endswith("_complete"):
+            return LOG_EMOJI["success"]
+        return LOG_EMOJI["lifecycle"]
+
+    @staticmethod
+    def welcome_panel_open(
+        *,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        return LogTemplates._welcome_panel_event(
+            event="welcome_panel_open",
+            ticket=ticket,
+            actor=actor,
+            channel=channel,
+            questions=questions,
+            result=result,
+            reason=reason,
+            extras=extras,
+        )
+
+    @staticmethod
+    def welcome_panel_start(
+        *,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        schema: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        return LogTemplates._welcome_panel_event(
+            event="welcome_panel_start",
+            ticket=ticket,
+            actor=actor,
+            channel=channel,
+            questions=questions,
+            schema=schema,
+            result=result,
+            reason=reason,
+            extras=extras,
+        )
+
+    @staticmethod
+    def welcome_panel_restart(
+        *,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        schema: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        return LogTemplates._welcome_panel_event(
+            event="welcome_panel_restart",
+            ticket=ticket,
+            actor=actor,
+            channel=channel,
+            questions=questions,
+            schema=schema,
+            result=result,
+            reason=reason,
+            extras=extras,
+        )
+
+    @staticmethod
+    def welcome_panel_complete(
+        *,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        level_detail: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        return LogTemplates._welcome_panel_event(
+            event="welcome_panel_complete",
+            ticket=ticket,
+            actor=actor,
+            channel=channel,
+            questions=questions,
+            level_detail=level_detail,
+            result=result,
+            reason=reason,
+            extras=extras,
+        )
+
+    @staticmethod
+    def welcome_panel_generic(
+        *,
+        event: str,
+        ticket: Optional[str],
+        actor: Optional[str],
+        channel: Optional[str],
+        questions: Optional[str],
+        schema: Optional[str],
+        level_detail: Optional[str],
+        result: Optional[str] = None,
+        reason: Optional[str] = None,
+        extras: Sequence[str] | None = None,
+    ) -> str:
+        return LogTemplates._welcome_panel_event(
+            event=f"welcome_panel_{event}",
+            ticket=ticket,
+            actor=actor,
+            channel=channel,
+            questions=questions,
+            schema=schema,
+            level_detail=level_detail,
+            result=result,
+            reason=reason,
+            extras=extras,
+        )
 
     @staticmethod
     def select_refresh_template(scope: str, buckets: Sequence[BucketResult], total_s: float) -> str:

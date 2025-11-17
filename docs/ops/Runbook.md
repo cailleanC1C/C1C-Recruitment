@@ -1,217 +1,112 @@
 # Ops Runbook
 
-This runbook consolidates the CoreOps lifecycle, cache controls, and telemetry surfaces
-introduced in the Phase 3/3b rollout. Use it during startup verification, routine refresh
-workflows, and post-change validation.
+Use this guide when operating the bot in production or test. It focuses on
+observable actions: deploy/restart, health checks, cache hygiene, and what to do
+when onboarding, welcome, recruitment, or placement flows misbehave.
 
-Older GitHub Actions deploy runs may display "skipped by same-file supersession" when a newer queued push touches overlapping files; treat this as expected sequencing.
+## Lifecycle controls
+- **Deploy / restart.** GitHub Actions builds the container and Render deploys the
+  latest successful run per branch. To redeploy, push to the branch, wait for the
+  workflow to finish, then trigger a manual deploy in Render if needed. Render
+  restarts the process automatically when `/health` or the watchdog exit fails.
+- **Manual restarts.** Run `!ops reload --reboot` in Discord to rebuild the
+  config registry, flush caches, and restart the aiohttp server plus gateway
+  session. Use this after updating Config tabs or environment variables.
+- **Start/stop health.** Startup logs should include `web server listening` and
+  `[watchdog] heartbeat` lines. Absence of either means the runtime did not reach
+  `Runtime.start()`; inspect Render logs for import errors.
 
-## Keep-Alive / Web Server — Expected Boot Line
-On successful bind, startup logs:
+## Health & logging
+- **HTTP probes.**
+  - `/ready` turns `ok=true` once Discord connects and CoreOps finishes startup.
+  - `/health` surfaces watchdog metrics plus component status (`runtime`,
+    `discord`, `sheets`). A 503 indicates stalled heartbeats or a failed
+    component.
+  - `/healthz` is liveness only (process/heartbeat age check).
+- **Discord diagnostics.** `!ops health` and `!ops digest` mirror the telemetry
+  returned by `/health`, including cache age, next scheduled refresh, retries,
+  and last actor.
+- **Logs.** Runtime logs are JSON with `ts`, `level`, `logger`, `msg`, and
+  `trace`. Use `trace` to correlate HTTP calls, refreshes, and command handlers.
+  Healthy watchdog messages log at INFO; WARN/ERROR mean operator action.
+- **Help diagnostics.** Temporarily set `HELP_DIAGNOSTICS=1` to post command
+  discovery summaries into the log channel resolved by
+  `resolve_ops_log_channel_id` for permission triage.
 
-```
-web server listening • port=<n>
-```
+## Cache & scheduler operations
+- **Startup preloader.** Each boot runs `refresh_now(name, actor="startup")` for
+  every cache bucket. Expect `[refresh] startup bucket=<name>` logs followed by a
+  single summary embed in the ops channel.
+- **Manual refreshes.** `!ops refresh <bucket|all>` triggers the same API used by
+  the scheduler. Buckets fail soft (stale data served) but log the error. The
+  telemetry embed records `actor` so you can audit manual runs.
+- **Reload vs refresh.** `!ops reload` rebuilds the config registry and TTL caches
+  without restarting the process. Use it after changing sheet tab names or
+  Config keys. `!ops reload --reboot` restarts after reload. `!ops refresh` keeps
+  the runtime up and only touches cache data.
+- **Scheduler cadence.** Cron jobs refresh recruitment caches (`clans`,
+  `templates`, `clan_tags`), welcome templates, and sheet-based reports. Failed
+  cron refreshes emit WARN logs and keep retry counters for follow-up.
 
-If this line is missing:
-1. Check for import errors near startup (Render logs). An early failure prevents `Runtime.start()` from reaching `start_webserver()`.
-2. Confirm no code imports `get_port` from `shared.config`. The only allowed path is `shared.ports.get_port`.
-3. Verify `/health` responds. If not, the aiohttp site did not start.
-4. After fix, you should see heartbeat/watchdog lines at the configured cadence (`WATCHDOG_*`).
+## Feature toggles & config
+- **Source of truth.** Feature toggles, admin/staff role IDs, sheet IDs, and
+  module gates live in the Config worksheet tabs documented in
+  [`docs/ops/Config.md`](Config.md). Do **not** edit environment variables to
+  flip a feature unless the Config doc explicitly calls it out.
+- **Toggling workflow.** Update the FeatureToggles tab, run `!ops reload`, then
+  confirm via `!cfg feature_name` or by watching the module boot logs. Missing
+  tabs or unrecognized toggles fail closed.
 
-Troubleshooting tip:
-- Run `scripts/ci/check_forbidden_imports.sh` locally to catch the deprecated import.
+## Day-to-day procedures
+### Onboarding & welcome tickets
+1. Confirm the welcome watcher is enabled (`enable_welcome_hook`,
+   `welcome_enabled`). Use `!ops health` to ensure watchers show as healthy.
+2. If a ticket stalls, run `!ops onb check` (see `docs/ops/Onboarding.md`) to
+   validate the sheet. The `!onb resume` command can restore a recruit's wizard
+   card directly in the thread.
+3. Closing a ticket automatically reconciles clan availability; review the
+   placement log in the ops channel for `result=ok`. Failures mention the admin
+   roles listed in `ADMIN_ROLE_IDS`.
 
-## Help overview surfaces
-- `@Bot help` adapts to the caller but always returns four embeds (Overview, Admin / Operational, Staff, User). Sections collapse when the caller cannot run any commands in that slice unless `SHOW_EMPTY_SECTIONS=1` is set, which swaps in a “Coming soon” placeholder for parity checks.
-- Commands are discovered dynamically via `bot.walk_commands()` and filtered through `command.can_run(ctx)` so permission decorators stay authoritative.
-- Admin covers the operational commands (including `welcome-refresh` and every `refresh*`/`perm*` control), Staff surfaces recruitment flows, Sheet Tools, and milestones, and User lists recruitment, milestones, and the mention-only entry points (`@Bot help`, `@Bot ping`).
-- Bare admin bang aliases follow the runtime `COREOPS_ADMIN_BANG_ALLOWLIST`. Admins see `!command` when the allowlist authorizes a bare alias and a runnable bare command exists; otherwise they see `!ops command`. Staff always see `!ops …`, and members only see user-tier commands plus the mention routes.
+### Recruitment panels & reservations
+1. `!clanmatch` and recruiter panel commands rely on the recruitment caches.
+   After editing the sheet, run `!ops refresh clans templates` to pick up the
+   changes and watch for `[refresh] trigger=manual` logs.
+2. Reservations use `!reserve` plus the reservations adapter.
+   - Check the FeatureToggles keys `placement_reservations` and
+     `placement_target_select` before enabling.
+   - Use `!ops digest` to inspect availability columns (`AF/AH/AI`) and retries.
 
-## Help diagnostics (temporary)
-- Toggle on with `HELP_DIAGNOSTICS=1` to emit a one-shot summary of discovered commands for each help invocation. The payload includes visible vs discovered totals plus a `yes`/`no` decision per command, and it sanitizes user and guild names before posting.
-- Messages post to the configured log channel resolved by `resolve_ops_log_channel_id`. If that channel is missing, only admins receive a DM copy; staff and members do not get fallbacks.
-- Use `HELP_DIAGNOSTICS_TTL_SEC` (default `60`) to throttle repeat posts per audience + guild so repeated help calls during the window reuse the existing diagnostics.
+### Watchers & keepalive
+- `keepalive.md` documents the watchdog thresholds. If heartbeats stall, expect
+  WARN logs followed by a controlled exit; Render restarts the container.
+- Promo/welcome watchers are gated by sheet toggles (`enable_promo_watcher`,
+  `enable_welcome_hook`). Disable the toggle first during incidents, then file a
+  follow-up in `docs/ops/Watchers.md`.
 
-## Startup preloader
-1. **Boot:** Render launches the container and the preloader runs before the CoreOps cog
-   registers commands.
-2. **Warm-up:** The preloader calls `refresh_now(name, actor="startup")` for every
-   registered cache bucket (`clans`, `templates`, `clan_tags`).
-3. **Logging:** A single success/failure summary posts to the ops channel once warm-up
- completes. Individual `[refresh] startup` lines include bucket, duration, retries, and
-  result.
-4. **Action:** If any bucket fails to warm, rerun `!ops refresh all` after the bot is
-  online. Escalate to platform on-call if two consecutive startups fail for the same
-  bucket.
+## Maintenance cadence
+- **Per deploy:** Verify `/ready`, `/health`, and `!ops digest` after redeploying.
+  Ensure the help command lists all modules for the Admin audience.
+- **Weekly:**
+  - Run `!ops refresh all` during a quiet window to validate every cache bucket.
+  - Review log volume for watchdog warnings and adjust `WATCHDOG_*` thresholds if
+    Render restarts are too frequent.
+  - Confirm the FeatureToggles sheet still lists every module expected in
+    `docs/ops/Modules.md`.
+- **Monthly:**
+  - Audit `config/bot_access_lists.json` via `!perm bot list --json` and compare
+    against Discord channel reality.
+  - Validate onboarding question tabs with `!ops onb check` plus a manual ticket
+    walkthrough in the test guild.
+  - Re-run the welcome template cache with `!welcome-refresh` to ensure new copy
+    flows through the wizard.
 
-> **Lifecycle tag:** CoreOps lifecycle notices (startup, reload, manual refresh) emit
-> `[watcher|lifecycle]` this release. Update dashboards to accept `[lifecycle]` ahead of
-> the next release when the dual tag flips off.
-
-## Interpreting logs
-- Runtime logs are JSON. Each entry includes `ts`, `level`, `logger`, `msg`, `trace`,
-  `env`, and `bot` plus any contextual extras. Example:
-
-  ```json
-  {"ts":"2025-10-26T04:12:32.104Z","level":"INFO","logger":"aiohttp.access","msg":"http_request","trace":"0a6c...","env":"prod","bot":"c1c","path":"/ready","method":"GET","status":200,"ms":4}
-  ```
-- Filter structured logs with your aggregator using `logger:"aiohttp.access"` for
-  request summaries or `trace:<uuid>` to follow a specific request across service logs.
-- The runtime echoes the active `trace` in both the JSON payload and the `X-Trace-Id`
-  response header for quick copy/paste when correlating downstream telemetry.
-- Healthy watchdog messages (heartbeat old but latency healthy) now log at INFO and are
-  rate-limited; WARN/ERROR entries remain reserved for actionable states.
-
-## Readiness vs Liveness
-- `/ready` now reflects required components (`runtime`, `discord`). It returns
-  `{"ok": false}` until Discord connectivity triggers `health.set_component("discord", True)`.
-- `/health` returns the watchdog metrics plus a `components` map of `{name: {ok, ts}}`.
-  A non-200 indicates either the watchdog stalled or a component flipped `ok=False`.
-- `/healthz` remains the simple liveness check (`200` while the process and watchdog are
-  healthy).
-
-## Refresh vs reload controls
-| Control | What it does | When to use | Logging & guardrails |
-| --- | --- | --- | --- |
-| `refresh` | Hits the public cache API (`refresh_now`) for the named bucket(s). Fails soft per bucket; stale data is served if refresh fails. | Stale cache data, `n/a` ages after reboot, Sheets edits that need to propagate. | `[refresh] trigger=<actor> bucket=<name> duration=<ms> age=<sec> retries=<n> result=<ok|fail>` |
-| `reload` | Rebuilds the config registry, clears TTL caches, and (optionally) schedules a graceful soft reboot when `--reboot` is supplied. | Role/config updates, registry edits, onboarding template changes. | `[ops] reload actor=<member> flags=<...> result=<ok|fail>` plus `[ops] reboot scheduled` when requested. |
-
-Both controls record the invoking actor, even when triggered via admin bang aliases.
-Manual refreshes never force a restart; even repeated failures leave the bot online while
-logging the error for follow-up.
-
-### Permissions sync commands
-- **`!perm`** — Entry point for the bot permissions toolkit; points admins at the bot
-  subcommands when invoked bare.
-- **`!perm bot list`** — Summarises the current allow/deny configuration, including totals
-  for each bucket. Supports `--json` to emit a downloadable snapshot.
-- **`!perm bot allow`** — Adds channels or categories to the allow list and trims matching
-  entries from the deny list.
-- **`!perm bot deny`** — Adds channels or categories to the deny list and trims matching
-  entries from the allow list.
-- **`!perm bot remove`** — Removes channels or categories from the stored allow/deny lists
-  without adding new entries.
-- **`!perm bot sync`** — Applies the stored allow/deny state to Discord overwrites. Runs
-  in dry mode by default; pass `--dry false` to persist changes.
-
-### Welcome template cache
-- **Command:** `!welcome-refresh` (Admin only)
-- **Purpose:** Reloads the `WelcomeTemplates` cache bucket so the next `!welcome` posts
-  reflect sheet edits.
-- **When to run:** After onboarding updates the sheet or when the welcome copy looks
-  stale. Staff must ask an admin to run it; the command now enforces admin gating.
-
-### Config snapshot (`!cfg`)
-- **Audience:** Admin / Bot Ops (requires `administrator` permission)
-- **Purpose:** Quickly verify merged config values and confirm which sheet supplied them.
-- **Usage:** `!cfg [KEY]` defaults to `ONBOARDING_TAB` when no key is provided; values are echoed read-only.
-- **Notes:** Use uppercase keys from the Config tab. The response includes the masked sheet ID tail and merged-key count so you can confirm reload health without exposing secrets.
-
-### Onboarding resume helper (`!onb resume`)
-- **Audience:** Recruiters / Staff with `Manage Threads`
-- **Purpose:** Restore a recruit’s onboarding panel when the original message is missing or stale.
-- **Usage:** `!onb resume @member` must be issued inside the recruit’s onboarding ticket thread.
-- **Notes:** The command rejects non-thread channels, surfaces “not found” guidance when no saved session exists, and informs staff when the onboarding controller is offline.
-
-### `!reload --reboot`
-- Restarts both the Discord modules and the aiohttp runtime after reloading configuration.
-- Flushes cached Sheets connections so the next command run observes fresh credentials and tabs.
-- Emits the log line `Runtime rebooted via !reload --reboot` once the restart sequence completes.
-
-## Digest & health telemetry
-When operators run `!ops digest` or `!ops health`, the embeds render the following fields
-from the public telemetry API:
-
-| Field | Meaning | Notes |
-| --- | --- | --- |
-| `age` | Seconds since the cache snapshot was last refreshed. | Healthy values stay below the configured TTL; `n/a` appears while caches warm. |
-| `next` | Scheduled UTC timestamp for the next automatic refresh. | Confirms cron cadence and upcoming refresh window. |
-| `retries` | Count of retry attempts during the last refresh cycle. | Any non-zero value warrants a log review for that bucket. |
-| `actor` | Who triggered the last refresh (`startup`, `cron`, or a Discord user). | Validates guardrail compliance (public API only). |
-
-## Checksheet validation
-`!checksheet` verifies the link between the configuration registry and the Google Sheets
-tabs.
-
-1. Run `!ops reload` after updating Sheet tab names or ranges.
-2. Trigger `!checksheet`.
-3. Review the embed for **Tabs**, **Named ranges**, and **Headers**. Missing entries show
-   as ⚠️ with the key that failed validation.
-4. Optional: `!checksheet --debug` posts the first few rows from each tab so you can
-   confirm recruiters see the expected columns.
-5. If any validations fail, double-check Sheet permissions and the Config tab contents
-   before escalating.
-
-### Validation (dry-run)
-Staff can validate the onboarding sheet without starting a flow:
-```
-!ops onb:check
-```
-This command reads the **existing** tab defined by `ONBOARDING_TAB` and reports success or the first blocking error (no fallbacks).
-
-### Daily recruiter summary embed
-- The “Summary Open Spots” card now renders as three distinct blocks: General Overview,
-  Per Bracket (one line per bracket with totals), and Bracket Details (per-clan rows).
-- Two zero-width divider fields containing `﹘﹘﹘` separate the blocks so desktop and
-  mobile layouts both show clear visual boundaries.
-
-## Reserving a clan seat (`!reserve`)
-- Confirm `FEATURE_RESERVATIONS` is enabled in the FeatureToggles worksheet before using the command.
-- Run `!reserve <clan_tag>` inside the recruit’s ticket thread (welcome or promo parent).
-- Optional: `!reserve <clan_tag> @recruit` skips the “Who do you want to reserve a spot for?” prompt. The mention/ID is validated before the date prompt begins.
-- Follow the prompts:
-  - Mention the recruit or paste their Discord ID.
-  - Provide the reservation end date in `YYYY-MM-DD`.
-  - Add a short reason when no effective seats remain (`AF` = 0).
-- Reply `yes` at the confirmation step to save; `change` lets you re-enter the recruit or date.
-- The bot appends the ledger row in `RESERVATIONS_TAB`, then calls `recompute_clan_availability` to update:
-  - `AH` — active reservations
-  - `AF` — effective open spots (`max(E - AH, 0)`)
-  - `AI` — reservation summary (`"<AH> -> usernames"`)
-- A success message posts in the thread with the refreshed `AH` and `AF` values.
-- The bot enforces **one active reservation per recruit**. If you try to hold a second seat the bot refuses, names the existing clan/thread, and tells you to update it from the recruiter control thread instead of creating a duplicate.
-
-### Reservation views & controls
-1. **Ticket threads (`W####-`, `Res-W####-`, `Closed-W####-`).**
-   - `!reserve <clan_tag>` still runs here, but all follow-up edits are read-only. `!reserve release`/`!reserve extend` reply with “Reservation changes must be done in `<#RECRUITERS_THREAD_ID>`” so recruiters don’t guess which row to edit.
-   - `!reservations` (no tag) lists the active hold for that recruit if the ledger matches the thread tag. If the bot detects a mismatch (thread tag vs. ledger) or multiple active rows, it stops immediately and tells the recruiter to fix things in the control thread or Sheets. Logs now include the thread name for traceability.
-
-2. **Recruiter control thread (`RECRUITERS_THREAD_ID`).**
-   - This is the only global edit surface outside of automatic ticket closures. `!reservations` here lists every reservation (active + inactive) touched in the last 28 days, including clan tag, user, ticket code (if known), status, and expiry.
-   - `!reserve release @user <clan_tag>` frees the seat, marks the ledger row released, and returns one manual open spot to the clan.
-   - `!reserve extend @user <clan_tag> <YYYY-MM-DD>` updates the expiry date in place. Both commands validate clan tags against `CLANLIST_TAB`, require a resolvable Discord member, and log `source=global` so ops can audit who changed what.
-
-3. **Recruitment interact channel (`RECRUITMENT_INTERACT_CHANNEL`).**
-   - `!reservations <clan_tag>` is scoped to this channel so clan leads (IDs listed in `CLAN_LEAD_IDS`) and recruiters can review active holds together. The output is read-only—any edits must still be made in the recruiter control thread.
-
-### Welcome ticket closure sync
-- Closing a welcome ticket now triggers the same reservation + availability helpers used by `!reserve`:
-  - If the recruit joins their reserved clan, the watcher marks the ledger row `closed_same_clan` and leaves manual open spots untouched.
-  - If the recruit moves to a different clan, the watcher marks the reservation `closed_other_clan`, restores the reserved clan’s manual open spots by `+1`, and consumes one seat (`-1`) from the final clan.
-  - If no reservation existed, the final clan loses one manual open spot (`-1`).
-  - Choosing the pseudo tag `NONE` cancels any reservation and restores the reserved clan’s open spot (`+1`).
-- After every adjustment the watcher calls `recompute_clan_availability` so `AF`/`AH`/`AI` stay in sync with the ledger.
-- Finalizing a clan tag also emits the 🧭 placement log (same format as `!reserve`) so ops can audit reconciliations in one channel.
- 
-## Reservation lifecycle (daily jobs)
-- **12:00 UTC — Reminder**
-  - Finds every `active` reservation where `reserved_until == today`.
-  - Posts a reminder in the recruit’s ticket thread, pings Recruiter roles, and tells them to run `!reserve extend @user <tag> <date>` or `!reserve release @user <tag>` in the recruiter control thread so edits stay centralized.
-  - Gives Recruiters a six-hour window to extend or intervene before expiry. Each reminder logs `reservation_reminder` with the ticket, clan, and expiry date.
-- **18:00 UTC — Auto-release**
-  - Marks `active` reservations with `reserved_until <= today` as `expired` in `RESERVATIONS_TAB`.
-  - Calls `recompute_clan_availability` for each affected clan to refresh `AF`, `AH`, and `AI`.
-  - Posts an expiry notice in the ticket thread (when it still exists) and a summary line in `RECRUITERS_THREAD_ID`.
-
-Both jobs respect the `FEATURE_RESERVATIONS` toggle in the `Feature_Toggles` worksheet. When the flag is disabled they exit without making any changes.
-
-## Features unexpectedly disabled at startup
-- **Checks:** Confirm the `FEATURE_TOGGLES_TAB` value points to `FeatureToggles`, headers
-  match (`feature_name`, `enabled`), and each enabled row uses `TRUE` (case-insensitive).
-- **Signals:** Startup posts an admin-ping warning in the runtime log channel when the tab,
-  headers, or row values are missing or invalid.
-- **Remediation:** Fix the Sheet, run `!ops reload` (or the admin bang alias), then
-  verify the tab with `!checksheet` before retrying the feature.
+## Reference map
+- [`docs/ops/Modules.md`](Modules.md) — which module owns each flow.
+- [`docs/ops/CoreOps.md`](CoreOps.md) — runtime contracts for schedulers, logging,
+  and cache adapters.
+- [`docs/ops/Troubleshooting.md`](Troubleshooting.md) — deep-dive error lookup and
+  mitigation tips.
+- [`docs/ops/Watchers.md`](Watchers.md) — watcher gating and scheduler details.
 
 Doc last updated: 2025-11-17 (v0.9.7)

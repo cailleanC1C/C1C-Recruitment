@@ -268,14 +268,16 @@ For this phase: **v0.9.7**. Use the current date in **UTC** unless specified.
 ### A3. Logging Standard (Discord-posted, humanized)
 
 **Golden pattern**
-`<emoji> <Event> — <scope> • <k1>=<v1> • <k2>=<v2> … [• details: …]`
+`<emoji> <Event> — <scope> • <k1>=<v1> • <k2>=<v2> …`
+`• <detail group 1> • <detail group 2>`
 
 Rules:
 - **Names over IDs.** Translate IDs using cache-only helpers (no fetch).
 - Hide zero/false/“-” fields. Human units (`1.3s`, `5m`, `3h`). Thousands separators.
 - Only show `reason=` on non-OK outcomes.
+- Multi-line logs are the canonical shape for scheduler, refresh, welcome panel lifecycle, and any entry where a single line would be unreadable.
 
-**Emoji map:** ✅ success • 🛈 neutral • ♻️ refresh/cache • 🐶 watchdog • 🔐 permissions • 🧭 scheduler • ⚠️ partial/warn • ❌ error
+**Emoji map:** ✅ success • 📋 neutral/info • 📘 lifecycle • ♻️ refresh/restart • 🐶 watchdog • 🔐 permissions • 🧭 scheduler • ⚠️ partial/warn • ❌ error
 
 **Display (confirmed)**
 - Channels: `#category › channel-name`
@@ -283,9 +285,9 @@ Rules:
 - **No DMs** in this system.
 
 **Label helpers (must use; cache-only)**
-- `channel_label(guild, channel_id)` → `#category › channel` / `#channel` / `#unknown (id)`
-- `user_label(guild, user_id)` → display name / `unknown (id)`
-- `guild_label(bot, guild_id)` → name / `unknown guild (id)`
+- `channel_label(guild, channel_id)` → `#category › channel` / `#channel` / `#unknown`
+- `user_label(guild, user_id)` → display name / `unknown`
+- `guild_label(bot, guild_id)` → name / `unknown guild`
 - **Never call** `fetch_*` from log paths.
 
 **Dedupe**
@@ -296,19 +298,32 @@ Rules:
   - `permsync:{guild_id}:{ts_bucket}`  
 - Emit one grouped line; suppress siblings.
 
-**Canonical templates (examples)**
-- 🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • next: clans=2025-10-29 00:00 UTC • templates=2025-10-30 00:00 UTC • clan_tags=2025-10-30 00:00 UTC  
-- ✅ **Guild allow-list** — verified • allowed=[C1C Cluster] • connected=[C1C Cluster]  
-- 🐶 **Watchdog started** — interval=300s • stall=1200s • disconnect_grace=6000s  
-- ♻️ **Refresh** — scope=startup • clan_tags ok (2.7s, 31, ttl) • clans ok (1.0s, 24, ttl) • templates ok (1.3s, 25, ttl) • total=5.8s  
-  *(If you render the pretty table, don’t also emit per-bucket lines.)*  
-- ✅ **Report: recruiters** — actor=manual • user=Caillean • guild=C1C Cluster • dest=#ops › recruiters-log • date=2025-10-28  
-- ♻️ **Cache: clans** — OK • 3.7s  
-- ⚠️ **Command error** — cmd=help • user=Caillean • reason=TypeError: unexpected kwarg `log_failures`  
-- 🔐 **Permission sync** — applied=0 • errors=57 • threads=on • details: 50× Missing Access (403/50001) • 7× Missing Permissions (403/50013)  
-- **Welcome (aggregated, preferred):**  
-  - ✅ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall  
+- **Canonical templates (examples)**
+- 🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • onboarding_questions=7d
+  - `• clans=2025-11-17 21:00 UTC`
+  - `• templates=2025-11-20 00:00 UTC`
+  - `• clan_tags=2025-11-20 00:00 UTC`
+  - `• onboarding_questions=2025-11-20 00:00 UTC`
+- ✅ **Guild allow-list** — verified • allowed=[C1C Cluster] • connected=[C1C Cluster]
+- 🐶 **Watchdog started** — interval=300s • stall=1200s • disconnect_grace=6000s
+- ♻️ **Refresh** — scope=startup
+  - `• clan_tags ok (2.7s, 31, ttl)`
+  - `• clans ok (1.0s, 24, ttl)`
+  - `• templates ok (1.3s, 25, ttl)`
+  - `• total=5.8s`
+  *(If you render the pretty table, don’t also emit per-bucket lines.)*
+- ✅ **Report: recruiters** — actor=manual • user=Caillean • guild=C1C Cluster • dest=#ops › recruiters-log • date=2025-10-28
+- ♻️ **Cache: clans** — OK • 3.7s
+- ⚠️ **Command error** — cmd=help • user=Caillean • reason=TypeError: unexpected kwarg `log_failures`
+- 🔐 **Permission sync** — applied=0 • errors=57 • threads=on • details: 50× Missing Access (403/50001) • 7× Missing Permissions (403/50013)
+- **Welcome (aggregated, preferred):**
+  - ✅ **Welcome** — tag=C1CM • recruit=Eir • channel=#clans › martyrs-hall
   - ⚠️ **Welcome** — tag=C1CE • recruit=Eir • channel=#clans › titans-hall • details: general_notice=error (Missing Access)
+- **Welcome panel lifecycle (multi-line):**
+  - `📘 welcome_panel_open — ticket=W0488-smurf • actor=@Recruit` `• channel=#WELCOME CENTER › welcome • questions=16`
+  - `📘 welcome_panel_start — ticket=W0488-smurf • actor=@Recruit` `• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976`
+  - `♻️ welcome_panel_restart — ticket=W0488-smurf • actor=@Recruit` `• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976`
+  - `✅ welcome_panel_complete — ticket=W0488-smurf • actor=@Recruit` `• channel=#WELCOME CENTER › welcome • questions=16 • level_detail=Beginner`
 
 **Bad → Good (what to stop)**
 - **Stop:** `[welcome/info] actor=<id>@<name> … thread=<id> parent=<id>`  
@@ -341,4 +356,4 @@ Rules:
 
 ---
 
-Doc last updated: 2025-11-04 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

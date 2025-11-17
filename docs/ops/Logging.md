@@ -6,15 +6,26 @@ Humanized logging makes the Discord-facing operational feed readable without los
 - Prefer labels over numeric IDs. Helpers automatically resolve guilds, channels, and users from the cache; if an object is missing, a `#unknown`/`unknown guild` placeholder is emitted instead.
 - Use concise human units: `fmt_duration` emits seconds, minutes, or hours; `fmt_count` adds thousands separators.
 - Hide empty values with `-` and avoid repeating redundant context (e.g., do not repeat the scope when it is part of the emoji/title).
-- Emoji prefix the message and communicate status: ✅ success, ⚠️ warning/partial, ❌ error, ♻️ refresh/cache, 🧭 scheduler, 🐶 watchdog, 🔐 permissions, 🛈 neutral.
+- Emoji prefix the message and communicate status: ✅ success, ⚠️ warning/partial, ❌ error, ♻️ refresh/restart, 🧭 scheduler, 🐶 watchdog, 🔐 permissions, 📋 neutral/info, 📘 lifecycle.
 - Structured logs (JSON/stdout) remain unchanged—only the Discord line format is affected.
+
+## Multi-line formatting
+
+- Long-form Discord logs share a common shape:
+  - **Line 1** — emoji + title + scope/primary fields (e.g., intervals for scheduler).
+  - **Subsequent lines** — start with `•` and group related key/value pairs. Join additional pairs on the same line with ` • ` when they describe the same bucket.
+- Keep the key ordering stable across runs so humans can scan the log stack quickly.
 
 ## Templates
 Each template lives in `shared/logfmt.LogTemplates` and is consumed by the relevant modules. Examples below show the expected output shape.
 
 ### Scheduler
 ```
-🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • next: clans=2025-10-29 00:00 UTC • templates=2025-10-30 00:00 UTC • clan_tags=2025-10-30 00:00 UTC
+🧭 **Scheduler** — intervals: clans=3h • templates=7d • clan_tags=7d • onboarding_questions=7d
+• clans=2025-11-17 21:00 UTC
+• templates=2025-11-20 00:00 UTC
+• clan_tags=2025-11-20 00:00 UTC
+• onboarding_questions=2025-11-20 00:00 UTC
 ```
 
 ### Allow-list
@@ -29,9 +40,12 @@ Each template lives in `shared/logfmt.LogTemplates` and is consumed by the relev
 ```
 
 ### Refresh
-Line mode:
 ```
-♻️ **Refresh** — scope=startup • clan_tags ok (2.7s, 31, ttl) • clans ok (1.0s, 24, ttl) • templates ok (1.3s, 25, ttl) • total=5.8s
+♻️ **Refresh** — scope=startup
+• clan_tags ok (2.7s, 31, ttl)
+• clans ok (1.0s, 24, ttl)
+• templates ok (1.3s, 25, ttl)
+• total=5.8s
 ```
 
 ### Reports
@@ -66,15 +80,20 @@ Line mode:
 ```
 
 ### Onboarding panel lifecycle logs
-Neutral lifecycle events (open, start, restart) now use the 📘 icon so the feed is quieter, while ✅ still marks a complete run and ⚠️/❌ remain reserved for odd or error conditions. These logs summarize the state change with human labels and omit raw message/thread IDs.
+Treat “onboarding panel” and “Welcome panel” as a single lifecycle surface. Neutral lifecycle events (open, start, restart) use the 📘 icon so the feed stays calm, ♻️ highlights restarts/refresh actions, and ✅ marks a complete run. All lines resolve human labels (ticket tag, actor handle, channel) and avoid raw snowflake IDs.
 
 ```
-📘 onboarding_panel_open — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16
-📘 onboarding_panel_restart — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16 • schema=v1
-✅ onboarding_panel_complete — ticket=W0481-caillean • actor=@Recruit • channel=#WELCOME CENTER › welcome • questions=16 • level_detail=Late Game
+📘 welcome_panel_open — ticket=W0488-smurf • actor=@Recruit
+• channel=#WELCOME CENTER › welcome • questions=16
+📘 welcome_panel_start — ticket=W0488-smurf • actor=@Recruit
+• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976
+♻️ welcome_panel_restart — ticket=W0488-smurf • actor=@Recruit
+• channel=#WELCOME CENTER › welcome • questions=16 • schema=v0f976
+✅ welcome_panel_complete — ticket=W0488-smurf • actor=@Recruit
+• channel=#WELCOME CENTER › welcome • questions=16 • level_detail=Beginner
 ```
 
-Only include `reason=` when the emoji is ⚠️ or ❌; keep tickets, actors, and channels readable, and rely on schema short codes (e.g., `v1`) instead of raw hashes. IDs are intentionally hidden—if a one-off investigation needs snowflakes, fall back to the structured console logs.
+The `schema=` field uses the onboarding question schema short code so humans can confirm which questionnaire was used without dumping hashes. The `level_detail=` field is the single high-signal progression bucket for the run; the full answer set remains in Sheets. Only include `reason=` when the emoji is ⚠️ or ❌. For anything more detailed (IDs, embeds, traces), use the structured console logs.
 
 ## Dedupe policy
 - Window: fixed at 5 seconds. All dedupe is in-memory and process-local.
