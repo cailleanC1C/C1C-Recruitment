@@ -7,6 +7,10 @@
 - Inline formatting keeps Hydra and Chimera clash averages alongside their difficulty answers.
 - Labels render in bold for easier scanning, including inline pairs.
 
+> **Style reference:** General embed, panel, and help formatting lives in
+> [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md). This spec only defines the
+> Welcome summary’s field order and hide logic.
+
 ## Field mapping (gid → display label)
 | gid | Label | Notes |
 | --- | ----- | ----- |
@@ -85,4 +89,4 @@ Keep this thread open until a recruiter confirms placement.
 **Heard about C1C from:** A friend in global chat
 ```
 
-Doc last updated: 2025-11-12 (v0.9.8)
+Doc last updated: 2025-11-17 (v0.9.7)
