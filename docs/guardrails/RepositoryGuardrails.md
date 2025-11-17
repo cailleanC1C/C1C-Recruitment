@@ -74,7 +74,7 @@ Every audit and CI check validates against this document.
     • `docs/ops/Module-<Module>.md`  
     • `docs/ops/Config.md`  
     • `docs/_meta/DocStyle.md` (if formatting changed)  
-    • `docs/ops/Architecture.md` (if data flows changed)  
+    • `docs/Architecture.md` (if data flows changed)
     • `CHANGELOG.md`
   No new docs may be created unless an ADR authorises it.
 

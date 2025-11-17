@@ -18,6 +18,62 @@ flowchart TD
     CoreOpsCog --> Http
 ```
 
+## Runtime surfaces
+- **Discord gateway → CoreOps entrypoint.** Discord events and commands land in the
+  c1c-coreops cog first. CoreOps performs RBAC checks, runs lifecycle hooks
+  (`startup`, `reload`, `refresh`), and routes execution to the feature modules in
+  `cogs/` and `modules/`.
+- **Scheduler & watchdog.** `Runtime.scheduler` drives cache refresh jobs and
+  timed digests, while the watchdog monitors gateway heartbeats using the
+  `WATCHDOG_*` thresholds and exits the process when the Discord connection is
+  stale.
+- **Sheets façade.** `shared.sheets.async_facade` wraps the synchronous Sheets
+  adapters so cache misses and writes never block the event loop. CoreOps and the
+  feature modules only call the async façade.
+- **HTTP health server.** The aiohttp site exposes `/`, `/ready`, `/health`, and
+  `/healthz`. Each request logs a structured JSON entry via
+  `shared.logging.structured.JsonFormatter` and reuses the trace id echoed in the
+  headers.
+
+## External integrations
+- **Discord.** Guild intents and permissions are configured in the Dev Portal.
+  Admin bang aliases (`!reload`, `!refresh all`, `!perm`, etc.) remain restricted
+  to the Admin role list defined in the config registry.
+- **Google Sheets.** Recruitment, onboarding, reservations, milestones, and
+  feature toggle tabs feed every module. Cache buckets (`clans`, `templates`,
+  `clan_tags`, `welcome_templates`, etc.) wrap these tabs and are refreshed via
+  the scheduler or `!ops refresh`.
+- **Render.** Render manages container builds, environment separation, and health
+  restarts. Production and test services both use the same runtime image; only
+  `ENV_NAME`, credentials, and sheet IDs differ.
+
+## Data flow highlights
+1. **Onboarding + welcome.** A recruiter or watcher opens a welcome ticket,
+   onboarding questions run inside the thread, and the resulting sheet row is
+   reconciled via the onboarding adapter before a placement log posts to the ops
+   channel.
+2. **Recruitment panels.** `!clanmatch` and the recruiter panel commands read the
+   recruitment caches, render embeds (including emoji pipeline fallbacks), and
+   record telemetry for every refresh.
+3. **Reservations and placement.** `!reserve` and the watcher-driven placement
+   reconciliation share the reservations sheet adapter. Manual adjustments update
+   the sheet, recompute availability columns (`AF/AH/AI`), and post placement
+   summaries.
+4. **Feature toggles.** Module boot calls
+   `modules.common.feature_flags.is_enabled()` for each toggle. Missing tabs or
+   unset keys fail closed so disabled modules never partially load.
+
+## Environment separation
+- **Test.** Uses isolated Discord guilds, sheet copies, and lower watchdog
+  intervals (e.g., `WATCHDOG_CHECK_SEC=60`). Admins can run development toggles
+  such as `SHOW_EMPTY_SECTIONS=1` without affecting production telemetry.
+- **Production.** Mirrors the same modules but points to the live sheets and uses
+  the longer watchdog thresholds (default 360 seconds). Render redeploys follow
+  the GitHub Actions queue; only the latest commit for a branch executes.
+- **Shared invariants.** Both environments require the same env keys listed in
+  `docs/ops/Config.md`, the same CoreOps package, and the same health endpoints
+  so CI and monitors stay consistent.
+
 ## Flow notes
 - **CoreOps cog funnels every command.** RBAC checks run before cache calls, and shared helpers live exclusively inside the `c1c_coreops` package.
 - **Cache access stays async-safe.** Command handlers import `shared.sheets.async_facade`, which routes any synchronous helper through `asyncio.to_thread` so cache misses do not block the event loop.
@@ -130,4 +186,4 @@ off in production until the panels ship._
 - Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags with context for quick filtering in Discord (transitioning from `[watcher|lifecycle]` to `[lifecycle]` during the dual-tag release).
 - Failures fall back to stale caches when safe and always raise a structured log to `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

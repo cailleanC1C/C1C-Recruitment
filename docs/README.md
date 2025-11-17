@@ -7,7 +7,7 @@ It exists so that contributors update the correct references after each developm
 ## Folder Map
 
 ### Root docs
-* [`Architecture.md`](Architecture.md) — high-level architecture overview and runtime map.
+* [`Architecture.md`](Architecture.md) — canonical runtime architecture, data flows, and environment map.
 * [`README.md`](README.md) — you are here; master index for the documentation tree.
 
 ### `/docs/adr/` — Architectural Decision Records
@@ -58,6 +58,9 @@ It exists so that contributors update the correct references after each developm
 * [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
 ### `/docs/ops/` — Operational Documentation
+* [`CoreOps.md`](ops/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
+* [`Modules.md`](ops/Modules.md) — module inventory with entry points and links to each deep dive.
+* [`Runbook.md`](ops/Runbook.md) — canonical operator procedures (deploy, health, refresh, and maintenance cadences).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
@@ -69,7 +72,6 @@ It exists so that contributors update the correct references after each developm
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 * [`RecruiterPanel.md`](ops/RecruiterPanel.md) — interaction model for the recruiter panel UI and messaging cadence.
-* [`Runbook.md`](ops/Runbook.md) — operator actions for routine tasks and incident handling.
 * [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
 * [`Watchers.md`](ops/Watchers.md) — environment-gated welcome/promo listeners and cache refresh scheduler notes.
 * [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
