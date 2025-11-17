@@ -240,14 +240,6 @@ _SEVERITY_LEVEL = {
     "error": logging.ERROR,
 }
 
-_SEVERITY_EMOJI = {
-    "info": "📘",
-    "success": "✅",
-    "warning": "⚠️",
-    "error": "❌",
-}
-
-
 def _resolve_severity(event: str, result: str | None) -> str:
     normalized_result = (result or "").strip().lower()
     if normalized_result in _RESULT_SEVERITY:
@@ -292,17 +284,6 @@ async def log_onboarding_panel_lifecycle(
 
     schema_label = _short_schema_version(schema_version)
 
-    segments: list[str] = []
-    if ticket_code:
-        segments.append(f"ticket={ticket_code}")
-    if actor_label:
-        segments.append(f"actor={actor_label}")
-    if channel_label:
-        segments.append(f"channel={channel_label}")
-    if question_label:
-        segments.append(f"questions={question_label}")
-    if schema_label:
-        segments.append(f"schema={schema_label}")
     resolved_result = result
     resolved_reason = reason
     if missing_ticket and resolved_result is None:
@@ -310,27 +291,92 @@ async def log_onboarding_panel_lifecycle(
         if not resolved_reason:
             resolved_reason = "ticket_not_parsed"
 
+    extras_items: list[str] = []
+    level_detail_value: str | None = None
     if extras:
         for key, value in extras.items():
             if value is None:
                 continue
             cleaned = _stringify(value)
-            if cleaned and cleaned != "-":
-                segments.append(f"{key}={cleaned}")
+            if not cleaned or cleaned == "-":
+                continue
+            if key == "level_detail":
+                level_detail_value = cleaned
+                continue
+            extras_items.append(f"{key}={cleaned}")
+    extras_items.sort()
+
     severity = _resolve_severity(event_slug, resolved_result)
-    emoji = _SEVERITY_EMOJI.get(severity, "📘")
     level = _SEVERITY_LEVEL.get(severity, logging.INFO)
 
-    if resolved_result:
-        segments.append(f"result={resolved_result}")
+    result_text = _stringify(resolved_result) if resolved_result else None
+    if result_text == "-":
+        result_text = None
     include_reason = severity in {"warning", "error"} and resolved_reason
-    if include_reason:
-        segments.append(f"reason={resolved_reason}")
+    reason_text = _stringify(resolved_reason) if include_reason else None
+    if reason_text == "-":
+        reason_text = None
 
-    if segments:
-        message = f"{emoji} onboarding_panel_{event_slug} — " + " • ".join(segments)
+    ticket_field = ticket_code or None
+    actor_field = actor_label or None
+    channel_field = channel_label or None
+    questions_field = question_label or None
+    extras_payload = extras_items or None
+
+    if event_slug == "open":
+        message = logfmt.LogTemplates.welcome_panel_open(
+            ticket=ticket_field,
+            actor=actor_field,
+            channel=channel_field,
+            questions=questions_field,
+            extras=extras_payload,
+        )
+    elif event_slug == "start":
+        message = logfmt.LogTemplates.welcome_panel_start(
+            ticket=ticket_field,
+            actor=actor_field,
+            channel=channel_field,
+            questions=questions_field,
+            schema=schema_label,
+            result=result_text,
+            reason=reason_text,
+            extras=extras_payload,
+        )
+    elif event_slug == "restart":
+        message = logfmt.LogTemplates.welcome_panel_restart(
+            ticket=ticket_field,
+            actor=actor_field,
+            channel=channel_field,
+            questions=questions_field,
+            schema=schema_label,
+            result=result_text,
+            reason=reason_text,
+            extras=extras_payload,
+        )
+    elif event_slug == "complete":
+        message = logfmt.LogTemplates.welcome_panel_complete(
+            ticket=ticket_field,
+            actor=actor_field,
+            channel=channel_field,
+            questions=questions_field,
+            level_detail=level_detail_value,
+            result=result_text,
+            reason=reason_text,
+            extras=extras_payload,
+        )
     else:
-        message = f"{emoji} onboarding_panel_{event_slug}"
+        message = logfmt.LogTemplates.welcome_panel_generic(
+            event=event_slug,
+            ticket=ticket_field,
+            actor=actor_field,
+            channel=channel_field,
+            questions=questions_field,
+            schema=schema_label,
+            level_detail=level_detail_value,
+            result=result_text,
+            reason=reason_text,
+            extras=extras_payload,
+        )
 
     log.log(level, "%s", message)
     tagged = f"{lifecycle_tag()} {message}"
@@ -621,12 +667,6 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
             ("view", ("view_tag", "view")),
             ("custom_id", ("custom_id",)),
             ("view_id", ("view_id",)),
-            ("message", ("message_id",)),
-            ("thread_id", ("thread_id",)),
-            ("parent_id", ("parent_channel_id",)),
-            ("actor_id", ("actor_id",)),
-            ("target_user_id", ("target_user_id",)),
-            ("target_message", ("target_message_id",)),
             ("app_perms_text", ("app_perms_text", "app_permissions")),
             ("missing", ("missing",)),
             ("trigger", ("trigger",)),

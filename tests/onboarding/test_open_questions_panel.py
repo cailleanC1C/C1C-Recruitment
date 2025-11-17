@@ -177,8 +177,13 @@ def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPat
         async def fake_log(level: str, **payload: object) -> None:
             assert response.is_done()
 
+        async def fake_lifecycle(**payload: object) -> None:
+            assert response.is_done()
+
         log_mock = AsyncMock(side_effect=fake_log)
+        lifecycle_mock = AsyncMock(side_effect=fake_lifecycle)
         monkeypatch.setattr(panels.logs, "send_welcome_log", log_mock)
+        monkeypatch.setattr(panels.logs, "log_onboarding_panel_lifecycle", lifecycle_mock)
 
         view = OpenQuestionsPanelView()
         interaction = SimpleNamespace(
@@ -194,7 +199,7 @@ def test_restart_from_view_responds_before_logging(monkeypatch: pytest.MonkeyPat
         assert response.is_done()
         assert response.deferred is True
         assert not response.sent_messages
-        assert log_mock.await_count >= 1
+        assert log_mock.await_count + lifecycle_mock.await_count >= 1
 
     asyncio.run(runner())
 

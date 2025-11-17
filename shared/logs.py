@@ -47,7 +47,7 @@ def log_lifecycle(logger: Any, scope: str, event: str, **fields: Any) -> None:
         return
     _lifecycle_dedupe[key] = now
 
-    prefix = "🛈"
+    prefix = "📘"
     title = f"{scope.capitalize()} watcher"
     kv_text = _fmt_kvs(fields)
     line = f"{prefix} {title} — event={event}" + (f" • {kv_text}" if kv_text else "")
