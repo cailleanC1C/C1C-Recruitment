@@ -6,7 +6,7 @@ It exists so that contributors update the correct references after each developm
 
 ## Folder Map
 ### Root docs
-📘 Global Documentation (`/docs`) - These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
+### 📘 Global Documentation (`/docs`) - These files describe how the **entire bot** works: architecture, operations, troubleshooting, and contributor rules.
 🔹 [`Architecture.md`](Architecture.md) - Canonical explanation of the bot’s architecture, runtime flow, Sheets integration, caches, and environment separation.
 🔹 [`Runbook.md`](Runbook.md) - Single source of truth for admin operations: health checks, maintenance, refresh rules, deployment expectations.
 🔹 [`Troubleshooting.md`](Troubleshooting.md) - How to diagnose common issues, logs to check, and recovery steps.
