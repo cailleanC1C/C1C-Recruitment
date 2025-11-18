@@ -28,6 +28,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!reload [--reboot]` | ✅ | Admin bang alias for config reload plus optional soft reboot. | `!reload [--reboot]` |
 | `!reload onboarding` | ✅ | Reload onboarding questions and log the active schema hash. | `!reload onboarding` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
+| `!servermap refresh` | ✅ | Rebuild the pinned `#server-map` message(s) from the current Discord category/channel structure. | `!servermap refresh` |
 | `!perm bot list` | ✅ | Admin-only; show the current bot allow/deny lists with counts, IDs, and optional JSON export. More details: [`PermissionsSync`](../modules/PermissionsSync.md). | `!perm bot list [--json]` |
 | `!perm bot allow <targets…>` | ✅ | Admin-only; add channels/categories to the allow list and clear conflicting deny entries. Targets accept channel mentions or quoted category names. More details: [`PermissionsSync`](../modules/PermissionsSync.md). | `!perm bot allow <targets…>` |
 | `!perm bot deny <targets…>` | ✅ | Admin-only; add channels/categories to the deny list while removing matching allow entries. Use for surgical blocks. More details: [`PermissionsSync`](../modules/PermissionsSync.md). | `!perm bot deny <targets…>` |

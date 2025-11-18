@@ -1,6 +1,11 @@
 # Changelog
 
-### v0.9.7 — 2025-11-17  
+### v0.9.7 — 2025-11-18
+- **Server map automation:** Added a scheduler job that rebuilds and pins the `#server-map` post using live guild categories, persists message IDs in the Recruitment Config tab, and respects the new `SERVER_MAP_*` env keys.
+- **Admin tooling:** Introduced `!servermap refresh` so CoreOps can regenerate the map on demand without waiting for the cadence gate.
+- **Docs & logging:** Updated configuration, logging, command matrix, watchers, and README references to cover the new automation and persistent state keys.
+
+### v0.9.7 — 2025-11-17
 #### Documentation Restructure & Guardrail Compliance
 - **Major docs cleanup:** unified global docs, ops docs, and module docs into the new SSoT layout.
 - Removed legacy folders (`reference/`, `runbooks/`, `specs/`, old onboarding/welcome flow docs).

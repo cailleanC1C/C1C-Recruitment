@@ -1,0 +1,382 @@
+"""Automated server map generator and scheduler wiring."""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import logging
+from dataclasses import dataclass
+from typing import Dict, List, Mapping, Sequence, Tuple, TYPE_CHECKING
+
+import discord
+
+from shared.config import (
+    get_server_map_channel_id,
+    get_server_map_enabled,
+    get_server_map_refresh_days,
+)
+from shared.logfmt import channel_label
+from modules.common import runtime as runtime_helpers
+
+from . import server_map_state
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    from modules.common.runtime import Runtime
+
+__all__ = [
+    "build_map_messages",
+    "refresh_server_map",
+    "schedule_server_map_job",
+    "should_refresh",
+]
+
+log = logging.getLogger("c1c.server_map")
+
+DEFAULT_MESSAGE_THRESHOLD = 1800
+UNCATEGORIZED_LABEL = "UNCATEGORIZED"
+BULLET = "🔹"
+FORUM_ICON = "📁"
+VOICE_ICON = "🎙️"
+STAGE_ICON = "🎤"
+
+
+@dataclass(slots=True)
+class ServerMapResult:
+    status: str
+    message_count: int = 0
+    total_chars: int = 0
+    reason: str | None = None
+    last_run: str | None = None
+
+
+def _channel_sort_key(channel: object) -> Tuple[int, int]:
+    position = getattr(channel, "position", 0)
+    identifier = getattr(channel, "id", 0)
+    try:
+        identifier = int(identifier)
+    except (TypeError, ValueError):
+        identifier = 0
+    try:
+        pos_value = int(position)
+    except (TypeError, ValueError):
+        pos_value = 0
+    return pos_value, identifier
+
+
+def _category_label(category: object) -> str:
+    name = str(getattr(category, "name", "")).strip()
+    if name:
+        return name
+    identifier = getattr(category, "id", None)
+    return f"Category {identifier}" if identifier is not None else "Category"
+
+
+def _channel_name(channel: object) -> str:
+    name = str(getattr(channel, "name", "")).strip()
+    if name:
+        return name
+    identifier = getattr(channel, "id", None)
+    return f"channel-{identifier}" if identifier is not None else "channel"
+
+
+def _channel_type_icon(channel: object) -> str:
+    channel_type = getattr(channel, "type", None)
+    if channel_type == discord.ChannelType.forum:
+        return FORUM_ICON
+    if channel_type == discord.ChannelType.voice:
+        return VOICE_ICON
+    if channel_type == discord.ChannelType.stage_voice:
+        return STAGE_ICON
+    if isinstance(channel, discord.ForumChannel):  # pragma: no cover - runtime only
+        return FORUM_ICON
+    if isinstance(channel, discord.VoiceChannel):  # pragma: no cover - runtime only
+        return VOICE_ICON
+    if isinstance(channel, discord.StageChannel):  # pragma: no cover - runtime only
+        return STAGE_ICON
+    return ""
+
+
+def _channel_line(channel: object) -> str:
+    icon = _channel_type_icon(channel)
+    if icon:
+        return f"{BULLET} {icon} {_channel_name(channel)}"
+    return f"{BULLET} {_channel_name(channel)}"
+
+
+def _split_blocks(blocks: Sequence[str], threshold: int) -> List[str]:
+    messages: List[str] = []
+    current = ""
+    for block in blocks:
+        block_text = block.strip()
+        if not block_text:
+            continue
+        if not current:
+            candidate = block_text
+        else:
+            candidate = f"{current}\n\n{block_text}"
+        if len(candidate) > threshold and current:
+            messages.append(current)
+            current = block_text
+        else:
+            current = candidate
+    if current:
+        messages.append(current)
+    return messages
+
+
+def _collect_orphan_channels(guild: object) -> List[object]:
+    channels = getattr(guild, "channels", []) or []
+    orphan: List[object] = []
+    for channel in channels:
+        channel_type = getattr(channel, "type", None)
+        if channel_type == discord.ChannelType.category or isinstance(channel, discord.CategoryChannel):
+            continue
+        if getattr(channel, "category_id", None) is None:
+            orphan.append(channel)
+    orphan.sort(key=_channel_sort_key)
+    return orphan
+
+
+def build_map_messages(guild: object, *, threshold: int = DEFAULT_MESSAGE_THRESHOLD) -> List[str]:
+    """Return formatted server map message bodies for ``guild``."""
+
+    categories = sorted(getattr(guild, "categories", []) or [], key=_channel_sort_key)
+    blocks: List[str] = []
+
+    for category in categories:
+        header = _category_label(category)
+        lines = [header]
+        channels = sorted(getattr(category, "channels", []) or [], key=_channel_sort_key)
+        lines.extend(_channel_line(channel) for channel in channels)
+        blocks.append("\n".join(lines).rstrip())
+
+    orphan_channels = _collect_orphan_channels(guild)
+    if orphan_channels:
+        lines = [UNCATEGORIZED_LABEL]
+        lines.extend(_channel_line(channel) for channel in orphan_channels)
+        blocks.append("\n".join(lines).rstrip())
+
+    return _split_blocks(blocks, threshold)
+
+
+def _extract_message_slots(state: Mapping[str, str]) -> list[tuple[int, int]]:
+    slots: list[tuple[int, int]] = []
+    for key, value in state.items():
+        if not key.startswith("SERVER_MAP_MESSAGE_ID_"):
+            continue
+        try:
+            slot = int(key.rsplit("_", 1)[-1])
+            message_id = int(str(value).strip())
+        except (TypeError, ValueError):
+            continue
+        slots.append((slot, message_id))
+    slots.sort(key=lambda item: item[0])
+    return slots
+
+
+def _parse_timestamp(value: str | None) -> dt.datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def should_refresh(
+    last_run: dt.datetime | None,
+    refresh_days: int,
+    *,
+    now: dt.datetime | None = None,
+) -> bool:
+    if last_run is None:
+        return True
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return (now - last_run) >= dt.timedelta(days=max(1, refresh_days))
+
+
+def _fallback_messages(guild: discord.Guild | None) -> List[str]:
+    name = getattr(guild, "name", "Server")
+    return [f"{name}\n{BULLET} No visible categories."]
+
+
+def _format_summary(message_count: int, total_chars: int) -> str:
+    return f"📘 Server map — refreshed • messages={message_count} • chars={total_chars}"
+
+
+def _format_skip(reason: str, last_run: str | None = None) -> str:
+    suffix = f" • last_run={last_run}" if last_run else ""
+    return f"📘 Server map — skipped • reason={reason}{suffix}"
+
+
+def _format_error(reason: str) -> str:
+    return f"❌ Server map — error • reason={reason}"
+
+
+def _now_iso(now: dt.datetime | None = None) -> str:
+    timestamp = (now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
+    return timestamp.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _clean_state_entries(
+    updated_messages: Sequence[discord.Message],
+    stored_slots: Sequence[tuple[int, int]],
+    timestamp: str,
+) -> Dict[str, str]:
+    entries: Dict[str, str] = {}
+    for index, message in enumerate(updated_messages, start=1):
+        entries[f"SERVER_MAP_MESSAGE_ID_{index}"] = str(message.id)
+    max_slot = max((slot for slot, _ in stored_slots), default=0)
+    for slot in range(len(updated_messages) + 1, max_slot + 1):
+        entries[f"SERVER_MAP_MESSAGE_ID_{slot}"] = ""
+    entries["SERVER_MAP_LAST_RUN_AT"] = timestamp
+    return entries
+
+
+async def refresh_server_map(
+    bot: discord.Client,
+    *,
+    force: bool = False,
+    actor: str = "scheduler",
+) -> ServerMapResult:
+    await bot.wait_until_ready()
+
+    if not get_server_map_enabled():
+        message = _format_skip("feature_disabled")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="disabled", reason="feature_disabled")
+
+    channel_id = get_server_map_channel_id()
+    if not channel_id:
+        message = _format_error("missing_channel_id")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="error", reason="missing_channel_id")
+
+    try:
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+    except discord.HTTPException:
+        log.exception("failed to resolve server map channel", extra={"channel_id": channel_id})
+        message = _format_error("channel_fetch_failed")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="error", reason="channel_fetch_failed")
+
+    if not isinstance(channel, discord.TextChannel):
+        label = channel_label(getattr(channel, "guild", None), channel_id)
+        log.warning("server map channel is not a text channel", extra={"channel": label})
+        message = _format_error("invalid_channel_type")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="error", reason="invalid_channel")
+
+    guild = channel.guild
+    try:
+        state = await server_map_state.fetch_state()
+    except Exception:
+        log.exception("failed to read Config worksheet for server map state")
+        message = _format_error("config_fetch_failed")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="error", reason="config_fetch_failed")
+
+    last_run_raw = state.get("SERVER_MAP_LAST_RUN_AT")
+    last_run = _parse_timestamp(last_run_raw)
+    refresh_days = get_server_map_refresh_days()
+    now = dt.datetime.now(dt.timezone.utc)
+
+    if not force and not should_refresh(last_run, refresh_days, now=now):
+        message = _format_skip("interval_not_elapsed", last_run_raw)
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(
+            status="skipped",
+            reason="interval_not_elapsed",
+            last_run=last_run_raw,
+        )
+
+    bodies = build_map_messages(guild, threshold=DEFAULT_MESSAGE_THRESHOLD)
+    if not bodies:
+        bodies = _fallback_messages(guild)
+
+    stored_slots = _extract_message_slots(state)
+    fetched_messages: List[discord.Message] = []
+    for _, message_id in stored_slots:
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            continue
+        except discord.HTTPException:
+            log.debug("failed to fetch stored server map message", exc_info=True)
+            continue
+        fetched_messages.append(message)
+
+    updated_messages: List[discord.Message] = []
+    for index, body in enumerate(bodies):
+        existing = fetched_messages[index] if index < len(fetched_messages) else None
+        if existing is None:
+            try:
+                new_message = await channel.send(body)
+            except discord.HTTPException:
+                log.exception("failed to send server map block", extra={"channel": channel_id})
+                message = _format_error("message_send_failed")
+                await runtime_helpers.send_log_message(message)
+                return ServerMapResult(status="error", reason="message_send_failed")
+            updated_messages.append(new_message)
+            continue
+        try:
+            if (existing.content or "").strip() != body.strip():
+                await existing.edit(content=body)
+        except discord.HTTPException:
+            log.exception("failed to edit server map message", extra={"message_id": existing.id})
+            message = _format_error("message_edit_failed")
+            await runtime_helpers.send_log_message(message)
+            return ServerMapResult(status="error", reason="message_edit_failed")
+        updated_messages.append(existing)
+
+    for extra in fetched_messages[len(updated_messages):]:
+        try:
+            await extra.delete()
+        except discord.HTTPException:
+            log.debug("failed to delete old server map message", exc_info=True)
+
+    if updated_messages:
+        primary = updated_messages[0]
+        try:
+            if not primary.pinned:
+                await primary.pin()
+        except discord.HTTPException:
+            log.debug("failed to pin primary server map message", exc_info=True)
+
+    total_chars = sum(len(body) for body in bodies)
+    now_iso = _now_iso(now)
+    entries = _clean_state_entries(updated_messages, stored_slots, now_iso)
+    try:
+        await server_map_state.update_state(entries)
+    except Exception:
+        log.exception("failed to persist server map state")
+        message = _format_error("state_update_failed")
+        await runtime_helpers.send_log_message(message)
+        return ServerMapResult(status="error", reason="state_update_failed")
+
+    summary = _format_summary(len(updated_messages), total_chars)
+    await runtime_helpers.send_log_message(summary)
+
+    return ServerMapResult(status="ok", message_count=len(updated_messages), total_chars=total_chars)
+
+
+def schedule_server_map_job(runtime: "Runtime") -> None:
+    job = runtime.scheduler.every(hours=24, jitter="small", tag="server_map", name="server_map_refresh")
+
+    async def runner() -> None:
+        try:
+            await refresh_server_map(runtime.bot, actor="scheduler")
+        except asyncio.CancelledError:  # pragma: no cover - scheduler lifecycle
+            raise
+        except Exception:  # pragma: no cover - defensive scheduler guard
+            log.exception("scheduled server map refresh failed")
+
+    job.do(runner)

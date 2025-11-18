@@ -75,6 +75,7 @@ Collaboration Contract and core infra conventions.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
+* Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md).
 
 ## Module Deep Dives `/docs/modules/` 
 * [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
