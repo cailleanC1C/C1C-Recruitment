@@ -73,6 +73,7 @@ Collaboration Contract and core infra conventions.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
+* [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
 
 ## Module Deep Dives `/docs/modules/` 
@@ -105,4 +106,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)
