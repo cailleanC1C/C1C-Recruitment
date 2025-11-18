@@ -25,6 +25,7 @@
 - Added inline status indicators (waiting / saved / error).
 - Removed deprecated fallback flows.
 - Additional watcher safeguards to prevent early retirement.
+- Removed the “Enter answer” button for text prompts; the wizard now instructs recruits to “Just reply in this thread with your answer.” and captures those replies automatically.
   
 ### v0.9.7 — 2025-11-13
 - **Audit:** Documented current reservation command flow and AF/AH/AI recompute wiring (`AUDIT/20251113_reservations-availability-wiring.md`).

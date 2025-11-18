@@ -35,7 +35,7 @@ def _status_for(
             )
         return f"⚠️ Invalid format: {hint}"
     if not is_answered:
-        return "✍️ Press “Enter answer” and type your answer below."
+        return "Waiting for your reply."
     return "✅ Saved. Click Next."
 
 from c1c_coreops import rbac  # Retained for compatibility with existing tests/hooks.
@@ -1670,8 +1670,6 @@ class OpenQuestionsPanelView(discord.ui.View):
             elif options:
                 select = self.OptionSelect(self, question, options, self._is_multi_select(question))
                 self.add_item(select)
-            else:
-                self.add_item(self.TextPromptButton(self, question))
             self.add_item(self.BackButton(self))
             has_answer = self._has_current_answer(question)
             self.add_item(self.NextButton(self, question, has_answer))
@@ -1759,20 +1757,6 @@ class OpenQuestionsPanelView(discord.ui.View):
                 wizard._last_direction = 1
                 await wizard.refresh(interaction)
                 wizard._touch()
-
-        class TextPromptButton(discord.ui.Button):
-            def __init__(self, parent: "OnboardWizard", question: Any) -> None:
-                needs_answer = not parent._has_current_answer(question)
-                style = (
-                    discord.ButtonStyle.primary if needs_answer else discord.ButtonStyle.secondary
-                )
-                super().__init__(style=style, label="Enter answer")
-                self._wizard = parent
-                self.question = question
-
-            async def callback(self, interaction: discord.Interaction) -> None:
-                await self._wizard._prompt_text_answer(interaction, self.question)
-                self._wizard._touch()
 
         class BackButton(discord.ui.Button):
             def __init__(self, parent: "OnboardWizard") -> None:
@@ -1873,146 +1857,6 @@ class OpenQuestionsPanelView(discord.ui.View):
                 step=self.step,
                 resumed=True,
             )
-
-        async def _prompt_text_answer(self, interaction: discord.Interaction, question: Any) -> None:
-            controller = self.controller
-            client = getattr(controller, "bot", None) or getattr(interaction, "client", None)
-            if client is None:
-                log.warning("inline wizard text prompt missing client")
-                try:
-                    if not interaction.response.is_done():
-                        await interaction.response.defer()
-                except Exception:
-                    try:
-                        if not interaction.response.is_done():
-                            await interaction.response.defer_update()
-                    except Exception:
-                        pass
-                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
-                self._status_error_hint = None
-                await self.refresh()
-                return
-
-            label = self._question_label(question) or "this question"
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.defer()
-            except discord.InteractionResponded:
-                pass
-            except Exception:
-                try:
-                    if not interaction.response.is_done():
-                        await interaction.response.defer_update()
-                except Exception:
-                    pass
-
-            self._status_override = f"✍️ Share your answer for **{label}** in this thread now."
-            self._status_error_hint = None
-            await self.refresh()
-
-            thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
-            raw_thread_id = getattr(thread, "id", None)
-            try:
-                thread_id = int(raw_thread_id) if raw_thread_id is not None else int(self.thread_id)
-            except (TypeError, ValueError):
-                thread_id = int(self.thread_id)
-            user = getattr(interaction, "user", None)
-            raw_user_id = getattr(user, "id", None)
-            try:
-                user_id = int(raw_user_id) if raw_user_id is not None else None
-            except (TypeError, ValueError):
-                user_id = None
-            if user_id is None:
-                log.warning("inline wizard text prompt missing user context")
-                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
-                await self.refresh()
-                return
-
-            def check(message: discord.Message) -> bool:
-                author = getattr(message, "author", None)
-                channel = getattr(message, "channel", None)
-                if author is None or getattr(author, "id", None) != user_id:
-                    return False
-                if not isinstance(channel, discord.Thread):
-                    return False
-                return int(getattr(channel, "id", 0) or 0) == thread_id
-
-            try:
-                message = await client.wait_for("message", check=check, timeout=300)
-            except asyncio.TimeoutError:
-                self._status_override = "⏳ Timed out waiting for your answer. Press **Enter answer** to try again."
-                await self.refresh()
-                return
-            except Exception:
-                log.warning("inline wizard text capture failed", exc_info=True)
-                self._status_override = "⚠️ Can’t capture that answer right now. Please press **Enter answer** again."
-                await self.refresh()
-                return
-
-            value = (message.content or "").strip()
-            try:
-                await message.delete()
-            except Exception:
-                log.debug("failed to delete inline text answer message", exc_info=True)
-
-            required = self._question_required(question)
-            key = self._question_key(question)
-            meta_getter = getattr(controller, "_question_meta", None)
-            if callable(meta_getter):
-                meta = meta_getter(question)
-            else:
-                meta = {
-                    "qid": key,
-                    "label": self._question_label(question),
-                    "type": self._question_type(question),
-                    "validate": getattr(question, "validate", None)
-                    if not isinstance(question, dict)
-                    else question.get("validate"),
-                    "help": getattr(question, "help", None)
-                    if not isinstance(question, dict)
-                    else question.get("help"),
-                }
-
-            if required and not value:
-                self._status_error_hint = "This question is required."
-                self._status_override = None
-                await self.refresh()
-                return
-
-            if value:
-                validator = getattr(controller, "validate_answer", None)
-                if callable(validator):
-                    ok, cleaned, err = validator(meta, value)
-                else:
-                    ok, cleaned, err = True, value, None
-                if not ok:
-                    self._status_error_hint = err or "Input does not match the required format."
-                    self._status_override = None
-                    await self.refresh()
-                    return
-                if diag.is_enabled():
-                    checker = getattr(controller, "_has_sheet_regex", None)
-                    if callable(checker):
-                        has_regex = checker(meta)
-                    else:
-                        validate_field = (meta.get("validate") or "").strip().lower()
-                        has_regex = validate_field.startswith("regex:")
-                    await diag.log_event(
-                        "info",
-                        "welcome_validator_branch",
-                        qid=meta.get("qid"),
-                        have_regex=has_regex,
-                        type=meta.get("type"),
-                    )
-                await controller.set_answer(self.thread_id, key, cleaned)
-                self._status_error_hint = None
-                self._status_override = None
-            else:
-                await controller.set_answer(self.thread_id, key, None)
-                self._status_error_hint = None
-                self._status_override = "✅ Answer cleared."
-
-            await self.refresh()
 
         async def _handle_select(
             self,

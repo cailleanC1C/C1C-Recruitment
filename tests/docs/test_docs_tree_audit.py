@@ -16,6 +16,7 @@ ALLOWED_OPS_MD = {
     "Logging.md",
     "PermCommandQuickstart.md",
     "Watchers.md",
+    "ShardTracker.md",
 }
 
 REQUIRED_MODULE_DOCS = {

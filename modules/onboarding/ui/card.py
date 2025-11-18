@@ -37,6 +37,7 @@ class RollingCard:
         view: Optional[discord.ui.View],
         answer_preview: str | None = None,
         note: str | None = None,
+        helper_line: str | None = None,
     ) -> None:
         message = await self.ensure()
         progress_total = max(total, 1)
@@ -50,6 +51,10 @@ class RollingCard:
 
         if help_text:
             lines.append(f"_{help_text}_")
+
+        if helper_line:
+            lines.append("")
+            lines.append(helper_line)
 
         if answer_preview:
             lines.append("")
