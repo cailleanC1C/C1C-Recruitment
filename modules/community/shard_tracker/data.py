@@ -9,11 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
-from shared.config import (
-    get_milestones_sheet_id,
-    get_shard_mercy_channel_id,
-    get_shard_mercy_tab,
-)
+from shared.config import cfg as runtime_config, get_milestones_sheet_id
 from shared.sheets import async_core
 
 log = logging.getLogger("c1c.shards.data")
@@ -122,10 +118,15 @@ class ShardSheetStore:
             if not sheet_id:
                 raise ShardTrackerConfigError("MILESTONES_SHEET_ID missing")
 
-            tab_name = get_shard_mercy_tab().strip()
+            tab_value = getattr(runtime_config, "shard_mercy_tab", "")
+            tab_name = str(tab_value or "").strip()
             if not tab_name:
                 raise ShardTrackerConfigError("SHARD_MERCY_TAB missing in milestones Config tab")
-            channel_id = get_shard_mercy_channel_id()
+            channel_value = getattr(runtime_config, "shard_mercy_channel_id", 0)
+            try:
+                channel_id = int(str(channel_value).strip())
+            except (TypeError, ValueError):
+                channel_id = 0
             if channel_id <= 0:
                 raise ShardTrackerConfigError("SHARD_MERCY_CHANNEL_ID missing or invalid")
 

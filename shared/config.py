@@ -543,6 +543,9 @@ class _ConfigFacade:
         return _CONFIG.values()
 
     def __getattr__(self, name: str):
+        normalised = _normalise_key(name)
+        if normalised and normalised in _CONFIG:
+            return _CONFIG[normalised]
         target = globals().get(name)
         if target is None:
             raise AttributeError(name)
