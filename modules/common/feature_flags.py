@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Sequence
 
@@ -31,6 +32,9 @@ _MISSING_WARNINGS_SENT: set[str] = set()
 
 _TRUE_VALUES = {"true", "1"}
 _FALSE_VALUES = {"false", "0"}
+
+
+sys.modules.setdefault("shared.features", sys.modules[__name__])
 
 
 def _normalize_key(value: object) -> str:
@@ -287,4 +291,8 @@ def snapshot() -> Dict[str, Any]:
     }
 
 
-__all__ = ["is_enabled", "refresh", "snapshot"]
+def values() -> Dict[str, bool]:
+    return dict(_FEATURE_VALUES)
+
+
+__all__ = ["is_enabled", "refresh", "snapshot", "values"]

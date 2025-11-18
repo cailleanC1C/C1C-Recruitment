@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
-from shared.config import get_milestones_sheet_id
+from shared.config import (
+    get_milestones_sheet_id,
+    get_shard_mercy_channel_id,
+    get_shard_mercy_tab,
+)
 from shared.sheets import async_core
 
 log = logging.getLogger("c1c.shards.data")
@@ -119,14 +122,10 @@ class ShardSheetStore:
             if not sheet_id:
                 raise ShardTrackerConfigError("MILESTONES_SHEET_ID missing")
 
-            config_tab = os.getenv("MILESTONES_CONFIG_TAB", "Config").strip() or "Config"
-            rows = await async_core.afetch_records(sheet_id, config_tab)
-            config_map = self._parse_config(rows)
-            tab_name = config_map.get("shard_mercy_tab")
+            tab_name = get_shard_mercy_tab().strip()
             if not tab_name:
                 raise ShardTrackerConfigError("SHARD_MERCY_TAB missing in milestones Config tab")
-            raw_channel = config_map.get("shard_mercy_channel_id")
-            channel_id = self._parse_int(raw_channel)
+            channel_id = get_shard_mercy_channel_id()
             if channel_id <= 0:
                 raise ShardTrackerConfigError("SHARD_MERCY_CHANNEL_ID missing or invalid")
 
@@ -186,15 +185,6 @@ class ShardSheetStore:
                 value_input_option="RAW",
             )
         return new_row_number
-
-    def _parse_config(self, rows: Sequence[Dict[str, Any]]) -> Dict[str, str]:
-        config: Dict[str, str] = {}
-        for row in rows:
-            key = self._normalize(row.get("key"))
-            value = (str(row.get("value", "")).strip())
-            if key:
-                config[key] = value
-        return config
 
     def _row_to_record(
         self,

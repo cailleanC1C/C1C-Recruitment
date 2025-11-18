@@ -53,6 +53,8 @@ __all__ = [
     "get_onboarding_cleanup_after_summary",
     "get_panel_thread_mode",
     "get_panel_fixed_thread_id",
+    "get_shard_mercy_tab",
+    "get_shard_mercy_channel_id",
     "get_public_base_url",
     "get_render_external_url",
     "get_emoji_max_bytes",
@@ -67,6 +69,8 @@ __all__ = [
     "merge_onboarding_config_early",
     "onboarding_config_merge_count",
     "get_ticket_tool_bot_id",
+    "features",
+    "update_feature_flags_snapshot",
 ]
 
 # Port helper lives in shared.ports. Import there where needed.
@@ -326,6 +330,58 @@ def _merge_onboarding_tab(config: Dict[str, object]) -> None:
     _LAST_ONBOARDING_CONFIG_KEYS = len(values)
 
 
+def _parse_sheet_config(rows: Sequence[Mapping[str, object]]) -> Dict[str, str]:
+    config: Dict[str, str] = {}
+    for row in rows:
+        key_value: str | None = None
+        stored_value: str | None = None
+        fallback: str | None = None
+        for column, raw_value in row.items():
+            column_norm = str(column or "").strip().lower()
+            text = str(raw_value or "").strip()
+            if column_norm == "key":
+                key_value = text
+            elif column_norm in {"value", "val"}:
+                stored_value = text
+            elif fallback is None and text:
+                fallback = text
+        if key_value:
+            config[key_value.strip().upper()] = stored_value or fallback or ""
+    return config
+
+
+def _load_milestones_config_values() -> tuple[str, Dict[str, str]]:
+    """Return Milestones config values keyed by upper-case strings."""
+
+    sheet_id = (os.getenv("MILESTONES_SHEET_ID") or "").strip()
+    if not sheet_id:
+        raise RuntimeError("MILESTONES_SHEET_ID not set")
+
+    tab_name = (os.getenv("MILESTONES_CONFIG_TAB") or "Config").strip() or "Config"
+    from shared.sheets import core as sheets_core  # type: ignore
+
+    rows = sheets_core.fetch_records(sheet_id, tab_name)
+    return sheet_id, _parse_sheet_config(rows)
+
+
+def _merge_milestones_tab(config: Dict[str, object]) -> None:
+    """Merge shard tracker settings from the milestones Config tab."""
+
+    try:
+        _, values = _load_milestones_config_values()
+    except RuntimeError:
+        log.debug("config: milestones sheet id not configured; skipping tab merge")
+        return
+    except Exception as exc:  # pragma: no cover - network or credential failures
+        log.warning("config: failed to load milestones Config tab: %s", exc)
+        return
+
+    if not values:
+        return
+
+    config.update(values)
+
+
 def merge_onboarding_config_early() -> int:
     """Merge onboarding Config tab values into the live config mapping."""
 
@@ -423,6 +479,7 @@ def _load_config() -> Dict[str, object]:
         )
 
     _merge_onboarding_tab(config)
+    _merge_milestones_tab(config)
 
     return config
 
@@ -493,6 +550,27 @@ class _ConfigFacade:
 
 
 cfg = _ConfigFacade()
+
+
+class _ConfigFeatures:
+    __slots__ = ("shard_tracker_enabled",)
+
+    def __init__(self) -> None:
+        self.shard_tracker_enabled = False
+
+    def update(self, toggles: Mapping[str, bool] | None = None) -> None:
+        values = toggles or {}
+        candidates = ("shardtracker", "shard_tracker", "shard_tracker_enabled")
+        self.shard_tracker_enabled = any(bool(values.get(key)) for key in candidates)
+
+
+features = _ConfigFeatures()
+
+
+def update_feature_flags_snapshot(toggles: Mapping[str, bool] | None) -> None:
+    """Refresh the cached feature toggle state for config consumers."""
+
+    features.update(toggles)
 
 
 def get_config_snapshot() -> Dict[str, object]:
@@ -804,6 +882,25 @@ def get_panel_thread_mode(default: str = "same") -> str:
 
 def get_panel_fixed_thread_id() -> Optional[int]:
     return _optional_id("PANEL_FIXED_THREAD_ID")
+
+
+def get_shard_mercy_tab(default: str = "") -> str:
+    value = _CONFIG.get("SHARD_MERCY_TAB", default)
+    if isinstance(value, str):
+        trimmed = value.strip()
+        if trimmed:
+            return trimmed
+    return default
+
+
+def get_shard_mercy_channel_id() -> int:
+    value = _CONFIG.get("SHARD_MERCY_CHANNEL_ID")
+    try:
+        if value is None:
+            return 0
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
 
 
 def get_public_base_url() -> str | None:
