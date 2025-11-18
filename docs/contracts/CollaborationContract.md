@@ -49,7 +49,11 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 | Folder             | Purpose                                                                     |
 | ------------------ | --------------------------------------------------------------------------- |
 | `docs/adr/`        | Architectural Decision Records (ADR-XXXX).                                  |
-| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Runbook, WelcomeFlow, Troubleshooting, Watchers. |
+| `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Logging, Perm command quickstart, Watchers. |
+| `docs/modules/`    | Module deep dives (CoreOps, Onboarding, Welcome, Placement, Recruitment, PermissionsSync). |
+| `docs/reference/`  | Supplemental references (Commands, Env checklist, Module toggles, Onboarding config). |
+| `docs/runbooks/`   | Flow-specific runbooks (Onboarding wizard, Welcome panel). |
+| `docs/specs/`      | Flow specifications (WelcomeFlow, Welcome summary embed). |
 | `docs/contracts/`  | Long-lived standards (this contract).                                       |
 | `docs/guardrails/` | Guardrail & CI policy specs (e.g., `RepositoryGuardrails.md`).              |
 | `docs/compliance/` | Audit and guardrail reports (e.g., `REPORT_GUARDRAILS.md`).                 |

@@ -73,13 +73,13 @@ keeps the bot “warm” in two layers:
 ## Related docs
 - [`docs/Architecture.md`](../Architecture.md) — runtime surfaces and scheduler
   relationships.
-- [`docs/ops/Runbook.md`](Runbook.md) — operational procedures that call into
+- [`docs/Runbook.md`](../Runbook.md) — operational procedures that call into
   these watchers and schedulers.
 - [`docs/ops/Config.md`](Config.md) — environment keys, FeatureToggles, and sheet
   tabs referenced above.
-- [`docs/ops/CoreOps.md`](CoreOps.md) — runtime lifecycle, scheduler wiring, and
+- [`docs/modules/CoreOps.md`](../modules/CoreOps.md) — runtime lifecycle, scheduler wiring, and
   watchdog contracts.
-- [`docs/ops/Modules.md`](Modules.md) — which modules own the watchers listed
+- [`docs/modules/README.md`](../modules/README.md) — which modules own the watchers listed
   here.
 
 Doc last updated: 2025-11-17 (v0.9.7)

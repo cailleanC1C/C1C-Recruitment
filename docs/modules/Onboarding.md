@@ -9,7 +9,7 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - **Session state** — track `step_index`, answered questions, derived visibility, and completion status per thread/user, including multi-device resumes.
 - **Persistence** — read/write the `OnboardingSessions` tab so progress survives restarts (`shared/sheets/onboarding_sessions.py`).
 - **Lifecycle logging** — emit structured diagnostics (cache refresh summaries, question counts, wizard actions, summary posted events) through the shared onboarding log helpers.
-- **Summary data model** — supply the normalized answer payload (keyed by question `qid`, e.g., `w_power`, `w_hydra_diff`) that downstream UX layers format into embeds (spec in `docs/ops/Welcome_Summary_Spec.md`).
+- **Summary data model** — supply the normalized answer payload (keyed by question `qid`, e.g., `w_power`, `w_hydra_diff`) that downstream UX layers format into embeds (spec in [`docs/specs/Welcome_Summary_Spec.md`](../specs/Welcome_Summary_Spec.md)).
 
 ## Non-Goals
 - No Discord thread creation, embeds, panels, or button wiring — Welcome owns those UX elements.
@@ -45,19 +45,19 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 5. **Completion** — when `step_index` exceeds the last visible question the engine marks the session `completed`, freezes answers, emits summary logs (`modules/onboarding/logs.question_stats`), and hands the normalized payload to Welcome for embed formatting. Completed sessions reject restarts; staff can use `!onb resume @user` (CommandMatrix entry) to rebind panels inside a ticket thread when Discord ate the message.
 
 ## Dependencies
-- **Config:** `shared.config` + `docs/ops/Config.md` define required env keys (`ONBOARDING_SHEET_ID`, optional `ONBOARDING_CONFIG_TAB`) and sheet tab overrides.
+- **Config:** `shared.config` + [`docs/ops/Config.md`](../ops/Config.md) define required env keys (`ONBOARDING_SHEET_ID`, optional `ONBOARDING_CONFIG_TAB`) and sheet tab overrides.
 - **Sheets access:** `shared/sheets/onboarding_questions`, `shared/sheets/onboarding_sessions`, and `shared/sheets/onboarding` supply cached question rows, persistence helpers, and tab upserts. All I/O honours service-account credentials (`GSPREAD_CREDENTIALS`/`GOOGLE_SERVICE_ACCOUNT_JSON`).
 - **Caches:** `shared.cache.telemetry` + cache scheduler refresh `onboarding_questions`; modules register buckets at startup so `!ops refresh onboarding_questions` works.
-- **Logging:** `modules/onboarding/logs` standardises structured events (launch, resume, summary posted, errors) and ties into the runtime log channel configured in `docs/ops/Logging.md`.
+- **Logging:** `modules/onboarding/logs` standardises structured events (launch, resume, summary posted, errors) and ties into the runtime log channel configured in [`docs/ops/Logging.md`](../ops/Logging.md).
 - **Tests:** `tests/onboarding/**` cover cache wiring, sheet ID enforcement, watcher placement reconciliation, and welcome dialog controllers per ADR-0022.
 
 ## Related Docs
-- [`docs/ops/Module-Welcome.md`](Module-Welcome.md)
-- [`docs/ops/Architecture.md`](Architecture.md)
-- [`docs/ops/Config.md`](Config.md)
-- [`docs/ops/CommandMatrix.md`](CommandMatrix.md)
-- [`docs/ops/Runbook.md`](Runbook.md)
-- [`docs/ops/Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
+- [`docs/modules/Welcome.md`](Welcome.md)
+- [`docs/Architecture.md`](../Architecture.md)
+- [`docs/ops/Config.md`](../ops/Config.md)
+- [`docs/ops/CommandMatrix.md`](../ops/CommandMatrix.md)
+- [`docs/Runbook.md`](../Runbook.md)
+- [`docs/specs/Welcome_Summary_Spec.md`](../specs/Welcome_Summary_Spec.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
 Doc last updated: 2025-11-17 (v0.9.7)

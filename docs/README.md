@@ -9,6 +9,8 @@ It exists so that contributors update the correct references after each developm
 ### Root docs
 * [`Architecture.md`](Architecture.md) — canonical runtime architecture, data flows, and environment map.
 * [`README.md`](README.md) — you are here; master index for the documentation tree.
+* [`Runbook.md`](Runbook.md) — canonical operator procedures (deploy, health, refresh, and maintenance cadences).
+* [`Troubleshooting.md`](Troubleshooting.md) — quick reference for diagnosing common issues.
 
 ### `/docs/adr/` — Architectural Decision Records
 * [`ADR-0000`](adr/ADR-0000-template.md) — template for proposing new architecture decisions.
@@ -58,30 +60,35 @@ It exists so that contributors update the correct references after each developm
 * [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
 ### `/docs/ops/` — Operational Documentation
-* [`CoreOps.md`](ops/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
-* [`Modules.md`](ops/Modules.md) — module inventory with entry points and links to each deep dive.
-* [`Runbook.md`](ops/Runbook.md) — canonical operator procedures (deploy, health, refresh, and maintenance cadences).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
-* [`Modules.md`](ops/Modules.md) — quick links to module deep dives (Onboarding, Welcome) and their responsibility summaries.
-* [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
-* [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
-* [`Module-Onboarding.md`](ops/Module-Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
-* [`Module-Welcome.md`](ops/Module-Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
-* [`Module-Placement.md`](ops/Module-Placement.md) — placement ledger, clan math reconciliation, and reservation upkeep (commands + cron jobs).
-* [`Onboarding.md`](ops/Onboarding.md) — onboarding sheet schema, cache lifecycle, and escalation playbook.
-* [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
-* [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
-* [`Module-Recruitment.md`](ops/Module-Recruitment.md) — recruitment module responsibilities, sheet schemas, panels, and reporting flows.
-* [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
-* [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
-* [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
-* [`Welcome_Summary_Spec.md`](ops/Welcome_Summary_Spec.md) — summary embed layout, formatting rules, and hide logic.
-* [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
-* [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
+
+### `/docs/modules/` — Module Deep Dives
+* [`README.md`](modules/README.md) — module inventory with entry points and links to each deep dive.
+* [`CoreOps.md`](modules/CoreOps.md) — scheduler contracts, cache façade responsibilities, and lifecycle ownership.
+* [`CoreOps-Development.md`](modules/CoreOps-Development.md) — developer-focused CoreOps guidance (telemetry helpers, preload contracts).
+* [`Onboarding.md`](modules/Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
+* [`Welcome.md`](modules/Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
+* [`Placement.md`](modules/Placement.md) — placement ledger, clan math reconciliation, and reservation upkeep (commands + cron jobs).
+* [`Recruitment.md`](modules/Recruitment.md) — recruitment module responsibilities, sheet schemas, panels, and reporting flows.
+* [`PermissionsSync.md`](modules/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
+
+### `/docs/reference/`
+* [`Commands.md`](reference/Commands.md) — supplemental command reference for operational usage.
+* [`Env.md`](reference/Env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
+* [`ModuleToggles.md`](reference/ModuleToggles.md) — module-level feature toggle reference.
+* [`OnboardingConfig.md`](reference/OnboardingConfig.md) — onboarding sheet schema, cache lifecycle, and escalation notes.
+
+### `/docs/runbooks/`
+* [`Onboarding-Runbook.md`](runbooks/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
+* [`WelcomePanel.md`](runbooks/WelcomePanel.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
+
+### `/docs/specs/`
+* [`WelcomeFlow.md`](specs/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
+* [`Welcome_Summary_Spec.md`](specs/Welcome_Summary_Spec.md) — summary embed layout, formatting rules, and hide logic.
 
 ## Maintenance Rules
 * Update this index whenever documentation files are added, renamed, or removed.
