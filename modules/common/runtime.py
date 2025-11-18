@@ -885,7 +885,7 @@ class Runtime:
             preload_on_startup,
             register_refresh_job,
         )
-        from modules.ops import cleanup_watcher
+        from modules.ops import cleanup_watcher, server_map as server_map_module
 
         ensure_cache_registration()
         await preload_on_startup()
@@ -942,6 +942,10 @@ class Runtime:
             emit_schedule_log(self, successes, failure),
             name="cache_refresh_schedule_log",
         )
+        try:
+            server_map_module.schedule_server_map_job(self)
+        except Exception:  # pragma: no cover - defensive scheduler guard
+            log.exception("failed to schedule server map refresh job")
         await self.bot.start(token)
 
     async def close(self) -> None:

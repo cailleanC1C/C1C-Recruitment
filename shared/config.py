@@ -61,6 +61,9 @@ __all__ = [
     "get_tag_badge_px",
     "get_tag_badge_box",
     "get_strict_emoji_proxy",
+    "get_server_map_enabled",
+    "get_server_map_channel_id",
+    "get_server_map_refresh_days",
     "redact_token",
     "redact_ids",
     "redact_value",
@@ -415,6 +418,9 @@ def _load_config() -> Dict[str, object]:
         "TAG_BADGE_PX": _int_env("TAG_BADGE_PX", 128, min_value=32, max_value=512),
         "TAG_BADGE_BOX": _float_env("TAG_BADGE_BOX", 0.90, min_value=0.2, max_value=0.95),
         "STRICT_EMOJI_PROXY": _env_bool("STRICT_EMOJI_PROXY", True),
+        "SERVER_MAP_ENABLED": _env_bool("SERVER_MAP_ENABLED", False),
+        "SERVER_MAP_CHANNEL_ID": _first_int(os.getenv("SERVER_MAP_CHANNEL_ID")),
+        "SERVER_MAP_REFRESH_DAYS": _int_env("SERVER_MAP_REFRESH_DAYS", 30, min_value=1),
     }
 
     if os.getenv("ENABLE_WELCOME_WATCHER") not in (None, ""):
@@ -870,6 +876,27 @@ def get_strict_emoji_proxy(default: bool = True) -> bool:
     if isinstance(value, bool):
         return value
     return default
+
+
+def get_server_map_enabled() -> bool:
+    value = _CONFIG.get("SERVER_MAP_ENABLED")
+    return bool(value)
+
+
+def get_server_map_channel_id() -> Optional[int]:
+    value = _CONFIG.get("SERVER_MAP_CHANNEL_ID")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_server_map_refresh_days(default: int = 30) -> int:
+    try:
+        value = int(_CONFIG.get("SERVER_MAP_REFRESH_DAYS", default))
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 1 else default
 
 
 def redact_token(token: Optional[str]) -> str:

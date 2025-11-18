@@ -135,6 +135,10 @@ Event listeners and watcher availability are controlled by FeatureToggles sheet 
 ## Sheet config tabs
 Both Google Sheets referenced above must expose a `Config` worksheet with **Key** and **Value** columns.
 
+### Recruitment runtime state keys
+- `SERVER_MAP_MESSAGE_ID_1`, `SERVER_MAP_MESSAGE_ID_2`, … — message IDs for each segment of the server map post in `SERVER_MAP_CHANNEL_ID`. The scheduler edits these messages in place when the structure changes.
+- `SERVER_MAP_LAST_RUN_AT` — ISO-8601 timestamp recorded after every successful refresh. The daily job reads this value to enforce `SERVER_MAP_REFRESH_DAYS`.
+
 ### Recruitment sheet keys
 - 'CLANS_TAB'
 - 'WELCOME_TEMPLATES_TAB'
