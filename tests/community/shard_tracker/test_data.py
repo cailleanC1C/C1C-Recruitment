@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+from types import SimpleNamespace
+
 import pytest
 
 from modules.community.shard_tracker import data as shard_data
@@ -12,17 +14,11 @@ def test_get_config_reads_sheet(monkeypatch):
     async def runner():
         store = shard_data.ShardSheetStore()
         monkeypatch.setattr(shard_data, "get_milestones_sheet_id", lambda: "sheet-123")
-        monkeypatch.setenv("MILESTONES_CONFIG_TAB", "Config")
-
-        async def fake_records(sheet_id, worksheet, **kwargs):
-            assert sheet_id == "sheet-123"
-            assert worksheet == "Config"
-            return [
-                {"key": "shard_mercy_tab", "value": "ShardTracker"},
-                {"key": "shard_mercy_channel_id", "value": "987654321"},
-            ]
-
-        monkeypatch.setattr(shard_data.async_core, "afetch_records", fake_records)
+        monkeypatch.setattr(
+            shard_data,
+            "runtime_config",
+            SimpleNamespace(shard_mercy_tab="ShardTracker", shard_mercy_channel_id=987654321),
+        )
 
         config = await store.get_config()
 
@@ -37,11 +33,11 @@ def test_get_config_missing_tab_raises(monkeypatch):
     async def runner():
         store = shard_data.ShardSheetStore()
         monkeypatch.setattr(shard_data, "get_milestones_sheet_id", lambda: "sheet-321")
-
-        async def fake_records(sheet_id, worksheet, **kwargs):
-            return []
-
-        monkeypatch.setattr(shard_data.async_core, "afetch_records", fake_records)
+        monkeypatch.setattr(
+            shard_data,
+            "runtime_config",
+            SimpleNamespace(shard_mercy_tab="", shard_mercy_channel_id=999),
+        )
 
         with pytest.raises(shard_data.ShardTrackerConfigError):
             await store.get_config()

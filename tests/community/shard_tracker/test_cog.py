@@ -36,7 +36,7 @@ def test_resolve_thread_rejects_wrong_channel(fake_discord_env):
         assert not allowed
         assert parent is None
         assert thread is None
-        assert "Shard tracking is only available" in ctx.replies[-1]
+        assert "Shard & Mercy tracking is only available" in ctx.replies[-1]
 
     asyncio.run(runner())
 

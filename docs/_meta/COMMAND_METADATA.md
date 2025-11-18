@@ -1,7 +1,7 @@
 # Command Metadata Audit
 
 ## Summary
-- Total commands discovered: 36
+- Total commands discovered: 42
 - Commands missing access_tier: 0
 - Commands missing function_group: 0
 - Commands missing both: 0
@@ -33,6 +33,12 @@
 | clan | cogs/recruitment_clan_profile.py:65 | user | recruitment | |
 | clansearch | cogs/recruitment_member.py:20 | user | recruitment | |
 | clanmatch | cogs/recruitment_recruiter.py:214 | staff | recruitment | |
+| shards | modules/community/shard_tracker/cog.py:123 | user | milestones | |
+| shards set | modules/community/shard_tracker/cog.py:137 | user | milestones | |
+| mercy | modules/community/shard_tracker/cog.py:153 | user | milestones | |
+| mercy set | modules/community/shard_tracker/cog.py:167 | user | milestones | |
+| lego | modules/community/shard_tracker/cog.py:183 | user | milestones | |
+| mythic primal | modules/community/shard_tracker/cog.py:215 | user | milestones | |
 | ping | cogs/app_admin.py:23 | admin | operational | |
 | report | cogs/recruitment_reporting.py:27 | admin | operational | |
 | welcome | cogs/recruitment_welcome.py:41 | staff | recruitment | |
@@ -56,4 +62,4 @@
 ## Suggested fixes
 - Ensure new commands and aliases include `help_metadata(...)` coverage so the help surface stays descriptive.
 
-Doc last updated: 2025-10-28 (v0.9.6)
+Doc last updated: 2025-11-18 (v0.9.7)

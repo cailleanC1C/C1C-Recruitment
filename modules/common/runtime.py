@@ -713,6 +713,11 @@ class Runtime:
             await features.refresh()
         except Exception:
             log.exception("feature toggle refresh failed")
+        else:
+            try:
+                shared_config.update_feature_flags_snapshot(features.values())
+            except Exception:
+                log.exception("feature toggle snapshot update failed")
 
         await onboarding_pkg.setup(self.bot)
 

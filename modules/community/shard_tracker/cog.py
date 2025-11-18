@@ -11,6 +11,8 @@ import discord
 from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata, tier
+from modules.common import feature_flags
+from shared import config as shared_config
 from shared.config import get_admin_role_ids
 from shared.logfmt import user_label
 
@@ -94,6 +96,8 @@ _TYPE_ALIASES = {
     "mythical": "mythic",
 }
 
+_FEATURE_TOGGLE_KEYS = ("shardtracker", "shard_tracker")
+
 
 class ShardTrackerCog(commands.Cog, ShardTrackerController):
     def __init__(self, bot: commands.Bot) -> None:
@@ -117,10 +121,22 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
     )
     @commands.group(name="shards", invoke_without_command=True)
     async def shards(self, ctx: commands.Context, *, shard_type: str | None = None) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_shards(ctx, shard_type)
 
+    @tier("user")
+    @help_metadata(
+        function_group="milestones",
+        section="community",
+        access_tier="user",
+        help="Set the shard stash count for a specific type (non-negative integers only).",
+        usage="!shards set <type> <count>",
+    )
     @shards.command(name="set")
     async def shards_set(self, ctx: commands.Context, shard_type: str, count: int) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_stash_set(ctx, shard_type, count)
 
     @tier("user")
@@ -135,10 +151,22 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
     )
     @commands.group(name="mercy", invoke_without_command=True)
     async def mercy(self, ctx: commands.Context, *, shard_type: str | None = None) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_shards(ctx, shard_type)
 
+    @tier("user")
+    @help_metadata(
+        function_group="milestones",
+        section="community",
+        access_tier="user",
+        help="Override a mercy counter. Accepts `mythic` to target the primal mythic pity.",
+        usage="!mercy set <type> <count>",
+    )
     @mercy.command(name="set")
     async def mercy_set(self, ctx: commands.Context, shard_type: str, count: int) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_mercy_set(ctx, shard_type, count)
 
     @tier("user")
@@ -155,6 +183,8 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
     async def log_lego(
         self, ctx: commands.Context, shard_type: str, after_count: int = 0
     ) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_lego(ctx, shard_type, after_count)
 
     @tier("user")
@@ -169,10 +199,22 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
     )
     @commands.group(name="mythic", aliases=["mythical"], invoke_without_command=True)
     async def mythic(self, ctx: commands.Context) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await ctx.reply("Specify the shard type: `!mythic primal <after_count>`.", mention_author=False)
 
+    @tier("user")
+    @help_metadata(
+        function_group="milestones",
+        section="community",
+        access_tier="user",
+        help="Log a primal mythic drop and reset the primal counters (channel + thread restricted).",
+        usage="!mythic primal [after_count]",
+    )
     @mythic.command(name="primal")
     async def mythic_primal(self, ctx: commands.Context, after_count: int = 0) -> None:
+        if not await self._ensure_feature_enabled(ctx):
+            return
         await self._handle_mythic(ctx, after_count)
 
     # === Button controller ===
@@ -184,6 +226,11 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
         shard_key: str,
         action: str,
     ) -> None:
+        if not self._feature_enabled():
+            await interaction.response.send_message(
+                self._feature_disabled_message(), ephemeral=True
+            )
+            return
         ctx_author = interaction.user
         guild = getattr(interaction.guild, "id", None)
         if guild is None:
@@ -229,6 +276,31 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
             )
 
     # === Internal helpers ===
+
+    def _feature_disabled_message(self) -> str:
+        return "Shard & Mercy tracking is currently disabled. Please check back later."
+
+    async def _ensure_feature_enabled(self, ctx: commands.Context) -> bool:
+        if self._feature_enabled():
+            return True
+        await ctx.reply(self._feature_disabled_message(), mention_author=False)
+        return False
+
+    def _feature_enabled(self) -> bool:
+        if getattr(shared_config.features, "shard_tracker_enabled", False):
+            return True
+        toggles: Dict[str, bool] = {}
+        for key in _FEATURE_TOGGLE_KEYS:
+            try:
+                toggles[key] = feature_flags.is_enabled(key)
+            except Exception:
+                log.exception("feature toggle check failed", extra={"feature": key})
+        if toggles:
+            try:
+                shared_config.update_feature_flags_snapshot(toggles)
+            except Exception:
+                log.exception("failed to refresh feature toggle snapshot")
+        return any(toggles.get(key, False) for key in _FEATURE_TOGGLE_KEYS)
 
     async def _handle_shards(
         self,
@@ -475,7 +547,7 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
         return f"Unknown shard type. Choose from: {options}, mythic."
 
     def _channel_error_message(self, channel_id: int) -> str:
-        return f"Shard tracking is only available in <#{channel_id}>."
+        return f"Shard & Mercy tracking is only available in <#{channel_id}>."
 
     async def _handle_config_failure(
         self, ctx: commands.Context, exc: Exception
