@@ -75,7 +75,7 @@ Collaboration Contract and core infra conventions.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
 
-### `/docs/modules/` — Module Deep Dives
+## Module Deep Dives `/docs/modules/` 
 * [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
 * [`CoreOps-Development.md`](modules/CoreOps-Development.md) — developer setup notes and contribution workflow guidance for CoreOps.
 * [`Onboarding.md`](modules/Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
