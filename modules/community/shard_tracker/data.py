@@ -46,9 +46,9 @@ class ShardTrackerConfig:
 @dataclass(slots=True)
 class ShardRecord:
     header: Sequence[str]
-    row_number: int
     discord_id: int
     username_snapshot: str
+    row_number: int = 0
     ancients_owned: int = 0
     voids_owned: int = 0
     sacreds_owned: int = 0
@@ -157,8 +157,8 @@ class ShardSheetStore:
                 break
         if target_row is None:
             record = self._new_record(header, discord_id, username)
-            record.row_number = len(matrix) + 1
-            await self._append_row(config, record)
+            new_row_number = await self._append_row(config, record)
+            record.row_number = new_row_number
             return record
         return self._row_to_record(header, header_map, row_number, target_row, discord_id, username)
 
@@ -175,14 +175,17 @@ class ShardSheetStore:
                 value_input_option="RAW",
             )
 
-    async def _append_row(self, config: ShardTrackerConfig, record: ShardRecord) -> None:
+    async def _append_row(self, config: ShardTrackerConfig, record: ShardRecord) -> int:
         worksheet = await async_core.aget_worksheet(config.sheet_id, config.tab_name)
         async with self._sheet_lock:
+            matrix = await async_core.afetch_values(config.sheet_id, config.tab_name)
+            new_row_number = len(matrix) + 1 if matrix else 1
             await async_core.acall_with_backoff(
                 worksheet.append_row,
                 record.to_row(),
                 value_input_option="RAW",
             )
+        return new_row_number
 
     def _parse_config(self, rows: Sequence[Dict[str, Any]]) -> Dict[str, str]:
         config: Dict[str, str] = {}
@@ -235,7 +238,6 @@ class ShardSheetStore:
     def _new_record(self, header: Sequence[str], discord_id: int, username: str) -> ShardRecord:
         record = ShardRecord(
             header=header,
-            row_number=len(header) + 1,
             discord_id=discord_id,
             username_snapshot=(username or "")[:64],
         )
