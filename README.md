@@ -63,6 +63,5 @@ Each module doc explains what that subsystem does and how it fits into the bigge
   - `docs/_meta/DocStyle.md`  
   - `docs/contracts/CollaborationContract.md`  
   - ADRs in `docs/adr/`
----
 
 Doc last updated: 2025-11-17 (v0.9.7)
