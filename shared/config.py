@@ -400,7 +400,7 @@ def _load_config() -> Dict[str, object]:
         "WATCHDOG_STALL_SEC": stall,
         "WATCHDOG_DISCONNECT_GRACE_SEC": grace,
         "CLAN_TAGS_CACHE_TTL_SEC": _int_env("CLAN_TAGS_CACHE_TTL_SEC", 3600, min_value=60),
-        "CLEANUP_AGE_HOURS": _int_env("CLEANUP_AGE_HOURS", 72, min_value=1),
+        "CLEANUP_AGE_HOURS": _int_env("CLEANUP_AGE_HOURS", 24, min_value=1),
         "PANEL_THREAD_MODE": (os.getenv("PANEL_THREAD_MODE") or "same").strip().lower() or "same",
         "PANEL_FIXED_THREAD_ID": _first_int(os.getenv("PANEL_FIXED_THREAD_ID")),
         "BOT_VERSION": os.getenv("BOT_VERSION", "dev"),
@@ -767,7 +767,7 @@ def get_clan_tags_cache_ttl_sec(default: int = 3600) -> int:
         return default
 
 
-def get_cleanup_age_hours(default: int = 72) -> int:
+def get_cleanup_age_hours(default: int = 24) -> int:
     value = _CONFIG.get("CLEANUP_AGE_HOURS", default)
     try:
         return int(value)

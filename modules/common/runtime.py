@@ -10,6 +10,7 @@ import os
 import random
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Iterable, Optional, Sequence
 
 from aiohttp import web
@@ -883,6 +884,7 @@ class Runtime:
             preload_on_startup,
             register_refresh_job,
         )
+        from modules.ops import cleanup_watcher
 
         ensure_cache_registration()
         await preload_on_startup()
@@ -908,6 +910,33 @@ class Runtime:
                     failure = (bucket, exc)
                 continue
             successes.append((spec, job))
+
+        cleanup_spec_entry: tuple[Any, Any] | None = None
+        try:
+            cleanup_interval = cleanup_watcher.get_cleanup_interval_hours()
+            cleanup_logger = logging.getLogger("c1c.cleanup")
+            cleanup_job = self.scheduler.every(
+                hours=float(cleanup_interval),
+                tag="cleanup",
+                name="cleanup_watcher",
+            )
+
+            async def cleanup_runner() -> None:
+                await cleanup_watcher.run_cleanup(self.bot, cleanup_logger)
+
+            cleanup_job.do(cleanup_runner)
+            cleanup_spec_entry = (
+                SimpleNamespace(bucket="cleanup", cadence_label=f"{cleanup_interval}h"),
+                cleanup_job,
+            )
+        except Exception as exc:  # pragma: no cover - defensive guard
+            log.exception("failed to schedule cleanup watcher")
+            if failure is None:
+                failure = ("cleanup", exc)
+
+        if cleanup_spec_entry is not None:
+            successes.append(cleanup_spec_entry)
+
         self.scheduler.spawn(
             emit_schedule_log(self, successes, failure),
             name="cache_refresh_schedule_log",
