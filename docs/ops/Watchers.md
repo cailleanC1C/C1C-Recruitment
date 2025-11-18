@@ -27,7 +27,21 @@ source of truth covers every automation hook:
 | **Cache refresh – templates** | Same scheduler | Every 7 d | Refreshes welcome/promo template content, ensuring watchers post the latest copy. | `[cache] bucket=templates` logs. | `WELCOME_TEMPLATES_TAB` sheet key. |
 | **Cache refresh – clan_tags** | Same scheduler | Every 7 d | Refreshes the clan tag autocomplete cache used in the watcher dropdowns. | `[cache] bucket=clan_tags` logs. | `CLAN_TAGS_CACHE_TTL_SEC` controls TTL; cadence fixed. |
 | **Onboarding questions refresh** | `shared.sheets.onboarding` warmers | Weekly | Reloads onboarding question forms to match the latest Config worksheet. | `[cache] bucket=onboarding_questions` (startup + scheduler) with `actor=startup` or `actor=scheduler`. | Requires `ONBOARDING_TAB` and FeatureToggles enabling onboarding modules. |
+| **Cleanup watcher** | `modules.ops.cleanup_watcher` | Every `CLEANUP_AGE_HOURS` hours | Deletes all non-pinned messages in configured panel threads so each run resets the canvas. | Multi-line `🧹 **Cleanup** — …` summary posted to the ops log channel plus Python WARN lines when fetch/delete fails. | `CLEANUP_AGE_HOURS`, `CLEANUP_THREAD_IDS`. |
 | **Daily Recruiter Update** | `modules.recruitment.reporting.daily_recruiter_update.scheduler_daily_recruiter_update` | Once per day at `REPORT_DAILY_POST_TIME` (UTC) | Posts the recruiter digest embed summarizing placements, queues, and cache freshness into `REPORT_RECRUITERS_DEST_ID`. | Structured console logs plus the Discord embed; scheduler start/stop events log via `daily_recruiter_update` helpers. | `REPORT_DAILY_POST_TIME`, `REPORT_RECRUITERS_DEST_ID`, and the `recruitment_reports` feature toggle. |
+
+### Cleanup watcher
+- **Environment.** `CLEANUP_AGE_HOURS` defines the fixed interval between runs; `CLEANUP_THREAD_IDS` lists the Discord thread IDs that will be wiped.
+- **Behavior.** On every run the watcher fetches the full history for each configured thread and deletes every non-pinned message, respecting Discord’s 14-day bulk delete rule (older messages fall back to one-by-one deletions). Pinned messages remain untouched.
+- **Logging.** The scheduler summary announces the cleanup cadence (`cleanup=<interval>h`), while each run emits a multi-line log:
+
+  ```text
+  🧹 **Cleanup** — threads=3 • deleted=87 • interval=24h
+  • #WELCOME CENTER › welcome-panel-W0488-smurf • deleted=42
+  • #WELCOME CENTER › welcome-panel-W0490-smurf • deleted=45
+  ```
+
+  Warnings such as `⚠️ **Cleanup** — reason=thread_not_found • thread_id=…` accompany fetch or deletion issues with `extra={...}` fields for machine parsing.
 
 ## Keepalive behaviour
 Render tears down idle services unless they see periodic traffic. The runtime
@@ -81,4 +95,4 @@ keeps the bot “warm” in two layers:
   scheduler wiring, and watchdog contracts.
 - [`docs/modules/`](../modules) — module owners for the watchers listed here.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)

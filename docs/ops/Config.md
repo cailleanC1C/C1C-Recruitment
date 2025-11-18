@@ -104,7 +104,8 @@ sync modules remain available for non-async scripts and cache warmers.
 | `KEEPALIVE_INTERVAL_SEC` | int | — | Legacy alias for `WATCHDOG_CHECK_SEC`; logs a warning when used. |
 | `CLAN_TAGS_CACHE_TTL_SEC` | int | `3600` | TTL for cached clan tags. |
 | `REPORT_DAILY_POST_TIME` | HH:MM | `09:30` | UTC time for the Daily Recruiter Update scheduler. |
-| `CLEANUP_AGE_HOURS` | int | `72` | Age threshold for cleanup jobs. |
+| `CLEANUP_AGE_HOURS` | int | `24` | Interval (hours) between Cleanup watcher runs; enforces a full reset cadence. |
+| `CLEANUP_THREAD_IDS` | csv | — | Comma-separated Discord thread IDs where cleanup wipes all non-pinned messages. |
 
 ### Media rendering
 | Key | Type | Default | Notes |
