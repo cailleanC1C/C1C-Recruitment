@@ -24,7 +24,7 @@ Porting can proceed once we add a lightweight intake cog that mirrors the legacy
   - Async facade wraps synchronous Sheets calls via `asyncio.to_thread`. `shared/sheets/async_facade.py:L1-L95`
   - Config exposes `SEARCH_RESULTS_SOFT_CAP`, emoji sizing, and proxy toggles required by member cards. `shared/config.py:L320-L352`
 - **Feature flags & docs**
-  - `member_panel` toggle documented but currently lights nothing. `docs/ops/module-toggles.md:L6-L27`
+  - `member_panel` toggle documented but currently lights nothing. `docs/ops/Config.md:L70-L130`
   - Command matrix lists `!clansearch` as gated, implying availability. `docs/ops/CommandMatrix.md:L25-L45`
   - Help copy already references `!rec help clansearch`. `shared/help.py:L205-L231`
 - **Legacy baseline for parity**
@@ -94,7 +94,7 @@ Porting can proceed once we add a lightweight intake cog that mirrors the legacy
   - Calling `sheets.fetch_clans()` via `shared.sheets.async_facade.fetch_clans()`.
   - Instantiating `MemberSearchPagedView` with embeds/files returned from new helpers.
   - Tracking and reusing prior results messages to avoid channel spam.
-- **Documentation updates** – once the command ships, flip `!clansearch` status to ✅ in `docs/ops/CommandMatrix.md` and add usage notes to `docs/ops/Config.md` / `docs/ops/module-toggles.md`. Ensure `docs/ops/Config.md` references any new ENV (none anticipated beyond existing `SEARCH_RESULTS_SOFT_CAP`).
+- **Documentation updates** – once the command ships, flip `!clansearch` status to ✅ in `docs/ops/CommandMatrix.md` and add usage notes to `docs/ops/Config.md` (FeatureToggles section). Ensure `docs/ops/Config.md` references any new ENV (none anticipated beyond existing `SEARCH_RESULTS_SOFT_CAP`).
 - **Testing** – add integration tests covering argument rejection, search soft-cap enforcement, and ownership checks (e.g., new tests under `tests/recruitment/test_member_panel.py`).
 
 ## Compatibility Notes
@@ -109,4 +109,4 @@ Porting can proceed once we add a lightweight intake cog that mirrors the legacy
 - Log panel lifecycle events (`panel_opened`, `panel_reused`, `panel_closed`) with message IDs to identify orphaned messages for cleanup.
 - Surface emoji thumbnail failures via the existing `c1c.recruitment.emoji` logger and aggregate counts for missing crest assets.
 
-Doc last updated: 2025-10-25 (v0.9.5)
+Doc last updated: 2025-11-17 (v0.9.7)

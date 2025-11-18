@@ -44,4 +44,4 @@ Admins keep an eye on the bigger picture: making sure the bot stays online, cach
 
 ---
 
-Doc last updated: 2025-10-29 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

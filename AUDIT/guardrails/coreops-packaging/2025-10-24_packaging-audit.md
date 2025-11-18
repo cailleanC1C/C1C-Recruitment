@@ -12,7 +12,7 @@ Result: **FAIL** (22 offenses)
 | `CHANGELOG.md` | 18 | `* Consolidate CoreOps to `modules/coreops`; remove `shared/coreops`.` |
 | `docs/adr/ADR-0002-cache-telemetry-wrapper.md` | 13 | `- Introduce `shared/coreops/cache_public.py` as the only import surface for telemetry.` |
 | `docs/guardrails/RepositoryGuardrails.md` | 25 | `- **C-09 No Legacy Paths:** No imports from removed legacy paths (e.g., top-level `recruitment/`, `shared/coreops`, `shared/utils/coreops_*`).` |
-| `docs/ops/development.md` | 4 | `- Import telemetry data via `shared.coreops.cache_public` helpers (`list_buckets`,` |
+| `docs/modules/CoreOps-Development.md` | 4 | `- Import telemetry data via `shared.coreops.cache_public` helpers (`list_buckets`,` |
 
 ## Duplicate CoreOps Symbols
 
@@ -55,4 +55,4 @@ Result: **FAIL** (22 offenses)
 - Delete duplicate CoreOps symbol definitions outside the package.
 - Update docs/configs to reference `c1c_coreops` paths only.
 
-Doc last updated: 2025-10-24 (v0.9.5)
+Doc last updated: 2025-11-17 (v0.9.7)

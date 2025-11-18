@@ -61,7 +61,7 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
 ### Onboarding & welcome tickets
 1. Confirm the welcome watcher is enabled (`enable_welcome_hook`,
    `welcome_enabled`). Use `!ops health` to ensure watchers show as healthy.
-2. If a ticket stalls, run `!ops onb check` (see `docs/reference/OnboardingConfig.md`) to
+2. If a ticket stalls, run `!ops onb check` (see `docs/modules/Onboarding.md`) to
    validate the sheet. The `!onb resume` command can restore a recruit's wizard
    card directly in the thread.
 3. Closing a ticket automatically reconciles clan availability; review the
@@ -73,7 +73,7 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
    After editing the sheet, run `!ops refresh clans templates` to pick up the
    changes and watch for `[refresh] trigger=manual` logs.
 2. Reservations use `!reserve`, `!reservations`, and the recruiter control
-   thread documented in [`modules/Placement.md`](modules/Placement.md).
+   thread documented in [`docs/modules/Placement.md`](modules/Placement.md).
    - Check the FeatureToggles keys `placement_reservations` and
      `placement_target_select` before enabling.
    - Use `!ops digest` to inspect availability columns (`AF/AH/AI`) and retries,
@@ -98,7 +98,7 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   - Review log volume for watchdog warnings and adjust `WATCHDOG_*` thresholds if
     Render restarts are too frequent.
   - Confirm the FeatureToggles sheet still lists every module expected in
-    `docs/modules/README.md`.
+    [`docs/modules/`](modules).
 - **Monthly:**
   - Audit `config/bot_access_lists.json` via `!perm bot list --json` and compare
     against Discord channel reality.
@@ -108,9 +108,9 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
     flows through the wizard.
 
 ## Reference map
-- [`docs/modules/README.md`](modules/README.md) — which module owns each flow.
-- [`docs/modules/CoreOps.md`](modules/CoreOps.md) — runtime contracts for schedulers, logging,
-  and cache adapters.
+- [`docs/modules/`](modules) — which module owns each flow.
+- [`docs/modules/CoreOps.md`](modules/CoreOps.md) — runtime contracts for
+  schedulers, logging, and cache adapters.
 - [`docs/Troubleshooting.md`](Troubleshooting.md) — deep-dive error lookup and
   mitigation tips.
 - [`docs/ops/Watchers.md`](Watchers.md) — watcher gating and scheduler details.

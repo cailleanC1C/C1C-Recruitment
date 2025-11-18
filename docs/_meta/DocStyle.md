@@ -125,10 +125,9 @@ this UX format.
 ## References
 - [`docs/ops/Logging.md`](../ops/Logging.md) — technical logging configuration,
   dedupe policy, and helper wiring.
-- [`docs/specs/Welcome_Summary_Spec.md`](../specs/Welcome_Summary_Spec.md) — concrete
-  example of embed hide rules and inline formatting.
-- [`docs/reference/Commands.md`](../reference/Commands.md) — runtime layout of the help system.
 - [`docs/modules/Welcome.md`](../modules/Welcome.md) — owner of the welcome
-  panels/wizard and recruiter summaries.
+  panels/wizard, summary layout, and recruiter embeds.
+- [`docs/ops/CommandMatrix.md`](../ops/CommandMatrix.md) — runtime layout of the
+  help system.
 
 Doc last updated: 2025-11-17 (v0.9.7)

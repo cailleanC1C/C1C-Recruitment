@@ -2,7 +2,8 @@
 
 CoreOps is the runtime spine of this repository. It owns the Discord cog that
 loads first, the scheduler, Sheets adapters, and the structured logging/health
-surfaces that every functional module relies on.
+surfaces that every functional module relies on. For deeper implementation
+notes, see [`docs/modules/CoreOps-Development.md`](CoreOps-Development.md).
 
 ## Responsibilities
 - **Command routing & RBAC.** The CoreOps cog in `packages/c1c-coreops` registers
@@ -29,7 +30,7 @@ surfaces that every functional module relies on.
 - **Modules.** Modules expose cogs in `cogs/` that register their commands. They
   resolve config, Sheets data, and feature toggles through CoreOps helpers such
   as `shared.config.registry`, `modules.common.feature_flags`, and the cache API
-  (`refresh_now`, `get_snapshot`). Module docs live in `docs/modules/README.md`.
+  (`refresh_now`, `get_snapshot`). Deep dives live under `docs/modules/`.
 - **Sheets & config registry.** CoreOps caches sheet tabs using bucket metadata
   stored in the Config worksheet (`docs/ops/Config.md`). Reloading the registry
   clears TTL caches and re-reads tab definitions before modules resume work.
