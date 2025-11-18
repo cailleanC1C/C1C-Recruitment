@@ -70,25 +70,19 @@ Collaboration Contract and core infra conventions.
 * [`Runbook.md`](ops/Runbook.md) — canonical operator procedures (deploy, health, refresh, and maintenance cadences).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
-* [`Modules.md`](ops/Modules.md) — quick links to module deep dives (Onboarding, Welcome) and their responsibility summaries.
-* [`env.md`](ops/env.md) — minimal environment checklist highlighting required keys and onboarding fallbacks.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
-* [`module-toggles.md`](ops/module-toggles.md) — module-level feature toggle reference.
-* [`Module-Onboarding.md`](ops/Module-Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
-* [`Module-Welcome.md`](ops/Module-Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
-* [`Module-Placement.md`](ops/Module-Placement.md) — placement ledger, clan math reconciliation, and reservation upkeep (commands + cron jobs).
-* [`Onboarding.md`](ops/Onboarding.md) — onboarding sheet schema, cache lifecycle, and escalation playbook.
-* [`Onboarding-Runbook.md`](ops/Onboarding-Runbook.md) — rolling-card onboarding operations and validation flow notes.
-* [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
-* [`PermissionsSync.md`](ops/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
-* [`Module-Recruitment.md`](ops/Module-Recruitment.md) — recruitment module responsibilities, sheet schemas, panels, and reporting flows.
-* [`Troubleshooting.md`](ops/Troubleshooting.md) — quick reference for diagnosing common issues.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
-* [`Welcome.md`](ops/Welcome.md) — persistent welcome panel behaviour, recovery workflow, and operator tips.
-* [`WelcomeFlow.md`](ops/WelcomeFlow.md) — ticket-thread questionnaire flow and modal interaction notes.
-* [`Welcome_Summary_Spec.md`](ops/Welcome_Summary_Spec.md) — summary embed layout, formatting rules, and hide logic.
-* [`commands.md`](ops/commands.md) — supplemental command reference for operational usage.
-* [`development.md`](ops/development.md) — developer setup notes and contribution workflow guidance.
+* [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
+* [`.env.example`](../.env.example) — reference environment file for local/testing setups.
+
+### `/docs/modules/` — Module Deep Dives
+* [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
+* [`CoreOps-Development.md`](modules/CoreOps-Development.md) — developer setup notes and contribution workflow guidance for CoreOps.
+* [`Onboarding.md`](modules/Onboarding.md) — onboarding engine scope, flows, sheet mappings, and dependencies.
+* [`Welcome.md`](modules/Welcome.md) — welcome UX scope, ticket-thread flow, summary formatting, and integrations.
+* [`Recruitment.md`](modules/Recruitment.md) — recruitment module responsibilities, sheet schemas, panels, and reporting flows.
+* [`Placement.md`](modules/Placement.md) — placement ledger, clan math reconciliation, and reservation upkeep (commands + cron jobs).
+* [`PermissionsSync.md`](modules/PermissionsSync.md) — bot access list administration and channel overwrite sync runbook.
 
 ## 🧩 Module Documentation `/docs/modules`
 Each module has a **dedicated deep-dive file** describing its scope, flows, data sources, and integrations.

@@ -14,7 +14,7 @@ players.
 caches surfaced via `shared.sheets.recruitment`; CoreOps refresh jobs keep the
 roster warm every 3 h while surfacing `[cache]` summaries in ops logs.
 - **Search & panels.** Owns the recruiter and member search panels as well as
-text-only summaries described in [`CommandMatrix.md`](CommandMatrix.md).
+text-only summaries described in [`CommandMatrix.md`](../ops/CommandMatrix.md).
 Feature toggles (`recruiter_panel`, `member_panel`) in `FeatureToggles`
 determine which surfaces boot.
 - **Emoji & welcome rendering.** Provides the crest + emoji helpers used by the
@@ -30,11 +30,12 @@ same adapters.
 
 ## Non-Goals
 - No Discord-facing onboarding UX or ticket wizard controls (see
-[`Module-Welcome.md`](Module-Welcome.md)).
+  [`docs/modules/Welcome.md`](Welcome.md)).
 - No questionnaire parsing or onboarding sheet writes (see
-[`Module-Onboarding.md`](Module-Onboarding.md)).
+  [`docs/modules/Onboarding.md`](Onboarding.md)).
 - No reservation lifecycle mutations; placement helpers own `!reserve`,
-reservation expiry, and the 🧭 placement log (see [`Watchers.md`](Watchers.md)).
+  reservation expiry, and the 🧭 placement log (see
+  [`docs/ops/Watchers.md`](../ops/Watchers.md)).
 - No scheduler orchestration or RBAC primitives; those stay inside CoreOps.
 
 ## Data Model & Sheets
@@ -133,7 +134,7 @@ needed.
 
 ### Reporting
 - The scheduled Daily Recruiter Update posts once per UTC day at the
-`REPORT_DAILY_POST_TIME` cadence defined in [`Config.md`](Config.md). Manual
+`REPORT_DAILY_POST_TIME` cadence defined in [`Config.md`](../ops/Config.md). Manual
 runs use the `!report recruiters` command. Both mention configured recruiter
 roles, render the General Overview + Per Bracket sections described in the
 reporting epic, and send a structured `[report] recruiters …` log entry to
@@ -156,17 +157,15 @@ exposes health routes (`/health`, `/ready`), and wires RBAC (`ADMIN_ROLE_IDS`,
 event loop.
 
 ## Related Docs
-- [`docs/ops/Architecture.md`](../Architecture.md)
-- [`docs/ops/Runbook.md`](Runbook.md)
-- [`docs/ops/Modules.md`](Modules.md)
-- [`docs/ops/CommandMatrix.md`](CommandMatrix.md)
-- [`docs/ops/Config.md`](Config.md)
-- [`docs/ops/Module-Onboarding.md`](Module-Onboarding.md)
-- [`docs/ops/Module-Welcome.md`](Module-Welcome.md)
-- [`docs/ops/Watchers.md`](Watchers.md)
-- [`docs/ops/Welcome.md`](Welcome.md)
-- [`docs/ops/WelcomeFlow.md`](WelcomeFlow.md)
-- [`docs/ops/Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
+- [`docs/Architecture.md`](../Architecture.md)
+- [`docs/Runbook.md`](../Runbook.md)
+- [`docs/ops/CommandMatrix.md`](../ops/CommandMatrix.md)
+- [`docs/ops/Config.md`](../ops/Config.md)
+- [`docs/ops/Watchers.md`](../ops/Watchers.md)
+- [`docs/modules/CoreOps.md`](CoreOps.md)
+- [`docs/modules/Onboarding.md`](Onboarding.md)
+- [`docs/modules/Welcome.md`](Welcome.md)
+- [`docs/modules/Placement.md`](Placement.md)
 - [`docs/adr/ADR-0020-Availability-Derivation.md`](../adr/ADR-0020-Availability-Derivation.md)
 - [`docs/adr/ADR-0017-Reservations-Placement-Schema.md`](../adr/ADR-0017-Reservations-Placement-Schema.md)
 - [`docs/adr/ADR-0018_DailyRecruiterUpdate.md`](../adr/ADR-0018_DailyRecruiterUpdate.md)

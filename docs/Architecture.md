@@ -58,7 +58,7 @@ flowchart TD
    record telemetry for every refresh.
 3. **Reservations and placement.** `!reserve` and the watcher-driven placement
    reconciliation share the reservations sheet adapter documented in
-   [`Module-Placement.md`](ops/Module-Placement.md). Manual adjustments update the
+   [`docs/modules/Placement.md`](modules/Placement.md). Manual adjustments update the
    sheet, recompute availability columns (`AF/AH/AI`), post placement summaries,
    and feed the reminder/auto-release cron jobs that keep stale reservations from
    blocking capacity.

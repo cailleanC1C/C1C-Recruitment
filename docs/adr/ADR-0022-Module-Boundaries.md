@@ -63,7 +63,7 @@ Exceptions allowed only for docs-only, CI-only, or comment-only changes with exp
 If a PR changes user-visible behaviour—commands, help text, onboarding questions, summary
 layout, watchers/schedules, or feature toggles—then the PR must update:
 - `docs/ops/CommandMatrix.md`
-- `docs/ops/Module-<Module>.md`
+- `docs/modules/<Module>.md`
 - `docs/ops/Config.md`
 - `docs/_meta/DocStyle.md` (if formatting changed)
 - `docs/Architecture.md` (if flows changed)

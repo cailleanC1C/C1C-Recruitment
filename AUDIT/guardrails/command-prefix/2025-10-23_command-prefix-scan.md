@@ -10,6 +10,6 @@ It lists every occurrence of `COMMAND_PREFIX` in the repository and fails CI if 
 ## Non-Python references
 
 - `AUDIT/20251013_PHASE1/CONFIG_NOTES.md:9` — `| `COMMAND_PREFIX` | `rec` | Adjust bang commands. | No change for keepalive but included for completeness. |`
-- `docs/ops/development.md:28` — ``COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and`
+- `docs/modules/CoreOps-Development.md:28` — ``COREOPS_ADMIN_BANG_ALLOWLIST`. Legacy `COMMAND_PREFIX` is unsupported and`
 
-Doc last updated: 2025-10-23 (v0.9.5)
+Doc last updated: 2025-11-17 (v0.9.7)

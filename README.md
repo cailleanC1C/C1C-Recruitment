@@ -31,17 +31,17 @@ Operational commands (anything that peeks under the hood of the bot like refresh
 
 ## Admin snapshot
 
-Admins keep an eye on the bigger picture: making sure the bot stays online, caches stay fresh, Sheets stay clean and permissions match the plan. The full toolkit lives in the Ops suite. See the [Ops Runbook](docs/ops/Runbook.md), [Troubleshooting guide](docs/ops/Troubleshooting.md), and [Watchers reference](docs/ops/Watchers.md) for the day-to-day checklists and command names.
+Admins keep an eye on the bigger picture: making sure the bot stays online, caches stay fresh, Sheets stay clean and permissions match the plan. The full toolkit lives in the Ops suite. See the [Ops Runbook](docs/Runbook.md), [Troubleshooting guide](docs/Troubleshooting.md), and [Watchers reference](docs/ops/Watchers.md) for the day-to-day checklists and command names.
 
 ## Documentation quick links
 
 - [Architecture overview](docs/Architecture.md)
 - [Developer handbook](docs/README.md)
 - [Ops Command Matrix](docs/ops/CommandMatrix.md)
-- [Ops Runbook](docs/ops/Runbook.md)
-- [Ops Troubleshooting guide](docs/ops/Troubleshooting.md)
+- [Ops Runbook](docs/Runbook.md)
+- [Ops Troubleshooting guide](docs/Troubleshooting.md)
 - [Watcher tooling reference](docs/ops/Watchers.md)
 
 ---
 
-Doc last updated: 2025-10-29 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)
