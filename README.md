@@ -40,6 +40,7 @@ Start with:
 - **Troubleshooting:** `docs/Troubleshooting.md`  
 - **Ops Command Matrix:** `docs/ops/CommandMatrix.md`  
 - **Watchers Reference:** `docs/ops/Watchers.md`
+  
 This is your Swiss-army knife for keeping the bot healthy.
 # 🧭 Behind the Curtain — How It Works
 If you’re curious how the bot thinks, check:
@@ -51,6 +52,7 @@ If you’re curious how the bot thinks, check:
   - `docs/modules/Placement.md`  
   - `docs/modules/CoreOps.md`  
   - `docs/modules/PermissionsSync.md`
+    
 Each module doc explains what that subsystem does and how it fits into the bigger picture.
 # 📚 Quick Documentation Links
 - 🏛 **Architecture:** `docs/Architecture.md`  
