@@ -48,6 +48,7 @@ Single source of truth for how we work (me ↔ ChatGPT ↔ Codex), how pull requ
 
 | Folder             | Purpose                                                                     |
 | ------------------ | --------------------------------------------------------------------------- |
+| `docs/`            | Global docs (Architecture, Runbook, Troubleshooting, `_meta/DocStyle.md`).  |
 | `docs/adr/`        | Architectural Decision Records (ADR-XXXX).                                  |
 | `docs/ops/`        | Ops docs: Config schema, CommandMatrix, Logging, Perm Command Quickstart, Watchers, env reference. |
 | `docs/modules/`    | Module deep dives (CoreOps, Onboarding, Welcome, Recruitment, Placement, PermissionsSync). |
