@@ -844,6 +844,7 @@ class Runtime:
         # === Always-on internal extensions (admin-gated debug/ops commands) ===
         ALWAYS_EXTENSIONS = (
             "modules.coreops.cmd_cfg",
+            "modules.community.shard_tracker",
         )
         for ext in ALWAYS_EXTENSIONS:
             try:

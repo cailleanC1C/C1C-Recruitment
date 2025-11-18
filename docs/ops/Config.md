@@ -188,6 +188,14 @@ Feature Toggles:
   clan_profile = ON
 ```
 
+### Milestones sheet keys
+- `SHARD_MERCY_TAB` — worksheet name that stores the Shard & Mercy tracker rows
+  inside `MILESTONES_SHEET_ID`. No defaults; the config tab must provide the
+  exact tab name.
+- `SHARD_MERCY_CHANNEL_ID` — Discord channel ID dedicated to shard tracking.
+  Commands run outside this channel reply with a routing reminder; the value is
+  read from the same milestones Config tab so shard routing stays sheet-driven.
+
 ### Feature toggles worksheet
 
 **Config key**
@@ -239,4 +247,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)

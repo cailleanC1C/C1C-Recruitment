@@ -57,7 +57,13 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `@Bot ping` | 🧩 | Quick pong reply to confirm the bot is online. | `@Bot ping` |
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
+| `!shards [type]` | ✅ | Shard stash + mercy dashboard (only in the Shards & Mercy channel; replies inside your thread). | `!shards [type]` |
+| `!shards set <type> <count>` | ✅ | Force-set your shard stash count (channel restricted to Shards & Mercy). | `!shards set <type> <count>` |
+| `!mercy [type]` | ✅ | Alias to show your mercy counters inside the shard thread (same channel/thread rules). | `!mercy [type]` |
+| `!mercy set <type> <count>` | ✅ | Override a mercy counter (`mythic` targets the primal mythic pity). | `!mercy set <type> <count>` |
+| `!lego <type> [after_count]` | ✅ | Log a legendary drop and reset that mercy counter (Shards & Mercy channel only). | `!lego <type> [after_count]` |
+| `!mythic primal [after_count]` | ✅ | Log a primal mythic drop; resets both primal counters inside your shard thread. | `!mythic primal [after_count]` |
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)

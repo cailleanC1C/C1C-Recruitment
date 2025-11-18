@@ -36,6 +36,7 @@ __all__ = [
     "get_gspread_credentials",
     "get_recruitment_sheet_id",
     "get_onboarding_sheet_id",
+    "get_milestones_sheet_id",
     "get_onboarding_questions_tab",
     "resolve_onboarding_tab",
     "get_admin_role_ids",
@@ -378,6 +379,7 @@ def _load_config() -> Dict[str, object]:
         "GSPREAD_CREDENTIALS": os.getenv("GSPREAD_CREDENTIALS", ""),
         "RECRUITMENT_SHEET_ID": (os.getenv("RECRUITMENT_SHEET_ID") or "").strip(),
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
+        "MILESTONES_SHEET_ID": (os.getenv("MILESTONES_SHEET_ID") or "").strip(),
         "ONBOARDING_TAB": (os.getenv("ONBOARDING_TAB") or "").strip(),
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
@@ -646,6 +648,10 @@ def get_recruitment_sheet_id() -> str:
 
 def get_onboarding_sheet_id() -> str:
     return str(_CONFIG.get("ONBOARDING_SHEET_ID", ""))
+
+
+def get_milestones_sheet_id() -> str:
+    return str(_CONFIG.get("MILESTONES_SHEET_ID", ""))
 
 
 def get_onboarding_questions_tab() -> str:
