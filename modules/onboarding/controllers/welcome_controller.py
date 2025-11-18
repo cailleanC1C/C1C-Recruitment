@@ -153,7 +153,7 @@ SELECT_TYPES = {"single-select", "multi-select"}
 STATUS_ICON_WAITING = "✍️"
 STATUS_ICON_SAVED = "✅"
 STATUS_ICON_ERROR = "⚠️"
-STATUS_TEXT_WAITING = "Press “Enter answer” and type your answer below."
+STATUS_TEXT_WAITING = "Waiting for your reply."
 STATUS_TEXT_SAVED = "Saved. Click Next."
 STATUS_TEXT_NUMBER = "Invalid format: Use a number like 12.6M (no commas)."
 STATUS_TEXT_SELECT = "Invalid format: Pick one option."
@@ -322,14 +322,18 @@ class RollingCardSession:
         state = visibility.get("state") or ("show" if required else "optional")
 
         has_answer = self._has_answer(question)
+        qtype_value = (question.qtype or getattr(question, "type", "") or "").lower()
         if self._status_question != question.qid:
             self._status_question = question.qid
             self._status_hint = None
             self._status_state = "saved" if has_answer else "waiting"
-            self._waiting = False
+        self._waiting = (qtype_value in TEXT_TYPES) and not has_answer
 
         view = self._view_for_question(question, required=required, has_answer=has_answer)
         help_text = question.help or ""
+        helper_line: str | None = None
+        if qtype_value in TEXT_TYPES:
+            helper_line = "Just reply in this thread with your answer."
         badge_kind: str | None
         if state == "optional":
             badge_kind = "optional"
@@ -352,6 +356,7 @@ class RollingCardSession:
             view=view,
             answer_preview=answer_preview,
             note=self._note,
+            helper_line=helper_line,
         )
         self._note = None
 
@@ -407,13 +412,11 @@ class RollingCardSession:
                         for child in select_view.children:
                             self.add_item(child)
 
-                include_enter = qtype.startswith("short") or qtype.startswith("paragraph") or qtype.startswith("number")
                 session._attach_nav_buttons(
                     self,
                     question,
                     required=required,
                     has_answer=has_answer,
-                    include_enter=include_enter,
                 )
 
         return CardView()
@@ -425,27 +428,11 @@ class RollingCardSession:
         *,
         required: bool,
         has_answer: bool,
-        include_enter: bool,
     ) -> None:
         session = self
         waiting_active = self._waiting and self._status_question == question.qid
         can_back = self._seek_visible_index(self._current_index - 1, -1) is not None
         can_next = (not waiting_active) and (has_answer or not required)
-
-        if include_enter:
-            enter_button = discord.ui.Button(
-                label="Enter answer",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"welcome.card.enter:{question.qid}",
-                disabled=waiting_active,
-            )
-
-            async def enter_callback(interaction: discord.Interaction) -> None:
-                await session._handle_enter(interaction, question)
-
-            enter_button.callback = enter_callback  # type: ignore[assignment]
-            enter_button.row = 1
-            view.add_item(enter_button)
 
         back_button = discord.ui.Button(
             label="Back",
@@ -542,25 +529,6 @@ class RollingCardSession:
                 return select
 
         return SelectPrompt()
-
-    async def _handle_enter(
-        self, interaction: discord.Interaction, question: SheetQuestionRecord
-    ) -> None:
-        if not self._is_owner(getattr(interaction, "user", None)):
-            try:
-                await interaction.response.send_message(
-                    "Only the ticket owner can answer.", ephemeral=True
-                )
-            except Exception:
-                pass
-            return
-        self._waiting = True
-        self._status_question = question.qid
-        self._status_state = "waiting"
-        self._status_hint = None
-        await self._defer_interaction(interaction)
-        self._log_event("⌛", "waiting")
-        await self._render_step()
 
     async def _handle_bool_answer(
         self,
@@ -862,7 +830,7 @@ class RollingCardSession:
         await self._render_step()
 
     async def handle_message(self, message: discord.Message) -> bool:
-        if self._closed or not self._waiting or self._current_question is None:
+        if self._closed or self._current_question is None:
             return False
         if self.thread_id is not None:
             channel_identifier = getattr(message.channel, "id", None)
@@ -875,6 +843,9 @@ class RollingCardSession:
             return False
         raw = (message.content or "").strip()
         question = self._current_question
+        qtype_value = (question.qtype or getattr(question, "type", "") or "").lower()
+        if qtype_value not in TEXT_TYPES:
+            return False
         ok, cleaned, hint = self._validate(question, raw)
         if not ok:
             self._status_question = question.qid
@@ -1621,8 +1592,12 @@ class BaseWelcomeController:
         help_text = getattr(question, "help", None)
         if isinstance(question, dict):
             help_text = question.get("help") or help_text
+        qtype_value = self._question_type_value(question).strip().lower()
+        reply_hint = "Just reply in this thread with your answer." if qtype_value in TEXT_TYPES else None
         if help_text:
             lines.append(f"_{help_text}_")
+        if reply_hint:
+            lines.append(reply_hint)
 
         if formatted:
             lines.append(f"**Current answer:** {formatted}")

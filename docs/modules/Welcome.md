@@ -26,7 +26,7 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 ### 2. Launching Onboarding
 1. When a recruit presses **Open questions**, the module defers the interaction, looks up the stored session (if any), and calls `modules.onboarding.welcome_flow.launch(...)` to fetch the `welcome` flow questions.
 2. The wizard message renders the current question, inline summary (“So far”), and navigation buttons (Back/Next/Skip/Cancel). Text and help content come from the onboarding sheet; the welcome layer only formats them.
-3. For text/number questions the watcher also listens for free-form replies in the thread so recruits who forget to press **Answer** are still captured. Valid answers update the wizard immediately; invalid input yields an inline ❌ hint.
+3. Text and paragraph prompts no longer rely on the **Enter answer** button. The wizard now reminds recruits, "Just reply in this thread with your answer." and the watcher treats their next reply from that thread owner as the response. (Numeric prompts continue to share the same inline capture.) Valid answers update the wizard immediately; invalid input yields an inline ❌ hint.
 
 ### 3. Summary + Recruiter Handoff
 1. After the last question the wizard switches to the summary card with `Finish ✅`. Pressing Finish posts the recruiter summary embed into the thread and pings configured roles.
@@ -61,4 +61,4 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 - [`docs/modules/Placement.md`](Placement.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.7)

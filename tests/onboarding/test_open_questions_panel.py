@@ -107,34 +107,6 @@ def test_launch_bootstraps_controller_when_missing(monkeypatch: pytest.MonkeyPat
     asyncio.run(runner())
 
 
-def test_text_prompt_button_highlights_until_answered() -> None:
-    async def runner() -> None:
-        thread_id = 777
-        question = {"label": "IGN", "qid": "ign", "type": "short", "options": []}
-
-        def make_controller(answered: bool) -> SimpleNamespace:
-            controller = SimpleNamespace()
-            controller.questions_by_thread = {thread_id: [question]}
-            controller.answers_by_thread = {thread_id: {"ign": "Ace"}} if answered else {}
-            controller.has_answer = lambda tid, _question, *, answered=answered: answered and tid == thread_id
-            return controller
-
-        unanswered_controller = make_controller(False)
-        wizard = panels.OnboardWizard(unanswered_controller, thread_id, step=0)
-        text_button = next(child for child in wizard.children if getattr(child, "label", "") == "Enter answer")
-        assert text_button.style is panels.discord.ButtonStyle.primary
-
-        answered_controller = make_controller(True)
-        wizard_after_answer = panels.OnboardWizard(answered_controller, thread_id, step=0)
-        text_button_after = next(
-            child for child in wizard_after_answer.children if getattr(child, "label", "") == "Enter answer"
-        )
-        assert text_button_after.style is panels.discord.ButtonStyle.secondary
-
-    asyncio.run(runner())
-
-
-
 def test_resume_button_visible_when_session_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(panels.OpenQuestionsPanelView, "_session_exists", staticmethod(lambda _thread_id, _user_id: True))
 
@@ -253,7 +225,7 @@ def test_status_row_visible_for_text_inputs() -> None:
         await wizard.refresh()
 
         assert message.last_edit is not None
-        assert "Press “Enter answer”" in message.last_edit.content
+        assert "Waiting for your reply." in message.last_edit.content
 
     asyncio.run(runner())
 
@@ -311,13 +283,13 @@ def test_status_row_hidden_for_select_and_bool() -> None:
 
         await wizard.refresh()
         assert message.last_edit is not None
-        assert "Press “Enter answer”" not in message.last_edit.content
+        assert "Waiting for your reply." not in message.last_edit.content
 
         # Swap to bool question and ensure status stays hidden
         controller.questions_by_thread[thread_id] = [bool_question]
         await wizard.refresh()
         assert message.last_edit is not None
-        assert "Press “Enter answer”" not in message.last_edit.content
+        assert "Waiting for your reply." not in message.last_edit.content
 
     asyncio.run(runner())
 
