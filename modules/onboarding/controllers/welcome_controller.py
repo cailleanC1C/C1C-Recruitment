@@ -430,7 +430,12 @@ class RollingCardSession:
         has_answer: bool,
     ) -> None:
         session = self
-        waiting_active = self._waiting and self._status_question == question.qid
+        # Only block "Next" when we're actively waiting on this required question.
+        waiting_active = (
+            self._waiting
+            and required
+            and self._status_question == question.qid
+        )
         can_back = self._seek_visible_index(self._current_index - 1, -1) is not None
         can_next = (not waiting_active) and (has_answer or not required)
 
