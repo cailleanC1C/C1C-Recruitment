@@ -40,6 +40,6 @@ def test_scheduler_job_exception_does_not_cancel(
         await scheduler.shutdown()
 
         assert attempt["count"] >= 2
-        assert any("recurring job error" in record.message for record in caplog.records)
+        assert any("recurring job error" in record.getMessage() for record in caplog.records)
 
     asyncio.run(runner())
