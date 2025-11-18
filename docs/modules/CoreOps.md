@@ -29,7 +29,7 @@ surfaces that every functional module relies on.
 - **Modules.** Modules expose cogs in `cogs/` that register their commands. They
   resolve config, Sheets data, and feature toggles through CoreOps helpers such
   as `shared.config.registry`, `modules.common.feature_flags`, and the cache API
-  (`refresh_now`, `get_snapshot`). Module docs live in `docs/ops/Modules.md`.
+  (`refresh_now`, `get_snapshot`). Module docs are indexed in `docs/README.md`.
 - **Sheets & config registry.** CoreOps caches sheet tabs using bucket metadata
   stored in the Config worksheet (`docs/ops/Config.md`). Reloading the registry
   clears TTL caches and re-reads tab definitions before modules resume work.

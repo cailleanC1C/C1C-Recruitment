@@ -71,7 +71,7 @@ Every audit and CI check validates against this document.
   schedules, feature toggles, or any user-visible flow, the PR **must** update the relevant  
   SSoT docs:
     • `docs/ops/CommandMatrix.md`  
-    • `docs/ops/Module-<Module>.md`  
+    • `docs/modules/<Module>.md`
     • `docs/ops/Config.md`  
     • `docs/_meta/DocStyle.md` (if formatting changed)  
     • `docs/Architecture.md` (if data flows changed)

@@ -30,9 +30,9 @@ same adapters.
 
 ## Non-Goals
 - No Discord-facing onboarding UX or ticket wizard controls (see
-[`Module-Welcome.md`](Module-Welcome.md)).
+ [`docs/modules/Welcome.md`](Welcome.md)).
 - No questionnaire parsing or onboarding sheet writes (see
-[`Module-Onboarding.md`](Module-Onboarding.md)).
+ [`docs/modules/Onboarding.md`](Onboarding.md)).
 - No reservation lifecycle mutations; placement helpers own `!reserve`,
 reservation expiry, and the 🧭 placement log (see [`Watchers.md`](Watchers.md)).
 - No scheduler orchestration or RBAC primitives; those stay inside CoreOps.
@@ -156,17 +156,15 @@ exposes health routes (`/health`, `/ready`), and wires RBAC (`ADMIN_ROLE_IDS`,
 event loop.
 
 ## Related Docs
-- [`docs/ops/Architecture.md`](../Architecture.md)
-- [`docs/ops/Runbook.md`](Runbook.md)
-- [`docs/ops/Modules.md`](Modules.md)
+- [`docs/Architecture.md`](../Architecture.md)
+- [`docs/Runbook.md`](../Runbook.md)
+- [`docs/README.md`](../README.md)
 - [`docs/ops/CommandMatrix.md`](CommandMatrix.md)
 - [`docs/ops/Config.md`](Config.md)
-- [`docs/ops/Module-Onboarding.md`](Module-Onboarding.md)
-- [`docs/ops/Module-Welcome.md`](Module-Welcome.md)
+- [`docs/modules/Onboarding.md`](Onboarding.md)
+- [`docs/modules/Welcome.md`](Welcome.md) — includes the ticket flow details formerly in `runbooks/WelcomePanel.md`/`specs/WelcomeFlow.md`.
 - [`docs/ops/Watchers.md`](Watchers.md)
-- [`docs/ops/Welcome.md`](Welcome.md)
-- [`docs/ops/WelcomeFlow.md`](WelcomeFlow.md)
-- [`docs/ops/Welcome_Summary_Spec.md`](Welcome_Summary_Spec.md)
+- [`docs/_meta/DocStyle.md`](../_meta/DocStyle.md)
 - [`docs/adr/ADR-0020-Availability-Derivation.md`](../adr/ADR-0020-Availability-Derivation.md)
 - [`docs/adr/ADR-0017-Reservations-Placement-Schema.md`](../adr/ADR-0017-Reservations-Placement-Schema.md)
 - [`docs/adr/ADR-0018_DailyRecruiterUpdate.md`](../adr/ADR-0018_DailyRecruiterUpdate.md)

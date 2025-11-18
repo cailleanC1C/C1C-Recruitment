@@ -14,8 +14,8 @@ Placement enforces the rules that determine where a recruit lands once a welcome
 - **Target-selection stub.** `modules/placement/target_select.py` currently only logs when it loads. The stub reserves the namespace for future automation but intentionally exposes no commands today. 【F:modules/placement/target_select.py†L1-L12】
 
 ## Non-Goals
-- No onboarding question or session logic; those responsibilities stay inside the onboarding engine. 【F:docs/ops/Module-Onboarding.md†L3-L45】
-- No Discord UX elements (panels, embeds, ticket lifecycle prompts); Welcome owns the user-facing surface and simply calls Placement helpers. 【F:docs/ops/Module-Welcome.md†L3-L45】
+- No onboarding question or session logic; those responsibilities stay inside the onboarding engine. 【F:docs/modules/Onboarding.md†L3-L45】
+- No Discord UX elements (panels, embeds, ticket lifecycle prompts); Welcome owns the user-facing surface and simply calls Placement helpers. 【F:docs/modules/Welcome.md†L3-L45】
 - No standalone reservations schema definitions — the Config doc remains the source of truth for environment keys, FeatureToggles rows, and tab overrides. 【F:docs/ops/Config.md†L76-L223】
 
 ## Data Model & Sheets
@@ -28,7 +28,7 @@ Placement enforces the rules that determine where a recruit lands once a welcome
 - **Derived availability:** `recompute_clan_availability` reads the `Reservations` tab, counts active holds, and rewrites `AF{row}:AI{row}` with `available_after_reservations`, the existing `AG` value, `reservation_count`, and a `reservation_summary` that lists holder names for quick audits. 【F:modules/recruitment/availability.py†L54-L118】
 
 ### Welcome ticket metadata (`WelcomeTickets` tab)
-- The onboarding helpers keep `ticket_number`, `username`, `clantag`, and `date_closed` in sync so Placement can always resolve the right row when a ticket closes. 【F:docs/ops/Module-Onboarding.md†L31-L35】
+- The onboarding helpers keep `ticket_number`, `username`, `clantag`, and `date_closed` in sync so Placement can always resolve the right row when a ticket closes. 【F:docs/modules/Onboarding.md†L31-L35】
 
 ## Flows
 1. **Ticket ready for placement.** Welcome parses the thread name, applies any pending reservation deltas (consume, release, or convert holds), and writes the final `clantag` plus before/after math snapshots before renaming the thread and logging the result. 【F:modules/onboarding/watcher_welcome.py†L1479-L1549】
@@ -42,14 +42,14 @@ Placement enforces the rules that determine where a recruit lands once a welcome
 - **Shared config.** Role/channel helpers (`get_clan_lead_ids`, `get_recruiters_thread_id`, `get_recruitment_interact_channel_id`, `get_welcome_channel_id`) decide who can run the commands and where summaries post. 【F:modules/placement/reservations.py†L17-L33】
 
 ## Related Docs
-- [`docs/ops/Architecture.md`](../Architecture.md)
-- [`docs/ops/Runbook.md`](Runbook.md)
-- [`docs/ops/Modules.md`](Modules.md)
-- [`docs/ops/RecruiterPanel.md`](RecruiterPanel.md)
+- [`docs/Architecture.md`](../Architecture.md)
+- [`docs/Runbook.md`](../Runbook.md)
+- [`docs/README.md`](../README.md)
+- [`docs/modules/Recruitment.md`](Recruitment.md)
 - [`docs/ops/CommandMatrix.md`](CommandMatrix.md)
 - [`docs/ops/Config.md`](Config.md)
-- [`docs/ops/Module-Onboarding.md`](Module-Onboarding.md)
-- [`docs/ops/Module-Welcome.md`](Module-Welcome.md)
+- [`docs/modules/Onboarding.md`](Onboarding.md)
+- [`docs/modules/Welcome.md`](Welcome.md)
 - [`docs/adr/ADR-0017-Reservations-Placement-Schema.md`](../adr/ADR-0017-Reservations-Placement-Schema.md)
 - [`docs/adr/ADR-0019-Introduction-of-Clan-SeatReservations.md`](../adr/ADR-0019-Introduction-of-Clan-SeatReservations.md)
 - [`docs/adr/ADR-0021-availability-recompute-helper.md`](../adr/ADR-0021-availability-recompute-helper.md)

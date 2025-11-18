@@ -125,10 +125,11 @@ this UX format.
 ## References
 - [`docs/ops/Logging.md`](../ops/Logging.md) — technical logging configuration,
   dedupe policy, and helper wiring.
-- [`docs/ops/Welcome_Summary_Spec.md`](../ops/Welcome_Summary_Spec.md) — concrete
-  example of embed hide rules and inline formatting.
-- [`docs/ops/commands.md`](../ops/commands.md) — runtime layout of the help system.
-- [`docs/ops/Module-Welcome.md`](../ops/Module-Welcome.md) — owner of the welcome
+- [`docs/_meta/DocStyle.md`](DocStyle.md) — summary embed layout, hide rules,
+  and inline formatting requirements (this file is the SSoT for formatting).
+- [`docs/ops/CommandMatrix.md`](../ops/CommandMatrix.md) — runtime layout of the
+  help system and operator-facing commands.
+- [`docs/modules/Welcome.md`](../modules/Welcome.md) — owner of the welcome
   panels/wizard and recruiter summaries.
 
 Doc last updated: 2025-11-17 (v0.9.7)
