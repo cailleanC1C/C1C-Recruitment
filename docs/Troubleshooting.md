@@ -17,7 +17,7 @@
 | “No tabs listed in Config” | Missing key in Sheet Config tab | check sheet permissions + tab names |
 | “I can't find a configured welcome for **TAG**. Add it in the sheet.” | Row missing or inactive in `WelcomeTemplates`; confirm `ACTIVE` = `Y`. | Update the sheet then ask an admin to run `!welcome-refresh` |
 
-Refer to the automation keys listed in [`Config.md`](Config.md#automation-listeners--cron-jobs)
+Refer to the automation keys listed in [`Config.md`](ops/Config.md#automation-listeners--cron-jobs)
 when adjusting cadences or toggles.
 
 ## Feature toggles Q&A
@@ -56,4 +56,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

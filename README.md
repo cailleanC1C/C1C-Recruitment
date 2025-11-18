@@ -1,47 +1,69 @@
 <!-- Keep README user-facing -->
 <!-- Dev layout reference: recruitment modules now live in modules/recruitment/, -->
 <!-- shared sheet adapters consolidate under shared/sheets/. See docs/Architecture.md. -->
-# C1C Bot - The Woadkeeper v0.9.7
+# C1C Bot — The Woadkeeper  
+Version v0.9.7
 
-Welcome to the C1C helper. The bot keeps clan rosters healthy, helps new friends find their hall and makes sure every welcome lands in the right place. It links simple Discord commands to the Mirralith Sheets that power recruitment and describe our cluster, so everyone is working with the same fresh info.
-
+Welcome, traveller of the Blue Flame.  
+The Woadkeeper keeps our clans organised, our newcomers guided, and our Sheets clean.  
+Think of it as the cluster’s quiet little helper: always awake, always watching, and always keeping the halls tidy so people can focus on playing and having fun.
 ## Role overview
-
 - **Users** get quick answers about clans and bot status without pinging staff.
 - **Staff** use richer panels with more info to clans needs and ready-to-send welcome messages.
 - **Admins** keep the bot running smoothly and coordinate anything that touches the Ops toolkit.
-
-## User commands
-
+# 🌟 What the Woadkeeper Does
+### For normal users
 - `@<Botname> help` — lists everything you can access with a short tip for each item.
-- `@<Botname> ping` — quick check that the bot is awake; it replies with 🏓 when everything is running.
-- `!clan <tag>` — posts a clan profile card and entry citeria pulled straight from our Mirraltih.
-- `!clansearch` — opens the interactive search panel so members can browse clan rosters on their own.
-
+- **Find a clan**  
+  `!clan <tag>` gives you a clean profile card with requirements, crest, and quick notes.
+- **Browse the cluster**  
+  Use `!clansearch` to open the interactive search menu.
+- **Check the bot**  
+  `@BotName ping` — answers with 🏓 if all systems are up.
 The bot only shows commands you can actually run; if you need more tools, ask an admin to review your roles.
-
-## Staff quick actions
-
+### For staff & recruiters
 Staff can use all user commands plus:
-
-- `!clanmatch` — recruiter panel for matching prospects to clans using the latest roster info.
-- `!welcome [clan] @mention` — posts a welcome messages with room for an optional note to the tagged recruit in their clans channel and posts a short notice in general chat so they can say hi to the community.
-
+- **Recruitment panel**  
+  `!clanmatch` opens the matching tool to help place new members.
+- **Welcome Messages**  
+  `!welcome [clan] @name` posts the welcome and logs it in the right places.
 Operational commands (anything that peeks under the hood of the bot like refresh buttons, sync helpers and similar tools) live in the Ops docs. Start with the [Command Matrix](docs/ops/CommandMatrix.md) and [Perm Command Quickstart](docs/ops/PermCommandQuickstart.md) to see what each command does before you press go.
+### Admin snapshot
+Admins handle the bigger picture:
+- Caches staying fresh  
+- Sheets staying clean  
+- Reservation ledger behaving  
+- Permissions syncing properly  
+- Onboarding running without stalling  
+Start with:
+- **Ops Runbook:** `docs/Runbook.md`  
+- **Troubleshooting:** `docs/Troubleshooting.md`  
+- **Ops Command Matrix:** `docs/ops/CommandMatrix.md`  
+- **Watchers Reference:** `docs/ops/Watchers.md`
+  
+This is your Swiss-army knife for keeping the bot healthy.
+# 🧭 Behind the Curtain — How It Works
+If you’re curious how the bot thinks, check:
+- **Architecture Overview:** `docs/Architecture.md`  
+- **Module docs:**  
+  - `docs/modules/Onboarding.md`  
+  - `docs/modules/Welcome.md`  
+  - `docs/modules/Recruitment.md`  
+  - `docs/modules/Placement.md`  
+  - `docs/modules/CoreOps.md`  
+  - `docs/modules/PermissionsSync.md`
+    
+Each module doc explains what that subsystem does and how it fits into the bigger picture.
+# 📚 Quick Documentation Links
+- 🏛 **Architecture:** `docs/Architecture.md`  
+- 📘 **Ops Runbook:** `docs/Runbook.md`  
+- 🔧 **Command Matrix:** `docs/ops/CommandMatrix.md`  
+- 🛠 **Troubleshooting:** `docs/Troubleshooting.md`  
+- 🔭 **Watchers:** `docs/ops/Watchers.md`  
+- 🧩 **Modules:** in `docs/modules/`  
+- 📜 **Contributor & Dev Docs:**  
+  - `docs/_meta/DocStyle.md`  
+  - `docs/contracts/CollaborationContract.md`  
+  - ADRs in `docs/adr/`
 
-## Admin snapshot
-
-Admins keep an eye on the bigger picture: making sure the bot stays online, caches stay fresh, Sheets stay clean and permissions match the plan. The full toolkit lives in the Ops suite. See the [Ops Runbook](docs/Runbook.md), [Troubleshooting guide](docs/Troubleshooting.md), and [Watchers reference](docs/ops/Watchers.md) for the day-to-day checklists and command names.
-
-## Documentation quick links
-
-- [Architecture overview](docs/Architecture.md)
-- [Developer handbook](docs/README.md)
-- [Ops Command Matrix](docs/ops/CommandMatrix.md)
-- [Ops Runbook](docs/Runbook.md)
-- [Ops Troubleshooting guide](docs/Troubleshooting.md)
-- [Watcher tooling reference](docs/ops/Watchers.md)
-
----
-
-Doc last updated: 2025-10-29 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.7)

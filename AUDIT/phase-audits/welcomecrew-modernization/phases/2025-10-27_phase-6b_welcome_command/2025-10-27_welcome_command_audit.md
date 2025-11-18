@@ -70,8 +70,8 @@
 - **Administrative surface area.** Port the refresh/on/off/status commands (or slash equivalents) to ensure staff can warm caches and flip the feature without code pushes, while aligning checks with the modern `tier("staff")` decorators (`AUDIT/legacy/clanmatch-welcomecrew/2025-10-10_code-export/MM/welcome.py:L407-L443`; `cogs/recruitment_welcome.py:L39-L83`).
 
 ## Parity & docs check
-- **Command matrix / commands.md** still advertise a working `!welcome [clan] @mention` with no schema caveats, matching the old behavior but not the current code requirement for `ClanTag`/`Message` columns (`docs/ops/CommandMatrix.md:L30-L47`; `docs/ops/commands.md:L87-L95`).
-- **Troubleshooting.md** suggests running `!rec refresh templates` when a template is missing, implying cache staleness rather than schema mismatch (`docs/ops/Troubleshooting.md:L13-L21`).
+- **Command matrix** still advertises a working `!welcome [clan] @mention` with no schema caveats, matching the old behavior but not the current code requirement for `ClanTag`/`Message` columns (`docs/ops/CommandMatrix.md:L30-L47`).
+- **Troubleshooting.md** suggests running `!rec refresh templates` when a template is missing, implying cache staleness rather than schema mismatch (`docs/Troubleshooting.md:L13-L21`).
 - The root README promises "!welcome — staff command that posts the standard welcome note" which is false given the present failure mode (`README.md:L4-L16`).
 - No doc mentions a migration to a single `Message` column or the new `ClanTag` header, so operators have no guidance to reconcile the sheets with the updated code.
 

@@ -55,22 +55,22 @@
 - D-01: 'Phase' in title → docs/development.md
 - D-02: missing or malformed footer → docs/development.md
 - D-02: missing or malformed footer → docs/Architecture.md
-- D-01: 'Phase' in title → docs/ops/commands.md
-- D-02: missing or malformed footer → docs/ops/commands.md
+- D-01: 'Phase' in title → legacy commands doc (retired)
+- D-02: missing or malformed footer → legacy commands doc (retired)
 - D-01: 'Phase' in title → docs/ops/Config.md
 - D-02: missing or malformed footer → docs/ops/Config.md
-- D-01: 'Phase' in title → docs/ops/module-toggles.md
-- D-02: missing or malformed footer → docs/ops/module-toggles.md
-- D-01: 'Phase' in title → docs/ops/Troubleshooting.md
-- D-02: missing or malformed footer → docs/ops/Troubleshooting.md
-- D-01: 'Phase' in title → docs/ops/development.md
-- D-02: missing or malformed footer → docs/ops/development.md
-- D-01: 'Phase' in title → docs/ops/Runbook.md
-- D-02: missing or malformed footer → docs/ops/Runbook.md
+- D-01: 'Phase' in title → module toggles doc (retired)
+- D-02: missing or malformed footer → module toggles doc (retired)
+- D-01: 'Phase' in title → docs/Troubleshooting.md
+- D-02: missing or malformed footer → docs/Troubleshooting.md
+- D-01: 'Phase' in title → docs/modules/CoreOps-Development.md
+- D-02: missing or malformed footer → docs/modules/CoreOps-Development.md
+- D-01: 'Phase' in title → docs/Runbook.md
+- D-02: missing or malformed footer → docs/Runbook.md
 - D-01: 'Phase' in title → docs/ops/CommandMatrix.md
 - D-02: missing or malformed footer → docs/ops/CommandMatrix.md
-- D-01: 'Phase' in title → docs/ops/Architecture.md
-- D-02: missing or malformed footer → docs/ops/Architecture.md
+- D-01: 'Phase' in title → docs/Architecture.md
+- D-02: missing or malformed footer → docs/Architecture.md
 - D-01: 'Phase' in title → docs/ops/Watchers.md
 - D-02: missing or malformed footer → docs/ops/Watchers.md
 - D-02: missing or malformed footer → docs/adr/ADR-0000-template.md
@@ -92,4 +92,4 @@
 - D-03: keys in Config.md missing in .env.example → ['ADMIN_ROLE_IDS', 'CLANLIST_TAB', 'CLANS_TAB', 'CLAN_TAGS_CACHE_TTL_SEC', 'CLEANUP_AGE_HOURS', 'CRON_REFRESH_CACHE', 'CRON_REFRESH_CLAN_TAGS', 'CRON_REFRESH_SHEETS', 'DISCORD_TOKEN', 'EMOJI_MAX_BYTES', 'EMOJI_PAD_BOX', 'EMOJI_PAD_SIZE', 'ENABLE_NOTIFY_FALLBACK', 'ENABLE_PROMO_LISTENERS', 'ENABLE_PROMO_WATCHER', 'ENABLE_WELCOME_LISTENERS', 'ENABLE_WELCOME_WATCHER', 'ENV_NAME', 'FALSE', 'FEATURE_TOGGLES_TAB', 'GSPREAD_CREDENTIALS', 'GUILD_IDS', 'LEAD_ROLE_IDS', 'LOG_CHANNEL_ID', 'NOTIFY_CHANNEL_ID', 'NOTIFY_PING_ROLE_ID', 'ONBOARDING_SHEET_ID', 'PROMO_CHANNEL_ID', 'PROMO_TICKETS_TAB', 'PUBLIC_BASE_URL', 'RECRUITER_ROLE_IDS', 'RECRUITMENT_SHEET_ID', 'REFRESH_TIMES', 'RENDER_EXTERNAL_URL', 'SEARCH_RESULTS_SOFT_CAP', 'STAFF_ROLE_IDS', 'STRICT_EMOJI_PROXY', 'STRICT_PROBE', 'TAG_BADGE_BOX', 'TAG_BADGE_PX', 'TIMEZONE', 'TRUE', 'UTC', 'WATCHDOG_CHECK_SEC', 'WATCHDOG_DISCONNECT_GRACE_SEC', 'WATCHDOG_STALL_SEC', 'WELCOME_CHANNEL_ID', 'WELCOME_ENABLED', 'WELCOME_GENERAL_CHANNEL_ID', 'WELCOME_TEMPLATES_TAB', 'WELCOME_TICKETS_TAB']
 - D-03: keys in .env.example not documented in Config.md → ['MEMBER_PANEL_ALLOW_ROLES', 'MEMBER_PANEL_THREAD_ID']
 
-Doc last updated: 2025-10-23 (v0.9.5)
+Doc last updated: 2025-11-17 (v0.9.7)

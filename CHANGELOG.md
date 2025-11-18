@@ -1,5 +1,31 @@
 # Changelog
 
+### v0.9.7 — 2025-11-17  
+#### Documentation Restructure & Guardrail Compliance
+- **Major docs cleanup:** unified global docs, ops docs, and module docs into the new SSoT layout.
+- Removed legacy folders (`reference/`, `runbooks/`, `specs/`, old onboarding/welcome flow docs).
+- Introduced `docs/modules/` with full module deep-dives.
+- Updated all internal links to correct SSoT paths.
+- README rewritten as a clean user-facing overview.
+- Added docs tree audit test to block future sprawl.
+- Updated footers across docs.
+#### Test Suite Consolidation
+- Migrated all standalone pytest configs into `pyproject.toml`.
+- Normalized test placement into `/tests/{coreops,integration,recruitment,shared,...}`.
+- Cleaned up stale test files referencing removed code paths.
+#### Reservations & Recruitment
+- Fixed missing recompute logs when closing tickets via `!reserve`.
+- Enforced canonical header order for reservation sheets.
+- Removed all alias fallbacks; sheet access is now strict and clean.
+- Added guardrails verifying reservation thread → ledger mapping.
+- Clarified coordinator vs scout functionality.
+#### Onboarding/Welcome Stability
+- Improved Enter-Answer detection to avoid Discord red-toast failures.
+- Strengthened session recovery to avoid “bleeding state” between tickets.
+- Added inline status indicators (waiting / saved / error).
+- Removed deprecated fallback flows.
+- Additional watcher safeguards to prevent early retirement.
+  
 ### v0.9.7 — 2025-11-13
 - **Audit:** Documented current reservation command flow and AF/AH/AI recompute wiring (`AUDIT/20251113_reservations-availability-wiring.md`).
 - **Audit:** Analyzed reservations cache behavior and header drift causing stale availability counts (`AUDIT/20251113_reservations-cache-and-active-rows.md`).

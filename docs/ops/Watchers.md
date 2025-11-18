@@ -77,8 +77,8 @@ keeps the bot “warm” in two layers:
   these watchers and schedulers.
 - [`docs/ops/Config.md`](Config.md) — environment keys, FeatureToggles, and sheet
   tabs referenced above.
-- [`docs/modules/CoreOps.md`](../modules/CoreOps.md) — runtime lifecycle, scheduler wiring, and
-  watchdog contracts.
-- [`docs/README.md`](../README.md) — which modules own the watchers listed here.
+- [`docs/modules/CoreOps.md`](../modules/CoreOps.md) — runtime lifecycle,
+  scheduler wiring, and watchdog contracts.
+- [`docs/modules/`](../modules) — module owners for the watchers listed here.
 
 Doc last updated: 2025-11-17 (v0.9.7)
