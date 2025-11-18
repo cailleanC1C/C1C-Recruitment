@@ -12,11 +12,10 @@ import discord
 
 from shared.config import (
     get_server_map_channel_id,
-    get_server_map_enabled,
     get_server_map_refresh_days,
 )
 from shared.logfmt import channel_label
-from modules.common import runtime as runtime_helpers
+from modules.common import feature_flags, runtime as runtime_helpers
 
 from . import server_map_state
 
@@ -249,7 +248,7 @@ async def refresh_server_map(
 ) -> ServerMapResult:
     await bot.wait_until_ready()
 
-    if not get_server_map_enabled():
+    if not feature_flags.is_enabled("SERVER_MAP"):
         message = _format_skip("feature_disabled")
         await runtime_helpers.send_log_message(message)
         return ServerMapResult(status="disabled", reason="feature_disabled")

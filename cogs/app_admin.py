@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
+from modules.common import feature_flags, runtime as runtime_helpers
 from modules.ops import server_map
 
 
@@ -87,6 +88,16 @@ class AppAdmin(commands.Cog):
     )
     @admin_only()
     async def servermap_refresh(self, ctx: commands.Context) -> None:
+        if not feature_flags.is_enabled("SERVER_MAP"):
+            await ctx.reply(
+                "Server map feature is currently disabled in FeatureToggles.",
+                mention_author=False,
+            )
+            await runtime_helpers.send_log_message(
+                "📘 Server map — skipped • reason=feature_disabled"
+            )
+            return
+
         result = await server_map.refresh_server_map(self.bot, force=True, actor="command")
         if result.status == "ok":
             await ctx.reply(
@@ -96,7 +107,7 @@ class AppAdmin(commands.Cog):
             return
         if result.status == "disabled":
             await ctx.reply(
-                "Server map automation is disabled. Set SERVER_MAP_ENABLED=true to enable it.",
+                "Server map feature is currently disabled in FeatureToggles.",
                 mention_author=False,
             )
             return
