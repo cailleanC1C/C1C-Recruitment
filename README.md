@@ -21,17 +21,14 @@ Think of it as the cluster’s quiet little helper: always awake, always watchin
 - **Check the bot**  
   `@BotName ping` — answers with 🏓 if all systems are up.
 The bot only shows commands you can actually run; if you need more tools, ask an admin to review your roles.
-
 ### For staff & recruiters
 Staff can use all user commands plus:
 - **Recruitment panel**  
   `!clanmatch` opens the matching tool to help place new members.
 - **Welcome Messages**  
   `!welcome [clan] @name` posts the welcome and logs it in the right places.
-
 Operational commands (anything that peeks under the hood of the bot like refresh buttons, sync helpers and similar tools) live in the Ops docs. Start with the [Command Matrix](docs/ops/CommandMatrix.md) and [Perm Command Quickstart](docs/ops/PermCommandQuickstart.md) to see what each command does before you press go.
-
-## Admin snapshot
+### Admin snapshot
 Admins handle the bigger picture:
 - Caches staying fresh  
 - Sheets staying clean  
@@ -44,7 +41,6 @@ Start with:
 - **Ops Command Matrix:** `docs/ops/CommandMatrix.md`  
 - **Watchers Reference:** `docs/ops/Watchers.md`
 This is your Swiss-army knife for keeping the bot healthy.
-
 # 🧭 Behind the Curtain — How It Works
 If you’re curious how the bot thinks, check:
 - **Architecture Overview:** `docs/Architecture.md`  
@@ -56,9 +52,7 @@ If you’re curious how the bot thinks, check:
   - `docs/modules/CoreOps.md`  
   - `docs/modules/PermissionsSync.md`
 Each module doc explains what that subsystem does and how it fits into the bigger picture.
-
 # 📚 Quick Documentation Links
-
 - 🏛 **Architecture:** `docs/Architecture.md`  
 - 📘 **Ops Runbook:** `docs/Runbook.md`  
 - 🔧 **Command Matrix:** `docs/ops/CommandMatrix.md`  
