@@ -163,6 +163,9 @@ Current keys include (non-exhaustive):
 - `FEATURE_REPORTS` — gates recruiter reports.
 - `FEATURE_RESERVATIONS` — gates reservation-aware workflows (e.g., `!reserve`,
   reminder jobs) once implemented.
+- `SERVER_MAP` — enables the scheduled refresh and manual `!servermap refresh`
+  command; channel routing (`SERVER_MAP_CHANNEL_ID`) and cadence
+  (`SERVER_MAP_REFRESH_DAYS`) remain environment-driven.
 
 If a toggle key is missing in `Feature_Toggles`, its behaviour should default to a
 safe value (usually `FALSE`/disabled) so new environments remain inert until
@@ -223,6 +226,7 @@ Feature Toggles:
   welcome_dialog,TRUE
   placement_target_select,TRUE
   placement_reservations,TRUE
+  SERVER_MAP,TRUE
   WELCOME_ENABLED,TRUE
   ENABLE_WELCOME_HOOK,TRUE
   ENABLE_PROMO_WATCHER,TRUE

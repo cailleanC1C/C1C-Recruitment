@@ -49,6 +49,7 @@ hidden, and refresh summaries always use the concise inline layout.
 ## Server map automation
 - `📘 Server map — refreshed • messages=2 • chars=3120` — posted after the bot edits or recreates the pinned map messages.
 - `📘 Server map — skipped • reason=interval_not_elapsed • last_run=2025-11-05T12:34:56Z` — emitted when the scheduled job sees fewer than `SERVER_MAP_REFRESH_DAYS` since the prior run.
+- `📘 Server map — skipped • reason=feature_disabled` — emitted when the `SERVER_MAP` FeatureToggle disables both the scheduler and manual `!servermap refresh` command.
 - `❌ Server map — error • reason=missing_channel_id` — configuration or Discord failures; inspect runtime logs for details before retrying the manual command.
 
 Doc last updated: 2025-11-18 (v0.9.7)
