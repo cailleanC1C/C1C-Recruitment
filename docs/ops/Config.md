@@ -24,7 +24,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
 
-**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `SERVER_MAP_CHANNEL_ID`, `SERVER_MAP_REFRESH_DAYS`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
 All sheet-facing modules now require their dedicated `*_SHEET_ID` variables; 
 
@@ -83,6 +83,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
+| `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
@@ -104,6 +105,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `KEEPALIVE_INTERVAL_SEC` | int | — | Legacy alias for `WATCHDOG_CHECK_SEC`; logs a warning when used. |
 | `CLAN_TAGS_CACHE_TTL_SEC` | int | `3600` | TTL for cached clan tags. |
 | `REPORT_DAILY_POST_TIME` | HH:MM | `09:30` | UTC time for the Daily Recruiter Update scheduler. |
+| `SERVER_MAP_REFRESH_DAYS` | int | `30` | Minimum days between scheduled server map refreshes; enforced alongside sheet runtime state. |
 | `CLEANUP_AGE_HOURS` | int | `24` | Interval (hours) between Cleanup watcher runs; enforces a full reset cadence. |
 | `CLEANUP_THREAD_IDS` | csv | — | Comma-separated Discord thread IDs where cleanup wipes all non-pinned messages. |
 
