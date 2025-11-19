@@ -6,7 +6,7 @@ import asyncio
 import datetime as dt
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Sequence, Tuple, TYPE_CHECKING
+from typing import Dict, List, Mapping, Sequence, Set, Tuple, TYPE_CHECKING
 
 import discord
 
@@ -32,11 +32,17 @@ __all__ = [
 log = logging.getLogger("c1c.server_map")
 
 DEFAULT_MESSAGE_THRESHOLD = 1800
-UNCATEGORIZED_LABEL = "UNCATEGORIZED"
 BULLET = "🔹"
-FORUM_ICON = "📁"
-VOICE_ICON = "🎙️"
-STAGE_ICON = "🎤"
+MAP_HEADER = "# 🧭 Server Map"
+MAP_INTRO_LINES = [
+    MAP_HEADER,
+    "Tired of wandering the digital wilderness?",
+    "Here’s your trusty compass—every channel, category, and secret nook laid out in one sleek guide.",
+    "Ready to explore? Let’s go light the path together. ✨",
+    "",
+    "Channels with a 🔒 icon do need special roles to unlock access.",
+    "",
+]
 
 
 @dataclass(slots=True)
@@ -78,28 +84,23 @@ def _channel_name(channel: object) -> str:
     return f"channel-{identifier}" if identifier is not None else "channel"
 
 
-def _channel_type_icon(channel: object) -> str:
-    channel_type = getattr(channel, "type", None)
-    if channel_type == discord.ChannelType.forum:
-        return FORUM_ICON
-    if channel_type == discord.ChannelType.voice:
-        return VOICE_ICON
-    if channel_type == discord.ChannelType.stage_voice:
-        return STAGE_ICON
-    if isinstance(channel, discord.ForumChannel):  # pragma: no cover - runtime only
-        return FORUM_ICON
-    if isinstance(channel, discord.VoiceChannel):  # pragma: no cover - runtime only
-        return VOICE_ICON
-    if isinstance(channel, discord.StageChannel):  # pragma: no cover - runtime only
-        return STAGE_ICON
-    return ""
+def _normalize_id(value: object) -> int | None:
+    try:
+        identifier = int(value)
+    except (TypeError, ValueError):
+        return None
+    return identifier if identifier >= 0 else None
+
+
+def _channel_mention(channel: object) -> str:
+    identifier = _normalize_id(getattr(channel, "id", None))
+    if identifier is not None:
+        return f"<#{identifier}>"
+    return _channel_name(channel)
 
 
 def _channel_line(channel: object) -> str:
-    icon = _channel_type_icon(channel)
-    if icon:
-        return f"{BULLET} {icon} {_channel_name(channel)}"
-    return f"{BULLET} {_channel_name(channel)}"
+    return f"{BULLET} {_channel_mention(channel)}"
 
 
 def _split_blocks(blocks: Sequence[str], threshold: int) -> List[str]:
@@ -136,23 +137,63 @@ def _collect_orphan_channels(guild: object) -> List[object]:
     return orphan
 
 
-def build_map_messages(guild: object, *, threshold: int = DEFAULT_MESSAGE_THRESHOLD) -> List[str]:
+def _parse_id_list(raw: object) -> Set[int]:
+    ids: Set[int] = set()
+    if raw is None:
+        return ids
+    text = str(raw).strip()
+    if not text:
+        return ids
+    for chunk in text.split(","):
+        part = chunk.strip()
+        if not part:
+            continue
+        identifier = _normalize_id(part)
+        if identifier is not None:
+            ids.add(identifier)
+    return ids
+
+
+def build_map_messages(
+    guild: object,
+    *,
+    threshold: int = DEFAULT_MESSAGE_THRESHOLD,
+    category_blacklist: Set[int] | None = None,
+    channel_blacklist: Set[int] | None = None,
+) -> List[str]:
     """Return formatted server map message bodies for ``guild``."""
 
+    category_blacklist = category_blacklist or set()
+    channel_blacklist = channel_blacklist or set()
     categories = sorted(getattr(guild, "categories", []) or [], key=_channel_sort_key)
     blocks: List[str] = []
 
-    for category in categories:
-        header = _category_label(category)
-        lines = [header]
-        channels = sorted(getattr(category, "channels", []) or [], key=_channel_sort_key)
-        lines.extend(_channel_line(channel) for channel in channels)
-        blocks.append("\n".join(lines).rstrip())
-
     orphan_channels = _collect_orphan_channels(guild)
-    if orphan_channels:
-        lines = [UNCATEGORIZED_LABEL]
-        lines.extend(_channel_line(channel) for channel in orphan_channels)
+    intro_lines = list(MAP_INTRO_LINES)
+    for channel in orphan_channels:
+        channel_id = _normalize_id(getattr(channel, "id", None))
+        if channel_id is not None and channel_id in channel_blacklist:
+            continue
+        intro_lines.append(_channel_line(channel))
+    blocks.append("\n".join(intro_lines).rstrip())
+
+    for category in categories:
+        category_id = _normalize_id(getattr(category, "id", None))
+        if category_id is not None and category_id in category_blacklist:
+            continue
+        channels = [
+            channel
+            for channel in sorted(getattr(category, "channels", []) or [], key=_channel_sort_key)
+            if (
+                (identifier := _normalize_id(getattr(channel, "id", None))) is None
+                or identifier not in channel_blacklist
+            )
+        ]
+        if not channels:
+            continue
+        header = _category_label(category)
+        lines = [f"## {header}", ""]
+        lines.extend(_channel_line(channel) for channel in channels)
         blocks.append("\n".join(lines).rstrip())
 
     return _split_blocks(blocks, threshold)
@@ -297,7 +338,15 @@ async def refresh_server_map(
             last_run=last_run_raw,
         )
 
-    bodies = build_map_messages(guild, threshold=DEFAULT_MESSAGE_THRESHOLD)
+    category_blacklist = _parse_id_list(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    channel_blacklist = _parse_id_list(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+
+    bodies = build_map_messages(
+        guild,
+        threshold=DEFAULT_MESSAGE_THRESHOLD,
+        category_blacklist=category_blacklist,
+        channel_blacklist=channel_blacklist,
+    )
     if not bodies:
         bodies = _fallback_messages(guild)
 
