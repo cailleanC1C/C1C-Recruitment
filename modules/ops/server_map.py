@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Set, Tuple, TYPE_CHE
 import discord
 
 from shared.config import (
+    cfg,
     get_server_map_channel_id,
     get_server_map_refresh_days,
 )
@@ -129,14 +130,16 @@ def _snowflake_text(value: object) -> str | None:
     return text or None
 
 
-def _parse_id_blacklist(raw: object) -> Set[str]:
+def _config_value_text(value: object | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _parse_id_blacklist(raw: str | None) -> Set[str]:
     ids: Set[str] = set()
-    if raw is None:
+    if not raw:
         return ids
-    text = str(raw).strip()
-    if not text:
-        return ids
-    for chunk in text.split(","):
+    for chunk in str(raw).split(","):
         entry = chunk.strip()
         if entry:
             ids.add(entry)
@@ -357,8 +360,26 @@ async def refresh_server_map(
             last_run=last_run_raw,
         )
 
-    category_blacklist = _parse_id_blacklist(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
-    channel_blacklist = _parse_id_blacklist(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+    raw_category_blacklist = _config_value_text(cfg.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    if raw_category_blacklist is None:
+        raw_category_blacklist = _config_value_text(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    raw_channel_blacklist = _config_value_text(cfg.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+    if raw_channel_blacklist is None:
+        raw_channel_blacklist = _config_value_text(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+
+    category_blacklist = _parse_id_blacklist(raw_category_blacklist)
+    channel_blacklist = _parse_id_blacklist(raw_channel_blacklist)
+
+    cat_raw_display = (raw_category_blacklist or "").replace("\"", "'")
+    chan_raw_display = (raw_channel_blacklist or "").replace("\"", "'")
+    config_debug = (
+        "📘 Server map — config • "
+        f'cat_blacklist_raw="{cat_raw_display}" • '
+        f'chan_blacklist_raw="{chan_raw_display}" • '
+        f"cat_ids={len(category_blacklist)} • "
+        f"chan_ids={len(channel_blacklist)}"
+    )
+    await runtime_helpers.send_log_message(config_debug)
 
     bodies = build_map_messages(
         guild,
