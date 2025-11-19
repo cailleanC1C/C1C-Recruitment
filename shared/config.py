@@ -31,6 +31,7 @@ __all__ = [
     "get_welcome_general_channel_id",
     "get_welcome_channel_id",
     "get_promo_channel_id",
+    "get_role_map_channel_id",
     "get_refresh_times",
     "get_refresh_timezone",
     "get_gspread_credentials",
@@ -451,6 +452,7 @@ def _load_config() -> Dict[str, object]:
         "WELCOME_GENERAL_CHANNEL_ID": _first_int(os.getenv("WELCOME_GENERAL_CHANNEL_ID")),
         "WELCOME_CHANNEL_ID": _first_int(os.getenv("WELCOME_CHANNEL_ID")),
         "PROMO_CHANNEL_ID": _first_int(os.getenv("PROMO_CHANNEL_ID")),
+        "ROLEMAP_CHANNEL_ID": _first_int(os.getenv("ROLEMAP_CHANNEL_ID")),
         "LOG_CHANNEL_ID": log_channel,
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
@@ -704,6 +706,10 @@ def get_welcome_channel_id() -> Optional[int]:
 
 def get_promo_channel_id() -> Optional[int]:
     return _optional_id("PROMO_CHANNEL_ID")
+
+
+def get_role_map_channel_id() -> Optional[int]:
+    return _optional_id("ROLEMAP_CHANNEL_ID")
 
 
 def get_refresh_times(default: Iterable[str] = ("02:00", "10:00", "18:00")) -> list[str]:

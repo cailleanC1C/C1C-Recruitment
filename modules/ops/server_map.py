@@ -360,12 +360,12 @@ async def refresh_server_map(
             last_run=last_run_raw,
         )
 
-    raw_category_blacklist = _config_value_text(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    raw_category_blacklist = _config_value_text(cfg.get("SERVER_MAP_CATEGORY_BLACKLIST"))
     if raw_category_blacklist is None:
-        raw_category_blacklist = _config_value_text(cfg.get("SERVER_MAP_CATEGORY_BLACKLIST"))
-    raw_channel_blacklist = _config_value_text(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+        raw_category_blacklist = _config_value_text(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    raw_channel_blacklist = _config_value_text(cfg.get("SERVER_MAP_CHANNEL_BLACKLIST"))
     if raw_channel_blacklist is None:
-        raw_channel_blacklist = _config_value_text(cfg.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+        raw_channel_blacklist = _config_value_text(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
 
     category_blacklist = _parse_id_blacklist(raw_category_blacklist)
     channel_blacklist = _parse_id_blacklist(raw_channel_blacklist)
