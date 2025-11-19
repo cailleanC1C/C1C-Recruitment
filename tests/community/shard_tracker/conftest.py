@@ -4,20 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 import discord
-from c1c_coreops import helpers as helper_mod
-
-
-_ORIGINAL_HELP_METADATA = helper_mod.help_metadata
-
-
-def _patched_help_metadata(*args, **kwargs):
-    kwargs.pop("help", None)
-    return _ORIGINAL_HELP_METADATA(*args, **kwargs)
-
-
-helper_mod.help_metadata = _patched_help_metadata
-
-
 class FakeBot:
     def __init__(self) -> None:
         self._threads: dict[int, FakeThread] = {}
@@ -123,5 +109,3 @@ def fake_discord_env(monkeypatch):
     return env
 
 
-def pytest_unconfigure(config):  # pragma: no cover - test cleanup hook
-    helper_mod.help_metadata = _ORIGINAL_HELP_METADATA
