@@ -8,7 +8,7 @@ from typing import Iterable, Mapping, Sequence
 
 import discord
 
-from .mercy import MercyState, format_percent
+from .mercy import MercySnapshot, format_percent
 
 
 @dataclass(frozen=True)
@@ -16,130 +16,171 @@ class ShardDisplay:
     key: str
     label: str
     owned: int
-    since: int
-    mercy: MercyState
+    mercy: MercySnapshot
     last_timestamp: str
+    last_depth: int
+
+
+@dataclass(frozen=True)
+class MythicDisplay:
+    mercy: MercySnapshot
+    last_timestamp: str
+    last_depth: int
 
 
 class ShardTrackerView(discord.ui.View):
-    """Interactive view exposing shard adjustment buttons."""
+    """Interactive view for the tabbed shard tracker."""
 
     def __init__(
         self,
         *,
         owner_id: int,
         controller: "ShardTrackerController",
+        active_tab: str,
         shard_labels: Mapping[str, str],
-        disabled: bool = False,
+        mythic_controls: bool = True,
     ) -> None:
         super().__init__(timeout=180)
-        self._owner_id = owner_id
+        self.owner_id = owner_id
+        self.active_tab = active_tab
         self._controller = controller
-        row_index = 0
-        for key, label in shard_labels.items():
-            add_button = _ShardAdjustButton(
-                controller=controller,
-                owner_id=owner_id,
-                shard_key=key,
-                action="add",
-                label=f"Add {label}",
-                style=discord.ButtonStyle.secondary,
-                row=row_index,
-                disabled=disabled,
+        # Tab buttons
+        for tab in ("overview", "ancient", "void", "sacred", "primal", "last_pulls"):
+            label = tab.replace("_", " ").title()
+            style = discord.ButtonStyle.primary if tab == active_tab else discord.ButtonStyle.secondary
+            self.add_item(
+                _ShardButton(
+                    custom_id=f"tab:{tab}",
+                    label=label,
+                    style=style,
+                    owner_id=owner_id,
+                    controller=controller,
+                )
             )
-            pull_button = _ShardAdjustButton(
-                controller=controller,
-                owner_id=owner_id,
-                shard_key=key,
-                action="pull",
-                label=f"Pull {label}",
-                style=discord.ButtonStyle.primary,
-                row=row_index,
-                disabled=disabled,
+
+        # Action rows depend on tab
+        if active_tab in shard_labels:
+            self._add_stash_buttons(active_tab)
+            self._add_legendary_button(active_tab, shard_labels[active_tab])
+            if active_tab == "primal" and mythic_controls:
+                self._add_primal_mythic_buttons()
+
+    def _add_stash_buttons(self, shard_key: str) -> None:
+        for delta in (-10, -5, -1, 1, 5, 10):
+            label = f"{delta:+d}"
+            self.add_item(
+                _ShardButton(
+                    custom_id=f"{shard_key}:add:{delta}",
+                    label=label,
+                    style=discord.ButtonStyle.secondary,
+                    owner_id=self.owner_id,
+                    controller=self._controller,
+                )
             )
-            self.add_item(add_button)
-            self.add_item(pull_button)
-            row_index += 1
+
+    def _add_legendary_button(self, shard_key: str, label: str) -> None:
+        self.add_item(
+            _ShardButton(
+                custom_id=f"{shard_key}:got_legendary",
+                label=f"Got Legendary ({label})",
+                style=discord.ButtonStyle.success,
+                owner_id=self.owner_id,
+                controller=self._controller,
+            )
+        )
+
+    def _add_primal_mythic_buttons(self) -> None:
+        for delta in (-5, -1, 1, 5):
+            self.add_item(
+                _ShardButton(
+                    custom_id=f"primal_mythic:add:{delta}",
+                    label=f"Mythic {delta:+d}",
+                    style=discord.ButtonStyle.secondary,
+                    owner_id=self.owner_id,
+                    controller=self._controller,
+                )
+            )
+        self.add_item(
+            _ShardButton(
+                custom_id="primal:got_mythical",
+                label="Got Mythical",
+                style=discord.ButtonStyle.success,
+                owner_id=self.owner_id,
+                controller=self._controller,
+            )
+        )
 
 
-class _ShardAdjustButton(discord.ui.Button[ShardTrackerView]):
+class _ShardButton(discord.ui.Button[ShardTrackerView]):
     def __init__(
         self,
         *,
-        controller: "ShardTrackerController",
+        custom_id: str,
+        label: str,
+        style: discord.ButtonStyle,
         owner_id: int,
-        shard_key: str,
-        action: str,
-        **kwargs,
+        controller: "ShardTrackerController",
     ) -> None:
-        super().__init__(**kwargs)
-        self._controller = controller
+        super().__init__(custom_id=custom_id, label=label, style=style)
         self._owner_id = owner_id
-        self._shard_key = shard_key
-        self._action = action
-        self.custom_id = f"shards:{action}:{shard_key}:{owner_id}"
+        self._controller = controller
 
     async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
         user_id = getattr(interaction.user, "id", None)
         if user_id != self._owner_id:
             await interaction.response.send_message(
-                "Only the owner of this tracker can use these buttons.",
-                ephemeral=True,
+                "Only the owner of this tracker can use these buttons.", ephemeral=True
             )
             return
         await self._controller.handle_button_interaction(
             interaction=interaction,
-            shard_key=self._shard_key,
-            action=self._action,
+            custom_id=self.custom_id,
+            active_tab=self.view.active_tab if isinstance(self.view, ShardTrackerView) else "overview",
         )
 
 
 class ShardTrackerController:
-    """Protocol describing the button handler used by the view."""
-
     async def handle_button_interaction(
         self,
         *,
         interaction: discord.Interaction,
-        shard_key: str,
-        action: str,
+        custom_id: str,
+        active_tab: str,
     ) -> None:
         raise NotImplementedError
 
 
-def build_summary_embed(
+def build_overview_embed(
     *,
     member: discord.abc.User,
     displays: Sequence[ShardDisplay],
-    mythic_state: MercyState,
-    channel: discord.abc.GuildChannel | discord.Thread,
+    mythic: MythicDisplay,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"{member.display_name or member.name} — Shards",
+        title=f"Shard Overview — {member.display_name or member.name}",
         colour=discord.Color.blurple(),
-    )
-    total = sum(max(display.owned, 0) for display in displays)
-    embed.description = (
-        f"Total stash: **{total:,}** shards.\n"
-        "Use the buttons below after you add or pull shards."
+        description=(
+            "Snapshot across all shard types. Use the tab buttons for details "
+            "and the Legendary/Mythical buttons to log pulls."
+        ),
     )
     for display in displays:
-        embed.add_field(
-            name=display.label,
-            value=_format_display(display),
-            inline=False,
+        line = (
+            f"Owned: **{max(display.owned, 0):,}** | "
+            f"Mercy: {display.mercy.pulls_since} / {display.mercy.threshold} | "
+            f"Chance: {format_percent(display.mercy.chance)}"
         )
-    embed.add_field(
-        name="Primal Mythic Mercy",
-        value=_format_mythic_state(mythic_state),
-        inline=False,
+        if display.last_timestamp:
+            line += f"\nLast Legendary: {human_time(display.last_timestamp)}"
+        embed.add_field(name=display.label, value=line, inline=False)
+
+    mythic_line = (
+        f"Mercy: {mythic.mercy.pulls_since} / {mythic.mercy.threshold} | "
+        f"Chance: {format_percent(mythic.mercy.chance)}"
     )
-    embed.set_footer(
-        text=(
-            f"Only available in #{getattr(channel, 'name', 'shards')} · "
-            "Commands: !shards, !mercy, !lego, !mythic"
-        )
-    )
+    if mythic.last_timestamp:
+        mythic_line += f"\nLast Mythical: {human_time(mythic.last_timestamp)}"
+    embed.add_field(name="Primal (Mythical)", value=mythic_line, inline=False)
     return embed
 
 
@@ -147,55 +188,108 @@ def build_detail_embed(
     *,
     member: discord.abc.User,
     display: ShardDisplay,
+    mythic: MythicDisplay | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"{display.label} — {member.display_name or member.name}",
-        colour=discord.Color.blurple(),
-        description=_format_display(display),
+        title=f"{display.label} Shards", colour=discord.Color.blurple()
     )
+    embed.description = _detail_block(display)
+    if mythic:
+        embed.add_field(name="Primal Mythical", value=_mythic_block(mythic), inline=False)
     return embed
 
 
-def _format_display(display: ShardDisplay) -> str:
+def build_last_pulls_embed(
+    *,
+    member: discord.abc.User,
+    displays: Sequence[ShardDisplay],
+    mythic: MythicDisplay,
+    base_rates: Mapping[str, str],
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"Last Pulls & Mercy Info — {member.display_name or member.name}",
+        colour=discord.Color.blurple(),
+    )
+    last_lines = []
+    for display in displays:
+        stamp = human_time(display.last_timestamp) if display.last_timestamp else "Never"
+        depth = f" ({display.last_depth} at pull)" if display.last_depth > 0 else ""
+        last_lines.append(f"{display.label} Legendary: {stamp}{depth}")
+    mythic_stamp = human_time(mythic.last_timestamp) if mythic.last_timestamp else "Never"
+    mythic_depth = f" ({mythic.last_depth} at pull)" if mythic.last_depth > 0 else ""
+    last_lines.append(f"Primal Mythical: {mythic_stamp}{mythic_depth}")
+    embed.add_field(name="Last Pulls", value="\n".join(last_lines), inline=False)
+
+    info_lines = [
+        "**Mercy System (official rates)**",
+        "Ancient/Void Legendary: after 200 pulls, +5% per shard",
+        "Sacred Legendary: after 12 pulls, +2% per shard",
+        "Primal Legendary: after 75 pulls, +1% per shard",
+        "Primal Mythical: after 200 pulls, +10% per shard",
+        "\nBase chances:",
+        "```",
+    ]
+    for label, rate in base_rates.items():
+        info_lines.append(f"{label:<18} {rate}")
+    info_lines.append("```")
+    embed.add_field(name="Mercy Info", value="\n".join(info_lines), inline=False)
+    return embed
+
+
+def _detail_block(display: ShardDisplay) -> str:
+    mercy = display.mercy
+    remaining = max(0, mercy.threshold - mercy.pulls_since)
+    remaining_label = f"{remaining} left" if remaining > 0 else "Maxed"
     parts = [
-        f"Owned: **{max(display.owned, 0):,}**",
-        _format_mercy_line(display.mercy),
+        f"Stash: **{max(display.owned, 0):,}**",
+        f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold} ({remaining_label})",
+        f"Legendary Chance: {format_percent(mercy.chance)}",
+        _progress_bar(mercy),
     ]
     if display.last_timestamp:
-        parts.append(f"Last LEGO: {_human_time(display.last_timestamp)}")
+        parts.append(
+            f"Last Legendary: {human_time(display.last_timestamp)}"
+            + (f" ({display.last_depth} depth)" if display.last_depth else "")
+        )
     return "\n".join(parts)
 
 
-def _format_mercy_line(mercy: MercyState) -> str:
-    chance = format_percent(mercy.current_chance)
-    if mercy.profile.guarantee <= 1:
-        return "Legendary chance: **100%**"
-    threshold = (
-        f"Starts in {mercy.pulls_until_threshold:,}"
-        if mercy.pulls_until_threshold > 0
-        else "Active now"
-    )
-    guarantee = (
-        "Guaranteed on next pull"
-        if mercy.pulls_until_guarantee <= 1
-        else f"Pity in {mercy.pulls_until_guarantee:,}"
-    )
-    return f"Since LEGO: {mercy.pulls_since:,} · Chance {chance} · {threshold} · {guarantee}"
+def _mythic_block(display: MythicDisplay) -> str:
+    mercy = display.mercy
+    remaining = max(0, mercy.threshold - mercy.pulls_since)
+    remaining_label = f"{remaining} left" if remaining > 0 else "Maxed"
+    parts = [
+        f"Mythical Mercy: {mercy.pulls_since} / {mercy.threshold} ({remaining_label})",
+        f"Mythical Chance: {format_percent(mercy.chance)}",
+        _progress_bar(mercy),
+    ]
+    if display.last_timestamp:
+        parts.append(
+            f"Last Mythical: {human_time(display.last_timestamp)}"
+            + (f" ({display.last_depth} depth)" if display.last_depth else "")
+        )
+    return "\n".join(parts)
 
 
-def _format_mythic_state(mercy: MercyState) -> str:
-    chance = format_percent(mercy.current_chance)
-    guarantee = (
-        "Guaranteed on next shard"
-        if mercy.pulls_until_guarantee <= 1
-        else f"Guaranteed in {mercy.pulls_until_guarantee:,}"
-    )
-    return (
-        f"Since mythic: **{mercy.pulls_since:,}** · Chance {chance} · {guarantee}"
-    )
+def _progress_bar(mercy: MercySnapshot, segments: int = 20) -> str:
+    max_pulls = max(mercy.cap_at, mercy.threshold)
+    capped = min(mercy.pulls_since, max_pulls)
+    filled = int(round((capped / max_pulls) * segments)) if max_pulls else 0
+    threshold_segments = int(round((mercy.threshold / max_pulls) * segments)) if max_pulls else 0
+    base_filled = min(filled, threshold_segments)
+    mercy_filled = max(0, filled - threshold_segments)
+    empty = max(0, segments - filled)
+    bar = "".join([
+        "🟩" * base_filled,
+        "🟦" * mercy_filled,
+        "⬜" * empty,
+    ])
+    return f"Progress: [{bar}] {mercy.pulls_since}/{max_pulls}"
 
 
-def _human_time(iso_value: str) -> str:
+def human_time(iso_value: str) -> str:
+    if not iso_value:
+        return ""
     try:
         dt = datetime.fromisoformat(iso_value)
     except ValueError:
@@ -207,9 +301,11 @@ def _human_time(iso_value: str) -> str:
 
 __all__ = [
     "ShardDisplay",
+    "MythicDisplay",
     "ShardTrackerView",
     "ShardTrackerController",
-    "build_summary_embed",
+    "build_overview_embed",
     "build_detail_embed",
+    "build_last_pulls_embed",
+    "human_time",
 ]
-

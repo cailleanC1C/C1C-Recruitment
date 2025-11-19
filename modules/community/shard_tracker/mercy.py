@@ -7,113 +7,94 @@ from typing import Dict
 
 
 @dataclass(frozen=True)
-class MercyProfile:
-    """Immutable description of a shard mercy track."""
-
+class MercyConfig:
     key: str
     label: str
-    base_rate: float
+    base_rate: float  # expressed as 0-1
     threshold: int
-    increment: float
-    guarantee: int
+    increment: float  # expressed as 0-1
 
 
 @dataclass(frozen=True)
-class MercyState:
-    """Derived mercy math for a specific pull count."""
-
-    profile: MercyProfile
+class MercySnapshot:
     pulls_since: int
-    current_chance: float
-    pulls_until_threshold: int
-    pulls_until_guarantee: int
+    chance: float  # expressed as 0-1
+    threshold: int
+    increment: float
+    base_rate: float
+    cap_at: int
 
     @property
     def percent(self) -> float:
-        return max(0.0, min(self.current_chance, 1.0)) * 100.0
+        return self.chance * 100.0
 
 
-def _clamp_rate(value: float) -> float:
-    if value < 0:
-        return 0.0
-    if value > 1:
-        return 1.0
-    return value
-
-
-def calculate_mercy(profile: MercyProfile, pulls_since: int) -> MercyState:
-    """Return the current mercy state for ``profile`` at ``pulls_since`` pulls."""
-
-    pulls = max(0, int(pulls_since))
-    if pulls < profile.threshold:
-        chance = profile.base_rate
-    else:
-        bonus_pulls = pulls - profile.threshold + 1
-        chance = profile.base_rate + bonus_pulls * profile.increment
-    chance = _clamp_rate(chance)
-    pulls_until_threshold = max(0, profile.threshold - pulls)
-    pulls_until_guarantee = max(0, profile.guarantee - pulls)
-    return MercyState(
-        profile=profile,
-        pulls_since=pulls,
-        current_chance=chance,
-        pulls_until_threshold=pulls_until_threshold,
-        pulls_until_guarantee=pulls_until_guarantee,
-    )
-
-
-def format_percent(value: float) -> str:
-    """Return a human-friendly percentage string."""
-
-    pct = _clamp_rate(value) * 100.0
-    if pct >= 10:
-        return f"{pct:.1f}%"
-    return f"{pct:.2f}%"
-
-
-MERCY_PROFILES: Dict[str, MercyProfile] = {
-    "ancient": MercyProfile(
+MERCY_CONFIGS: Dict[str, MercyConfig] = {
+    "ancient": MercyConfig(
         key="ancient",
         label="Ancient",
         base_rate=0.005,
         threshold=200,
-        increment=0.005,
-        guarantee=220,
+        increment=0.05,
     ),
-    "void": MercyProfile(
+    "void": MercyConfig(
         key="void",
         label="Void",
         base_rate=0.005,
         threshold=200,
-        increment=0.005,
-        guarantee=220,
+        increment=0.05,
     ),
-    "sacred": MercyProfile(
+    "sacred": MercyConfig(
         key="sacred",
         label="Sacred",
         base_rate=0.06,
         threshold=12,
         increment=0.02,
-        guarantee=20,
     ),
-    # Primal shards always produce a legendary; treat the legendary track as a
-    # one-pull guarantee with a 100% rate so the UI can still render a block.
-    "primal": MercyProfile(
+    "primal": MercyConfig(
         key="primal",
         label="Primal",
-        base_rate=1.0,
-        threshold=1,
-        increment=0.0,
-        guarantee=1,
+        base_rate=0.01,
+        threshold=75,
+        increment=0.01,
     ),
-    # Mythic pity math for primal shards.
-    "primal_mythic": MercyProfile(
+    "primal_mythic": MercyConfig(
         key="primal_mythic",
-        label="Primal Mythic",
-        base_rate=0.10,
-        threshold=10,
-        increment=0.02,
-        guarantee=20,
+        label="Primal Mythical",
+        base_rate=0.005,
+        threshold=200,
+        increment=0.10,
     ),
 }
 
+
+def mercy_state(shard_type: str, pulls_since: int) -> MercySnapshot:
+    config = MERCY_CONFIGS[shard_type]
+    pulls = max(0, int(pulls_since))
+    steps = max(0, pulls - config.threshold)
+    chance = min(1.0, config.base_rate + steps * config.increment)
+    cap_at = config.threshold
+    if config.increment > 0:
+        import math
+
+        remaining = max(0.0, 1.0 - config.base_rate)
+        steps_to_cap = math.ceil(remaining / config.increment)
+        cap_at = config.threshold + max(0, steps_to_cap)
+    return MercySnapshot(
+        pulls_since=pulls,
+        chance=chance,
+        threshold=config.threshold,
+        increment=config.increment,
+        base_rate=config.base_rate,
+        cap_at=cap_at,
+    )
+
+
+def format_percent(value: float) -> str:
+    pct = max(0.0, min(value, 1.0)) * 100.0
+    if pct >= 10:
+        return f"{pct:.1f}%"
+    return f"{pct:.2f}%"
+
+
+__all__ = ["MERCY_CONFIGS", "MercyConfig", "MercySnapshot", "mercy_state", "format_percent"]

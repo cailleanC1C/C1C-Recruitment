@@ -1,33 +1,31 @@
 from __future__ import annotations
 
-import pytest
-
-from modules.community.shard_tracker.mercy import (
-    MERCY_PROFILES,
-    calculate_mercy,
-    format_percent,
-)
+from modules.community.shard_tracker.mercy import MERCY_CONFIGS, format_percent, mercy_state
 
 
-def test_calculate_mercy_before_threshold():
-    profile = MERCY_PROFILES["sacred"]
-    state = calculate_mercy(profile, 5)
+def test_mercy_before_threshold():
+    config = MERCY_CONFIGS["sacred"]
+    state = mercy_state("sacred", 5)
 
-    assert state.pulls_since == 5
-    assert state.current_chance == pytest.approx(profile.base_rate)
-    assert state.pulls_until_threshold == profile.threshold - 5
-    assert state.pulls_until_guarantee == profile.guarantee - 5
+    assert state.chance == config.base_rate
+    assert state.threshold == config.threshold
+    assert state.percent == 6.0
 
 
-def test_calculate_mercy_after_threshold():
-    profile = MERCY_PROFILES["ancient"]
-    pulls = profile.threshold + 5
-    state = calculate_mercy(profile, pulls)
+def test_mercy_after_threshold_adds_increment():
+    config = MERCY_CONFIGS["ancient"]
+    pulls = config.threshold + 3
+    state = mercy_state("ancient", pulls)
 
-    expected_rate = profile.base_rate + (pulls - profile.threshold + 1) * profile.increment
-    assert state.current_chance == pytest.approx(expected_rate)
-    assert state.pulls_until_threshold == 0
-    assert state.pulls_until_guarantee == profile.guarantee - pulls
+    expected = config.base_rate + (pulls - config.threshold) * config.increment
+    assert state.chance == expected
+
+
+def test_mercy_caps_at_hundred_percent():
+    state = mercy_state("void", 240)
+
+    assert state.chance == 1.0
+    assert state.cap_at >= state.threshold
 
 
 def test_format_percent_precision():

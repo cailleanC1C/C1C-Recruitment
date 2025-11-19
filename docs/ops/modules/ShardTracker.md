@@ -1,20 +1,20 @@
 # Shard & Mercy Tracker Module
 
 Community-focused module that lets members maintain their RAID shard stash and
-legendary pity counters directly in Discord. Every interaction happens inside
+legendary mercy counters directly in Discord. Every interaction happens inside
 the dedicated **Shards & Mercy** channel so global chatter stays clean while
 users keep a personal, button-driven tracker thread.
 
 ## Scope & Responsibilities
 
-- Persist shard stash counts plus pity counters (`ancient`, `void`, `sacred`,
-  `primal`, and the primal-mythic pity) per Discord user.
+- Persist shard stash counts plus mercy counters (`ancient`, `void`, `sacred`,
+  `primal`, and the primal-mythical mercy) per Discord user.
 - Enforce channel routing: only the configured Shards & Mercy channel may run
   shard commands, and every user gets a private thread underneath that channel.
 - Surface a mobile-friendly embed with buttons so players can log pulls or add
   shards without typing commands.
-- Provide reset commands (`!lego`, `!mythic primal`) plus manual setters for
-  stash (`!shards set …`) and mercy (`!mercy set …`).
+- Provide modal-based logging for Legendary/Mythical pulls and manual stash
+  setters via `!shards set …`.
 - Log lifecycle, warning, and error states through the existing C1C log helper
   plus ADMIN_ROLE_IDS pings on hard failures.
 
@@ -38,37 +38,35 @@ users keep a personal, button-driven tracker thread.
 | `username_snapshot` | Last display name captured when the bot touched the row. |
 | `ancients_owned`, `voids_owned`, `sacreds_owned`, `primals_owned` | Current stash counts. |
 | `ancients_since_lego`, `voids_since_lego`, `sacreds_since_lego`, `primals_since_lego` | Mercy counters per shard type. |
-| `primals_since_mythic` | Mythic pity counter. |
-| `last_*_lego_iso`, `last_primal_mythic_iso`, `last_updated_iso` | UTC ISO timestamps for the last logged LEGO/mythic and update time. |
+| `primals_since_mythic` | Mythical mercy counter. |
+| `last_*_lego_iso`, `last_primal_mythic_iso`, `last_updated_iso` | UTC ISO timestamps for the last logged Legendary/Mythical and update time. |
+| `last_*_lego_depth`, `last_primal_mythic_depth` | Mercy depth at the time the pull was logged. |
 
 Rows are created automatically the first time a user opens the tracker; all
 fields initialize to zero and timestamps stay blank until a LEGO is recorded.
 
 ## Mercy Math Reference
 
-| Type | Base chance | Mercy threshold | Increment | Guarantee |
-| --- | --- | --- | --- | --- |
-| Ancient | 0.5% | 200 shards | +0.5% per shard | 220th shard |
-| Void | 0.5% | 200 shards | +0.5% per shard | 220th shard |
-| Sacred | 6% | 12 shards | +2% per shard | 20th shard |
-| Primal (Legendary) | 100% | Immediate | — | Every shard |
-| Primal Mythic | 10% | 10 shards | +2% per shard | 20th shard |
+Plarium’s official mercy values:
 
-Ancient/Void/Sacred counters increase once you cross the threshold (e.g., the
-201st Ancient shard applies the first +0.5% bonus). Primal Legendary drops are
-always guaranteed; we still track the counter for visibility. Primal mythic pity
-uses the dedicated counter and only resets when `!mythic primal` is logged.
+| Type | Base chance | Mercy threshold | Increment |
+| --- | --- | --- | --- |
+| Ancient Legendary | 0.5% | After 200 shards | +5% per shard |
+| Void Legendary | 0.5% | After 200 shards | +5% per shard |
+| Sacred Legendary | 6% | After 12 shards | +2% per shard |
+| Primal Legendary | 1% | After 75 shards | +1% per shard |
+| Primal Mythical | 0.5% | After 200 shards | +10% per shard |
+
+Chance increases after crossing the threshold and caps at 100%. Mythical pulls
+reset both primal tracks; Legendary pulls reset only the Legendary track but the
+Mythical counter continues accumulating primal shards.
 
 ## Commands & Buttons
 
 | Command | Notes |
 | --- | --- |
-| `!shards [type]` | Posts the stash + mercy dashboard in the user’s shard thread. Optional `type` renders a focused card. |
+| `!shards [type]` | Posts the tabbed shard tracker in the user’s shard thread. Optional `type` opens a detail tab. |
 | `!shards set <type> <count>` | Force-set a stash count (non-negative integer). |
-| `!mercy [type]` | Same routing as `!shards`; primarily a help alias. |
-| `!mercy set <type> <count>` | Override a mercy counter. Accepts `mythic` for the primal-mythic pity. |
-| `!lego <type> [after_count]` | Reset a mercy counter when a LEGO drops. `after_count` captures shards pulled after the LEGO before logging (defaults to `0`). |
-| `!mythic primal [after_count]` | Reset both primal counters when a mythic drops. |
 
 All commands **must** be issued in `<#SHARD_MERCY_CHANNEL_ID>`. When a member
 runs a command directly in that channel, the bot creates (or reuses) their
@@ -77,9 +75,11 @@ there, and replies in the parent channel with a short pointer.
 
 Buttons live on every embed inside the user’s thread:
 
-- **Add <type>** — increments the stash count for that shard type.
-- **Pull <type>** — decrements the stash (clamped at zero) and increments the
-  mercy counters (`primal` pulls also bump the mythic pity).
+- **Tab buttons** — Overview, per-shard detail tabs, and a Last Pulls tab.
+- **Stash adjusters** — +/- buttons per shard type to update stash counts; pulls
+  (negative deltas) increment the appropriate mercy counters.
+- **Got Legendary/Mythical** — open modals that record how many shards were
+  pulled, where the drop appeared, and reset counters accordingly.
 
 Only the thread owner may press the buttons; everyone else receives a friendly
 rejection message. Button handlers write through to Sheets immediately and edit
@@ -105,7 +105,7 @@ the message in place.
   the user with a polite explanation and ping the first ADMIN_ROLE_ID inside a
   `❌` log entry.
 - All Sheets writes run through the shared async backoff helper and use a
-  single-row range update (`A{row}:Q{row}`) so the schema stays intact.
+  single-row range update (`A{row}:V{row}`) so the schema stays intact.
 
 ## Testing Expectations
 
