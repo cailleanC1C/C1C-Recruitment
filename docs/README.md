@@ -75,7 +75,7 @@ Collaboration Contract and core infra conventions.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
-* Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md).
+* Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
 
 ## Module Deep Dives `/docs/modules/` 
 * [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
@@ -107,4 +107,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.7)
