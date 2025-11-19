@@ -1,6 +1,17 @@
 """Shard & Mercy tracker extension."""
 
-from .cog import setup
+import logging
 
-__all__ = ["setup"]
+from discord.ext import commands
+
+from .cog import ShardTracker
+
+__all__ = ["ShardTracker", "setup"]
+
+
+async def setup(bot: commands.Bot) -> None:
+    """Load the ShardTracker cog."""
+
+    await bot.add_cog(ShardTracker(bot))
+    logging.getLogger("c1c.shards.cog").info("Shard tracker cog loaded")
 

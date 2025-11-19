@@ -7,13 +7,14 @@ from unittest.mock import AsyncMock
 import discord
 from discord.ext import commands
 
-from modules.community.shard_tracker import cog as shard_cog
+from modules.community.shard_tracker import setup as shard_setup
+from modules.community.shard_tracker.cog import ShardTracker
 from modules.community.shard_tracker.data import ShardTrackerConfig
 
 
 def test_resolve_kind_aliases():
     bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
-    tracker = shard_cog.ShardTrackerCog(bot)
+    tracker = ShardTracker(bot)
 
     assert tracker._resolve_kind_key("Anc") == "ancient"
     assert tracker._resolve_kind("primals").key == "primal"
@@ -23,7 +24,7 @@ def test_resolve_kind_aliases():
 def test_resolve_thread_rejects_wrong_channel(fake_discord_env):
     async def runner():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
-        tracker = shard_cog.ShardTrackerCog(bot)
+        tracker = ShardTracker(bot)
         config = ShardTrackerConfig(sheet_id="s", tab_name="t", channel_id=999)
         tracker.store.get_config = AsyncMock(return_value=config)
 
@@ -44,7 +45,7 @@ def test_resolve_thread_rejects_wrong_channel(fake_discord_env):
 def test_resolve_thread_creates_and_reuses(fake_discord_env):
     async def runner():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
-        tracker = shard_cog.ShardTrackerCog(bot)
+        tracker = ShardTracker(bot)
         config = ShardTrackerConfig(sheet_id="s", tab_name="t", channel_id=444)
         tracker.store.get_config = AsyncMock(return_value=config)
 
@@ -70,7 +71,7 @@ def test_resolve_thread_creates_and_reuses(fake_discord_env):
 def test_resolve_thread_rejects_foreign_thread(fake_discord_env):
     async def runner():
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
-        tracker = shard_cog.ShardTrackerCog(bot)
+        tracker = ShardTracker(bot)
         config = ShardTrackerConfig(sheet_id="s", tab_name="t", channel_id=222)
         tracker.store.get_config = AsyncMock(return_value=config)
 
@@ -90,5 +91,15 @@ def test_resolve_thread_rejects_foreign_thread(fake_discord_env):
         assert not allowed_second
         assert thread_second is None
         assert "Please use your own shard thread" in thread_ctx.replies[-1]
+
+    asyncio.run(runner())
+
+
+def test_commands_are_registered():
+    async def runner():
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        await shard_setup(bot)
+        assert bot.get_command("shards") is not None
+        assert bot.get_command("mercy") is not None
 
     asyncio.run(runner())

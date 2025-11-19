@@ -47,6 +47,7 @@ from shared.web_routes import mount_emoji_pad
 from . import keepalive
 
 import modules.onboarding as onboarding_pkg
+from modules.community import COMMUNITY_EXTENSIONS
 
 log = logging.getLogger("c1c.runtime")
 
@@ -848,10 +849,7 @@ class Runtime:
         await ops_watchers.setup(self.bot)
 
         # === Always-on internal extensions (admin-gated debug/ops commands) ===
-        ALWAYS_EXTENSIONS = (
-            "modules.coreops.cmd_cfg",
-            "modules.community.shard_tracker",
-        )
+        ALWAYS_EXTENSIONS = ("modules.coreops.cmd_cfg",)
         for ext in ALWAYS_EXTENSIONS:
             try:
                 await self.bot.load_extension(ext)
@@ -869,6 +867,25 @@ class Runtime:
                     "feature module loaded",
                     feature_module=ext,
                     feature_key="always_on",
+                )
+
+        for ext in COMMUNITY_EXTENSIONS:
+            try:
+                await self.bot.load_extension(ext)
+            except Exception as exc:
+                human_log.human(
+                    "warn",
+                    "feature module load failed",
+                    feature_module=ext,
+                    feature_key="community",
+                    error=str(exc),
+                )
+            else:
+                human_log.human(
+                    "info",
+                    "feature module loaded",
+                    feature_module=ext,
+                    feature_key="community",
                 )
 
         # (Refresh commands now live directly in the CoreOps cog.)
