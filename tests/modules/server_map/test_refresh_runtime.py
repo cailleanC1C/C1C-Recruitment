@@ -145,6 +145,7 @@ def test_refresh_server_map_applies_category_blacklist(monkeypatch):
             log_messages.append(message)
 
         async def fake_fetch_state() -> dict[str, str]:
+            return {"SERVER_MAP_CATEGORY_BLACKLIST": str(hidden.id)}
             return {}
 
         async def fake_update_state(entries: dict[str, str]) -> None:
@@ -157,6 +158,8 @@ def test_refresh_server_map_applies_category_blacklist(monkeypatch):
         monkeypatch.setattr(server_map.server_map_state, "update_state", fake_update_state)
         monkeypatch.setattr(server_map.runtime_helpers, "send_log_message", fake_log)
         monkeypatch.setattr(server_map.discord, "TextChannel", _FakeTextChannel)
+        shared_config._CONFIG.pop("SERVER_MAP_CATEGORY_BLACKLIST", None)
+        shared_config._CONFIG.pop("SERVER_MAP_CHANNEL_BLACKLIST", None)
         monkeypatch.setitem(
             shared_config._CONFIG,
             "SERVER_MAP_CATEGORY_BLACKLIST",
@@ -205,6 +208,10 @@ def test_refresh_server_map_filters_blacklisted_channels_and_logs_config(monkeyp
             log_messages.append(message)
 
         async def fake_fetch_state() -> dict[str, str]:
+            return {
+                "SERVER_MAP_CATEGORY_BLACKLIST": "999999",
+                "SERVER_MAP_CHANNEL_BLACKLIST": f"{market.id}, {lounge.id}",
+            }
             return {}
 
         async def fake_update_state(entries: dict[str, str]) -> None:
@@ -217,6 +224,8 @@ def test_refresh_server_map_filters_blacklisted_channels_and_logs_config(monkeyp
         monkeypatch.setattr(server_map.server_map_state, "update_state", fake_update_state)
         monkeypatch.setattr(server_map.runtime_helpers, "send_log_message", fake_log)
         monkeypatch.setattr(server_map.discord, "TextChannel", _FakeTextChannel)
+        shared_config._CONFIG.pop("SERVER_MAP_CATEGORY_BLACKLIST", None)
+        shared_config._CONFIG.pop("SERVER_MAP_CHANNEL_BLACKLIST", None)
         monkeypatch.setitem(shared_config._CONFIG, "SERVER_MAP_CATEGORY_BLACKLIST", "999999")
         monkeypatch.setitem(
             shared_config._CONFIG,
