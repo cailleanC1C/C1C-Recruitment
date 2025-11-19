@@ -113,13 +113,16 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
-        help=(
-            "Shard dashboard with stash counts and mercy chance. Only runs in the Shards & Mercy channel; "
-            "creates your personal thread when needed."
-        ),
         usage="!shards [type]",
     )
-    @commands.group(name="shards", invoke_without_command=True)
+    @commands.group(
+        name="shards",
+        invoke_without_command=True,
+        help=(
+            "Shard dashboard with stash counts and mercy chance. Only runs in the Shards & Mercy "
+            "channel; creates your personal thread when needed."
+        ),
+    )
     async def shards(self, ctx: commands.Context, *, shard_type: str | None = None) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
@@ -130,10 +133,12 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
-        help="Set the shard stash count for a specific type (non-negative integers only).",
         usage="!shards set <type> <count>",
     )
-    @shards.command(name="set")
+    @shards.command(
+        name="set",
+        help="Set the shard stash count for a specific type (non-negative integers only).",
+    )
     async def shards_set(self, ctx: commands.Context, shard_type: str, count: int) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
@@ -144,12 +149,15 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
+        usage="!mercy [type]",
+    )
+    @commands.group(
+        name="mercy",
+        invoke_without_command=True,
         help=(
             "Show mercy counters for all shard types inside your personal thread in the Shards & Mercy channel."
         ),
-        usage="!mercy [type]",
     )
-    @commands.group(name="mercy", invoke_without_command=True)
     async def mercy(self, ctx: commands.Context, *, shard_type: str | None = None) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
@@ -160,10 +168,12 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
-        help="Override a mercy counter. Accepts `mythic` to target the primal mythic pity.",
         usage="!mercy set <type> <count>",
     )
-    @mercy.command(name="set")
+    @mercy.command(
+        name="set",
+        help="Override a mercy counter. Accepts `mythic` to target the primal mythic pity.",
+    )
     async def mercy_set(self, ctx: commands.Context, shard_type: str, count: int) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
@@ -174,12 +184,14 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
+        usage="!lego <type> [after_count]",
+    )
+    @commands.command(
+        name="lego",
         help=(
             "Log a legendary pull for a shard type. Accepts the number of shards you pulled after the LEGO before logging."
         ),
-        usage="!lego <type> [after_count]",
     )
-    @commands.command(name="lego")
     async def log_lego(
         self, ctx: commands.Context, shard_type: str, after_count: int = 0
     ) -> None:
@@ -192,12 +204,16 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
-        help=(
-            "Log a primal mythic pull. Accepts how many shards you pulled after the mythic before logging."
-        ),
         usage="!mythic primal [after_count]",
     )
-    @commands.group(name="mythic", aliases=["mythical"], invoke_without_command=True)
+    @commands.group(
+        name="mythic",
+        aliases=["mythical"],
+        invoke_without_command=True,
+        help=(
+            "Base command for primal mythic tracking. Run `!mythic primal <after_count>` to log a mythic drop."
+        ),
+    )
     async def mythic(self, ctx: commands.Context) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
@@ -208,10 +224,12 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         function_group="milestones",
         section="community",
         access_tier="user",
-        help="Log a primal mythic drop and reset the primal counters (channel + thread restricted).",
         usage="!mythic primal [after_count]",
     )
-    @mythic.command(name="primal")
+    @mythic.command(
+        name="primal",
+        help="Log a primal mythic drop and reset the primal counters (channel + thread restricted).",
+    )
     async def mythic_primal(self, ctx: commands.Context, after_count: int = 0) -> None:
         if not await self._ensure_feature_enabled(ctx):
             return
