@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from shared.config import cfg as runtime_config, get_milestones_sheet_id
 from shared.sheets import async_core
 
 log = logging.getLogger("c1c.shards.data")
+_CONFIG_LOG_EMITTED = False
 
 EXPECTED_HEADERS: List[str] = [
     "discord_id",
@@ -115,18 +117,35 @@ class ShardSheetStore:
                 return self._config_cache
 
             sheet_id = (get_milestones_sheet_id() or "").strip()
+            tab_value = _config_value("shard_mercy_tab", "")
+            tab_name = str(tab_value or "").strip()
+
+            raw_env = (os.getenv("SHARD_MERCY_CHANNEL_ID") or "").strip()
+            env_channel_id = _parse_channel_id(raw_env)
+
+            sheet_channel_value = _config_value("shard_mercy_channel_id", "")
+            sheet_raw = str(sheet_channel_value or "").strip()
+            sheet_has_row = bool(sheet_raw)
+            sheet_channel_id = _parse_channel_id(sheet_channel_value)
+
+            channel_id = env_channel_id or sheet_channel_id
+            source = "env" if env_channel_id else ("sheet" if sheet_channel_id else "missing")
+
+            _log_config_snapshot(
+                tab_name=tab_name,
+                source=source,
+                sheet_has_row=sheet_has_row,
+                raw_env=raw_env,
+                raw_sheet=sheet_raw,
+                parsed_channel_id=channel_id,
+            )
+
             if not sheet_id:
                 raise ShardTrackerConfigError("MILESTONES_SHEET_ID missing")
 
-            tab_value = getattr(runtime_config, "shard_mercy_tab", "")
-            tab_name = str(tab_value or "").strip()
             if not tab_name:
                 raise ShardTrackerConfigError("SHARD_MERCY_TAB missing in milestones Config tab")
-            channel_value = getattr(runtime_config, "shard_mercy_channel_id", 0)
-            try:
-                channel_id = int(str(channel_value).strip())
-            except (TypeError, ValueError):
-                channel_id = 0
+
             if channel_id <= 0:
                 raise ShardTrackerConfigError("SHARD_MERCY_CHANNEL_ID missing or invalid")
 
@@ -254,6 +273,70 @@ class ShardSheetStore:
             return int(str(value or "").strip())
         except (TypeError, ValueError):
             return 0
+
+
+def _config_value(key: str, default: object = None) -> object:
+    getter = getattr(runtime_config, "get", None)
+    if callable(getter):
+        try:
+            return getter(key, default)
+        except Exception:
+            return default
+    return getattr(runtime_config, key, default)
+
+
+def _parse_channel_id(value: object) -> int:
+    if value is None:
+        return 0
+    try:
+        text = str(value).strip()
+    except Exception:
+        return 0
+    if not text:
+        return 0
+    try:
+        parsed = int(text)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def _log_config_snapshot(
+    *,
+    tab_name: str,
+    source: str,
+    sheet_has_row: bool,
+    raw_env: str,
+    raw_sheet: str,
+    parsed_channel_id: int,
+) -> None:
+    global _CONFIG_LOG_EMITTED
+    if _CONFIG_LOG_EMITTED:
+        return
+
+    clean_tab = tab_name or ""
+    msg = (
+        "🧩 Config — ShardTracker tab=%r source=%s sheet_has_row=%s "
+        "raw_env=%r raw_sheet=%r parsed_channel_id=%s"
+    )
+    log.info(
+        msg,
+        clean_tab,
+        source,
+        bool(sheet_has_row),
+        raw_env,
+        raw_sheet,
+        parsed_channel_id,
+        extra={
+            "tab": clean_tab,
+            "source": source,
+            "sheet_has_row": bool(sheet_has_row),
+            "raw_env": raw_env,
+            "raw_sheet": raw_sheet,
+            "channel_id": parsed_channel_id,
+        },
+    )
+    _CONFIG_LOG_EMITTED = True
 
 
 def _now_iso() -> str:

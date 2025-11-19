@@ -1344,6 +1344,28 @@ class CoreOpsCog(commands.Cog):
             disconnect_grace_sec=dgrace,
         )
 
+        shard_status = "⚠️ shard tracker unavailable"
+        try:
+            from modules.community.shard_tracker import data as shard_data  # type: ignore
+
+            shard_store = shard_data.ShardSheetStore()
+        except Exception as exc:  # pragma: no cover - import errors rare
+            reason = (str(exc).strip()) or exc.__class__.__name__
+            shard_status = f"⚠️ shard tracker unavailable ({reason})"
+        else:
+            try:
+                shard_config = await shard_store.get_config()
+            except shard_data.ShardTrackerConfigError as exc:
+                reason = (str(exc).strip()) or exc.__class__.__name__
+                shard_status = f"⚠️ {reason}"
+            except Exception as exc:  # pragma: no cover - defensive guard
+                reason = (str(exc).strip()) or exc.__class__.__name__
+                shard_status = f"⚠️ {reason}"
+            else:
+                shard_status = f"✅ <#{shard_config.channel_id}>"
+
+        embed.add_field(name="Shard tracker", value=shard_status, inline=False)
+
         now = dt.datetime.now(UTC)
 
         bucket_names = _list_bucket_names()
