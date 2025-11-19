@@ -102,7 +102,9 @@ class AppAdmin(commands.Cog):
             )
             return
 
-        result = await server_map.refresh_server_map(self.bot, force=True, actor="command")
+        result = await server_map.refresh_server_map(
+            self.bot, force=True, actor="command", requested_channel="ctx"
+        )
         if result.status == "ok":
             await ctx.reply(
                 f"Server map refreshed — messages={result.message_count} • chars={result.total_chars}.",

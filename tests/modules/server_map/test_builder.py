@@ -53,7 +53,7 @@ def test_build_map_messages_renders_intro_mentions_and_headings() -> None:
         channels=[battle, halls, siege, voice, forum, lobby],
     )
 
-    messages = server_map.build_map_messages(guild)
+    messages, stats = server_map.build_map_messages(guild)
 
     expected = (
         "# 🧭 Server Map\n"
@@ -75,6 +75,9 @@ def test_build_map_messages_renders_intro_mentions_and_headings() -> None:
         "🔹 <#103>"
     )
     assert messages == [expected]
+    assert stats == server_map.ServerMapStats(
+        categories=2, channels=4, uncategorized=1
+    )
 
 
 def test_build_map_messages_splits_when_threshold_hit() -> None:
@@ -95,11 +98,12 @@ def test_build_map_messages_splits_when_threshold_hit() -> None:
 
     guild = SimpleNamespace(categories=categories, channels=guild_channels)
 
-    messages = server_map.build_map_messages(guild, threshold=40)
+    messages, stats = server_map.build_map_messages(guild, threshold=40)
 
     assert len(messages) >= 2
     assert messages[0].startswith("# 🧭 Server Map")
     assert messages[-1].endswith("🔹 <#202>")
+    assert stats == server_map.ServerMapStats(categories=3, channels=3, uncategorized=0)
 
 
 def test_build_map_messages_respects_blacklists() -> None:
@@ -120,7 +124,7 @@ def test_build_map_messages_respects_blacklists() -> None:
         channels=[battle, halls, siege, voice, forum, lobby],
     )
 
-    messages = server_map.build_map_messages(
+    messages, stats = server_map.build_map_messages(
         guild,
         category_blacklist={str(battle.id)},
         channel_blacklist={str(voice.id), str(lobby.id)},
@@ -132,6 +136,7 @@ def test_build_map_messages_respects_blacklists() -> None:
     assert "🔹 <#102>" not in body
     assert "🔹 <#104>" not in body
     assert "## GATHERING HALLS" in body
+    assert stats == server_map.ServerMapStats(categories=1, channels=1, uncategorized=0)
 
 
 def test_parse_id_blacklist_trims_entries() -> None:
@@ -154,10 +159,11 @@ def test_build_map_messages_lists_uncategorized_first() -> None:
         channels=[category, alpha, lobby],
     )
 
-    messages = server_map.build_map_messages(guild)
+    messages, stats = server_map.build_map_messages(guild)
     assert len(messages) == 1
     body = messages[0]
     assert body.index("🔹 <#104>") < body.index("## AFTER")
+    assert stats == server_map.ServerMapStats(categories=1, channels=2, uncategorized=1)
 
 
 def test_should_refresh_enforces_interval() -> None:

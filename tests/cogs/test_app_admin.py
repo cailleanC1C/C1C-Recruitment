@@ -156,7 +156,7 @@ def test_servermap_refresh_command_invokes_refresh_when_enabled(monkeypatch):
 
         await cog.servermap_refresh.callback(cog, ctx)
 
-        refresh.assert_awaited_once()
+        refresh.assert_awaited_once_with(bot, force=True, actor="command", requested_channel="ctx")
         ctx.reply.assert_awaited_once_with(
             "Server map refreshed — messages=2 • chars=1200.",
             mention_author=False,

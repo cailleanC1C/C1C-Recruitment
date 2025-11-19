@@ -29,7 +29,7 @@ source of truth covers every automation hook:
 | **Onboarding questions refresh** | `shared.sheets.onboarding` warmers | Weekly | Reloads onboarding question forms to match the latest Config worksheet. | `[cache] bucket=onboarding_questions` (startup + scheduler) with `actor=startup` or `actor=scheduler`. | Requires `ONBOARDING_TAB` and FeatureToggles enabling onboarding modules. |
 | **Cleanup watcher** | `modules.ops.cleanup_watcher` | Every `CLEANUP_AGE_HOURS` hours | Deletes all non-pinned messages in configured panel threads so each run resets the canvas. | Multi-line `🧹 **Cleanup** — …` summary posted to the ops log channel plus Python WARN lines when fetch/delete fails. | `CLEANUP_AGE_HOURS`, `CLEANUP_THREAD_IDS`. |
 | **Daily Recruiter Update** | `modules.recruitment.reporting.daily_recruiter_update.scheduler_daily_recruiter_update` | Once per day at `REPORT_DAILY_POST_TIME` (UTC) | Posts the recruiter digest embed summarizing placements, queues, and cache freshness into `REPORT_RECRUITERS_DEST_ID`. | Structured console logs plus the Discord embed; scheduler start/stop events log via `daily_recruiter_update` helpers. | `REPORT_DAILY_POST_TIME`, `REPORT_RECRUITERS_DEST_ID`, and the `recruitment_reports` feature toggle. |
-| **Server map refresh** | `modules.ops.server_map` | Daily interval check (24 h cadence gated by `SERVER_MAP_REFRESH_DAYS`) | Generates the category/channel overview in `#server-map`, edits existing pinned messages, and pins the first block. | `📘 Server map — refreshed/skipped` logs plus `❌` errors for configuration issues. | FeatureToggles entry `SERVER_MAP` gates both the scheduler and `!servermap refresh`; `SERVER_MAP_CHANNEL_ID` and `SERVER_MAP_REFRESH_DAYS` remain env-driven while runtime state lives in the Recruitment Config tab. |
+| **Server map refresh** | `modules.ops.server_map` | Daily interval check (24 h cadence gated by `SERVER_MAP_REFRESH_DAYS`) | Generates the category/channel overview in `#server-map`, edits existing pinned messages, and pins the first block. | Start logs note `channel_fallback` vs `requested_channel`, followed by config, optional `cleaned_messages`, and summary lines with category/channel counts plus blacklist sizes; `❌` errors still surface configuration issues. | FeatureToggles entry `SERVER_MAP` gates both the scheduler and `!servermap refresh`; `SERVER_MAP_CHANNEL_ID` and `SERVER_MAP_REFRESH_DAYS` remain env-driven while runtime state lives in the Recruitment Config tab. |
 
 ### Cleanup watcher
 - **Environment.** `CLEANUP_AGE_HOURS` defines the fixed interval between runs; `CLEANUP_THREAD_IDS` lists the Discord thread IDs that will be wiped.
@@ -96,4 +96,4 @@ keeps the bot “warm” in two layers:
   scheduler wiring, and watchdog contracts.
 - [`docs/modules/`](../modules) — module owners for the watchers listed here.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.7)
