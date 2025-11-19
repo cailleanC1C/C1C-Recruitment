@@ -99,7 +99,7 @@ _TYPE_ALIASES = {
 _FEATURE_TOGGLE_KEYS = ("shardtracker", "shard_tracker")
 
 
-class ShardTrackerCog(commands.Cog, ShardTrackerController):
+class ShardTracker(commands.Cog, ShardTrackerController):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.store = ShardSheetStore()
@@ -604,8 +604,4 @@ class ShardTrackerCog(commands.Cog, ShardTrackerController):
 
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-
-async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(ShardTrackerCog(bot))
-    log.info("Shard tracker cog loaded")
 
