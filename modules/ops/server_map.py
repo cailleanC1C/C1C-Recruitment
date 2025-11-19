@@ -5,16 +5,13 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import os
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Sequence, Set, Tuple, TYPE_CHECKING
 
 import discord
 
-from shared.config import (
-    cfg,
-    get_server_map_channel_id,
-    get_server_map_refresh_days,
-)
+from shared.config import get_server_map_channel_id, get_server_map_refresh_days
 from shared.logfmt import channel_label
 from modules.common import feature_flags, runtime as runtime_helpers
 
@@ -53,6 +50,13 @@ class ServerMapResult:
     total_chars: int = 0
     reason: str | None = None
     last_run: str | None = None
+
+
+@dataclass(slots=True)
+class ServerMapStats:
+    categories: int
+    channels: int
+    uncategorized: int
 
 
 def _channel_sort_key(channel: object) -> Tuple[int, int]:
@@ -158,7 +162,7 @@ def _normalize_blacklist_values(values: Iterable[object] | None) -> Set[str]:
 
 
 def _split_channels_by_category(
-    guild: object, *, channel_blacklist: Set[str]
+    guild: object,
 ) -> tuple[List[object], Dict[object, List[object]]]:
     channels = getattr(guild, "channels", []) or []
     orphan: List[object] = []
@@ -168,9 +172,6 @@ def _split_channels_by_category(
         if channel_type == discord.ChannelType.category or isinstance(
             channel, discord.CategoryChannel
         ):
-            continue
-        channel_id = _snowflake_text(getattr(channel, "id", None))
-        if channel_id and channel_id in channel_blacklist:
             continue
         category_id = getattr(channel, "category_id", None)
         if category_id is None:
@@ -190,20 +191,26 @@ def build_map_messages(
     threshold: int = DEFAULT_MESSAGE_THRESHOLD,
     category_blacklist: Iterable[object] | None = None,
     channel_blacklist: Iterable[object] | None = None,
-) -> List[str]:
+) -> tuple[List[str], ServerMapStats]:
     """Return formatted server map message bodies for ``guild``."""
 
     category_blacklist = _normalize_blacklist_values(category_blacklist)
     channel_blacklist = _normalize_blacklist_values(channel_blacklist)
     categories = sorted(getattr(guild, "categories", []) or [], key=_channel_sort_key)
     blocks: List[str] = []
+    rendered_category_count = 0
+    rendered_channel_count = 0
+    rendered_uncategorized_count = 0
 
-    orphan_channels, channels_by_category = _split_channels_by_category(
-        guild, channel_blacklist=channel_blacklist
-    )
+    orphan_channels, channels_by_category = _split_channels_by_category(guild)
     intro_lines = list(MAP_INTRO_LINES)
     for channel in orphan_channels:
+        channel_id = _snowflake_text(getattr(channel, "id", None))
+        if channel_id and channel_id in channel_blacklist:
+            continue
         intro_lines.append(_channel_line(channel))
+        rendered_channel_count += 1
+        rendered_uncategorized_count += 1
     blocks.append("\n".join(intro_lines).rstrip())
 
     for category in categories:
@@ -211,14 +218,27 @@ def build_map_messages(
         if category_id_text and category_id_text in category_blacklist:
             continue
         channels = channels_by_category.get(getattr(category, "id", None), [])
-        if not channels:
+        rendered_channels: list[str] = []
+        for channel in channels:
+            channel_id = _snowflake_text(getattr(channel, "id", None))
+            if channel_id and channel_id in channel_blacklist:
+                continue
+            rendered_channels.append(_channel_line(channel))
+        if not rendered_channels:
             continue
         header = _category_label(category)
         lines = [f"## {header}", ""]
-        lines.extend(_channel_line(channel) for channel in channels)
+        lines.extend(rendered_channels)
+        rendered_category_count += 1
+        rendered_channel_count += len(rendered_channels)
         blocks.append("\n".join(lines).rstrip())
 
-    return _split_blocks(blocks, threshold)
+    stats = ServerMapStats(
+        categories=rendered_category_count,
+        channels=rendered_channel_count,
+        uncategorized=rendered_uncategorized_count,
+    )
+    return _split_blocks(blocks, threshold), stats
 
 
 def _extract_message_slots(state: Mapping[str, str]) -> list[tuple[int, int]]:
@@ -270,10 +290,6 @@ def _fallback_messages(guild: discord.Guild | None) -> List[str]:
     return [f"{name}\n{BULLET} No visible categories."]
 
 
-def _format_summary(message_count: int, total_chars: int) -> str:
-    return f"📘 Server map — refreshed • messages={message_count} • chars={total_chars}"
-
-
 def _format_skip(reason: str, last_run: str | None = None) -> str:
     suffix = f" • last_run={last_run}" if last_run else ""
     return f"📘 Server map — skipped • reason={reason}{suffix}"
@@ -308,6 +324,7 @@ async def refresh_server_map(
     *,
     force: bool = False,
     actor: str = "scheduler",
+    requested_channel: str | None = "config",
 ) -> ServerMapResult:
     await bot.wait_until_ready()
 
@@ -338,6 +355,17 @@ async def refresh_server_map(
         return ServerMapResult(status="error", reason="invalid_channel")
 
     guild = channel.guild
+    guild_name = getattr(guild, "name", "unknown guild")
+    cmd_label = "cron" if actor == "scheduler" else "servermap"
+    requested_label = requested_channel or "config"
+    target_label = channel_label(guild, channel_id)
+
+    await runtime_helpers.send_log_message(
+        "📘 Server map — "
+        f"cmd={cmd_label} • guild={guild_name} "
+        f"• channel_fallback={target_label} • requested_channel={requested_label}"
+    )
+
     try:
         state = await server_map_state.fetch_state()
     except Exception:
@@ -360,12 +388,12 @@ async def refresh_server_map(
             last_run=last_run_raw,
         )
 
-    raw_category_blacklist = _config_value_text(cfg.get("SERVER_MAP_CATEGORY_BLACKLIST"))
-    if raw_category_blacklist is None:
-        raw_category_blacklist = _config_value_text(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
-    raw_channel_blacklist = _config_value_text(cfg.get("SERVER_MAP_CHANNEL_BLACKLIST"))
-    if raw_channel_blacklist is None:
-        raw_channel_blacklist = _config_value_text(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+    raw_category_blacklist = _config_value_text(
+        os.getenv("SERVER_MAP_CATEGORY_BLACKLIST", "")
+    )
+    raw_channel_blacklist = _config_value_text(
+        os.getenv("SERVER_MAP_CHANNEL_BLACKLIST", "")
+    )
 
     category_blacklist = _parse_id_blacklist(raw_category_blacklist)
     channel_blacklist = _parse_id_blacklist(raw_channel_blacklist)
@@ -374,14 +402,24 @@ async def refresh_server_map(
     chan_raw_display = (raw_channel_blacklist or "").replace("\"", "'")
     config_debug = (
         "📘 Server map — config • "
-        f'cat_blacklist_raw="{cat_raw_display}" • '
-        f'chan_blacklist_raw="{chan_raw_display}" • '
-        f"cat_ids={len(category_blacklist)} • "
-        f"chan_ids={len(channel_blacklist)}"
+        f"guild={guild_name} "
+        f"• cat_blacklist_raw={cat_raw_display!r} "
+        f"• chan_blacklist_raw={chan_raw_display!r} "
+        f"• cat_ids={len(category_blacklist)} "
+        f"• chan_ids={len(channel_blacklist)}"
+    )
+    log.info(
+        "Server map — config • guild=%s • cat_blacklist_raw=%r • chan_blacklist_raw=%r "
+        "• cat_ids=%d • chan_ids=%d",
+        guild_name,
+        raw_category_blacklist,
+        raw_channel_blacklist,
+        len(category_blacklist),
+        len(channel_blacklist),
     )
     await runtime_helpers.send_log_message(config_debug)
 
-    bodies = build_map_messages(
+    bodies, stats = build_map_messages(
         guild,
         threshold=DEFAULT_MESSAGE_THRESHOLD,
         category_blacklist=category_blacklist,
@@ -389,6 +427,7 @@ async def refresh_server_map(
     )
     if not bodies:
         bodies = _fallback_messages(guild)
+        stats = ServerMapStats(categories=0, channels=0, uncategorized=0)
 
     stored_slots = _extract_message_slots(state)
     fetched_messages: List[discord.Message] = []
@@ -425,11 +464,18 @@ async def refresh_server_map(
             return ServerMapResult(status="error", reason="message_edit_failed")
         updated_messages.append(existing)
 
+    cleaned = 0
     for extra in fetched_messages[len(updated_messages):]:
         try:
             await extra.delete()
+            cleaned += 1
         except discord.HTTPException:
             log.debug("failed to delete old server map message", exc_info=True)
+
+    if cleaned:
+        await runtime_helpers.send_log_message(
+            f"📘 Server map — cmd={cmd_label} • guild={guild_name} • cleaned_messages={cleaned}"
+        )
 
     if updated_messages:
         primary = updated_messages[0]
@@ -450,10 +496,21 @@ async def refresh_server_map(
         await runtime_helpers.send_log_message(message)
         return ServerMapResult(status="error", reason="state_update_failed")
 
-    summary = _format_summary(len(updated_messages), total_chars)
-    await runtime_helpers.send_log_message(summary)
+    await runtime_helpers.send_log_message(
+        "📘 Server map — "
+        f"cmd={cmd_label} • guild={guild_name} "
+        f"• categories={stats.categories} "
+        f"• channels={stats.channels} "
+        f"• uncategorized={stats.uncategorized} "
+        f"• messages={len(updated_messages)} "
+        f"• cat_blacklist_ids={len(category_blacklist)} "
+        f"• chan_blacklist_ids={len(channel_blacklist)} "
+        f"• target_channel={target_label}"
+    )
 
-    return ServerMapResult(status="ok", message_count=len(updated_messages), total_chars=total_chars)
+    return ServerMapResult(
+        status="ok", message_count=len(updated_messages), total_chars=total_chars
+    )
 
 
 def schedule_server_map_job(runtime: "Runtime") -> None:

@@ -84,6 +84,8 @@ sync modules remain available for non-async scripts and cache warmers.
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
 | `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
+| `SERVER_MAP_CATEGORY_BLACKLIST` | csv | — | Comma-separated Discord category IDs hidden from the rendered server map. |
+| `SERVER_MAP_CHANNEL_BLACKLIST` | csv | — | Comma-separated Discord channel IDs hidden from the server map, even when their parent category is visible. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
@@ -140,8 +142,8 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 ### Recruitment runtime state keys
 - `SERVER_MAP_MESSAGE_ID_1`, `SERVER_MAP_MESSAGE_ID_2`, … — message IDs for each segment of the server map post in `SERVER_MAP_CHANNEL_ID`. The scheduler edits these messages in place when the structure changes.
 - `SERVER_MAP_LAST_RUN_AT` — ISO-8601 timestamp recorded after every successful refresh. The daily job reads this value to enforce `SERVER_MAP_REFRESH_DAYS`.
-- `SERVER_MAP_CATEGORY_BLACKLIST` — comma-separated Discord category IDs hidden from the rendered server map.
-- `SERVER_MAP_CHANNEL_BLACKLIST` — comma-separated Discord channel IDs hidden from the server map, even if their parent category is visible.
+
+Blacklist keys for server map rendering are environment variables (`SERVER_MAP_CATEGORY_BLACKLIST`, `SERVER_MAP_CHANNEL_BLACKLIST`) rather than sheet config entries.
 
 The `SERVER_MAP` FeatureToggle in the FeatureToggles worksheet still gates the automation. These blacklist keys only hide specific entries; they do not disable scheduling or posting.
 

@@ -47,9 +47,12 @@ hidden, and refresh summaries always use the concise inline layout.
   retryable errors and will raise alerts if the ops channel becomes unavailable.
 
 ## Server map automation
-- `📘 Server map — refreshed • messages=2 • chars=3120` — posted after the bot edits or recreates the pinned map messages.
+- `📘 Server map — cmd=servermap • guild=<guild> • channel_fallback=#server-map • requested_channel=ctx` — emitted at the start of a manual refresh (scheduled runs use `cmd=cron`/`requested_channel=config`).
+- `📘 Server map — config • guild=<guild> • cat_blacklist_raw='123,456' • chan_blacklist_raw='999' • cat_ids=2 • chan_ids=1` — raw config view of the blacklists pulled from the Config worksheet.
+- `📘 Server map — cmd=servermap • guild=<guild> • cleaned_messages=1` — appears when the refresh deletes stale server-map messages before posting the new copy.
+- `📘 Server map — cmd=servermap • guild=<guild> • categories=5 • channels=38 • uncategorized=2 • messages=3 • cat_blacklist_ids=1 • chan_blacklist_ids=2 • target_channel=#server-map` — summary after the map posts.
 - `📘 Server map — skipped • reason=interval_not_elapsed • last_run=2025-11-05T12:34:56Z` — emitted when the scheduled job sees fewer than `SERVER_MAP_REFRESH_DAYS` since the prior run.
 - `📘 Server map — skipped • reason=feature_disabled` — emitted when the `SERVER_MAP` FeatureToggle disables both the scheduler and manual `!servermap refresh` command.
 - `❌ Server map — error • reason=missing_channel_id` — configuration or Discord failures; inspect runtime logs for details before retrying the manual command.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.7)
