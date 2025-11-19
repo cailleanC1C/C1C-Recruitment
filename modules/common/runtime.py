@@ -13,6 +13,7 @@ from datetime import datetime, time as dt_time, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Iterable, Optional, Sequence
 
+import discord
 from aiohttp import web
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -370,6 +371,60 @@ def _trim_message(message: str, *, limit: int = 1800) -> str:
     if len(message) <= limit:
         return message
     return f"{message[: limit - 1]}…"
+
+
+async def resolve_configured_message_channel(
+    ctx: commands.Context,
+    *,
+    bot: discord.Client,
+    channel_id: int | str | None,
+    expected_guild: discord.Guild | None = None,
+) -> tuple[discord.abc.Messageable | object | None, bool]:
+    """Resolve a configured channel with a safe fallback to the invoking context."""
+
+    snowflake: int | None = None
+    try:
+        snowflake = int(channel_id) if channel_id is not None else None
+    except (TypeError, ValueError):
+        snowflake = None
+
+    channel: object | None = None
+    if snowflake:
+        channel = bot.get_channel(snowflake)
+        if channel is None:
+            fetch_channel = getattr(bot, "fetch_channel", None)
+            if callable(fetch_channel):
+                try:
+                    channel = await fetch_channel(snowflake)
+                except discord.HTTPException:
+                    channel = None
+        if channel is not None and expected_guild is not None:
+            channel_guild = getattr(channel, "guild", None)
+            if channel_guild is not None and channel_guild != expected_guild:
+                log.warning(
+                    "configured channel belongs to another guild",
+                    extra={
+                        "channel_id": snowflake,
+                        "channel_guild": getattr(channel_guild, "id", None),
+                        "expected_guild": getattr(expected_guild, "id", None),
+                    },
+                )
+                channel = None
+        if channel is not None and not hasattr(channel, "send"):
+            log.warning(
+                "configured channel is not messageable",
+                extra={"channel_id": snowflake, "type": type(channel).__name__},
+            )
+            channel = None
+
+    if channel is not None:
+        return channel, False
+
+    fallback = getattr(ctx, "channel", None)
+    if fallback is not None and hasattr(fallback, "send"):
+        return fallback, True
+
+    return None, True
 
 
 class _RecurringJob:

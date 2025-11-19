@@ -171,7 +171,12 @@ class AppAdmin(commands.Cog):
         render = cluster_role_map.build_role_map_render(guild, entries)
 
         channel_id = get_role_map_channel_id()
-        target_channel, used_fallback = await self._resolve_role_map_channel(ctx, guild, channel_id)
+        target_channel, used_fallback = await runtime_helpers.resolve_configured_message_channel(
+            ctx,
+            bot=self.bot,
+            channel_id=channel_id,
+            expected_guild=guild,
+        )
         if target_channel is None:
             await ctx.reply(
                 "I couldn’t determine where to post the role map. Please try again in a guild channel.",
@@ -284,29 +289,6 @@ class AppAdmin(commands.Cog):
             f"• roles={render.role_count} • unassigned_roles={render.unassigned_roles} "
             f"• category_messages={len(jump_entries)} • target_channel={target_label}"
         )
-
-
-    async def _resolve_role_map_channel(
-        self,
-        ctx: commands.Context,
-        guild: discord.Guild,
-        channel_id: int | None,
-    ) -> tuple[discord.abc.Messageable | object | None, bool]:
-        """Resolve the target channel for the cluster role map post."""
-
-        fallback = getattr(ctx, "channel", None)
-        if channel_id:
-            channel = self.bot.get_channel(channel_id)
-            if channel is None:
-                fetch_channel = getattr(self.bot, "fetch_channel", None)
-                if callable(fetch_channel):
-                    try:
-                        channel = await fetch_channel(channel_id)
-                    except discord.HTTPException:
-                        channel = None
-            if channel is not None and getattr(channel, "guild", None) == guild:
-                return channel, False
-        return fallback, True
 
 
 async def setup(bot: commands.Bot) -> None:

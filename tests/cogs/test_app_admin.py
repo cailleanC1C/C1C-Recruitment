@@ -81,6 +81,12 @@ class FakeChannel:
             self.deleted_messages.append(message)
 
 
+class FakeCategory:
+    def __init__(self, channel_id: int, guild) -> None:
+        self.id = channel_id
+        self.guild = guild
+
+
 class FakeGuild:
     def __init__(self, guild_id: int = 1, name: str = "Guild") -> None:
         self.id = guild_id
@@ -472,6 +478,127 @@ def test_whoweare_command_logs_channel_fallback(monkeypatch):
         await cog.whoweare.callback(cog, ctx)
 
         assert any("channel_fallback=#Guild:333" in message for message in log_messages)
+        ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
+
+    asyncio.run(_run())
+
+
+def test_whoweare_command_falls_back_for_non_messageable_channel(monkeypatch):
+    async def _run() -> None:
+        bot = FakeBot()
+        guild = FakeGuild()
+        fallback_channel = FakeChannel(555, guild, bot.user)
+        configured = FakeCategory(444, guild)
+        bot.register_channel(fallback_channel)
+        bot.register_channel(configured)
+
+        cog = AppAdmin(bot)
+        ctx = SimpleNamespace()
+        ctx.guild = guild
+        ctx.channel = fallback_channel
+        ctx.reply = AsyncMock()
+        ctx.bot = bot
+
+        monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
+        monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
+
+        async def fake_fetch(*_args, **_kwargs):
+            return []
+
+        monkeypatch.setattr(cluster_role_map, "fetch_role_map_rows", fake_fetch)
+
+        role_entry = cluster_role_map.RoleEntryRender(
+            display_name="Lead",
+            description="Keeps lights on",
+            members=["<@200>"],
+        )
+        category = cluster_role_map.RoleMapCategoryRender(
+            name="ClusterLeadership",
+            emoji="🔥",
+            roles=[role_entry],
+        )
+        render = cluster_role_map.RoleMapRender(
+            categories=[category],
+            category_count=1,
+            role_count=1,
+            unassigned_roles=0,
+        )
+
+        monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
+        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: configured.id)
+
+        log_messages: list[str] = []
+
+        async def fake_log(message: str) -> None:
+            log_messages.append(message)
+
+        monkeypatch.setattr(runtime_helpers, "send_log_message", fake_log)
+
+        await cog.whoweare.callback(cog, ctx)
+
+        assert len(fallback_channel.sent_messages) == 2
+        assert any("channel_fallback=#Guild:555" in message for message in log_messages)
+        ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
+
+    asyncio.run(_run())
+
+
+def test_whoweare_command_falls_back_for_foreign_channel(monkeypatch):
+    async def _run() -> None:
+        bot = FakeBot()
+        guild = FakeGuild()
+        other_guild = FakeGuild(guild_id=2, name="Elsewhere")
+        channel = FakeChannel(666, guild, bot.user)
+        foreign = FakeChannel(777, other_guild, bot.user)
+        bot.register_channel(channel)
+        bot.register_channel(foreign)
+
+        cog = AppAdmin(bot)
+        ctx = SimpleNamespace()
+        ctx.guild = guild
+        ctx.channel = channel
+        ctx.reply = AsyncMock()
+        ctx.bot = bot
+
+        monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
+        monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
+
+        async def fake_fetch(*_args, **_kwargs):
+            return []
+
+        monkeypatch.setattr(cluster_role_map, "fetch_role_map_rows", fake_fetch)
+
+        role_entry = cluster_role_map.RoleEntryRender(
+            display_name="Lead",
+            description="Keeps lights on",
+            members=["<@200>"],
+        )
+        category = cluster_role_map.RoleMapCategoryRender(
+            name="ClusterLeadership",
+            emoji="🔥",
+            roles=[role_entry],
+        )
+        render = cluster_role_map.RoleMapRender(
+            categories=[category],
+            category_count=1,
+            role_count=1,
+            unassigned_roles=0,
+        )
+
+        monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
+        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: foreign.id)
+
+        log_messages: list[str] = []
+
+        async def fake_log(message: str) -> None:
+            log_messages.append(message)
+
+        monkeypatch.setattr(runtime_helpers, "send_log_message", fake_log)
+
+        await cog.whoweare.callback(cog, ctx)
+
+        assert len(channel.sent_messages) == 2
+        assert any("channel_fallback=#Guild:666" in message for message in log_messages)
         ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
 
     asyncio.run(_run())
