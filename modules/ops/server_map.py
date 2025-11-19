@@ -6,7 +6,7 @@ import asyncio
 import datetime as dt
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Sequence, Set, Tuple, TYPE_CHECKING
+from typing import Dict, Iterable, List, Mapping, Sequence, Set, Tuple, TYPE_CHECKING
 
 import discord
 
@@ -124,71 +124,90 @@ def _split_blocks(blocks: Sequence[str], threshold: int) -> List[str]:
     return messages
 
 
-def _collect_orphan_channels(guild: object) -> List[object]:
-    channels = getattr(guild, "channels", []) or []
-    orphan: List[object] = []
-    for channel in channels:
-        channel_type = getattr(channel, "type", None)
-        if channel_type == discord.ChannelType.category or isinstance(channel, discord.CategoryChannel):
-            continue
-        if getattr(channel, "category_id", None) is None:
-            orphan.append(channel)
-    orphan.sort(key=_channel_sort_key)
-    return orphan
+def _snowflake_text(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
-def _parse_id_list(raw: object) -> Set[int]:
-    ids: Set[int] = set()
+def _parse_id_blacklist(raw: object) -> Set[str]:
+    ids: Set[str] = set()
     if raw is None:
         return ids
     text = str(raw).strip()
     if not text:
         return ids
     for chunk in text.split(","):
-        part = chunk.strip()
-        if not part:
-            continue
-        identifier = _normalize_id(part)
-        if identifier is not None:
-            ids.add(identifier)
+        entry = chunk.strip()
+        if entry:
+            ids.add(entry)
     return ids
+
+
+def _normalize_blacklist_values(values: Iterable[object] | None) -> Set[str]:
+    normalized: Set[str] = set()
+    if not values:
+        return normalized
+    for value in values:
+        text = _snowflake_text(value)
+        if text:
+            normalized.add(text)
+    return normalized
+
+
+def _split_channels_by_category(
+    guild: object, *, channel_blacklist: Set[str]
+) -> tuple[List[object], Dict[object, List[object]]]:
+    channels = getattr(guild, "channels", []) or []
+    orphan: List[object] = []
+    grouped: Dict[object, List[object]] = {}
+    for channel in channels:
+        channel_type = getattr(channel, "type", None)
+        if channel_type == discord.ChannelType.category or isinstance(
+            channel, discord.CategoryChannel
+        ):
+            continue
+        channel_id = _snowflake_text(getattr(channel, "id", None))
+        if channel_id and channel_id in channel_blacklist:
+            continue
+        category_id = getattr(channel, "category_id", None)
+        if category_id is None:
+            orphan.append(channel)
+        else:
+            bucket = grouped.setdefault(category_id, [])
+            bucket.append(channel)
+    orphan.sort(key=_channel_sort_key)
+    for bucket in grouped.values():
+        bucket.sort(key=_channel_sort_key)
+    return orphan, grouped
 
 
 def build_map_messages(
     guild: object,
     *,
     threshold: int = DEFAULT_MESSAGE_THRESHOLD,
-    category_blacklist: Set[int] | None = None,
-    channel_blacklist: Set[int] | None = None,
+    category_blacklist: Iterable[object] | None = None,
+    channel_blacklist: Iterable[object] | None = None,
 ) -> List[str]:
     """Return formatted server map message bodies for ``guild``."""
 
-    category_blacklist = category_blacklist or set()
-    channel_blacklist = channel_blacklist or set()
+    category_blacklist = _normalize_blacklist_values(category_blacklist)
+    channel_blacklist = _normalize_blacklist_values(channel_blacklist)
     categories = sorted(getattr(guild, "categories", []) or [], key=_channel_sort_key)
     blocks: List[str] = []
 
-    orphan_channels = _collect_orphan_channels(guild)
+    orphan_channels, channels_by_category = _split_channels_by_category(
+        guild, channel_blacklist=channel_blacklist
+    )
     intro_lines = list(MAP_INTRO_LINES)
     for channel in orphan_channels:
-        channel_id = _normalize_id(getattr(channel, "id", None))
-        if channel_id is not None and channel_id in channel_blacklist:
-            continue
         intro_lines.append(_channel_line(channel))
     blocks.append("\n".join(intro_lines).rstrip())
 
     for category in categories:
-        category_id = _normalize_id(getattr(category, "id", None))
-        if category_id is not None and category_id in category_blacklist:
+        category_id_text = _snowflake_text(getattr(category, "id", None))
+        if category_id_text and category_id_text in category_blacklist:
             continue
-        channels = [
-            channel
-            for channel in sorted(getattr(category, "channels", []) or [], key=_channel_sort_key)
-            if (
-                (identifier := _normalize_id(getattr(channel, "id", None))) is None
-                or identifier not in channel_blacklist
-            )
-        ]
+        channels = channels_by_category.get(getattr(category, "id", None), [])
         if not channels:
             continue
         header = _category_label(category)
@@ -338,8 +357,8 @@ async def refresh_server_map(
             last_run=last_run_raw,
         )
 
-    category_blacklist = _parse_id_list(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
-    channel_blacklist = _parse_id_list(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
+    category_blacklist = _parse_id_blacklist(state.get("SERVER_MAP_CATEGORY_BLACKLIST"))
+    channel_blacklist = _parse_id_blacklist(state.get("SERVER_MAP_CHANNEL_BLACKLIST"))
 
     bodies = build_map_messages(
         guild,

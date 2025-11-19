@@ -122,8 +122,8 @@ def test_build_map_messages_respects_blacklists() -> None:
 
     messages = server_map.build_map_messages(
         guild,
-        category_blacklist={battle.id},
-        channel_blacklist={voice.id, lobby.id},
+        category_blacklist={str(battle.id)},
+        channel_blacklist={str(voice.id), str(lobby.id)},
     )
 
     assert len(messages) == 1
@@ -132,6 +132,14 @@ def test_build_map_messages_respects_blacklists() -> None:
     assert "🔹 <#102>" not in body
     assert "🔹 <#104>" not in body
     assert "## GATHERING HALLS" in body
+
+
+def test_parse_id_blacklist_trims_entries() -> None:
+    raw = " 101 , 202,  ,303,  "
+
+    result = server_map._parse_id_blacklist(raw)
+
+    assert result == {"101", "202", "303"}
 
 
 def test_build_map_messages_lists_uncategorized_first() -> None:
