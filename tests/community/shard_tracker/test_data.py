@@ -3,28 +3,60 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
-from types import SimpleNamespace
-
 import pytest
 
 from modules.community.shard_tracker import data as shard_data
 
 
-def test_get_config_reads_sheet(monkeypatch):
+class _RuntimeConfigStub:
+    def __init__(self, values: dict[str, object]):
+        self._values = {str(key).lower(): value for key, value in values.items()}
+
+    def get(self, key, default=None):  # pragma: no cover - trivial passthrough
+        lookup = str(key).lower()
+        return self._values.get(lookup, default)
+
+
+def _patch_runtime_config(
+    monkeypatch, *, tab: str = "ShardTracker", sheet_channel: object = 987654321
+) -> None:
+    stub = _RuntimeConfigStub(
+        {
+            "shard_mercy_tab": tab,
+            "shard_mercy_channel_id": sheet_channel,
+        }
+    )
+    monkeypatch.setattr(shard_data, "runtime_config", stub)
+
+
+def test_get_config_prefers_env_channel_id(monkeypatch):
     async def runner():
         store = shard_data.ShardSheetStore()
         monkeypatch.setattr(shard_data, "get_milestones_sheet_id", lambda: "sheet-123")
-        monkeypatch.setattr(
-            shard_data,
-            "runtime_config",
-            SimpleNamespace(shard_mercy_tab="ShardTracker", shard_mercy_channel_id=987654321),
-        )
+        _patch_runtime_config(monkeypatch, sheet_channel=999999999)
+        monkeypatch.setenv("SHARD_MERCY_CHANNEL_ID", "123")
 
         config = await store.get_config()
 
         assert config.sheet_id == "sheet-123"
         assert config.tab_name == "ShardTracker"
-        assert config.channel_id == 987654321
+        assert config.channel_id == 123
+
+    asyncio.run(runner())
+
+
+def test_get_config_sheet_fallback_when_env_missing(monkeypatch):
+    async def runner():
+        store = shard_data.ShardSheetStore()
+        monkeypatch.setattr(shard_data, "get_milestones_sheet_id", lambda: "sheet-abc")
+        _patch_runtime_config(monkeypatch, sheet_channel="456")
+        monkeypatch.delenv("SHARD_MERCY_CHANNEL_ID", raising=False)
+
+        config = await store.get_config()
+
+        assert config.sheet_id == "sheet-abc"
+        assert config.tab_name == "ShardTracker"
+        assert config.channel_id == 456
 
     asyncio.run(runner())
 
@@ -33,11 +65,8 @@ def test_get_config_missing_tab_raises(monkeypatch):
     async def runner():
         store = shard_data.ShardSheetStore()
         monkeypatch.setattr(shard_data, "get_milestones_sheet_id", lambda: "sheet-321")
-        monkeypatch.setattr(
-            shard_data,
-            "runtime_config",
-            SimpleNamespace(shard_mercy_tab="", shard_mercy_channel_id=999),
-        )
+        _patch_runtime_config(monkeypatch, tab="", sheet_channel=999)
+        monkeypatch.delenv("SHARD_MERCY_CHANNEL_ID", raising=False)
 
         with pytest.raises(shard_data.ShardTrackerConfigError):
             await store.get_config()
