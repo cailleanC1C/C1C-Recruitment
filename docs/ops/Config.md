@@ -145,11 +145,17 @@ Both Google Sheets referenced above must expose a `Config` worksheet with **Key*
 - 'FEATURE_TOGGLES_TAB'
 - 'REPORTS_TAB'
 - 'RESERVATIONS_TAB'
+- 'ROLEMAP_TAB'
 
 `RESERVATIONS_TAB` defaults to `Reservations` and stores the structured reservation
 ledger used to derive availability. If the key is missing, the adapter falls back
 to the default name so new environments remain inert until the sheet configuration
 is populated.
+
+`ROLEMAP_TAB` defaults to `WhoWeAre` and stores the category/role listings that
+power the `!whoweare` cluster role map command. The worksheet must expose the
+columns `category`, `role_ID`, `role_name`, and `role_description` so the bot
+can group roles, resolve Discord IDs, and surface the sheet's snarky blurbs.
 
 ### Sheet-based Feature Toggles (`Feature_Toggles` tab)
 
@@ -166,6 +172,8 @@ Current keys include (non-exhaustive):
 - `SERVER_MAP` — enables the scheduled refresh and manual `!servermap refresh`
   command; channel routing (`SERVER_MAP_CHANNEL_ID`) and cadence
   (`SERVER_MAP_REFRESH_DAYS`) remain environment-driven.
+- `ClusterRoleMap` — enables the `!whoweare` command that renders the "Who We
+  Are" roster from the configured `ROLEMAP_TAB` worksheet.
 
 If a toggle key is missing in `Feature_Toggles`, its behaviour should default to a
 safe value (usually `FALSE`/disabled) so new environments remain inert until
@@ -256,4 +264,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.7)
