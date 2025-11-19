@@ -358,6 +358,14 @@ def get_reservations_tab_name(default: str = "Reservations") -> str:
     return text or default
 
 
+def get_role_map_tab_name(default: str = "WhoWeAre") -> str:
+    """Return the configured role map worksheet name."""
+
+    value = _config_lookup("rolemap_tab", default) or default
+    text = str(value or "").strip()
+    return text or default
+
+
 def get_reservations_config(force: bool = False) -> ReservationsConfig:
     """Return reservations feature wiring from the Config worksheet."""
 

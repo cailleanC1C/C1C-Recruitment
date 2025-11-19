@@ -36,11 +36,12 @@ Admins handle the bigger picture:
 - Permissions syncing properly  
 - Onboarding running without stalling  
 Start with:
-- **Ops Runbook:** `docs/Runbook.md`  
-- **Troubleshooting:** `docs/Troubleshooting.md`  
-- **Ops Command Matrix:** `docs/ops/CommandMatrix.md`  
+- **Ops Runbook:** `docs/Runbook.md`
+- **Troubleshooting:** `docs/Troubleshooting.md`
+- **Ops Command Matrix:** `docs/ops/CommandMatrix.md`
 - **Watchers Reference:** `docs/ops/Watchers.md`
-  
+- **Cluster Role Map:** `!whoweare` prints the live "Who We Are" roster straight from the WhoWeAre sheet so cluster leads can see who holds which roles (with snark) in real time.
+
 This is your Swiss-army knife for keeping the bot healthy.
 # 🧭 Behind the Curtain — How It Works
 If you’re curious how the bot thinks, check:
@@ -66,4 +67,4 @@ Each module doc explains what that subsystem does and how it fits into the bigge
   - `docs/contracts/CollaborationContract.md`  
   - ADRs in `docs/adr/`
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.7)
