@@ -71,14 +71,18 @@ def test_build_role_map_render_renders_categories_and_members():
 
     render = cluster_role_map.build_role_map_render(guild, entries)
 
-    assert "💙 WHO WE ARE" in render.message
-    assert "🔥 ClusterLeadership" in render.message
-    assert "🛡️ ClusterSupport" in render.message
-    assert "**Leader** — Runs it" in render.message
-    assert "<@1>" in render.message
-    assert "**Shield** — no description set" in render.message
-    assert "**Backup** — Keeps receipts" in render.message
-    assert "(currently unassigned)" in render.message
     assert render.category_count == 2
     assert render.role_count == 3
     assert render.unassigned_roles == 2
+    assert len(render.categories) == 2
+    leadership = render.categories[0]
+    support = render.categories[1]
+    assert leadership.name == "ClusterLeadership"
+    assert leadership.roles[0].display_name == "Leader"
+    assert leadership.roles[0].members == ["<@1>"]
+    assert support.roles[0].description == "no description set"
+    category_body = cluster_role_map.build_category_message(leadership)
+    assert "## 🔥 ClusterLeadership" in category_body
+    assert "**Leader**" in category_body
+    assert "*Runs it*" in category_body
+    assert "<@1>" in category_body

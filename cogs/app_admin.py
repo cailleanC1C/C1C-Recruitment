@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import discord
 from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata, tier
 from c1c_coreops.rbac import admin_only
 from modules.common import feature_flags, runtime as runtime_helpers
+from modules.common.logs import channel_label
 from modules.ops import cluster_role_map, server_map
+from shared.config import get_role_map_channel_id
 from shared.sheets import recruitment as recruitment_sheet
 
 
@@ -166,11 +169,125 @@ class AppAdmin(commands.Cog):
             return
 
         render = cluster_role_map.build_role_map_render(guild, entries)
-        await ctx.reply(render.message, mention_author=False)
+
+        channel_id = get_role_map_channel_id()
+        target_channel, used_fallback = await runtime_helpers.resolve_configured_message_channel(
+            ctx,
+            bot=self.bot,
+            channel_id=channel_id,
+            expected_guild=guild,
+        )
+        if target_channel is None:
+            await ctx.reply(
+                "I couldn’t determine where to post the role map. Please try again in a guild channel.",
+                mention_author=False,
+            )
+            await runtime_helpers.send_log_message(
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} • status=error • reason=no_channel"
+            )
+            return
+
+        if used_fallback:
+            requested = channel_id or "ctx"
+            fallback_label = channel_label(guild, getattr(target_channel, "id", None))
+            await runtime_helpers.send_log_message(
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
+                f"• channel_fallback={fallback_label} • requested_channel={requested}"
+            )
+
+        cleaned = 0
+        bot_user = getattr(self.bot, "user", None)
+        bot_user_id = getattr(bot_user, "id", None)
+        try:
+            cleaned = await cluster_role_map.cleanup_previous_role_map_messages(
+                target_channel,
+                bot_id=bot_user_id,
+            )
+        except Exception:  # pragma: no cover - defensive logging
+            log_reason = "cleanup_failed"
+            await runtime_helpers.send_log_message(
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} • status=warning • reason={log_reason}"
+            )
+        else:
+            if cleaned:
+                await runtime_helpers.send_log_message(
+                    f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} • cleaned_messages={cleaned}"
+                )
+
+        try:
+            index_message = await target_channel.send(cluster_role_map.build_index_placeholder())
+        except discord.HTTPException as exc:
+            reason = str(exc) or "index_send_failed"
+            await ctx.reply(
+                "I couldn’t post the role map. Please check channel permissions and try again.",
+                mention_author=False,
+            )
+            await runtime_helpers.send_log_message(
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
+                f"• status=error • step=index_send • reason={reason}"
+            )
+            return
+
+        jump_entries: list[cluster_role_map.IndexLink] = []
+        for category in render.categories:
+            body = cluster_role_map.build_category_message(category)
+            if not body.strip():
+                continue
+            try:
+                message = await target_channel.send(body)
+            except discord.HTTPException as exc:
+                reason = str(exc) or "category_send_failed"
+                await runtime_helpers.send_log_message(
+                    f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
+                    f"• status=error • step=category_send • category={category.name} • reason={reason}"
+                )
+                continue
+            jump_entries.append(
+                cluster_role_map.IndexLink(
+                    name=category.name,
+                    emoji=category.emoji,
+                    url=cluster_role_map.build_jump_url(
+                        getattr(guild, "id", 0),
+                        getattr(target_channel, "id", 0),
+                        getattr(message, "id", 0),
+                    ),
+                )
+            )
+
+        if not jump_entries:
+            if render.category_count:
+                empty_reason = "_(Unable to post any categories — check channel permissions and try again.)_"
+            else:
+                empty_reason = "_(No categories are currently available — check the WhoWeAre sheet.)_"
+        else:
+            empty_reason = None
+
+        try:
+            final_index = cluster_role_map.build_index_message(jump_entries, empty_reason=empty_reason)
+            await index_message.edit(content=final_index)
+        except discord.HTTPException as exc:
+            reason = str(exc) or "index_edit_failed"
+            await runtime_helpers.send_log_message(
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
+                f"• status=error • step=index_edit • reason={reason}"
+            )
+
+        if getattr(target_channel, "id", None) == getattr(ctx.channel, "id", None):
+            ack_message = "Cluster role map updated."
+        else:
+            mention = getattr(target_channel, "mention", None)
+            if not mention:
+                label = channel_label(guild, getattr(target_channel, "id", None))
+                mention = label or "the configured channel"
+            ack_message = f"Cluster role map refreshed in {mention}."
+        await ctx.reply(ack_message, mention_author=False)
+
+        target_label = channel_label(guild, getattr(target_channel, "id", None))
         await runtime_helpers.send_log_message(
             "📘 **Cluster role map** — "
             f"cmd=whoweare • guild={guild_name} • categories={render.category_count} "
-            f"• roles={render.role_count} • unassigned_roles={render.unassigned_roles}"
+            f"• roles={render.role_count} • unassigned_roles={render.unassigned_roles} "
+            f"• category_messages={len(jump_entries)} • target_channel={target_label}"
         )
 
 
