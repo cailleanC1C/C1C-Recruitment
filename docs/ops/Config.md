@@ -83,7 +83,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
-| `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the `SERVER_MAP` toggle is enabled. |
+| `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
