@@ -49,14 +49,15 @@ class ShardTrackerView(discord.ui.View):
     def __init__(
         self,
         *,
-        owner_id: int | None,
+        owner_id: int,
         controller: "ShardTrackerController",
         active_tab: str,
         shard_labels: Mapping[str, str],
         shard_emojis: Mapping[str, discord.PartialEmoji | None],
         mythic_controls: bool = True,
+        timeout: float | None = None,
     ) -> None:
-        super().__init__(timeout=None)
+        super().__init__(timeout=timeout)
         self.owner_id = owner_id
         self.active_tab = active_tab
         self._controller = controller
@@ -97,7 +98,7 @@ class ShardTrackerView(discord.ui.View):
                 label="+ Stash",
                 emoji=None,
                 style=discord.ButtonStyle.primary,
-                owner_id=self.owner_id or 0,
+                owner_id=self.owner_id,
                 controller=self._controller,
             )
         )
@@ -107,7 +108,7 @@ class ShardTrackerView(discord.ui.View):
                 label="- Pulls",
                 emoji=None,
                 style=discord.ButtonStyle.secondary,
-                owner_id=self.owner_id or 0,
+                owner_id=self.owner_id,
                 controller=self._controller,
             )
         )
@@ -120,7 +121,7 @@ class ShardTrackerView(discord.ui.View):
                 label=label,
                 emoji=None,
                 style=discord.ButtonStyle.success,
-                owner_id=self.owner_id or 0,
+                owner_id=self.owner_id,
                 controller=self._controller,
             )
         )
@@ -132,7 +133,7 @@ class ShardTrackerView(discord.ui.View):
                 label="Last Pulls / Mercy",
                 emoji=None,
                 style=discord.ButtonStyle.secondary,
-                owner_id=self.owner_id or 0,
+                owner_id=self.owner_id,
                 controller=self._controller,
             )
         )
@@ -148,15 +149,14 @@ class _ShardButton(discord.ui.Button[ShardTrackerView]):
         style: discord.ButtonStyle,
         owner_id: int,
         controller: "ShardTrackerController",
-    ) -> None:
+        ) -> None:
         super().__init__(custom_id=custom_id, label=label, style=style, emoji=emoji)
         self._owner_id = owner_id
         self._controller = controller
 
     async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
         user_id = getattr(interaction.user, "id", None)
-        thread_owner = getattr(getattr(interaction.message, "channel", None), "owner_id", None)
-        owner_id = self._owner_id or thread_owner
+        owner_id = self._owner_id
         if owner_id and user_id != owner_id:
             await interaction.response.send_message(
                 "Only the owner of this tracker can use these buttons.", ephemeral=True
