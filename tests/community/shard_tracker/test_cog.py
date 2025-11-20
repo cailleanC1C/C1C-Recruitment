@@ -105,25 +105,25 @@ def test_commands_are_registered():
     asyncio.run(runner())
 
 
-def test_logged_legendary_updates_depth():
+def test_legendary_reset_tracks_depth():
     tracker = ShardTracker(commands.Bot(command_prefix="!", intents=discord.Intents.none()))
     record = tracker.store._new_record([], 1, "user")  # type: ignore[arg-type]
     kind = tracker._resolve_kind("ancient")
+    record.ancients_since_lego = 7
 
-    tracker._apply_logged_legendary(record, kind, total_pulled=10, legend_index=4)  # type: ignore[arg-type]
+    tracker._apply_legendary_reset(record, kind)  # type: ignore[arg-type]
 
-    assert record.ancients_since_lego == 6
-    assert record.last_ancient_lego_depth == 4
+    assert record.ancients_since_lego == 0
+    assert record.last_ancient_lego_depth == 7
 
 
 def test_logged_mythic_resets_counters():
     tracker = ShardTracker(commands.Bot(command_prefix="!", intents=discord.Intents.none()))
     record = tracker.store._new_record([], 2, "user")  # type: ignore[arg-type]
-    kind = tracker._resolve_kind("primal")
     record.primals_since_mythic = 50
 
-    tracker._apply_logged_mythic(record, kind, total_pulled=15, mythic_index=5)  # type: ignore[arg-type]
+    tracker._apply_primal_mythical(record)  # type: ignore[arg-type]
 
-    assert record.primals_since_mythic == 10
-    assert record.primals_since_lego == 10
-    assert record.last_primal_mythic_depth == 55
+    assert record.primals_since_mythic == 0
+    assert record.primals_since_lego == 0
+    assert record.last_primal_mythic_depth == 50

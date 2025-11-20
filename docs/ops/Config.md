@@ -122,6 +122,11 @@ sync modules remain available for non-async scripts and cache warmers.
 | `TAG_BADGE_PX` | int | `128` | Pixel edge length used when generating clan badge attachments. |
 | `TAG_BADGE_BOX` | float | `0.90` | Glyph fill ratio applied during clan badge attachment rendering. |
 | `STRICT_EMOJI_PROXY` | bool | `true` | When truthy (`1`), require padded proxy thumbnails instead of raw CDN URLs. |
+| `SHARD_PANEL_OVERVIEW_EMOJI` | string | `c1c` | Emoji tag or `<:name:id>` value used for the shard overview tab author icon. |
+| `SHARD_EMOJI_ANCIENT` | string | `ancient` | Emoji tag or `<:name:id>` value for the Ancient shard tab/button. |
+| `SHARD_EMOJI_VOID` | string | `void` | Emoji tag or `<:name:id>` value for the Void shard tab/button. |
+| `SHARD_EMOJI_SACRED` | string | `sacred` | Emoji tag or `<:name:id>` value for the Sacred shard tab/button. |
+| `SHARD_EMOJI_PRIMAL` | string | `primal` | Emoji tag or `<:name:id>` value for the Primal shard tab/button. |
 
 > Local development runner (`scripts/dev_run.sh`) now sources `.env` with `set -a; source ./.env`, preserving quoted and space-containing values verbatim.
 >
@@ -272,4 +277,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-19 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)
