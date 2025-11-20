@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import discord
 from discord.ext import commands
 
@@ -10,9 +12,11 @@ from c1c_coreops.rbac import admin_only
 from modules.common import feature_flags, runtime as runtime_helpers
 from modules.common.logs import channel_label
 from modules.ops import cluster_role_map, server_map
-from shared.config import get_role_map_channel_id
+from shared.config import get_who_we_are_channel_id
 from shared.sheets import recruitment as recruitment_sheet
 
+
+log = logging.getLogger(__name__)
 
 class AppAdmin(commands.Cog):
     """Lightweight administrative utilities for bot operators."""
@@ -170,32 +174,35 @@ class AppAdmin(commands.Cog):
             )
             return
 
-        render = cluster_role_map.build_role_map_render(guild, entries)
-
-        channel_id = get_role_map_channel_id()
-        target_channel, used_fallback = await runtime_helpers.resolve_configured_message_channel(
-            ctx,
-            bot=self.bot,
+        channel_id = get_who_we_are_channel_id()
+        target_channel, channel_error = await runtime_helpers.resolve_configured_text_channel(
+            self.bot,
             channel_id=channel_id,
-            expected_guild=guild,
+            logger=log,
+            context="role map",
         )
-        if target_channel is None:
+        if channel_error:
             await ctx.reply(
                 "I couldn’t determine where to post the role map. Please try again in a guild channel.",
                 mention_author=False,
             )
             await runtime_helpers.send_log_message(
-                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} • status=error • reason=no_channel"
+                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
+                f"• status=error • reason={channel_error}"
             )
             return
 
-        if used_fallback:
-            requested = channel_id or "ctx"
-            fallback_label = channel_label(guild, getattr(target_channel, "id", None))
-            await runtime_helpers.send_log_message(
-                f"📘 **Cluster role map** — cmd=whoweare • guild={guild_name} "
-                f"• channel_fallback={fallback_label} • requested_channel={requested}"
-            )
+        guild = getattr(target_channel, "guild", guild)
+        guild_name = getattr(guild, "name", "unknown guild")
+        render = cluster_role_map.build_role_map_render(guild, entries)
+
+        requested_label = channel_label(guild, channel_id)
+        target_label = channel_label(guild, getattr(target_channel, "id", None))
+        await runtime_helpers.send_log_message(
+            "📘 **Cluster role map** — "
+            f"cmd=whoweare • guild={guild_name} "
+            f"• channel_fallback={target_label} • requested_channel={requested_label}"
+        )
 
         cleaned = 0
         bot_user = getattr(self.bot, "user", None)

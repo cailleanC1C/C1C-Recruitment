@@ -261,6 +261,8 @@ def test_whoweare_command_cleans_old_map_messages(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -287,7 +289,7 @@ def test_whoweare_command_cleans_old_map_messages(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: channel.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: channel.id)
 
         log_messages: list[str] = []
 
@@ -320,6 +322,8 @@ def test_whoweare_command_posts_multi_message_map(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -346,7 +350,7 @@ def test_whoweare_command_posts_multi_message_map(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: channel.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: channel.id)
 
         log_messages: list[str] = []
 
@@ -394,6 +398,8 @@ def test_whoweare_command_marks_unassigned_with_blue_diamond(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -420,7 +426,7 @@ def test_whoweare_command_marks_unassigned_with_blue_diamond(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: channel.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: channel.id)
 
         await cog.whoweare.callback(cog, ctx)
 
@@ -446,6 +452,8 @@ def test_whoweare_command_handles_empty_categories(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -462,7 +470,7 @@ def test_whoweare_command_handles_empty_categories(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: channel.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: channel.id)
 
         log_messages: list[str] = []
 
@@ -495,6 +503,8 @@ def test_whoweare_command_logs_channel_fallback(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -521,7 +531,7 @@ def test_whoweare_command_logs_channel_fallback(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: 999999)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: 999999)
 
         log_messages: list[str] = []
 
@@ -532,8 +542,14 @@ def test_whoweare_command_logs_channel_fallback(monkeypatch):
 
         await cog.whoweare.callback(cog, ctx)
 
-        assert any("channel_fallback=#Guild:333" in message for message in log_messages)
-        ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
+        assert channel.sent_messages == []
+        assert log_messages == [
+            "📘 **Cluster role map** — cmd=whoweare • guild=Guild • status=error • reason=invalid_channel"
+        ]
+        ctx.reply.assert_awaited_once_with(
+            "I couldn’t determine where to post the role map. Please try again in a guild channel.",
+            mention_author=False,
+        )
 
     asyncio.run(_run())
 
@@ -554,6 +570,8 @@ def test_whoweare_command_falls_back_for_non_messageable_channel(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -580,7 +598,7 @@ def test_whoweare_command_falls_back_for_non_messageable_channel(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: configured.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: configured.id)
 
         log_messages: list[str] = []
 
@@ -591,9 +609,14 @@ def test_whoweare_command_falls_back_for_non_messageable_channel(monkeypatch):
 
         await cog.whoweare.callback(cog, ctx)
 
-        assert len(fallback_channel.sent_messages) == 2
-        assert any("channel_fallback=#Guild:555" in message for message in log_messages)
-        ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
+        assert fallback_channel.sent_messages == []
+        assert log_messages == [
+            "📘 **Cluster role map** — cmd=whoweare • guild=Guild • status=error • reason=invalid_channel"
+        ]
+        ctx.reply.assert_awaited_once_with(
+            "I couldn’t determine where to post the role map. Please try again in a guild channel.",
+            mention_author=False,
+        )
 
     asyncio.run(_run())
 
@@ -615,6 +638,8 @@ def test_whoweare_command_falls_back_for_foreign_channel(monkeypatch):
         ctx.reply = AsyncMock()
         ctx.bot = bot
 
+        monkeypatch.setattr(runtime_helpers.discord, "TextChannel", FakeChannel)
+
         monkeypatch.setattr(feature_flags, "is_enabled", lambda key: True)
         monkeypatch.setattr(recruitment_sheet, "get_role_map_tab_name", lambda: "WhoWeAre")
 
@@ -641,7 +666,7 @@ def test_whoweare_command_falls_back_for_foreign_channel(monkeypatch):
         )
 
         monkeypatch.setattr(cluster_role_map, "build_role_map_render", lambda guild, entries: render)
-        monkeypatch.setattr("cogs.app_admin.get_role_map_channel_id", lambda: foreign.id)
+        monkeypatch.setattr("cogs.app_admin.get_who_we_are_channel_id", lambda: foreign.id)
 
         log_messages: list[str] = []
 
@@ -652,8 +677,11 @@ def test_whoweare_command_falls_back_for_foreign_channel(monkeypatch):
 
         await cog.whoweare.callback(cog, ctx)
 
-        assert len(channel.sent_messages) == 2
-        assert any("channel_fallback=#Guild:666" in message for message in log_messages)
-        ctx.reply.assert_awaited_once_with("Cluster role map updated.", mention_author=False)
+        assert channel.sent_messages == []
+        assert len(foreign.sent_messages) == 2
+        assert "channel_fallback=#Elsewhere:777" in log_messages[0]
+        ctx.reply.assert_awaited_once_with(
+            "Cluster role map refreshed in <#777>.", mention_author=False
+        )
 
     asyncio.run(_run())

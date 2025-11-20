@@ -22,7 +22,7 @@ from discord.ext import commands
 from shared import health as healthmod
 from shared import socket_heartbeat as hb
 from shared import watchdog as watchdog_loop
-from modules.common.logs import log as human_log
+from modules.common.logs import channel_label, log as human_log
 from shared import config as shared_config
 from shared.config import (
     get_env_name,
@@ -425,6 +425,43 @@ async def resolve_configured_message_channel(
         return fallback, True
 
     return None, True
+
+
+async def resolve_configured_text_channel(
+    bot: discord.Client,
+    *,
+    channel_id: int | str | None,
+    logger: logging.Logger,
+    context: str,
+    invalid_reason: str = "invalid_channel",
+) -> tuple[discord.TextChannel | None, str | None]:
+    """Resolve a configured text channel using the strict server map pattern."""
+
+    snowflake: int | None = None
+    try:
+        snowflake = int(channel_id) if channel_id is not None else None
+    except (TypeError, ValueError):
+        snowflake = None
+
+    if not snowflake:
+        return None, "missing_channel_id"
+
+    try:
+        channel = bot.get_channel(snowflake) or await bot.fetch_channel(snowflake)
+    except discord.HTTPException:
+        logger.exception(
+            f"failed to resolve {context} channel", extra={"channel_id": snowflake}
+        )
+        return None, "channel_fetch_failed"
+
+    if not isinstance(channel, discord.TextChannel):
+        label = channel_label(getattr(channel, "guild", None), snowflake)
+        logger.warning(
+            f"{context} channel is not a text channel", extra={"channel": label}
+        )
+        return None, invalid_reason
+
+    return channel, None
 
 
 class _RecurringJob:

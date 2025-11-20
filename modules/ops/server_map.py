@@ -334,25 +334,17 @@ async def refresh_server_map(
         return ServerMapResult(status="disabled", reason="feature_disabled")
 
     channel_id = get_server_map_channel_id()
-    if not channel_id:
-        message = _format_error("missing_channel_id")
+    channel, channel_error = await runtime_helpers.resolve_configured_text_channel(
+        bot,
+        channel_id=channel_id,
+        logger=log,
+        context="server map",
+        invalid_reason="invalid_channel_type",
+    )
+    if channel_error:
+        message = _format_error(channel_error)
         await runtime_helpers.send_log_message(message)
-        return ServerMapResult(status="error", reason="missing_channel_id")
-
-    try:
-        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-    except discord.HTTPException:
-        log.exception("failed to resolve server map channel", extra={"channel_id": channel_id})
-        message = _format_error("channel_fetch_failed")
-        await runtime_helpers.send_log_message(message)
-        return ServerMapResult(status="error", reason="channel_fetch_failed")
-
-    if not isinstance(channel, discord.TextChannel):
-        label = channel_label(getattr(channel, "guild", None), channel_id)
-        log.warning("server map channel is not a text channel", extra={"channel": label})
-        message = _format_error("invalid_channel_type")
-        await runtime_helpers.send_log_message(message)
-        return ServerMapResult(status="error", reason="invalid_channel")
+        return ServerMapResult(status="error", reason=channel_error)
 
     guild = channel.guild
     guild_name = getattr(guild, "name", "unknown guild")
