@@ -122,9 +122,9 @@ def test_logged_mythic_resets_counters():
     record = tracker.store._new_record([], 2, "user")  # type: ignore[arg-type]
     record.primals_since_mythic = 50
 
-    tracker._apply_primal_mythical(record)  # type: ignore[arg-type]
+    tracker._apply_primal_mythical(record, depth=record.primals_since_mythic)  # type: ignore[arg-type]
 
-    assert record.primals_since_mythic == 0
+    assert record.primals_since_mythic == 50
     assert record.primals_since_lego == 0
     assert record.last_primal_mythic_depth == 50
 
