@@ -34,24 +34,29 @@ class ShardTrackerView(discord.ui.View):
     def __init__(
         self,
         *,
-        owner_id: int,
+        owner_id: int | None,
         controller: "ShardTrackerController",
         active_tab: str,
         shard_labels: Mapping[str, str],
+        shard_emojis: Mapping[str, discord.PartialEmoji | None],
         mythic_controls: bool = True,
     ) -> None:
-        super().__init__(timeout=180)
+        super().__init__(timeout=None)
         self.owner_id = owner_id
         self.active_tab = active_tab
         self._controller = controller
         # Tab buttons
         for tab in ("overview", "ancient", "void", "sacred", "primal", "last_pulls"):
-            label = tab.replace("_", " ").title()
+            label = "Overview" if tab == "overview" else None
+            emoji = shard_emojis.get(tab)
+            if label is None and emoji is None:
+                label = shard_labels.get(tab, tab.replace("_", " ").title())
             style = discord.ButtonStyle.primary if tab == active_tab else discord.ButtonStyle.secondary
             self.add_item(
                 _ShardButton(
                     custom_id=f"tab:{tab}",
                     label=label,
+                    emoji=emoji,
                     style=style,
                     owner_id=owner_id,
                     controller=controller,
@@ -60,52 +65,39 @@ class ShardTrackerView(discord.ui.View):
 
         # Action rows depend on tab
         if active_tab in shard_labels:
-            self._add_stash_buttons(active_tab)
-            self._add_legendary_button(active_tab, shard_labels[active_tab])
-            if active_tab == "primal" and mythic_controls:
-                self._add_primal_mythic_buttons()
+            self._add_primary_buttons()
+            self._add_legendary_button()
 
-    def _add_stash_buttons(self, shard_key: str) -> None:
-        for delta in (-10, -5, -1, 1, 5, 10):
-            label = f"{delta:+d}"
-            self.add_item(
-                _ShardButton(
-                    custom_id=f"{shard_key}:add:{delta}",
-                    label=label,
-                    style=discord.ButtonStyle.secondary,
-                    owner_id=self.owner_id,
-                    controller=self._controller,
-                )
-            )
-
-    def _add_legendary_button(self, shard_key: str, label: str) -> None:
+    def _add_primary_buttons(self) -> None:
         self.add_item(
             _ShardButton(
-                custom_id=f"{shard_key}:got_legendary",
-                label=f"Got Legendary ({label})",
-                style=discord.ButtonStyle.success,
-                owner_id=self.owner_id,
+                custom_id=f"action:stash:{self.active_tab}",
+                label="+ Stash",
+                emoji=None,
+                style=discord.ButtonStyle.primary,
+                owner_id=self.owner_id or 0,
+                controller=self._controller,
+            )
+        )
+        self.add_item(
+            _ShardButton(
+                custom_id=f"action:pulls:{self.active_tab}",
+                label="- Pulls",
+                emoji=None,
+                style=discord.ButtonStyle.secondary,
+                owner_id=self.owner_id or 0,
                 controller=self._controller,
             )
         )
 
-    def _add_primal_mythic_buttons(self) -> None:
-        for delta in (-5, -1, 1, 5):
-            self.add_item(
-                _ShardButton(
-                    custom_id=f"primal_mythic:add:{delta}",
-                    label=f"Mythic {delta:+d}",
-                    style=discord.ButtonStyle.secondary,
-                    owner_id=self.owner_id,
-                    controller=self._controller,
-                )
-            )
+    def _add_legendary_button(self) -> None:
         self.add_item(
             _ShardButton(
-                custom_id="primal:got_mythical",
-                label="Got Mythical",
+                custom_id=f"action:legendary:{self.active_tab}",
+                label="Got Legendary",
+                emoji=None,
                 style=discord.ButtonStyle.success,
-                owner_id=self.owner_id,
+                owner_id=self.owner_id or 0,
                 controller=self._controller,
             )
         )
@@ -117,17 +109,20 @@ class _ShardButton(discord.ui.Button[ShardTrackerView]):
         *,
         custom_id: str,
         label: str,
+        emoji: discord.PartialEmoji | None,
         style: discord.ButtonStyle,
         owner_id: int,
         controller: "ShardTrackerController",
     ) -> None:
-        super().__init__(custom_id=custom_id, label=label, style=style)
+        super().__init__(custom_id=custom_id, label=label, style=style, emoji=emoji)
         self._owner_id = owner_id
         self._controller = controller
 
     async def callback(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
         user_id = getattr(interaction.user, "id", None)
-        if user_id != self._owner_id:
+        thread_owner = getattr(getattr(interaction.message, "channel", None), "owner_id", None)
+        owner_id = self._owner_id or thread_owner
+        if owner_id and user_id != owner_id:
             await interaction.response.send_message(
                 "Only the owner of this tracker can use these buttons.", ephemeral=True
             )
@@ -135,7 +130,9 @@ class _ShardButton(discord.ui.Button[ShardTrackerView]):
         await self._controller.handle_button_interaction(
             interaction=interaction,
             custom_id=self.custom_id,
-            active_tab=self.view.active_tab if isinstance(self.view, ShardTrackerView) else "overview",
+            active_tab=self.custom_id.split(":")[-1]
+            if self.custom_id.startswith("action:") or self.custom_id.startswith("tab:")
+            else self.view.active_tab if isinstance(self.view, ShardTrackerView) else "overview",
         )
 
 
@@ -155,6 +152,8 @@ def build_overview_embed(
     member: discord.abc.User,
     displays: Sequence[ShardDisplay],
     mythic: MythicDisplay,
+    author_name: str | None = None,
+    author_icon_url: str | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
         title=f"Shard Overview — {member.display_name or member.name}",
@@ -164,6 +163,8 @@ def build_overview_embed(
             "and the Legendary/Mythical buttons to log pulls."
         ),
     )
+    if author_name:
+        embed.set_author(name=author_name, icon_url=author_icon_url or None)
     for display in displays:
         line = (
             f"Owned: **{max(display.owned, 0):,}** | "
@@ -189,10 +190,14 @@ def build_detail_embed(
     member: discord.abc.User,
     display: ShardDisplay,
     mythic: MythicDisplay | None = None,
+    author_name: str | None = None,
+    author_icon_url: str | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
         title=f"{display.label} Shards", colour=discord.Color.blurple()
     )
+    if author_name:
+        embed.set_author(name=author_name, icon_url=author_icon_url or None)
     embed.description = _detail_block(display)
     if mythic:
         embed.add_field(name="Primal Mythical", value=_mythic_block(mythic), inline=False)
@@ -205,11 +210,15 @@ def build_last_pulls_embed(
     displays: Sequence[ShardDisplay],
     mythic: MythicDisplay,
     base_rates: Mapping[str, str],
+    author_name: str | None = None,
+    author_icon_url: str | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
         title=f"Last Pulls & Mercy Info — {member.display_name or member.name}",
         colour=discord.Color.blurple(),
     )
+    if author_name:
+        embed.set_author(name=author_name, icon_url=author_icon_url or None)
     last_lines = []
     for display in displays:
         stamp = human_time(display.last_timestamp) if display.last_timestamp else "Never"
@@ -238,11 +247,10 @@ def build_last_pulls_embed(
 
 def _detail_block(display: ShardDisplay) -> str:
     mercy = display.mercy
-    remaining = max(0, mercy.threshold - mercy.pulls_since)
-    remaining_label = f"{remaining} left" if remaining > 0 else "Maxed"
+    maxed = mercy.pulls_since >= mercy.threshold
     parts = [
         f"Stash: **{max(display.owned, 0):,}**",
-        f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold} ({remaining_label})",
+        f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
         f"Legendary Chance: {format_percent(mercy.chance)}",
         _progress_bar(mercy),
     ]
@@ -256,10 +264,9 @@ def _detail_block(display: ShardDisplay) -> str:
 
 def _mythic_block(display: MythicDisplay) -> str:
     mercy = display.mercy
-    remaining = max(0, mercy.threshold - mercy.pulls_since)
-    remaining_label = f"{remaining} left" if remaining > 0 else "Maxed"
+    maxed = mercy.pulls_since >= mercy.threshold
     parts = [
-        f"Mythical Mercy: {mercy.pulls_since} / {mercy.threshold} ({remaining_label})",
+        f"Mythical Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
         f"Mythical Chance: {format_percent(mercy.chance)}",
         _progress_bar(mercy),
     ]
@@ -284,7 +291,7 @@ def _progress_bar(mercy: MercySnapshot, segments: int = 20) -> str:
         "🟦" * mercy_filled,
         "⬜" * empty,
     ])
-    return f"Progress: [{bar}] {mercy.pulls_since}/{max_pulls}"
+    return f"Progress: [{bar}]"
 
 
 def human_time(iso_value: str) -> str:

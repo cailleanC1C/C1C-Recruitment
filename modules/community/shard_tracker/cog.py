@@ -12,6 +12,7 @@ from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata, tier
 from modules.common import feature_flags
+from modules.recruitment import emoji_pipeline
 from shared import config as shared_config
 from shared.config import get_admin_role_ids
 from shared.logfmt import user_label
@@ -120,6 +121,24 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         self.store = ShardSheetStore()
         self.threads = ShardThreadRouter(bot)
         self._locks: Dict[int, asyncio.Lock] = {}
+        self._emoji_tags = self._load_emoji_tags()
+        self._tab_emojis = self._load_tab_emojis(self._emoji_tags)
+
+    async def cog_load(self) -> None:
+        labels = {kind.key: kind.label for kind in SHARD_KINDS.values()}
+        for tab in ("ancient", "void", "sacred", "primal"):
+            try:
+                self.bot.add_view(
+                    ShardTrackerView(
+                        owner_id=None,
+                        controller=self,
+                        shard_labels=labels,
+                        shard_emojis=self._tab_emojis,
+                        active_tab=tab,
+                    )
+                )
+            except Exception:  # pragma: no cover - defensive registration
+                log.exception("failed to register persistent shard tracker view", extra={"tab": tab})
 
     # === Commands ===
 
@@ -209,56 +228,75 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 await self._notify_admins(str(exc))
                 return
 
-            if action[0] == "tab":
-                new_tab = action[1]
+            action_name, action_tab = action
+
+            if action_name == "tab":
+                new_tab = action_tab
                 embed, view = self._build_panel(
                     ctx_author, record, interaction.channel, new_tab
                 )
                 await interaction.response.edit_message(embed=embed, view=view)
                 return
 
-            if action[0] == "log":
-                _, shard_key = action
-                modal = _LegendaryLogModal(
-                    shard_key=shard_key,
+            tab = action_tab or active_tab or "overview"
+            if tab not in SHARD_KINDS and action_name in {"stash", "pulls", "legendary"}:
+                await interaction.response.send_message(
+                    "Pick a shard tab to use these buttons.", ephemeral=True
+                )
+                return
+
+            if action_name == "stash":
+                modal = _StashModal(
                     controller=self,
                     owner_id=ctx_author.id,
-                    active_tab=active_tab,
+                    shard_key=tab,
+                    active_tab=tab,
                 )
                 await interaction.response.send_modal(modal)
                 return
 
-            if action[0] == "log_mythic":
-                modal = _MythicLogModal(
+            if action_name == "pulls":
+                modal = _PullsModal(
                     controller=self,
                     owner_id=ctx_author.id,
-                    active_tab=active_tab,
+                    shard_key=tab,
+                    active_tab=tab,
                 )
                 await interaction.response.send_modal(modal)
                 return
 
-            # adjustments
-            action_type, shard_key, delta = action
-            if action_type == "mythic_adjust":
-                self._adjust_mythic_counter(record, delta)
-            else:
-                kind = self._resolve_kind(shard_key)
+            if action_name == "legendary":
+                if tab == "primal":
+                    await interaction.response.send_message(
+                        "What did you pull?",
+                        view=_PrimalDropChoiceView(
+                            controller=self,
+                            owner_id=ctx_author.id,
+                            active_tab=tab,
+                            panel_message=interaction.message,
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                kind = self._resolve_kind(tab)
                 if kind is None:
                     await interaction.response.send_message(
                         "Unknown shard type for this button.", ephemeral=True
                     )
                     return
-                self._apply_delta(record, kind, delta)
-            record.snapshot_name(ctx_author.display_name or ctx_author.name)
-            await self.store.save_record(config, record)
-            embed, view = self._build_panel(ctx_author, record, interaction.channel, active_tab)
-            await interaction.response.edit_message(embed=embed, view=view)
-            await self._log_action(
-                "button",
-                ctx_author,
-                interaction.channel,
-                f"{custom_id}",
-            )
+                self._apply_legendary_reset(record, kind)
+                record.snapshot_name(ctx_author.display_name or ctx_author.name)
+                await self.store.save_record(config, record)
+                embed, view = self._build_panel(
+                    ctx_author, record, interaction.channel, tab
+                )
+                await interaction.response.edit_message(embed=embed, view=view)
+                await self._log_action(
+                    "legendary_reset",
+                    ctx_author,
+                    interaction.channel,
+                    f"{kind.label} reset",
+                )
 
     # === Internal helpers ===
 
@@ -334,61 +372,32 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         )
         await self._log_action("stash_set", ctx.author, ctx.channel, f"{kind.label}={count}")
 
-    def _parse_custom_id(
-        self, custom_id: str
-    ) -> tuple[str, str | None, int] | tuple[str, str] | None:
+    def _parse_custom_id(self, custom_id: str) -> tuple[str, str | None] | None:
         if custom_id.startswith("tab:"):
             return ("tab", custom_id.split(":", 1)[1])
-        if custom_id.endswith("got_legendary"):
-            shard_key = custom_id.split(":", 1)[0]
-            return ("log", shard_key)
-        if custom_id.endswith("got_mythical"):
-            return ("log_mythic", None)
-        parts = custom_id.split(":")
-        if len(parts) == 3 and parts[1] == "add":
-            shard_key, _, delta_raw = parts
-            try:
-                delta = int(delta_raw)
-            except ValueError:
-                return None
-            if shard_key == "primal_mythic":
-                return ("mythic_adjust", shard_key, delta)
-            return ("adjust", shard_key, delta)
+        parts = custom_id.split(":", 2)
+        if len(parts) == 3 and parts[0] == "action":
+            return (parts[1], parts[2])
         return None
 
-    def _apply_delta(self, record: ShardRecord, kind: ShardKind, delta: int) -> None:
-        owned = max(0, getattr(record, kind.stash_field, 0))
-        new_owned = max(0, owned + delta)
-        setattr(record, kind.stash_field, new_owned)
-        actual_delta = new_owned - owned
-        if actual_delta < 0:
-            pulled = abs(actual_delta)
-            current_mercy = max(0, getattr(record, kind.mercy_field, 0))
-            setattr(record, kind.mercy_field, current_mercy + pulled)
-            if kind.key == "primal":
-                record.primals_since_mythic = max(0, record.primals_since_mythic) + pulled
-
-    def _adjust_mythic_counter(self, record: ShardRecord, delta: int) -> None:
-        record.primals_since_mythic = max(0, record.primals_since_mythic + delta)
-
-    async def process_legendary_modal(
+    async def process_stash_modal(
         self,
         *,
         interaction: discord.Interaction,
         shard_key: str,
-        total_pulled: int,
-        legend_index: int,
+        amount: int,
         active_tab: str,
     ) -> None:
         kind = self._resolve_kind(shard_key)
         if kind is None:
             await interaction.response.send_message("Unknown shard type.", ephemeral=True)
             return
-        if legend_index > total_pulled:
+        if amount <= 0:
             await interaction.response.send_message(
-                "Legendary shard index cannot exceed total pulled.", ephemeral=True
+                "Please enter a positive number.", ephemeral=True
             )
             return
+
         async with self._user_lock(interaction.user.id):
             try:
                 config = await self.store.get_config()
@@ -402,32 +411,38 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 )
                 await self._notify_admins(str(exc))
                 return
-            self._apply_logged_legendary(record, kind, total_pulled, legend_index)
+
+            self._apply_stash_increase(record, kind, amount)
             record.snapshot_name(interaction.user.display_name or interaction.user.name)
             await self.store.save_record(config, record)
+
         embed, view = self._build_panel(interaction.user, record, interaction.channel, active_tab)
         await interaction.response.edit_message(embed=embed, view=view)
         await self._log_action(
-            "legendary_modal",
+            "stash_add",
             interaction.user,
             interaction.channel,
-            f"{kind.label} total={total_pulled} index={legend_index}",
+            f"{kind.label} stash +{amount}",
         )
 
-    async def process_mythic_modal(
+    async def process_pulls_modal(
         self,
         *,
         interaction: discord.Interaction,
-        total_pulled: int,
-        mythic_index: int,
+        shard_key: str,
+        amount: int,
         active_tab: str,
     ) -> None:
-        if mythic_index > total_pulled:
+        kind = self._resolve_kind(shard_key)
+        if kind is None:
+            await interaction.response.send_message("Unknown shard type.", ephemeral=True)
+            return
+        if amount <= 0:
             await interaction.response.send_message(
-                "Mythical shard index cannot exceed total pulled.", ephemeral=True
+                "Please enter a positive number.", ephemeral=True
             )
             return
-        kind = SHARD_KINDS["primal"]
+
         async with self._user_lock(interaction.user.id):
             try:
                 config = await self.store.get_config()
@@ -441,53 +456,100 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 )
                 await self._notify_admins(str(exc))
                 return
-            self._apply_logged_mythic(record, kind, total_pulled, mythic_index)
+
+            self._apply_pull_usage(record, kind, amount)
             record.snapshot_name(interaction.user.display_name or interaction.user.name)
             await self.store.save_record(config, record)
+
         embed, view = self._build_panel(interaction.user, record, interaction.channel, active_tab)
         await interaction.response.edit_message(embed=embed, view=view)
         await self._log_action(
-            "mythic_modal",
+            "pulls_logged",
             interaction.user,
             interaction.channel,
-            f"Primal total={total_pulled} index={mythic_index}",
+            f"{kind.label} -{amount}",
         )
 
-    def _apply_logged_legendary(
-        self, record: ShardRecord, kind: ShardKind, total_pulled: int, legend_index: int
+    async def process_primal_choice(
+        self,
+        *,
+        interaction: discord.Interaction,
+        choice: str,
+        active_tab: str,
+        panel_message: discord.Message | None,
     ) -> None:
-        total = max(1, total_pulled)
-        index = max(1, legend_index)
-        pre = index
-        post = max(0, total - index)
-        previous = max(0, getattr(record, kind.mercy_field, 0))
-        depth = previous + pre
-        setattr(record, kind.mercy_field, post)
-        setattr(record, kind.depth_field, depth)
-        setattr(record, kind.timestamp_field, self._now_iso())
-        if kind.key == "primal":
-            record.primals_since_mythic = max(0, record.primals_since_mythic) + total
-        owned = max(0, getattr(record, kind.stash_field, 0))
-        setattr(record, kind.stash_field, max(0, owned - total))
+        if choice not in {"legendary", "mythical"}:
+            await interaction.response.send_message(
+                "Unknown primal drop type.", ephemeral=True
+            )
+            return
+        async with self._user_lock(interaction.user.id):
+            try:
+                config = await self.store.get_config()
+                record = await self.store.load_record(
+                    interaction.user.id,
+                    interaction.user.display_name or interaction.user.name,
+                )
+            except (ShardTrackerConfigError, ShardTrackerSheetError) as exc:
+                await interaction.response.send_message(
+                    self._config_error_message(str(exc)), ephemeral=True
+                )
+                await self._notify_admins(str(exc))
+                return
 
-    def _apply_logged_mythic(
-        self, record: ShardRecord, kind: ShardKind, total_pulled: int, mythic_index: int
-    ) -> None:
-        total = max(1, total_pulled)
-        index = max(1, mythic_index)
-        pre = index
-        post = max(0, total - index)
-        previous = max(0, record.primals_since_mythic)
-        depth = previous + pre
-        record.primals_since_mythic = post
-        setattr(record, kind.mercy_field, post)
-        timestamp = self._now_iso()
-        record.last_primal_mythic_iso = timestamp
-        record.last_primal_mythic_depth = depth
-        setattr(record, kind.timestamp_field, timestamp)
-        setattr(record, kind.depth_field, depth)
+            if choice == "legendary":
+                self._apply_primal_legendary(record)
+            else:
+                self._apply_primal_mythical(record)
+            record.snapshot_name(interaction.user.display_name or interaction.user.name)
+            await self.store.save_record(config, record)
+
+        target_message = panel_message or interaction.message
+        if target_message:
+            embed, view = self._build_panel(interaction.user, record, target_message.channel, active_tab)
+            await target_message.edit(embed=embed, view=view)
+        await interaction.response.edit_message(content="Logged!", view=None)
+        await self._log_action(
+            "primal_drop",
+            interaction.user,
+            interaction.channel,
+            f"Primal {choice}",
+        )
+
+    def _apply_stash_increase(self, record: ShardRecord, kind: ShardKind, amount: int) -> None:
         owned = max(0, getattr(record, kind.stash_field, 0))
-        setattr(record, kind.stash_field, max(0, owned - total))
+        setattr(record, kind.stash_field, owned + amount)
+
+    def _apply_pull_usage(self, record: ShardRecord, kind: ShardKind, amount: int) -> None:
+        owned = max(0, getattr(record, kind.stash_field, 0))
+        new_owned = max(0, owned - amount)
+        setattr(record, kind.stash_field, new_owned)
+        current_mercy = max(0, getattr(record, kind.mercy_field, 0))
+        setattr(record, kind.mercy_field, current_mercy + amount)
+        if kind.key == "primal":
+            record.primals_since_mythic = max(0, record.primals_since_mythic) + amount
+
+    def _apply_legendary_reset(self, record: ShardRecord, kind: ShardKind) -> None:
+        current_depth = max(0, getattr(record, kind.mercy_field, 0))
+        setattr(record, kind.mercy_field, 0)
+        setattr(record, kind.depth_field, current_depth)
+        setattr(record, kind.timestamp_field, self._now_iso())
+
+    def _apply_primal_legendary(self, record: ShardRecord) -> None:
+        depth = max(0, record.primals_since_lego)
+        record.primals_since_lego = 0
+        record.last_primal_lego_depth = depth
+        record.last_primal_lego_iso = self._now_iso()
+
+    def _apply_primal_mythical(self, record: ShardRecord) -> None:
+        depth = max(0, record.primals_since_mythic)
+        record.primals_since_mythic = 0
+        record.primals_since_lego = 0
+        timestamp = self._now_iso()
+        record.last_primal_mythic_depth = depth
+        record.last_primal_mythic_iso = timestamp
+        record.last_primal_lego_depth = depth
+        record.last_primal_lego_iso = timestamp
 
     async def _handle_mercy_set(
         self, ctx: commands.Context, shard_type: str, count: int
@@ -565,20 +627,6 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         )
         await self._log_action("mythic", ctx.author, ctx.channel, f"Primal after={after}")
 
-    def _apply_button_action(self, record: ShardRecord, kind: ShardKind, action: str) -> None:
-        if action == "add":
-            current = max(0, getattr(record, kind.stash_field, 0)) + 1
-            setattr(record, kind.stash_field, current)
-            return
-        if action == "pull":
-            owned = max(0, getattr(record, kind.stash_field, 0) - 1)
-            setattr(record, kind.stash_field, owned)
-            current_mercy = max(0, getattr(record, kind.mercy_field, 0)) + 1
-            setattr(record, kind.mercy_field, current_mercy)
-            if kind.key == "primal":
-                record.primals_since_mythic = max(0, record.primals_since_mythic) + 1
-            return
-
     async def _resolve_thread(
         self, ctx: commands.Context
     ) -> tuple[bool, discord.TextChannel | None, discord.Thread | None]:
@@ -640,6 +688,9 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         displays = [self._build_display(record, kind) for kind in SHARD_KINDS.values()]
         mythic = self._build_mythic_display(record)
         tab = active_tab if active_tab else "overview"
+        author_name, author_key = self._author_meta(tab)
+        guild = getattr(channel, "guild", None)
+        author_icon_url = self._author_icon_url(guild, author_key)
 
         if tab == "last_pulls":
             embed = build_last_pulls_embed(
@@ -647,6 +698,8 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 displays=displays,
                 mythic=mythic,
                 base_rates=_BASE_RATES,
+                author_name=author_name,
+                author_icon_url=author_icon_url,
             )
         elif tab in SHARD_KINDS:
             target = next((d for d in displays if d.key == tab), displays[0])
@@ -654,15 +707,24 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 member=member,
                 display=target,
                 mythic=mythic if tab == "primal" else None,
+                author_name=author_name,
+                author_icon_url=author_icon_url,
             )
         else:
-            embed = build_overview_embed(member=member, displays=displays, mythic=mythic)
+            embed = build_overview_embed(
+                member=member,
+                displays=displays,
+                mythic=mythic,
+                author_name=author_name,
+                author_icon_url=author_icon_url,
+            )
 
         labels = {kind.key: kind.label for kind in SHARD_KINDS.values()}
         view = ShardTrackerView(
             owner_id=getattr(member, "id", 0),
             controller=self,
             shard_labels=labels,
+            shard_emojis=self._tab_emojis,
             active_tab=tab,
         )
         return embed, view
@@ -689,6 +751,48 @@ class ShardTracker(commands.Cog, ShardTrackerController):
             last_timestamp=record.last_primal_mythic_iso,
             last_depth=max(0, record.last_primal_mythic_depth),
         )
+
+    def _load_emoji_tags(self) -> dict[str, str]:
+        return {
+            "overview": shared_config.get_shard_panel_overview_emoji("c1c"),
+            "ancient": shared_config.get_shard_emoji_ancient("ancient"),
+            "void": shared_config.get_shard_emoji_void("void"),
+            "sacred": shared_config.get_shard_emoji_sacred("sacred"),
+            "primal": shared_config.get_shard_emoji_primal("primal"),
+        }
+
+    def _load_tab_emojis(
+        self, tags: dict[str, str]
+    ) -> dict[str, discord.PartialEmoji | None]:
+        return {key: self._parse_partial_emoji(value) for key, value in tags.items()}
+
+    @staticmethod
+    def _parse_partial_emoji(value: str | None) -> discord.PartialEmoji | None:
+        if not value:
+            return None
+        try:
+            return discord.PartialEmoji.from_str(str(value))
+        except Exception:
+            return None
+
+    def _emoji_tag_value(self, key: str) -> str:
+        raw = self._emoji_tags.get(key, "")
+        parsed = self._parse_partial_emoji(raw)
+        if parsed and parsed.name:
+            return parsed.name
+        return str(raw).strip(": ") or key
+
+    def _author_meta(self, tab: str) -> tuple[str, str]:
+        if tab in SHARD_KINDS:
+            label = SHARD_KINDS[tab].label
+            return (f"{label} Shards", tab)
+        return ("Shard Overview — C1C", "overview")
+
+    def _author_icon_url(self, guild: discord.Guild | None, emoji_key: str) -> str | None:
+        tag = self._emoji_tag_value(emoji_key)
+        if not tag:
+            return None
+        return emoji_pipeline.padded_emoji_url(guild, tag)
 
     def _resolve_kind(self, value: str | None) -> ShardKind | None:
         key = self._resolve_kind_key(value)
@@ -765,107 +869,152 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-class _LegendaryLogModal(discord.ui.Modal):
+class _NumberModal(discord.ui.Modal):
     def __init__(
         self,
         *,
-        shard_key: str,
+        title: str,
+        label: str,
+        placeholder: str,
+    ) -> None:
+        super().__init__(title=title)
+        self.amount = discord.ui.TextInput(
+            label=label,
+            min_length=1,
+            max_length=6,
+            required=True,
+            placeholder=placeholder,
+        )
+        self.add_item(self.amount)
+
+    def _parsed_amount(self) -> int | None:
+        try:
+            return int(str(self.amount.value))
+        except (TypeError, ValueError):
+            return None
+
+
+class _StashModal(_NumberModal):
+    def __init__(
+        self,
+        *,
         controller: ShardTracker,
         owner_id: int,
+        shard_key: str,
         active_tab: str,
     ) -> None:
-        label = SHARD_KINDS.get(shard_key).label if SHARD_KINDS.get(shard_key) else shard_key.title()
-        super().__init__(title=f"Log Legendary pull — {label} Shards")
-        self.shard_key = shard_key
-        self.controller = controller
-        self.owner_id = owner_id
-        self.active_tab = active_tab
-        self.total_pulled = discord.ui.TextInput(
-            label="Total shards pulled in this session",
-            min_length=1,
-            max_length=6,
-            required=True,
+        super().__init__(
+            title="Add to Stash",
+            label="How many shards are you adding to your stash?",
             placeholder="e.g., 10",
         )
-        self.legend_index = discord.ui.TextInput(
-            label="On which shard did the Legendary appear?",
-            min_length=1,
-            max_length=6,
-            required=True,
-            placeholder="e.g., 3",
-        )
-        self.add_item(self.total_pulled)
-        self.add_item(self.legend_index)
+        self.controller = controller
+        self.owner_id = owner_id
+        self.shard_key = shard_key
+        self.active_tab = active_tab
 
     async def on_submit(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Only the tracker owner can log pulls.", ephemeral=True)
+            await interaction.response.send_message(
+                "Only the tracker owner can log pulls.", ephemeral=True
+            )
             return
-        try:
-            total = int(str(self.total_pulled.value))
-            index = int(str(self.legend_index.value))
-        except (TypeError, ValueError):
-            await interaction.response.send_message("Please provide numeric values.", ephemeral=True)
+        amount = self._parsed_amount()
+        if amount is None:
+            await interaction.response.send_message(
+                "Please provide a numeric value.", ephemeral=True
+            )
             return
-        if total < 1 or index < 1:
-            await interaction.response.send_message("Values must be at least 1.", ephemeral=True)
-            return
-        await self.controller.process_legendary_modal(
+        await self.controller.process_stash_modal(
             interaction=interaction,
             shard_key=self.shard_key,
-            total_pulled=total,
-            legend_index=index,
+            amount=amount,
             active_tab=self.active_tab,
         )
 
 
-class _MythicLogModal(discord.ui.Modal):
+class _PullsModal(_NumberModal):
+    def __init__(
+        self,
+        *,
+        controller: ShardTracker,
+        owner_id: int,
+        shard_key: str,
+        active_tab: str,
+    ) -> None:
+        super().__init__(
+            title="Log pulls",
+            label="How many shards did you pull?",
+            placeholder="e.g., 5",
+        )
+        self.controller = controller
+        self.owner_id = owner_id
+        self.shard_key = shard_key
+        self.active_tab = active_tab
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Only the tracker owner can log pulls.", ephemeral=True
+            )
+            return
+        amount = self._parsed_amount()
+        if amount is None:
+            await interaction.response.send_message(
+                "Please provide a numeric value.", ephemeral=True
+            )
+            return
+        await self.controller.process_pulls_modal(
+            interaction=interaction,
+            shard_key=self.shard_key,
+            amount=amount,
+            active_tab=self.active_tab,
+        )
+
+
+class _PrimalDropChoiceView(discord.ui.View):
     def __init__(
         self,
         *,
         controller: ShardTracker,
         owner_id: int,
         active_tab: str,
+        panel_message: discord.Message | None,
     ) -> None:
-        super().__init__(title="Log Mythical pull — Primal Shards")
+        super().__init__(timeout=120)
         self.controller = controller
         self.owner_id = owner_id
         self.active_tab = active_tab
-        self.total_pulled = discord.ui.TextInput(
-            label="Total primal shards pulled in this session",
-            min_length=1,
-            max_length=6,
-            required=True,
-            placeholder="e.g., 10",
-        )
-        self.mythic_index = discord.ui.TextInput(
-            label="On which shard did the Mythical appear?",
-            min_length=1,
-            max_length=6,
-            required=True,
-            placeholder="e.g., 7",
-        )
-        self.add_item(self.total_pulled)
-        self.add_item(self.mythic_index)
+        self.panel_message = panel_message
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:  # type: ignore[override]
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Only the tracker owner can log pulls.", ephemeral=True)
-            return
-        try:
-            total = int(str(self.total_pulled.value))
-            index = int(str(self.mythic_index.value))
-        except (TypeError, ValueError):
-            await interaction.response.send_message("Please provide numeric values.", ephemeral=True)
-            return
-        if total < 1 or index < 1:
-            await interaction.response.send_message("Values must be at least 1.", ephemeral=True)
-            return
-        await self.controller.process_mythic_modal(
+            await interaction.response.send_message(
+                "Only the tracker owner can log pulls.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Legendary", style=discord.ButtonStyle.primary)
+    async def handle_legendary(
+        self, interaction: discord.Interaction, _: discord.ui.Button
+    ) -> None:
+        await self.controller.process_primal_choice(
             interaction=interaction,
-            total_pulled=total,
-            mythic_index=index,
+            choice="legendary",
             active_tab=self.active_tab,
+            panel_message=self.panel_message,
+        )
+
+    @discord.ui.button(label="Mythical", style=discord.ButtonStyle.success)
+    async def handle_mythical(
+        self, interaction: discord.Interaction, _: discord.ui.Button
+    ) -> None:
+        await self.controller.process_primal_choice(
+            interaction=interaction,
+            choice="mythical",
+            active_tab=self.active_tab,
+            panel_message=self.panel_message,
         )
 
 
