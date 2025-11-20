@@ -121,6 +121,7 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         self.store = ShardSheetStore()
         self.threads = ShardThreadRouter(bot)
         self._locks: Dict[int, asyncio.Lock] = {}
+        self._emoji_warning_emitted = False
         self._emoji_tags = self._load_emoji_tags()
         self._tab_emojis = self._load_tab_emojis(self._emoji_tags)
 
@@ -764,20 +765,40 @@ class ShardTracker(commands.Cog, ShardTrackerController):
     def _load_tab_emojis(
         self, tags: dict[str, str]
     ) -> dict[str, discord.PartialEmoji | None]:
-        return {key: self._parse_partial_emoji(value) for key, value in tags.items()}
+        parsed: dict[str, discord.PartialEmoji | None] = {}
+        for key, value in tags.items():
+            emoji = self._parse_partial_emoji(value, key)
+            parsed[key] = emoji if emoji and emoji.id else None
+        return parsed
 
     @staticmethod
-    def _parse_partial_emoji(value: str | None) -> discord.PartialEmoji | None:
+    def _log_emoji_warning(key: str, value: str, reason: str) -> None:
+        log.warning("invalid shard emoji", extra={"key": key, "value": value, "reason": reason})
+
+    def _parse_partial_emoji(
+        self, value: str | None, key: str | None = None
+    ) -> discord.PartialEmoji | None:
         if not value:
             return None
         try:
-            return discord.PartialEmoji.from_str(str(value))
+            emoji = discord.PartialEmoji.from_str(str(value))
         except Exception:
+            if not self._emoji_warning_emitted:
+                self._log_emoji_warning(key or "unknown", str(value), "parse_failed")
+                self._emoji_warning_emitted = True
             return None
+
+        if emoji.id is None:
+            if not self._emoji_warning_emitted:
+                self._log_emoji_warning(key or "unknown", str(value), "missing_id")
+                self._emoji_warning_emitted = True
+            return None
+
+        return emoji
 
     def _emoji_tag_value(self, key: str) -> str:
         raw = self._emoji_tags.get(key, "")
-        parsed = self._parse_partial_emoji(raw)
+        parsed = self._parse_partial_emoji(raw, key)
         if parsed and parsed.name:
             return parsed.name
         return str(raw).strip(": ") or key

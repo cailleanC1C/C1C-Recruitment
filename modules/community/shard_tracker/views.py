@@ -48,8 +48,9 @@ class ShardTrackerView(discord.ui.View):
         # Tab buttons
         for tab in ("overview", "ancient", "void", "sacred", "primal", "last_pulls"):
             label = "Overview" if tab == "overview" else None
-            emoji = shard_emojis.get(tab)
-            if label is None and emoji is None:
+            emoji = None if tab == "overview" else shard_emojis.get(tab)
+            if tab != "overview" and (not emoji or not getattr(emoji, "id", None)):
+                emoji = None
                 label = shard_labels.get(tab, tab.replace("_", " ").title())
             style = discord.ButtonStyle.primary if tab == active_tab else discord.ButtonStyle.secondary
             self.add_item(
