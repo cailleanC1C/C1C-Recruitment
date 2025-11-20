@@ -756,9 +756,10 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         displays = [self._build_display(record, kind) for kind in SHARD_KINDS.values()]
         mythic = self._build_mythic_display(record)
         tab = active_tab if active_tab else "overview"
-        author_name, author_key = self._author_meta(tab)
+        author_name, author_key = self._author_meta(tab, member.display_name or member.name)
         guild = getattr(channel, "guild", None)
         author_icon_url = self._author_icon_url(guild, author_key)
+        color = self._tab_color(tab)
 
         if tab == "last_pulls":
             embed = build_last_pulls_embed(
@@ -768,6 +769,7 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 base_rates=_BASE_RATES,
                 author_name=author_name,
                 author_icon_url=author_icon_url,
+                color=color,
             )
         elif tab in SHARD_KINDS:
             target = next((d for d in displays if d.key == tab), displays[0])
@@ -777,6 +779,7 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 mythic=mythic if tab == "primal" else None,
                 author_name=author_name,
                 author_icon_url=author_icon_url,
+                color=color,
             )
         else:
             embed = build_overview_embed(
@@ -785,6 +788,7 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 mythic=mythic,
                 author_name=author_name,
                 author_icon_url=author_icon_url,
+                color=color,
             )
 
         labels = {kind.key: kind.label for kind in SHARD_KINDS.values()}
@@ -870,11 +874,19 @@ class ShardTracker(commands.Cog, ShardTrackerController):
             return parsed.name
         return str(raw).strip(": ") or key
 
-    def _author_meta(self, tab: str) -> tuple[str, str]:
+    def _author_meta(self, tab: str, username: str) -> tuple[str, str]:
         if tab in SHARD_KINDS:
             label = SHARD_KINDS[tab].label
-            return (f"{label} Shards", tab)
-        return ("Shard Overview — C1C", "overview")
+            return (f"{label} Shards | {username}", tab)
+        if tab == "last_pulls":
+            return (f"Last Pulls & Mercy Info — C1C | {username}", "overview")
+        return (f"Shard Overview — C1C | {username}", "overview")
+
+    @staticmethod
+    def _tab_color(tab: str) -> discord.Colour:
+        from modules.community.shard_tracker.views import _TAB_COLORS
+
+        return _TAB_COLORS.get(tab, _TAB_COLORS["overview"])
 
     def _author_icon_url(self, guild: discord.Guild | None, emoji_key: str) -> str | None:
         tag = self._emoji_tag_value(emoji_key)

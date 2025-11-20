@@ -8,6 +8,8 @@ from typing import Iterable, Mapping, Sequence
 
 import discord
 
+from shared import theme
+
 from .mercy import MercySnapshot, format_percent
 
 
@@ -138,6 +140,26 @@ class _ShardButton(discord.ui.Button[ShardTrackerView]):
         )
 
 
+_TAB_COLORS: Mapping[str, discord.Colour] = {
+    "overview": theme.colors.c1c_blue,
+    "last_pulls": theme.colors.c1c_blue,
+    "ancient": discord.Colour(0x5CC8FF),
+    "void": discord.Colour(0xA970FF),
+    "sacred": discord.Colour.gold(),
+    "primal": discord.Colour.dark_red(),
+}
+
+
+_AUTHOR_NAMES: Mapping[str, str] = {
+    "overview": "Shard Overview — C1C",
+    "last_pulls": "Last Pulls & Mercy Info — C1C",
+    "ancient": "Ancient Shards",
+    "void": "Void Shards",
+    "sacred": "Sacred Shards",
+    "primal": "Primal Shards",
+}
+
+
 class ShardTrackerController:
     async def handle_button_interaction(
         self,
@@ -156,17 +178,19 @@ def build_overview_embed(
     mythic: MythicDisplay,
     author_name: str | None = None,
     author_icon_url: str | None = None,
+    color: discord.Colour | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"Shard Overview — {member.display_name or member.name}",
-        colour=discord.Color.blurple(),
+        colour=color or _TAB_COLORS.get("overview"),
         description=(
             "Snapshot across all shard types. Use the tab buttons for details "
             "and the Legendary/Mythical buttons to log pulls."
         ),
     )
-    if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url)
+    embed.set_author(
+        name=author_name or _AUTHOR_NAMES.get("overview"),
+        icon_url=author_icon_url,
+    )
     for display in displays:
         line = (
             f"Owned: **{max(display.owned, 0):,}** | "
@@ -194,13 +218,21 @@ def build_detail_embed(
     mythic: MythicDisplay | None = None,
     author_name: str | None = None,
     author_icon_url: str | None = None,
+    color: discord.Colour | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"{display.label} Shards", colour=discord.Color.blurple()
+        colour=color or _TAB_COLORS.get(display.key, _TAB_COLORS["overview"])
     )
-    if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url)
+    embed.set_author(
+        name=author_name or _AUTHOR_NAMES.get(display.key, display.label),
+        icon_url=author_icon_url,
+    )
     embed.description = _detail_block(display)
+    embed.add_field(
+        name="Progress",
+        value=_progress_bar(display.mercy),
+        inline=False,
+    )
     if mythic:
         embed.add_field(name="Primal Mythical", value=_mythic_block(mythic), inline=False)
     return embed
@@ -214,13 +246,15 @@ def build_last_pulls_embed(
     base_rates: Mapping[str, str],
     author_name: str | None = None,
     author_icon_url: str | None = None,
+    color: discord.Colour | None = None,
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"Last Pulls & Mercy Info — {member.display_name or member.name}",
-        colour=discord.Color.blurple(),
+        colour=color or _TAB_COLORS.get("last_pulls", _TAB_COLORS["overview"])
     )
-    if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url)
+    embed.set_author(
+        name=author_name or _AUTHOR_NAMES.get("last_pulls"),
+        icon_url=author_icon_url,
+    )
     last_lines = []
     for display in displays:
         stamp = human_time(display.last_timestamp) if display.last_timestamp else "Never"
@@ -254,7 +288,6 @@ def _detail_block(display: ShardDisplay) -> str:
         f"Stash: **{max(display.owned, 0):,}**",
         f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
         f"Legendary Chance: {format_percent(mercy.chance)}",
-        _progress_bar(mercy),
     ]
     if display.last_timestamp:
         parts.append(
@@ -280,7 +313,7 @@ def _mythic_block(display: MythicDisplay) -> str:
     return "\n".join(parts)
 
 
-def _progress_bar(mercy: MercySnapshot, segments: int = 20) -> str:
+def _progress_bar(mercy: MercySnapshot, segments: int = 10) -> str:
     max_pulls = max(mercy.cap_at, mercy.threshold)
     capped = min(mercy.pulls_since, max_pulls)
     filled = int(round((capped / max_pulls) * segments)) if max_pulls else 0
@@ -293,7 +326,7 @@ def _progress_bar(mercy: MercySnapshot, segments: int = 20) -> str:
         "🟦" * mercy_filled,
         "⬜" * empty,
     ])
-    return f"Progress: [{bar}]"
+    return bar
 
 
 def human_time(iso_value: str) -> str:
