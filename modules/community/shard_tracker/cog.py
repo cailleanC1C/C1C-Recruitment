@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from typing import Dict, Iterable, Optional
 
 import discord
+from discord import PartialEmoji
 from discord.ext import commands
 
 from c1c_coreops.helpers import help_metadata, tier
@@ -123,7 +125,7 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         self._locks: Dict[int, asyncio.Lock] = {}
         self._emoji_warning_emitted = False
         self._emoji_tags = self._load_emoji_tags()
-        self._tab_emojis = self._load_tab_emojis(self._emoji_tags)
+        self._tab_emojis = self._load_tab_emojis()
 
     async def cog_load(self) -> None:
         labels = {kind.key: kind.label for kind in SHARD_KINDS.values()}
@@ -929,43 +931,30 @@ class ShardTracker(commands.Cog, ShardTrackerController):
             "primal": shared_config.get_shard_emoji_primal("primal"),
         }
 
-    def _load_tab_emojis(
-        self, tags: dict[str, str]
-    ) -> dict[str, discord.PartialEmoji | None]:
-        parsed: dict[str, discord.PartialEmoji | None] = {}
-        for key, value in tags.items():
-            emoji = self._parse_partial_emoji(value, key)
-            parsed[key] = emoji if emoji and emoji.id else None
-        return parsed
+    def _load_tab_emojis(self) -> dict[str, discord.PartialEmoji | None]:
+        return {
+            "ancient": self._parse_partial_emoji(os.getenv("SHARD_EMOJI_ANCIENT", "")),
+            "void": self._parse_partial_emoji(os.getenv("SHARD_EMOJI_VOID", "")),
+            "sacred": self._parse_partial_emoji(os.getenv("SHARD_EMOJI_SACRED", "")),
+            "primal": self._parse_partial_emoji(os.getenv("SHARD_EMOJI_PRIMAL", "")),
+        }
 
-    @staticmethod
-    def _log_emoji_warning(key: str, value: str, reason: str) -> None:
-        log.warning("invalid shard emoji", extra={"key": key, "value": value, "reason": reason})
-
-    def _parse_partial_emoji(
-        self, value: str | None, key: str | None = None
-    ) -> discord.PartialEmoji | None:
+    def _parse_partial_emoji(self, value: str | None) -> discord.PartialEmoji | None:
         if not value:
             return None
         try:
-            emoji = discord.PartialEmoji.from_str(str(value))
+            emoji = PartialEmoji.from_str(value)
+            if emoji.id:
+                return emoji
         except Exception:
             if not self._emoji_warning_emitted:
-                self._log_emoji_warning(key or "unknown", str(value), "parse_failed")
+                log.warning("Invalid shard emoji config: %r", value)
                 self._emoji_warning_emitted = True
-            return None
-
-        if emoji.id is None:
-            if not self._emoji_warning_emitted:
-                self._log_emoji_warning(key or "unknown", str(value), "missing_id")
-                self._emoji_warning_emitted = True
-            return None
-
-        return emoji
+        return None
 
     def _emoji_tag_value(self, key: str) -> str:
         raw = self._emoji_tags.get(key, "")
-        parsed = self._parse_partial_emoji(raw, key)
+        parsed = self._parse_partial_emoji(raw)
         if parsed and parsed.name:
             return parsed.name
         return str(raw).strip(": ") or key

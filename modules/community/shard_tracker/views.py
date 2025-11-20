@@ -13,6 +13,16 @@ from shared import theme
 from .mercy import MercySnapshot, format_percent
 
 
+TAB_LABELS: Mapping[str, str] = {
+    "overview": "Overview",
+    "ancient": "Ancient",
+    "void": "Void",
+    "sacred": "Sacred",
+    "primal": "Primal",
+    "last_pulls": "Last Pulls",
+}
+
+
 @dataclass(frozen=True)
 class ShardDisplay:
     key: str
@@ -49,11 +59,16 @@ class ShardTrackerView(discord.ui.View):
         self._controller = controller
         # Tab buttons
         for tab in ("overview", "ancient", "void", "sacred", "primal", "last_pulls"):
-            label = "Overview" if tab == "overview" else None
-            emoji = None if tab == "overview" else shard_emojis.get(tab)
-            if tab != "overview" and (not emoji or not getattr(emoji, "id", None)):
-                emoji = None
-                label = shard_labels.get(tab, tab.replace("_", " ").title())
+            label: str | None = None
+            emoji = None
+
+            if tab in ("overview", "last_pulls"):
+                label = TAB_LABELS[tab]
+            else:
+                emoji = shard_emojis.get(tab)
+                if not emoji or not getattr(emoji, "id", None):
+                    emoji = None
+                    label = TAB_LABELS[tab]
             style = discord.ButtonStyle.primary if tab == active_tab else discord.ButtonStyle.secondary
             self.add_item(
                 _ShardButton(
