@@ -56,6 +56,11 @@ __all__ = [
     "get_panel_fixed_thread_id",
     "get_shard_mercy_tab",
     "get_shard_mercy_channel_id",
+    "get_shard_panel_overview_emoji",
+    "get_shard_emoji_ancient",
+    "get_shard_emoji_void",
+    "get_shard_emoji_sacred",
+    "get_shard_emoji_primal",
     "get_public_base_url",
     "get_render_external_url",
     "get_emoji_max_bytes",
@@ -914,6 +919,35 @@ def get_shard_mercy_channel_id() -> int:
         return int(str(value).strip())
     except (TypeError, ValueError):
         return 0
+
+
+def _clean_emoji_value(key: str, default: str) -> str:
+    value = _CONFIG.get(key, default)
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+    return default
+
+
+def get_shard_panel_overview_emoji(default: str = "c1c") -> str:
+    return _clean_emoji_value("SHARD_PANEL_OVERVIEW_EMOJI", default)
+
+
+def get_shard_emoji_ancient(default: str = "ancient") -> str:
+    return _clean_emoji_value("SHARD_EMOJI_ANCIENT", default)
+
+
+def get_shard_emoji_void(default: str = "void") -> str:
+    return _clean_emoji_value("SHARD_EMOJI_VOID", default)
+
+
+def get_shard_emoji_sacred(default: str = "sacred") -> str:
+    return _clean_emoji_value("SHARD_EMOJI_SACRED", default)
+
+
+def get_shard_emoji_primal(default: str = "primal") -> str:
+    return _clean_emoji_value("SHARD_EMOJI_PRIMAL", default)
 
 
 def get_public_base_url() -> str | None:

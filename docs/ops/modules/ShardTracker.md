@@ -12,7 +12,8 @@ users keep a personal, button-driven tracker thread.
 - Enforce channel routing: only the configured Shards & Mercy channel may run
   shard commands, and every user gets a private thread underneath that channel.
 - Surface a mobile-friendly embed with buttons so players can log pulls or add
-  shards without typing commands.
+  shards without typing commands. Panel buttons are persistent and survive
+  bot restarts.
 - Provide modal-based logging for Legendary/Mythical pulls and manual stash
   setters via `!shards set …`.
 - Log lifecycle, warning, and error states through the existing C1C log helper
@@ -75,11 +76,14 @@ there, and replies in the parent channel with a short pointer.
 
 Buttons live on every embed inside the user’s thread:
 
-- **Tab buttons** — Overview, per-shard detail tabs, and a Last Pulls tab.
-- **Stash adjusters** — +/- buttons per shard type to update stash counts; pulls
-  (negative deltas) increment the appropriate mercy counters.
-- **Got Legendary/Mythical** — open modals that record how many shards were
-  pulled, where the drop appeared, and reset counters accordingly.
+- **Tab buttons** — Text-only Overview tab plus emoji-only shard tabs
+  (Ancient/Void/Sacred/Primal) and a text Last Pulls tab.
+- **+ Stash / - Pulls** — open numeric modals on the active shard tab only.
+  + Stash increases stash without touching mercy; - Pulls reduces stash (floored
+  at 0) and increments mercy (Primal increments both legendary and mythical).
+- **Got Legendary** — shard tabs only. Non-Primal resets the legendary mercy to
+  zero; Primal opens a follow-up with Legendary vs Mythical to decide whether to
+  reset only the legendary counter or both mercy tracks.
 
 Only the thread owner may press the buttons; everyone else receives a friendly
 rejection message. Button handlers write through to Sheets immediately and edit
@@ -117,5 +121,5 @@ Automated tests cover:
 - Thread routing unit tests verifying channel restrictions and reusing an
   existing thread before creating a new one.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)
 
