@@ -164,7 +164,7 @@ def build_overview_embed(
         ),
     )
     if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url or None)
+        embed.set_author(name=author_name, icon_url=author_icon_url or discord.Embed.Empty)
     for display in displays:
         line = (
             f"Owned: **{max(display.owned, 0):,}** | "
@@ -197,7 +197,7 @@ def build_detail_embed(
         title=f"{display.label} Shards", colour=discord.Color.blurple()
     )
     if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url or None)
+        embed.set_author(name=author_name, icon_url=author_icon_url or discord.Embed.Empty)
     embed.description = _detail_block(display)
     if mythic:
         embed.add_field(name="Primal Mythical", value=_mythic_block(mythic), inline=False)
@@ -218,7 +218,7 @@ def build_last_pulls_embed(
         colour=discord.Color.blurple(),
     )
     if author_name:
-        embed.set_author(name=author_name, icon_url=author_icon_url or None)
+        embed.set_author(name=author_name, icon_url=author_icon_url or discord.Embed.Empty)
     last_lines = []
     for display in displays:
         stamp = human_time(display.last_timestamp) if display.last_timestamp else "Never"
