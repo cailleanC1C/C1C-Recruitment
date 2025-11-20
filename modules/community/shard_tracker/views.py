@@ -22,6 +22,9 @@ TAB_LABELS: Mapping[str, str] = {
     "last_pulls": "Last Pulls",
 }
 
+FOOTER_TEXT = "For info about how this works type !help shards"
+OVERFLOW_RANGE = 100
+
 
 @dataclass(frozen=True)
 class ShardDisplay:
@@ -219,7 +222,10 @@ def build_overview_embed(
         name=author_name or _AUTHOR_NAMES.get("overview"),
         icon_url=author_icon_url,
     )
-    for display in displays:
+    primal = next((display for display in displays if display.key == "primal"), None)
+    other_displays = [display for display in displays if display.key != "primal"]
+
+    for display in other_displays:
         line = (
             f"Owned: **{max(display.owned, 0):,}** | "
             f"Mercy: {display.mercy.pulls_since} / {display.mercy.threshold} | "
@@ -229,13 +235,33 @@ def build_overview_embed(
             line += f"\nLast Legendary: {human_time(display.last_timestamp)}"
         embed.add_field(name=display.label, value=line, inline=False)
 
-    mythic_line = (
-        f"Mercy: {mythic.mercy.pulls_since} / {mythic.mercy.threshold} | "
-        f"Chance: {format_percent(mythic.mercy.chance)}"
-    )
-    if mythic.last_timestamp:
-        mythic_line += f"\nLast Mythical: {human_time(mythic.last_timestamp)}"
-    embed.add_field(name="Primal (Mythical)", value=mythic_line, inline=False)
+    if primal:
+        mythic_mercy = mythic.mercy
+        primal_lines = [
+            f"Owned: **{max(primal.owned, 0):,}**",
+            "Legendary",
+            (
+                f"Mercy: {primal.mercy.pulls_since} / {primal.mercy.threshold} | "
+                f"Chance: {format_percent(primal.mercy.chance)}"
+            ),
+        ]
+        if primal.last_timestamp:
+            primal_lines.append(f"Last Legendary: {human_time(primal.last_timestamp)}")
+        primal_lines.extend(
+            [
+                "Mythical",
+                (
+                    f"Mercy: {mythic_mercy.pulls_since} / {mythic_mercy.threshold} | "
+                    f"Chance: {format_percent(mythic_mercy.chance)}"
+                ),
+            ]
+        )
+        if mythic.last_timestamp:
+            primal_lines.append(f"Last Mythical: {human_time(mythic.last_timestamp)}")
+        primal_lines.append("Details:")
+        embed.add_field(name="Primal", value="\n".join(primal_lines), inline=False)
+
+    _apply_footer(embed)
     return embed
 
 
@@ -263,6 +289,7 @@ def build_detail_embed(
     )
     if mythic:
         embed.add_field(name="Primal Mythical", value=_mythic_block(mythic), inline=False)
+    _apply_footer(embed)
     return embed
 
 
@@ -306,6 +333,7 @@ def build_last_pulls_embed(
         info_lines.append(f"{label:<18} {rate}")
     info_lines.append("```")
     embed.add_field(name="Mercy Info", value="\n".join(info_lines), inline=False)
+    _apply_footer(embed)
     return embed
 
 
@@ -325,10 +353,10 @@ def _detail_block(display: ShardDisplay) -> str:
         ]
     )
     if display.last_timestamp:
-        parts.append(
-            f"Last Legendary: {human_time(display.last_timestamp)}"
-            + (f" ({display.last_depth} depth)" if display.last_depth else "")
-        )
+        last_line = f"Last Legendary: {human_time(display.last_timestamp)}"
+        if display.key != "primal" and display.last_depth:
+            last_line += f" ({display.last_depth} depth)"
+        parts.append(last_line)
     return "\n".join(parts)
 
 
@@ -340,28 +368,31 @@ def _mythic_block(display: MythicDisplay) -> str:
         f"Mythical Chance: {format_percent(mercy.chance)}",
     ]
     if display.last_timestamp:
-        parts.append(
-            f"Last Mythical: {human_time(display.last_timestamp)}"
-            + (f" ({display.last_depth} depth)" if display.last_depth else "")
-        )
-    parts.extend(["", "Progress", _progress_bar(mercy)])
+        parts.append(f"Last Mythical: {human_time(display.last_timestamp)}")
+    parts.extend(["Progress", _progress_bar(mercy)])
     return "\n".join(parts)
 
 
 def _progress_bar(mercy: MercySnapshot, segments: int = 10) -> str:
-    max_pulls = max(mercy.cap_at, mercy.threshold)
-    capped = min(mercy.pulls_since, max_pulls)
-    filled = int(round((capped / max_pulls) * segments)) if max_pulls else 0
-    threshold_segments = int(round((mercy.threshold / max_pulls) * segments)) if max_pulls else 0
-    base_filled = min(filled, threshold_segments)
-    mercy_filled = max(0, filled - threshold_segments)
+    threshold = max(mercy.threshold, 1)
+    if mercy.pulls_since <= mercy.threshold:
+        ratio = mercy.pulls_since / threshold
+        filled_char = "🟩"
+        empty_char = "⬜"
+    else:
+        overflow = mercy.pulls_since - mercy.threshold
+        ratio = overflow / OVERFLOW_RANGE
+        filled_char = "🟧"
+        empty_char = "⬛"
+
+    ratio = max(0.0, min(ratio, 1.0))
+    filled = int(ratio * segments)
     empty = max(0, segments - filled)
-    bar = "".join([
-        "🟩" * base_filled,
-        "🟦" * mercy_filled,
-        "⬜" * empty,
-    ])
-    return bar
+    return f"{filled_char * filled}{empty_char * empty}"
+
+
+def _apply_footer(embed: discord.Embed) -> None:
+    embed.set_footer(text=FOOTER_TEXT)
 
 
 def human_time(iso_value: str) -> str:

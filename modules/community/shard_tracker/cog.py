@@ -509,6 +509,9 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 await self._notify_admins(str(exc))
                 return
 
+            legendary_before = max(0, record.primals_since_lego)
+            mythical_before = max(0, record.primals_since_mythic)
+
             self._apply_pull_usage(record, kind, total_pulls)
 
             current_mercy = max(0, getattr(record, kind.mercy_field, 0))
@@ -516,9 +519,6 @@ class ShardTracker(commands.Cog, ShardTrackerController):
             setattr(record, kind.mercy_field, drop_depth)
 
             if kind.key == "primal":
-                previous_mythic = max(0, record.primals_since_mythic)
-                mythic_depth = max(0, previous_mythic + total_pulls - after_champion)
-                record.primals_since_mythic = mythic_depth
                 record.snapshot_name(interaction.user.display_name or interaction.user.name)
                 await self.store.save_record(config, record)
 
@@ -530,6 +530,9 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                         active_tab=active_tab,
                         panel_message=interaction.message,
                         after_champion=after_champion,
+                        total_pulls=total_pulls,
+                        legendary_mercy=legendary_before,
+                        mythical_mercy=mythical_before,
                     ),
                     ephemeral=True,
                 )
@@ -619,6 +622,9 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         active_tab: str,
         panel_message: discord.Message | None,
         after_champion: int,
+        total_pulls: int,
+        legendary_mercy: int,
+        mythical_mercy: int,
     ) -> None:
         if choice not in {"legendary", "mythical"}:
             await interaction.response.send_message(
@@ -639,18 +645,20 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 await self._notify_admins(str(exc))
                 return
 
-            current_mythic_mercy = max(0, record.primals_since_mythic)
+            before_champion = max(0, total_pulls - after_champion)
+            legendary_before = max(0, legendary_mercy)
+            mythical_before = max(0, mythical_mercy)
 
             if choice == "legendary":
+                record.primals_since_lego = legendary_before + before_champion
                 self._apply_primal_legendary(record)
                 record.primals_since_lego = max(0, after_champion)
-                record.primals_since_mythic = current_mythic_mercy + max(
-                    0, after_champion
-                )
+                record.primals_since_mythic = mythical_before + max(0, total_pulls)
             else:
-                self._apply_primal_mythical(record)
-                record.primals_since_lego = max(0, after_champion)
+                depth_mythical = mythical_before + before_champion
+                self._apply_primal_mythical(record, depth=depth_mythical)
                 record.primals_since_mythic = max(0, after_champion)
+                record.primals_since_lego = legendary_before + max(0, total_pulls)
             record.snapshot_name(interaction.user.display_name or interaction.user.name)
             await self.store.save_record(config, record)
 
@@ -691,15 +699,11 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         record.last_primal_lego_depth = depth
         record.last_primal_lego_iso = self._now_iso()
 
-    def _apply_primal_mythical(self, record: ShardRecord) -> None:
-        depth = max(0, record.primals_since_mythic)
-        record.primals_since_mythic = 0
-        record.primals_since_lego = 0
+    def _apply_primal_mythical(self, record: ShardRecord, *, depth: int) -> None:
+        depth_value = max(0, depth)
         timestamp = self._now_iso()
-        record.last_primal_mythic_depth = depth
+        record.last_primal_mythic_depth = depth_value
         record.last_primal_mythic_iso = timestamp
-        record.last_primal_lego_depth = depth
-        record.last_primal_lego_iso = timestamp
 
     def _apply_manual_mercy(
         self,
@@ -1301,6 +1305,9 @@ class _PrimalDropChoiceView(discord.ui.View):
         active_tab: str,
         panel_message: discord.Message | None,
         after_champion: int,
+        total_pulls: int,
+        legendary_mercy: int,
+        mythical_mercy: int,
     ) -> None:
         super().__init__(timeout=120)
         self.controller = controller
@@ -1308,6 +1315,9 @@ class _PrimalDropChoiceView(discord.ui.View):
         self.active_tab = active_tab
         self.panel_message = panel_message
         self.after_champion = after_champion
+        self.total_pulls = total_pulls
+        self.legendary_mercy = legendary_mercy
+        self.mythical_mercy = mythical_mercy
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:  # type: ignore[override]
         if interaction.user.id != self.owner_id:
@@ -1327,6 +1337,9 @@ class _PrimalDropChoiceView(discord.ui.View):
             active_tab=self.active_tab,
             panel_message=self.panel_message,
             after_champion=self.after_champion,
+            total_pulls=self.total_pulls,
+            legendary_mercy=self.legendary_mercy,
+            mythical_mercy=self.mythical_mercy,
         )
 
     @discord.ui.button(label="Mythical", style=discord.ButtonStyle.success)
@@ -1339,6 +1352,9 @@ class _PrimalDropChoiceView(discord.ui.View):
             active_tab=self.active_tab,
             panel_message=self.panel_message,
             after_champion=self.after_champion,
+            total_pulls=self.total_pulls,
+            legendary_mercy=self.legendary_mercy,
+            mythical_mercy=self.mythical_mercy,
         )
 
 
