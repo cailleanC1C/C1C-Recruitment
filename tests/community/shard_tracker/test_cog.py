@@ -127,3 +127,28 @@ def test_logged_mythic_resets_counters():
     assert record.primals_since_mythic == 0
     assert record.primals_since_lego == 0
     assert record.last_primal_mythic_depth == 50
+
+
+def test_manual_mercy_sets_primal_independently():
+    tracker = ShardTracker(commands.Bot(command_prefix="!", intents=discord.Intents.none()))
+    record = tracker.store._new_record([], 3, "user")  # type: ignore[arg-type]
+    kind = tracker._resolve_kind("primal")
+
+    tracker._apply_manual_mercy(  # type: ignore[arg-type]
+        record, kind, legendary_mercy=12, mythical_mercy=7
+    )
+
+    assert record.primals_since_lego == 12
+    assert record.primals_since_mythic == 7
+
+
+def test_manual_mercy_sets_non_primal_counter():
+    tracker = ShardTracker(commands.Bot(command_prefix="!", intents=discord.Intents.none()))
+    record = tracker.store._new_record([], 4, "user")  # type: ignore[arg-type]
+    kind = tracker._resolve_kind("sacred")
+
+    tracker._apply_manual_mercy(  # type: ignore[arg-type]
+        record, kind, legendary_mercy=5, mythical_mercy=None
+    )
+
+    assert record.sacreds_since_lego == 5

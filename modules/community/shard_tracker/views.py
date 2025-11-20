@@ -70,6 +70,7 @@ class ShardTrackerView(discord.ui.View):
         if active_tab in shard_labels:
             self._add_primary_buttons()
             self._add_legendary_button()
+            self._add_last_pulls_button()
 
     def _add_primary_buttons(self) -> None:
         self.add_item(
@@ -101,6 +102,18 @@ class ShardTrackerView(discord.ui.View):
                 label=label,
                 emoji=None,
                 style=discord.ButtonStyle.success,
+                owner_id=self.owner_id or 0,
+                controller=self._controller,
+            )
+        )
+
+    def _add_last_pulls_button(self) -> None:
+        self.add_item(
+            _ShardButton(
+                custom_id=f"action:last_pulls:{self.active_tab}",
+                label="Last Pulls / Mercy",
+                emoji=None,
+                style=discord.ButtonStyle.secondary,
                 owner_id=self.owner_id or 0,
                 controller=self._controller,
             )
