@@ -24,7 +24,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
 
-**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `SERVER_MAP_CHANNEL_ID`, `SERVER_MAP_REFRESH_DAYS`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `SERVER_MAP_CHANNEL_ID`, `SERVER_MAP_CATEGORY_BLACKLIST`, `SERVER_MAP_CHANNEL_BLACKLIST`, `WHO_WE_ARE_CHANNEL_ID`, `SERVER_MAP_REFRESH_DAYS`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
 All sheet-facing modules now require their dedicated `*_SHEET_ID` variables; 
 
@@ -86,6 +86,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
 | `SERVER_MAP_CATEGORY_BLACKLIST` | csv | — | Comma-separated Discord category IDs hidden from the rendered server map. |
 | `SERVER_MAP_CHANNEL_BLACKLIST` | csv | — | Comma-separated Discord channel IDs hidden from the server map, even when their parent category is visible. |
+| `WHO_WE_ARE_CHANNEL_ID` | snowflake | — | Discord channel ID used by the `!whoweare` role map command. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
