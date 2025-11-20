@@ -318,20 +318,19 @@ def build_last_pulls_embed(
     mythic_stamp = human_time(mythic.last_timestamp) if mythic.last_timestamp else "Never"
     mythic_depth = f" ({mythic.last_depth} at pull)" if mythic.last_depth > 0 else ""
     last_lines.append(f"Primal Mythical: {mythic_stamp}{mythic_depth}")
+    last_lines.append("")
     embed.add_field(name="Last Pulls", value="\n".join(last_lines), inline=False)
 
     info_lines = [
-        "**Mercy System (official rates)**",
         "Ancient/Void Legendary: after 200 pulls, +5% per shard",
         "Sacred Legendary: after 12 pulls, +2% per shard",
         "Primal Legendary: after 75 pulls, +1% per shard",
         "Primal Mythical: after 200 pulls, +10% per shard",
-        "\nBase chances:",
-        "```",
+        "",
+        "**Base chances:**",
     ]
     for label, rate in base_rates.items():
         info_lines.append(f"{label:<18} {rate}")
-    info_lines.append("```")
     embed.add_field(name="Mercy Info", value="\n".join(info_lines), inline=False)
     _apply_footer(embed)
     return embed
