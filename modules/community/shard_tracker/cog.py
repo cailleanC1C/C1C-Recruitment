@@ -276,6 +276,26 @@ class ShardTracker(commands.Cog, ShardTrackerController):
                 await interaction.response.send_modal(modal)
                 return
 
+            if action_name == "last_pulls":
+                kind = self._resolve_kind(tab)
+                if kind is None:
+                    await interaction.response.send_message(
+                        "Unknown shard type.", ephemeral=True
+                    )
+                    return
+                modal = _LastPullsModal(
+                    controller=self,
+                    owner_id=ctx_author.id,
+                    shard_key=tab,
+                    active_tab=tab,
+                    legendary_mercy=max(
+                        0, getattr(record, kind.mercy_field, 0)
+                    ),
+                    mythical_mercy=max(0, record.primals_since_mythic),
+                )
+                await interaction.response.send_modal(modal)
+                return
+
     # === Internal helpers ===
 
     def _feature_disabled_message(self) -> str:
@@ -529,6 +549,66 @@ class ShardTracker(commands.Cog, ShardTrackerController):
             f"{kind.label} drop: pulls={total_pulls}, after={after_champion}",
         )
 
+    async def process_last_pulls_modal(
+        self,
+        *,
+        interaction: discord.Interaction,
+        shard_key: str,
+        active_tab: str,
+        legendary_mercy: int,
+        mythical_mercy: int | None,
+    ) -> None:
+        kind = self._resolve_kind(shard_key)
+        if kind is None:
+            await interaction.response.send_message("Unknown shard type.", ephemeral=True)
+            return
+        if legendary_mercy < 0 or (mythical_mercy is not None and mythical_mercy < 0):
+            await interaction.response.send_message(
+                "Please provide non-negative numbers.", ephemeral=True
+            )
+            return
+
+        async with self._user_lock(interaction.user.id):
+            try:
+                config = await self.store.get_config()
+                record = await self.store.load_record(
+                    interaction.user.id,
+                    interaction.user.display_name or interaction.user.name,
+                )
+            except (ShardTrackerConfigError, ShardTrackerSheetError) as exc:
+                await interaction.response.send_message(
+                    self._config_error_message(str(exc)), ephemeral=True
+                )
+                await self._notify_admins(str(exc))
+                return
+
+            self._apply_manual_mercy(
+                record,
+                kind,
+                legendary_mercy=legendary_mercy,
+                mythical_mercy=mythical_mercy,
+            )
+            record.snapshot_name(interaction.user.display_name or interaction.user.name)
+            await self.store.save_record(config, record)
+
+        embed, view = self._build_panel(
+            interaction.user, record, interaction.channel, active_tab
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+        await self._log_action(
+            "manual_mercy",
+            interaction.user,
+            interaction.channel,
+            (
+                f"{kind.label} mercy set to {legendary_mercy}"
+                if kind.key != "primal"
+                else (
+                    "Primal mercy set to "
+                    f"legendary={legendary_mercy}, mythic={mythical_mercy or 0}"
+                )
+            ),
+        )
+
     async def process_primal_choice(
         self,
         *,
@@ -618,6 +698,22 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         record.last_primal_mythic_iso = timestamp
         record.last_primal_lego_depth = depth
         record.last_primal_lego_iso = timestamp
+
+    def _apply_manual_mercy(
+        self,
+        record: ShardRecord,
+        kind: ShardKind,
+        *,
+        legendary_mercy: int,
+        mythical_mercy: int | None,
+    ) -> None:
+        if kind.key == "primal":
+            record.primals_since_lego = max(0, legendary_mercy)
+            record.primals_since_mythic = max(
+                0, mythical_mercy if mythical_mercy is not None else legendary_mercy
+            )
+        else:
+            setattr(record, kind.mercy_field, max(0, legendary_mercy))
 
     async def _handle_mercy_set(
         self, ctx: commands.Context, shard_type: str, count: int
@@ -1117,6 +1213,80 @@ class _LegendaryModal(discord.ui.Modal):
             total_pulls=total,
             after_champion=after,
             active_tab=self.active_tab,
+        )
+
+
+class _LastPullsModal(discord.ui.Modal):
+    def __init__(
+        self,
+        *,
+        controller: ShardTracker,
+        owner_id: int,
+        shard_key: str,
+        active_tab: str,
+        legendary_mercy: int,
+        mythical_mercy: int,
+    ) -> None:
+        super().__init__(title="Edit Last Pulls / Mercy")
+        self.controller = controller
+        self.owner_id = owner_id
+        self.shard_key = shard_key
+        self.active_tab = active_tab
+
+        self.legendary_mercy = discord.ui.TextInput(
+            label="Legendary mercy after last pull",
+            min_length=1,
+            max_length=6,
+            required=True,
+            placeholder="e.g., 10",
+            default=str(max(0, legendary_mercy)),
+        )
+        self.add_item(self.legendary_mercy)
+
+        self.mythical_mercy: discord.ui.TextInput | None = None
+        if shard_key == "primal":
+            self.mythical_mercy = discord.ui.TextInput(
+                label="Mythical mercy after last pull",
+                min_length=1,
+                max_length=6,
+                required=True,
+                placeholder="e.g., 5",
+                default=str(max(0, mythical_mercy)),
+            )
+            self.add_item(self.mythical_mercy)
+
+    def _parse_field(self, field: discord.ui.TextInput) -> int | None:
+        try:
+            return int(str(field.value))
+        except (TypeError, ValueError):
+            return None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:  # type: ignore[override]
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Only the tracker owner can edit mercy counters.", ephemeral=True
+            )
+            return
+
+        legendary_value = self._parse_field(self.legendary_mercy)
+        mythical_value: int | None = None
+        if self.mythical_mercy is not None:
+            mythical_value = self._parse_field(self.mythical_mercy)
+
+        if legendary_value is None or (
+            self.mythical_mercy is not None and mythical_value is None
+        ):
+            await interaction.response.send_message(
+                "Please provide numeric values.", ephemeral=True
+            )
+            return
+
+        await self.controller.process_last_pulls_modal(
+            interaction=interaction,
+            shard_key=self.shard_key,
+            active_tab=self.active_tab,
+            legendary_mercy=legendary_value,
+            mythical_mercy=mythical_value,
         )
 
 
