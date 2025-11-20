@@ -127,22 +127,6 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         self._emoji_tags = self._load_emoji_tags()
         self._tab_emojis = self._load_tab_emojis()
 
-    async def cog_load(self) -> None:
-        labels = {kind.key: kind.label for kind in SHARD_KINDS.values()}
-        for tab in ("ancient", "void", "sacred", "primal"):
-            try:
-                self.bot.add_view(
-                    ShardTrackerView(
-                        owner_id=None,
-                        controller=self,
-                        shard_labels=labels,
-                        shard_emojis=self._tab_emojis,
-                        active_tab=tab,
-                    )
-                )
-            except Exception:  # pragma: no cover - defensive registration
-                log.exception("failed to register persistent shard tracker view", extra={"tab": tab})
-
     # === Commands ===
 
     @tier("user")
