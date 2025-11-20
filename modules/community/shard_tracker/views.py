@@ -314,9 +314,16 @@ def _detail_block(display: ShardDisplay) -> str:
     maxed = mercy.pulls_since >= mercy.threshold
     parts = [
         f"Stash: **{max(display.owned, 0):,}**",
-        f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
-        f"Legendary Chance: {format_percent(mercy.chance)}",
     ]
+    if display.key == "primal":
+        parts.append("")
+        parts.append("**Primal Legendary**")
+    parts.extend(
+        [
+            f"Legendary Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
+            f"Legendary Chance: {format_percent(mercy.chance)}",
+        ]
+    )
     if display.last_timestamp:
         parts.append(
             f"Last Legendary: {human_time(display.last_timestamp)}"
@@ -331,13 +338,13 @@ def _mythic_block(display: MythicDisplay) -> str:
     parts = [
         f"Mythical Mercy: {mercy.pulls_since} / {mercy.threshold}" + (" (Maxed)" if maxed else ""),
         f"Mythical Chance: {format_percent(mercy.chance)}",
-        _progress_bar(mercy),
     ]
     if display.last_timestamp:
         parts.append(
             f"Last Mythical: {human_time(display.last_timestamp)}"
             + (f" ({display.last_depth} depth)" if display.last_depth else "")
         )
+    parts.extend(["", "Progress", _progress_bar(mercy)])
     return "\n".join(parts)
 
 
