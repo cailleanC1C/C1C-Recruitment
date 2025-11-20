@@ -837,7 +837,8 @@ class ShardTracker(commands.Cog, ShardTrackerController):
         if thread is None:
             await ctx.reply("Unable to locate or create your shard thread.", mention_author=False)
             return
-        await thread.send(embed=embed, view=view)
+        content = f"{ctx.author.mention}"
+        await thread.send(content=content, embed=embed, view=view)
         if parent and parent == ctx.channel:
             await ctx.reply(
                 f"📬 Posted in your shard thread: {thread.mention}",
