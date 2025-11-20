@@ -92,10 +92,11 @@ class ShardTrackerView(discord.ui.View):
         )
 
     def _add_legendary_button(self) -> None:
+        label = "Got Legendary/Mythical" if self.active_tab == "primal" else "Got Legendary"
         self.add_item(
             _ShardButton(
                 custom_id=f"action:legendary:{self.active_tab}",
-                label="Got Legendary",
+                label=label,
                 emoji=None,
                 style=discord.ButtonStyle.success,
                 owner_id=self.owner_id or 0,
