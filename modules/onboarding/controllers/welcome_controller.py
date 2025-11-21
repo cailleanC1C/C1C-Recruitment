@@ -1519,6 +1519,23 @@ class BaseWelcomeController:
             idx += 1 if direction >= 0 else -1
         return None, None
 
+    def _set_current_step_for_thread(
+        self, thread_id: int, step_index: int
+    ) -> SessionData | None:
+        session = store.get(thread_id)
+        if session is None:
+            return None
+
+        questions = self._questions.get(thread_id) or []
+        if not questions or step_index < 0 or step_index >= len(questions):
+            return None
+
+        pending_step = {"kind": "inline", "index": step_index}
+        session.current_question_index = step_index
+        session.pending_step = pending_step
+        store.set_pending_step(thread_id, pending_step)
+        return session
+
     def next_visible_step(self, thread_id: int, current_step: int) -> int | None:
         questions = self._questions.get(thread_id) or []
         if not questions:
@@ -2158,7 +2175,7 @@ class BaseWelcomeController:
                 session.current_question_index = None
         else:
             index = resolved_index
-            store.set_pending_step(thread_id, {"kind": "inline", "index": index})
+            self._set_current_step_for_thread(thread_id, index)
             try:
                 content = self.render_step(thread_id, index)
             except Exception:

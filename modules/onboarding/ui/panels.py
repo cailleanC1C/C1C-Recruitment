@@ -1772,6 +1772,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                 if callable(resolver):
                     previous = resolver(wizard.thread_id, wizard.step)
                     if previous is not None:
+                        sync_step = getattr(wizard.controller, "_set_current_step_for_thread", None)
+                        if callable(sync_step):
+                            sync_step(wizard.thread_id, previous)
                         wizard.step = previous
                     elif wizard.step > 0:
                         wizard.step -= 1
@@ -1806,6 +1809,9 @@ class OpenQuestionsPanelView(discord.ui.View):
                     )
                     wizard.stop()
                     return
+                sync_step = getattr(wizard.controller, "_set_current_step_for_thread", None)
+                if callable(sync_step):
+                    sync_step(wizard.thread_id, next_index)
                 wizard.step = next_index
                 await wizard.refresh(interaction)
                 wizard._touch()
