@@ -2348,6 +2348,25 @@ class BaseWelcomeController:
         except Exception:
             pass
 
+        resolved_thread: discord.Thread | None = self._threads.get(thread_id)
+        if resolved_thread is None:
+            session = store.get(thread_id)
+            candidate_thread_id: int | None = None
+            if session is not None:
+                try:
+                    candidate_thread_id = int(session.thread_id) if session.thread_id is not None else None
+                except (TypeError, ValueError):
+                    candidate_thread_id = None
+            if candidate_thread_id is None:
+                candidate_thread_id = thread_id
+            try:
+                channel = self.bot.get_channel(candidate_thread_id)
+            except Exception:
+                channel = None
+            if isinstance(channel, discord.Thread):
+                resolved_thread = channel
+                self._threads[thread_id] = channel
+
         message_obj: discord.Message | None = None
         inline_map = getattr(self, "_inline_messages", None)
         if isinstance(inline_map, dict):
@@ -2356,8 +2375,7 @@ class BaseWelcomeController:
         if message_obj is None:
             id_map = getattr(self, "_inline_message_ids", None)
             message_id = id_map.get(thread_id) if isinstance(id_map, dict) else None
-            thread = self._threads.get(thread_id)
-            fetcher = getattr(thread, "fetch_message", None) if thread is not None else None
+            fetcher = getattr(resolved_thread, "fetch_message", None) if resolved_thread is not None else None
             if callable(fetcher) and message_id:
                 try:
                     message_obj = await fetcher(message_id)
@@ -2366,14 +2384,24 @@ class BaseWelcomeController:
                     if isinstance(id_map, dict):
                         id_map.pop(thread_id, None)
 
-        if message_obj is None:
-            return
-
-        try:
-            await message_obj.edit(content=content, view=wizard)
-        except Exception:
-            log.debug("failed to refresh inline wizard message", exc_info=True)
-            return
+        if message_obj is not None:
+            try:
+                await message_obj.edit(content=content, view=wizard)
+            except Exception:
+                log.debug("failed to refresh inline wizard message", exc_info=True)
+                return
+        else:
+            if resolved_thread is None:
+                log.debug(
+                    "welcome.inline_refresh.thread_missing",
+                    extra={"thread": thread_id, "index": index},
+                )
+                return
+            try:
+                message_obj = await resolved_thread.send(content=content, view=wizard)
+            except Exception:
+                log.debug("failed to re-render inline wizard message", exc_info=True)
+                return
 
         try:
             wizard.attach(message_obj)
