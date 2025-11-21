@@ -28,6 +28,7 @@ def test_cvc_priority_mapping() -> None:
     assert cvc_priority(1) == "Low"
     assert cvc_priority("5") == "High"
     assert cvc_priority("unknown") == "unknown"
+    assert cvc_priority({"label": "3", "value": "3"}) == "Medium"
 
 
 def test_is_hide_value_normalises_tokens() -> None:

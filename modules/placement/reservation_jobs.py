@@ -13,7 +13,10 @@ from discord.ext import commands
 from modules.common import feature_flags
 from modules.common import runtime as runtime_mod
 from modules.common.logs import log as human_log
-from modules.onboarding.watcher_welcome import parse_welcome_thread_name
+from modules.onboarding.watcher_welcome import (
+    build_open_thread_name,
+    parse_welcome_thread_name,
+)
 from modules.recruitment import availability
 from shared.config import get_recruiter_role_ids, get_recruiters_thread_id
 from shared.sheets import reservations
@@ -223,6 +226,7 @@ async def reservations_autorelease_daily(
                     exc_info=True,
                     extra={"thread_id": row.thread_id, "clan_tag": clan_label},
                 )
+            await _reset_thread_name(thread)
         else:
             log.warning(
                 "reservation expiry thread missing",
@@ -366,6 +370,26 @@ def _display_tag(tag: str | None) -> str:
 def _normalize_tag(tag: str | None) -> str:
     text = str(tag or "").strip().upper()
     return "".join(ch for ch in text if ch.isalnum())
+
+
+async def _reset_thread_name(thread: discord.Thread) -> None:
+    name = getattr(thread, "name", None)
+    parts = parse_welcome_thread_name(name)
+    if parts is None or parts.state != "reserved":
+        return
+
+    new_name = build_open_thread_name(parts.ticket_code, parts.username)
+    if not new_name or name == new_name:
+        return
+
+    try:
+        await thread.edit(name=new_name)
+    except Exception:
+        log.warning(
+            "failed to reset welcome thread name after reservation expiry",
+            exc_info=True,
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parts.ticket_code},
+        )
 
 
 def _user_display(row: reservations.ReservationRow) -> str:

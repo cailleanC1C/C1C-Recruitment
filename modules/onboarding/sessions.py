@@ -26,6 +26,9 @@ class Session:
     last_updated: datetime = field(init=False)
     completed: bool = False
     completed_at: datetime | None = None
+    first_reminder_at: datetime | None = None
+    warning_sent_at: datetime | None = None
+    auto_closed_at: datetime | None = None
 
     def __post_init__(self) -> None:
         self.last_updated = self.created_at
@@ -62,6 +65,13 @@ class Session:
             "answers": dict(self.answers),
             "completed": self.completed,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "first_reminder_at": self.first_reminder_at.isoformat()
+            if self.first_reminder_at
+            else None,
+            "warning_sent_at": self.warning_sent_at.isoformat()
+            if self.warning_sent_at
+            else None,
+            "auto_closed_at": self.auto_closed_at.isoformat() if self.auto_closed_at else None,
         }
 
     def save_to_sheet(self) -> None:
@@ -73,6 +83,13 @@ class Session:
             "answers": self.answers,
             "completed": bool(self.completed),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "first_reminder_at": self.first_reminder_at.isoformat()
+            if self.first_reminder_at
+            else None,
+            "warning_sent_at": self.warning_sent_at.isoformat()
+            if self.warning_sent_at
+            else None,
+            "auto_closed_at": self.auto_closed_at.isoformat() if self.auto_closed_at else None,
         }
         sess_sheet.save(payload)
 
@@ -97,8 +114,28 @@ class Session:
                 session.completed_at = datetime.fromisoformat(normalized)
             except Exception:
                 session.completed_at = None
+        reminder_token = row.get("first_reminder_at")
+        if reminder_token:
+            session.first_reminder_at = _parse_iso(reminder_token)
+        warning_token = row.get("warning_sent_at")
+        if warning_token:
+            session.warning_sent_at = _parse_iso(warning_token)
+        auto_closed = row.get("auto_closed_at")
+        if auto_closed:
+            session.auto_closed_at = _parse_iso(auto_closed)
         session.last_updated = utc_now()
         return session
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    try:
+        normalized = str(value).replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except Exception:
+        return None
 
 
 class SessionStore:
