@@ -14,11 +14,13 @@ Think of it as the cluster’s quiet little helper: always awake, always watchin
 # 🌟 What the Woadkeeper Does
 ### For normal users
 - `@<Botname> help` — lists everything you can access with a short tip for each item.
-- **Find a clan**  
+- **Find a clan**
   `!clan <tag>` gives you a clean profile card with requirements, crest, and quick notes.
-- **Browse the cluster**  
+- **Browse the cluster**
   Use `!clansearch` to open the interactive search menu.
-- **Check the bot**  
+- **Track your shard mercy**
+  `!shards` opens your personal shard tracker panel in a private thread. It shows stash, mercy counters, last pulls, and base chances for Ancient, Void, Sacred, and Primal shards, including the split Legendary/Mythical path for Primals.
+- **Check the bot**
   `@BotName ping` — answers with 🏓 if all systems are up.
 The bot only shows commands you can actually run; if you need more tools, ask an admin to review your roles.
 ### For staff & recruiters
@@ -67,4 +69,4 @@ Each module doc explains what that subsystem does and how it fits into the bigge
   - `docs/contracts/CollaborationContract.md`  
   - ADRs in `docs/adr/`
 
-Doc last updated: 2025-11-19 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

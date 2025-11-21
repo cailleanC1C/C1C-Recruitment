@@ -16,6 +16,7 @@
 | `n/a` ages in `!digest` | Bot restarted → cache not yet warmed | wait 5 min or run `!ops refresh all` |
 | “No tabs listed in Config” | Missing key in Sheet Config tab | check sheet permissions + tab names |
 | “I can't find a configured welcome for **TAG**. Add it in the sheet.” | Row missing or inactive in `WelcomeTemplates`; confirm `ACTIVE` = `Y`. | Update the sheet then ask an admin to run `!welcome-refresh` |
+| `!shards` replies but no panel appears | Shard tracker channel/thread misconfigured or feature toggle off | Check `SHARD_MERCY_CHANNEL_ID`/Config tab and `shardtracker` toggle; review shard tracker logs in ops channel |
 
 Refer to the automation keys listed in [`Config.md`](ops/Config.md#automation-listeners--cron-jobs)
 when adjusting cadences or toggles.
@@ -56,4 +57,4 @@ when adjusting cadences or toggles.
   opening an incident.
 - Ping #bot-production with the summary before filing a longer report.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)
