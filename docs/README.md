@@ -91,7 +91,7 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 * [`modules/CoreOps.md`](modules/CoreOps.md) - Scheduler, bootstrap, cache facade, runtime responsibilities.
 * [`modules/CoreOps-Development.md`](modules/CoreOps-Development.md) - Developer notes for CoreOps: telemetry, preloader rules, caveats, dev behaviour, testing commands.
 * [`modules/Onboarding.md`](modules/Onboarding.md) - Onboarding engine: sessions, rules, skip-logic, persistence, sheet mapping.
-* [`modules/Welcome.md`](modules/Welcome.md) - Discord-facing onboarding UX: threads, panels, summary embed, hand-off into recruitment.
+* [`modules/Welcome.md`](modules/Welcome.md) - Discord-facing onboarding UX: threads, panels, summary embed, inline reply capture (no Enter Answer button), and hand-off into recruitment.
 * [`modules/Recruitment.md`](modules/Recruitment.md) - Recruitment workflow: reservations, sheet mapping, recruiter tools.
 * [`modules/Placement.md`](modules/Placement.md) - Placement logic: clan matching, ledger, seat availability, recomputations.
 * [`modules/PermissionsSync.md`](modules/PermissionsSync.md) - Permission sync module: ACL workflows, overwrite syncing. All commands referenced here **must** also be present in the CommandMatrix.
@@ -107,4 +107,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-19 (v0.9.7)
+Doc last updated: 2025-11-21 (v0.9.7)

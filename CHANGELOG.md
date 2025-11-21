@@ -6,6 +6,8 @@
 - **Primal mercy fix:** Legendary and Mythical mercy counters on Primals are now tracked independently. Logging a Mythical pull no longer resets Legendary mercy; depth and last-pull information is cleaned up and consistent across cards.
 - **Panel ownership & lifetime:** Shard tracker buttons are now bound to the owning user so only they can mutate their data. Views use a long timeout so panels don’t silently expire while the user is AFK; users can always spawn a fresh panel with `!shards`.
 - **Docs:** Updated README and internal docs to cover the shard tracker, mercy behaviour, and new configuration keys.
+- **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”
+- **Docs:** Clarified the inline reply capture model for onboarding (no Enter Answer button) and reinforced respondent binding behaviour.
 
 ### v0.9.7 — 2025-11-18
 - **Server map automation:** Added a scheduler job that rebuilds and pins the `#server-map` post using live guild categories, persists message IDs in the Recruitment Config tab, and respects the new `SERVER_MAP_*` env keys.
@@ -326,4 +328,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-21 (v0.9.7)
