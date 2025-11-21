@@ -20,6 +20,8 @@ Think of it as the cluster’s quiet little helper: always awake, always watchin
   Use `!clansearch` to open the interactive search menu.
 - **Track your shard mercy**
   `!shards` opens your personal shard tracker panel in a private thread. It shows stash, mercy counters, last pulls, and base chances for Ancient, Void, Sacred, and Primal shards, including the split Legendary/Mythical path for Primals.
+- **Answer onboarding prompts**
+  When the onboarding wizard in your welcome thread says “Input is required,” reply in that same thread with your answer. The bot captures your message directly—no extra “Enter answer” button needed—and enables **Next** once it validates the reply.
 - **Check the bot**
   `@BotName ping` — answers with 🏓 if all systems are up.
 The bot only shows commands you can actually run; if you need more tools, ask an admin to review your roles.
@@ -64,9 +66,9 @@ Each module doc explains what that subsystem does and how it fits into the bigge
 - 🛠 **Troubleshooting:** `docs/Troubleshooting.md`  
 - 🔭 **Watchers:** `docs/ops/Watchers.md`  
 - 🧩 **Modules:** in `docs/modules/`  
-- 📜 **Contributor & Dev Docs:**  
-  - `docs/_meta/DocStyle.md`  
-  - `docs/contracts/CollaborationContract.md`  
+- 📜 **Contributor & Dev Docs:**
+  - `docs/_meta/DocStyle.md`
+  - `docs/contracts/CollaborationContract.md`
   - ADRs in `docs/adr/`
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-21 (v0.9.7)

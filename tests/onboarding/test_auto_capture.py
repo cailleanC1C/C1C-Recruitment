@@ -136,10 +136,14 @@ def test_handle_thread_message_requires_bound_respondent() -> None:
 
         handled = await controller.handle_thread_message(message)
 
-        assert handled is False
-        controller._react_to_message.assert_not_called()
-        controller._refresh_inline_message.assert_not_called()
-        assert controller.answers_by_thread.get(thread_id) is None
+        assert handled is True
+        controller._react_to_message.assert_any_call(message, "✅")
+        controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+        stored = controller.answers_by_thread.get(thread_id, {})
+        assert stored.get("w_require") == "Should not capture"
+        refreshed = store.get(thread_id)
+        assert refreshed is not None
+        assert refreshed.respondent_id == 999
 
         store.end(thread_id)
 
@@ -236,6 +240,60 @@ def test_handle_thread_message_falls_back_to_current_index() -> None:
         assert stored.get("w_power") == "99"
         controller._react_to_message.assert_called_with(message, "✅")
         controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+
+        store.end(thread_id)
+
+    asyncio.run(runner())
+
+
+def test_handle_thread_message_rehydrates_non_inline_pending() -> None:
+    async def runner() -> None:
+        loop = asyncio.get_running_loop()
+        controller = WelcomeController(SimpleNamespace(loop=loop, logger=None))
+
+        thread_id = 7100
+        question = SimpleNamespace(
+            qid="w_alias",
+            label="Alias",
+            type="short",
+            required=True,
+            validate="",
+            help="",
+            options=(),
+        )
+        controller._questions[thread_id] = [question]
+        controller._threads[thread_id] = SimpleNamespace(id=thread_id)
+
+        session = store.ensure(thread_id, flow=controller.flow, schema_hash="hash")
+        session.pending_step = {"kind": "select", "index": 0}
+        session.current_question_index = 0
+        session.status = "in_progress"
+        session.respondent_id = 456
+        session.thread_id = thread_id
+        session.answers = {}
+
+        message = SimpleNamespace(
+            channel=SimpleNamespace(id=thread_id),
+            author=SimpleNamespace(id=456, bot=False),
+            content="AliasName",
+            id=314,
+            add_reaction=AsyncMock(),
+        )
+
+        controller._react_to_message = AsyncMock()
+        controller._refresh_inline_message = AsyncMock()
+
+        handled = await controller.handle_thread_message(message)
+
+        assert handled is True
+        stored = controller.answers_by_thread.get(thread_id, {})
+        assert stored.get("w_alias") == "AliasName"
+        controller._react_to_message.assert_called_with(message, "✅")
+        controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+
+        refreshed = store.get(thread_id)
+        assert refreshed is not None
+        assert refreshed.pending_step == {"kind": "inline", "index": 0}
 
         store.end(thread_id)
 

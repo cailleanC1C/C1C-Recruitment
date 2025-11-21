@@ -2389,6 +2389,45 @@ class BaseWelcomeController:
             except Exception:
                 pass
 
+    def _resolve_inline_index(self, thread_id: int, session: SessionData) -> tuple[int | None, str]:
+        questions = self._questions.get(thread_id) or []
+        pending = session.pending_step or {}
+        pending_kind = pending.get("kind") if isinstance(pending, dict) else None
+
+        def _valid_inline(idx: int | None) -> bool:
+            if idx is None or not (0 <= idx < len(questions)):
+                return False
+            qtype = self._question_type_value(questions[idx]).strip().lower()
+            return qtype in TEXT_TYPES
+
+        pending_index: int | None = None
+        try:
+            pending_index = int(pending.get("index", 0)) if isinstance(pending, dict) else None
+        except (TypeError, ValueError):
+            pending_index = None
+
+        if _valid_inline(pending_index):
+            if pending_kind != "inline":
+                store.set_pending_step(thread_id, {"kind": "inline", "index": cast(int, pending_index)})
+                return cast(int, pending_index), "pending_rehydrated"
+            return cast(int, pending_index), "pending"
+
+        current_index: int | None = None
+        try:
+            current_index = (
+                int(session.current_question_index)
+                if session.current_question_index is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            current_index = None
+
+        if _valid_inline(current_index):
+            store.set_pending_step(thread_id, {"kind": "inline", "index": cast(int, current_index)})
+            return cast(int, current_index), "current_index"
+
+        return None, pending_kind or "unknown"
+
     async def handle_thread_message(self, message: discord.Message) -> bool:
         channel = getattr(message, "channel", None)
         thread_identifier = getattr(channel, "id", None)
@@ -2415,17 +2454,9 @@ class BaseWelcomeController:
             return False
 
         if session.respondent_id is None:
-            log.debug(
-                "welcome.auto_capture.ignore_unbound",
-                extra={
-                    "thread": thread_id,
-                    "author": author_id,
-                    "status": session.status,
-                },
-            )
-            return False
-
-        if session.respondent_id != author_id:
+            session.respondent_id = author_id
+            session.touch()
+        elif session.respondent_id != author_id:
             log.debug(
                 "welcome.auto_capture.ignore_other_author",
                 extra={
@@ -2436,37 +2467,28 @@ class BaseWelcomeController:
                 },
             )
             return False
+
         if session.status == "completed":
             return False
 
-        pending = session.pending_step or {}
-        pending_kind = pending.get("kind") if isinstance(pending, dict) else None
-        if pending_kind == "select":
-            return False
-
-        capture_mode = "pending"
-        try:
-            index = int(pending.get("index", 0)) if pending_kind == "inline" else None
-        except (TypeError, ValueError):
-            index = None
-
+        index, capture_mode = self._resolve_inline_index(thread_id, session)
         if index is None:
-            try:
-                index = int(session.current_question_index) if session.current_question_index is not None else None
-            except (TypeError, ValueError):
-                index = None
-            if index is None:
-                return False
-            capture_mode = "current_index"
-            store.set_pending_step(thread_id, {"kind": "inline", "index": index})
+            log.debug(
+                "welcome.auto_capture.no_inline_step",
+                extra={
+                    "thread": thread_id,
+                    "author": author_id,
+                    "pending": session.pending_step,
+                    "current": session.current_question_index,
+                    "status": session.status,
+                },
+            )
+            return False
 
         questions = self._questions.get(thread_id) or []
-        if not (0 <= index < len(questions)):
-            return False
-
         question = questions[index]
         qtype = self._question_type_value(question).strip().lower()
-        if qtype not in {"short", "paragraph", "number"}:
+        if qtype not in TEXT_TYPES:
             return False
 
         content = (message.content or "").strip()

@@ -26,7 +26,8 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 ### 2. Launching Onboarding
 1. When a recruit presses **Open questions**, the module defers the interaction, looks up the stored session (if any), and calls `modules.onboarding.welcome_flow.launch(...)` to fetch the `welcome` flow questions.
 2. The wizard message renders the current question, inline summary (“So far”), and navigation buttons (Back/Next/Skip/Cancel). Text and help content come from the onboarding sheet; the welcome layer only formats them.
-3. Text and paragraph prompts no longer rely on the **Enter answer** button. The wizard now reminds recruits, "Just reply in this thread with your answer." and the watcher treats their next reply from that thread owner as the response. (Numeric prompts continue to share the same inline capture.) Valid answers update the wizard immediately; invalid input yields an inline ❌ hint.
+3. Text and paragraph prompts no longer rely on the **Enter answer** button. The wizard now reminds recruits, "Just reply in this thread with your answer." and the watcher treats the respondent’s next reply in that onboarding thread as the response. (Numeric prompts continue to share the same inline capture.) Valid answers update the wizard immediately; invalid input yields an inline ❌ hint.
+4. The respondent binding is resilient: the user who opens the wizard is recorded as `respondent_id`, and if the session is restored without one, the first human reply in that onboarding thread claims ownership. Messages from other users are ignored to avoid cross-answer contamination.
 
 ### 3. Summary + Recruiter Handoff
 1. After the last question the wizard switches to the summary card with `Finish ✅`. Pressing Finish posts the recruiter summary embed into the thread and pings configured roles.
@@ -48,7 +49,7 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 ## Formatting
 - **Panels:** Single message per session, edited in place. Buttons are labelled with emojis per [`docs/modules/Onboarding.md`](Onboarding.md) mockups (Answer ✏️, Next ➡️, Skip ⏭️, etc.). Panel content must match sheet wording; no localised rewrites.
 - **Summary embed:** Layout + hide rules follow the Summary spec maintained here. Number formatting shortens `w_power`, `w_hydra_clash`, `w_chimera_clash`, `w_cvc_points`. Inline pairs use the mid-dot (`•`) separator.
-- **Status messaging:** When waiting for a typed response, the panel shows “Waiting for <user>…”; resume actions show “Session restored” with the old timestamp so staff can tell whether a session was reopened or freshly started.
+- **Status messaging:** When waiting for a typed response, the panel shows “Waiting for <user>…”; resume actions show “Session restored” with the old timestamp so staff can tell whether a session was reopened or freshly started. Replies from the bound respondent clear the “Input is required” state and re-enable **Next** once captured.
 
 ## Related Docs
 - [`docs/Architecture.md`](../Architecture.md)
@@ -61,4 +62,4 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 - [`docs/modules/Placement.md`](Placement.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-21 (v0.9.7)
