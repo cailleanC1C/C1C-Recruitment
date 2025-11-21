@@ -8,6 +8,7 @@
 - **Docs:** Updated README and internal docs to cover the shard tracker, mercy behaviour, and new configuration keys.
 - **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”
 - **Docs:** Clarified the inline reply capture model for onboarding (no Enter Answer button) and reinforced respondent binding behaviour.
+- **Fix:** Refreshed onboarding inline wizard cards even when the cached message cannot be resolved, re-rendering in the thread so saved answers clear the “Input is required” state and enable **Next**.
 
 ### v0.9.7 — 2025-11-18
 - **Server map automation:** Added a scheduler job that rebuilds and pins the `#server-map` post using live guild categories, persists message IDs in the Recruitment Config tab, and respects the new `SERVER_MAP_*` env keys.
