@@ -1,16 +1,18 @@
 # Changelog
 
+### v0.9.7 — 2025-11-21
+- **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”
+- **Docs:** Clarified the inline reply capture model for onboarding (no Enter Answer button) and reinforced respondent binding behaviour.
+- **Fix:** Refreshed onboarding inline wizard cards even when the cached message cannot be resolved, re-rendering in the thread so saved answers clear the “Input is required” state and enable **Next**.
+- **Fix:** Synced onboarding wizard navigation with thread-answer capture so **Next**/**Back** keep the active step aligned instead of looping to earlier questions.
+- **Change:** Cleaned up onboarding threads by deleting user reply messages after answers are captured so only the wizard card and recruiter summary remain.
+  
 ### v0.9.7 — 2025-11-20
 - **Shard tracker:** Added the `!shards` command, which opens a per-user shard tracker panel in a private thread. Tracks stash, mercy counters, and last pulls for Ancient, Void, Sacred, and Primal shards, including separate Legendary and Mythical paths for Primals.
 - **Shard UI & UX:** Introduced tabbed shard views with per-shard embeds, shard-icon tab buttons, and a two-phase mercy progress bar (green/white toward mercy, orange/black for overflow). Added a common `!help shards` footer to explain how it works.
 - **Primal mercy fix:** Legendary and Mythical mercy counters on Primals are now tracked independently. Logging a Mythical pull no longer resets Legendary mercy; depth and last-pull information is cleaned up and consistent across cards.
 - **Panel ownership & lifetime:** Shard tracker buttons are now bound to the owning user so only they can mutate their data. Views use a long timeout so panels don’t silently expire while the user is AFK; users can always spawn a fresh panel with `!shards`.
 - **Docs:** Updated README and internal docs to cover the shard tracker, mercy behaviour, and new configuration keys.
-- **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”
-- **Docs:** Clarified the inline reply capture model for onboarding (no Enter Answer button) and reinforced respondent binding behaviour.
-- **Fix:** Refreshed onboarding inline wizard cards even when the cached message cannot be resolved, re-rendering in the thread so saved answers clear the “Input is required” state and enable **Next**.
-- **Fix:** Synced onboarding wizard navigation with thread-answer capture so **Next**/**Back** keep the active step aligned instead of looping to earlier questions.
-- **Change:** Cleaned up onboarding threads by deleting user reply messages after answers are captured so only the wizard card and recruiter summary remain.
 
 ### v0.9.7 — 2025-11-18
 - **Server map automation:** Added a scheduler job that rebuilds and pins the `#server-map` post using live guild categories, persists message IDs in the Recruitment Config tab, and respects the new `SERVER_MAP_*` env keys.
