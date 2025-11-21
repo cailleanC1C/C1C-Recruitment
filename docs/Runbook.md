@@ -83,6 +83,15 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
      `reservations-autorelease`) around 12:00Z/18:00Z; if those disappear, verify
      the feature toggle and scheduler health.
 
+### Shard tracker (`!shards`)
+1. Shard commands only run in the configured Shards & Mercy channel
+   (`SHARD_MERCY_CHANNEL_ID` env or sheet Config row). If the bot replies with a
+   channel error, confirm the env/config source in the milestones Config tab.
+2. Each user gets a private thread; if the panel fails to open, check the
+   milestones sheet headers and the `shardtracker` feature toggle.
+3. Missing shard icons or blank tab buttons usually mean the shard emoji env
+   vars are unset (`SHARD_PANEL_OVERVIEW_EMOJI`, `SHARD_EMOJI_*`).
+
 ### Watchers & keepalive
 - [`Watchers.md`](Watchers.md) is the canonical source for watcher gating,
   scheduler cadences, watchdog thresholds, and keepalive expectations.
@@ -115,4 +124,4 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   mitigation tips.
 - [`docs/ops/Watchers.md`](Watchers.md) — watcher gating and scheduler details.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

@@ -1,21 +1,24 @@
 # Shard & Mercy Tracker Module
 
 Community-focused module that lets members maintain their RAID shard stash and
-legendary mercy counters directly in Discord. Every interaction happens inside
-the dedicated **Shards & Mercy** channel so global chatter stays clean while
-users keep a personal, button-driven tracker thread.
+mercy counters directly in Discord. Every interaction happens inside the
+dedicated **Shards & Mercy** channel so global chatter stays clean while users
+keep a private, button-driven tracker thread.
 
 ## Scope & Responsibilities
 
-- Persist shard stash counts plus mercy counters (`ancient`, `void`, `sacred`,
-  `primal`, and the primal-mythical mercy) per Discord user.
+- Persist shard stash counts, last pulls, and mercy counters (`ancient`,
+  `void`, `sacred`, `primal`) per Discord user, including separate Legendary
+  and Mythical mercy tracks for Primals.
 - Enforce channel routing: only the configured Shards & Mercy channel may run
   shard commands, and every user gets a private thread underneath that channel.
-- Surface a mobile-friendly embed with buttons so players can log pulls or add
-  shards without typing commands. Panel buttons are persistent and survive
-  bot restarts.
+- Surface a mobile-friendly, tabbed embed with shard-icon buttons and a
+  two-phase mercy bar (green/white toward mercy, orange/black when past it) so
+  players can log pulls or add shards without typing commands. Panel buttons are
+  persistent and survive bot restarts.
 - Provide modal-based logging for Legendary/Mythical pulls and manual stash
-  setters via `!shards set …`.
+  setters via `!shards set …` plus a shared `!help shards` footer to explain
+  the controls.
 - Log lifecycle, warning, and error states through the existing C1C log helper
   plus ADMIN_ROLE_IDS pings on hard failures.
 
@@ -74,13 +77,15 @@ runs a command directly in that channel, the bot creates (or reuses) their
 personal thread named `Shards – <Display Name> [user_id]`, posts the embed
 there, and replies in the parent channel with a short pointer.
 
-Buttons live on every embed inside the user’s thread:
+Buttons live on every embed inside the user’s thread and are **locked to the
+thread owner**:
 
 - **Tab buttons** — Text-only Overview tab plus emoji-only shard tabs
   (Ancient/Void/Sacred/Primal) and a text Last Pulls tab.
 - **+ Stash / - Pulls** — open numeric modals on the active shard tab only.
   + Stash increases stash without touching mercy; - Pulls reduces stash (floored
-  at 0) and increments mercy (Primal increments both legendary and mythical).
+  at 0) and increments mercy. Primal pull logging increments Legendary and
+  Mythical mercy separately so Mythical pulls no longer reset Legendary mercy.
 - **Got Legendary** — shard tabs only. Non-Primal resets the legendary mercy to
   zero; Primal opens a follow-up with Legendary vs Mythical to decide whether to
   reset only the legendary counter or both mercy tracks.
@@ -122,4 +127,3 @@ Automated tests cover:
   existing thread before creating a new one.
 
 Doc last updated: 2025-11-20 (v0.9.7)
-

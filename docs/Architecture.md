@@ -95,6 +95,13 @@ flowchart TD
 CoreOps code exists **only** in `packages/c1c-coreops`. The `audit-coreops` workflow
 fails CI if any legacy imports, shims, or duplicate symbols live elsewhere.
 
+### Community utilities — shard tracker
+- Entry point: `modules.community.shard_tracker` registered via the `!shards` command.
+- Surface: per-user shard tracker panel posted inside a private thread under the configured Shards & Mercy channel.
+- Coverage: Ancient, Void, Sacred, and Primal shards with independent Legendary and Mythical mercy tracking on Primals.
+- UI: tabbed embeds with shard-emoji buttons, two-phase mercy bar (green/white toward mercy, orange/black for overflow), and a common `!help shards` footer explaining behaviour.
+- Ownership: buttons are locked to the owning user; long-lived views prevent silent expiry so users can keep sessions open or respawn via `!shards` at any time.
+
 ## Configuration & Startup
 Config validation is performed during bot startup (e.g., in `setup()`), not at package import, so libraries remain importable in build pipelines.
 
@@ -189,4 +196,4 @@ off in production until the panels ship._
 - Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags with context for quick filtering in Discord (transitioning from `[watcher|lifecycle]` to `[lifecycle]` during the dual-tag release).
 - Failures fall back to stale caches when safe and always raise a structured log to `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

@@ -1,5 +1,12 @@
 # Changelog
 
+### v0.9.7 — 2025-11-20
+- **Shard tracker:** Added the `!shards` command, which opens a per-user shard tracker panel in a private thread. Tracks stash, mercy counters, and last pulls for Ancient, Void, Sacred, and Primal shards, including separate Legendary and Mythical paths for Primals.
+- **Shard UI & UX:** Introduced tabbed shard views with per-shard embeds, shard-icon tab buttons, and a two-phase mercy progress bar (green/white toward mercy, orange/black for overflow). Added a common `!help shards` footer to explain how it works.
+- **Primal mercy fix:** Legendary and Mythical mercy counters on Primals are now tracked independently. Logging a Mythical pull no longer resets Legendary mercy; depth and last-pull information is cleaned up and consistent across cards.
+- **Panel ownership & lifetime:** Shard tracker buttons are now bound to the owning user so only they can mutate their data. Views use a long timeout so panels don’t silently expire while the user is AFK; users can always spawn a fresh panel with `!shards`.
+- **Docs:** Updated README and internal docs to cover the shard tracker, mercy behaviour, and new configuration keys.
+
 ### v0.9.7 — 2025-11-18
 - **Server map automation:** Added a scheduler job that rebuilds and pins the `#server-map` post using live guild categories, persists message IDs in the Recruitment Config tab, and respects the new `SERVER_MAP_*` env keys.
 - **Admin tooling:** Introduced `!servermap refresh` so CoreOps can regenerate the map on demand without waiting for the cadence gate.
@@ -319,4 +326,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-08 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)

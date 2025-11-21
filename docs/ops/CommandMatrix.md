@@ -59,9 +59,11 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `@Bot ping` | 🧩 | Quick pong reply to confirm the bot is online. | `@Bot ping` |
 | `!clan <tag>` | 🧩 | Public clan card with crest + 💡 reaction flip between profile and entry criteria. [gated: `clan_profile`] | `!clan <tag>` |
 | `!clansearch` | 🧩 | Member clan search with legacy filters + pager (edits the panel in place). [gated: `member_panel`] | `!clansearch` |
-| `!shards [type]` | ✅ | Opens the shard tracker thread (overview + detail tabs). Optional type selects default tab. | `!shards [type]` |
+| `!shards [type]` | ✅ | Opens your shard tracker in a private thread with overview + shard tabs. Shows stash, mercy, last pulls, and base chances; optional type selects the default tab. | `!shards [type]` |
 | `!shards set <type> <count>` | ✅ | Force-set your shard stash count (channel restricted to Shards & Mercy). | `!shards set <type> <count>` |
+
+Shard tracker buttons are owner-only, use shard-emoji tab selectors, and keep a common `!help shards` footer explaining mercy behaviour.
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-11-19 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.7)
