@@ -38,6 +38,7 @@ def test_handle_thread_message_captures_answer() -> None:
             content="  Answer  ",
             id=99,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller._react_to_message = AsyncMock()
@@ -50,6 +51,7 @@ def test_handle_thread_message_captures_answer() -> None:
         assert stored.get("w_ign") == "Answer"
         controller._react_to_message.assert_any_call(message, "✅")
         controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+        message.delete.assert_awaited()
 
         store.end(thread_id)
 
@@ -84,6 +86,7 @@ def test_handle_thread_message_ignores_other_users() -> None:
             content="Should be ignored",
             id=100,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller._react_to_message = AsyncMock()
@@ -95,6 +98,7 @@ def test_handle_thread_message_ignores_other_users() -> None:
         controller._react_to_message.assert_not_called()
         controller._refresh_inline_message.assert_not_called()
         assert controller.answers_by_thread.get(thread_id) is None
+        message.delete.assert_not_awaited()
 
         store.end(thread_id)
 
@@ -129,6 +133,7 @@ def test_handle_thread_message_requires_bound_respondent() -> None:
             content="Should not capture",
             id=200,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller._react_to_message = AsyncMock()
@@ -144,6 +149,7 @@ def test_handle_thread_message_requires_bound_respondent() -> None:
         refreshed = store.get(thread_id)
         assert refreshed is not None
         assert refreshed.respondent_id == 999
+        message.delete.assert_awaited()
 
         store.end(thread_id)
 
@@ -178,6 +184,7 @@ def test_handle_thread_message_flags_invalid_answer() -> None:
             content="bad",
             id=150,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller.validate_answer = lambda meta, raw: (False, None, "nope")
@@ -190,6 +197,7 @@ def test_handle_thread_message_flags_invalid_answer() -> None:
         controller._react_to_message.assert_called_with(message, "❌")
         controller._refresh_inline_message.assert_not_called()
         assert controller.answers_by_thread.get(thread_id) is None
+        message.delete.assert_not_awaited()
 
         store.end(thread_id)
 
@@ -228,6 +236,7 @@ def test_handle_thread_message_falls_back_to_current_index() -> None:
             content="99",
             id=42,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller._react_to_message = AsyncMock()
@@ -240,6 +249,7 @@ def test_handle_thread_message_falls_back_to_current_index() -> None:
         assert stored.get("w_power") == "99"
         controller._react_to_message.assert_called_with(message, "✅")
         controller._refresh_inline_message.assert_awaited_with(thread_id, index=0)
+        message.delete.assert_awaited()
 
         store.end(thread_id)
 
@@ -278,6 +288,7 @@ def test_handle_thread_message_rehydrates_non_inline_pending() -> None:
             content="AliasName",
             id=314,
             add_reaction=AsyncMock(),
+            delete=AsyncMock(),
         )
 
         controller._react_to_message = AsyncMock()
@@ -294,6 +305,7 @@ def test_handle_thread_message_rehydrates_non_inline_pending() -> None:
         refreshed = store.get(thread_id)
         assert refreshed is not None
         assert refreshed.pending_step == {"kind": "inline", "index": 0}
+        message.delete.assert_awaited()
 
         store.end(thread_id)
 

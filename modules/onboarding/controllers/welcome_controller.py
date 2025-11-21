@@ -2558,6 +2558,12 @@ class BaseWelcomeController:
         await self._react_to_message(message, "✅")
         await self._refresh_inline_message(thread_id, index=index)
         try:
+            await message.delete()
+        except (discord.Forbidden, discord.NotFound):
+            pass
+        except discord.HTTPException:
+            pass
+        try:
             qkey = self._question_key(question)
         except Exception:
             qkey = "unknown"
