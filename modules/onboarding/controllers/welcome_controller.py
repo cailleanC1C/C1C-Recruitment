@@ -1164,6 +1164,22 @@ class BaseWelcomeController:
             except Exception:
                 self.recruiter_role_ids = []
 
+    def session_status(self, thread_id: int | None) -> str | None:
+        if thread_id is None:
+            return None
+        session = store.get(thread_id)
+        if session is None:
+            return None
+        return session.status
+
+    def is_session_completed(self, thread_id: int | None) -> bool:
+        status = self.session_status(thread_id)
+        if status is None:
+            return False
+        if status == "completed":
+            return True
+        return status not in {"idle", "in_progress"}
+
     async def wait_until_ready(self, timeout: float = 0.0) -> bool:
         if timeout and timeout > 0:
             try:
@@ -1580,7 +1596,12 @@ class BaseWelcomeController:
 
     def render_step(self, thread_id: int, step: int) -> str:
         questions = self._questions.get(thread_id) or []
+        status = self.session_status(thread_id)
         if not questions:
+            if self.is_session_completed(thread_id) or (
+                status is not None and status not in {"idle", "in_progress"}
+            ):
+                return "All onboarding questions are complete."
             return "No onboarding questions are configured for this flow yet."
 
         resolved_index, question = self.resolve_step(thread_id, step, direction=1)
