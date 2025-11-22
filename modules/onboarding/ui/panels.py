@@ -1329,6 +1329,11 @@ class OpenQuestionsPanelView(discord.ui.View):
         async def _auto_refresh(self, *, notice: str, reason: str) -> None:
             if self._message is None:
                 return
+            if self._is_completed():
+                log.debug(
+                    "🛈 welcome_lifecycle — scope=welcome • phase=idle_refresh_skipped • reason=completed"
+                )
+                return
             try:
                 await self.refresh(notice=notice, touch=False)
             except Exception:
@@ -1371,6 +1376,15 @@ class OpenQuestionsPanelView(discord.ui.View):
                 if value is not None:
                     return str(value)
             return None
+
+        def _is_completed(self) -> bool:
+            checker = getattr(self.controller, "is_session_completed", None)
+            if callable(checker):
+                try:
+                    return bool(checker(self.thread_id))
+                except Exception:
+                    log.debug("failed to resolve welcome completion state", exc_info=True)
+            return False
 
         # --- Internals --------------------------------------------------------
         async def interaction_check(self, interaction: discord.Interaction) -> bool:  # pragma: no cover - network

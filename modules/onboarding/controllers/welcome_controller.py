@@ -1693,7 +1693,12 @@ class BaseWelcomeController:
 
     def render_step(self, thread_id: int, step: int) -> str:
         questions = self._questions.get(thread_id) or []
+        status = self.session_status(thread_id)
         if not questions:
+            if self.is_session_completed(thread_id) or (
+                status is not None and status not in {"idle", "in_progress"}
+            ):
+                return "All onboarding questions are complete."
             return "No onboarding questions are configured for this flow yet."
 
         resolved_index, question = self.resolve_step(thread_id, step, direction=1)
