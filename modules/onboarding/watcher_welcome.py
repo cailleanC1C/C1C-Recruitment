@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 
 import discord
@@ -19,6 +20,11 @@ from modules.common import runtime as rt
 from modules.common.logs import log as human_log
 from modules.onboarding import logs, thread_membership, thread_scopes
 from modules.onboarding.ui import panels
+from modules.onboarding.controllers.welcome_controller import (
+    extract_target_from_message,
+    locate_welcome_message,
+)
+from modules.onboarding.sessions import Session
 from shared.config import (
     get_admin_role_ids,
     get_guardian_knight_role_ids,
@@ -35,6 +41,15 @@ from shared.sheets import recruitment as recruitment_sheets
 from shared.sheets.cache_service import cache as sheets_cache
 
 log = logging.getLogger("c1c.onboarding.welcome_watcher")
+
+_REMINDER_JOB_NAME = "welcome_incomplete_scan"
+_REMINDER_INTERVAL_SECONDS = 900
+_FIRST_REMINDER_AFTER = timedelta(hours=5)
+_WARNING_AFTER = timedelta(hours=24)
+_AUTO_CLOSE_AFTER = timedelta(hours=36)
+
+_REMINDER_TASK: asyncio.Task | None = None
+_TARGET_CACHE: dict[int, int | None] = {}
 
 _TRIGGER_PHRASE = "awake by reacting with"
 _TICKET_EMOJI = "🎫"
@@ -104,6 +119,277 @@ def build_reserved_thread_name(ticket_code: str, username: str, clan_tag: str) -
 def build_closed_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
     tag = (clan_tag or "").strip().upper()
     return f"Closed-{ticket_code}-{username}-{tag}".strip("-")
+
+
+def _normalize_dt(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _determine_reminder_action(
+    now: datetime,
+    created_at: datetime,
+    session: Session | None,
+    *,
+    has_progress: bool,
+) -> str | None:
+    if session and session.completed:
+        return None
+    if session and session.auto_closed_at:
+        return None
+
+    age = now - created_at
+
+    if age >= _AUTO_CLOSE_AFTER:
+        if session is None or session.auto_closed_at is None:
+            return "close"
+        return None
+
+    if age >= _WARNING_AFTER:
+        if session is None or session.warning_sent_at is None:
+            return "warning"
+        return None
+
+    if age >= _FIRST_REMINDER_AFTER and not has_progress:
+        if session is None or session.first_reminder_at is None:
+            return "reminder"
+
+    return None
+
+
+def _ensure_reminder_job(bot: commands.Bot) -> None:
+    global _REMINDER_TASK
+
+    runtime = rt.get_active_runtime()
+    if runtime is None:
+        return
+
+    if _REMINDER_TASK is not None and not _REMINDER_TASK.done():
+        return
+
+    job = runtime.scheduler.every(
+        seconds=_REMINDER_INTERVAL_SECONDS,
+        jitter="small",
+        tag="welcome",
+        name=_REMINDER_JOB_NAME,
+    )
+
+    _REMINDER_TASK = job.do(lambda: _scan_incomplete_threads(bot))
+
+
+async def _scan_incomplete_threads(bot: commands.Bot) -> None:
+    if not feature_flags.is_enabled("welcome_dialog"):
+        return
+    if not feature_flags.is_enabled("recruitment_welcome"):
+        return
+
+    channel_id = get_welcome_channel_id()
+    try:
+        channel_int = int(channel_id) if channel_id is not None else None
+    except (TypeError, ValueError):
+        channel_int = None
+
+    if channel_int is None:
+        return
+
+    await bot.wait_until_ready()
+
+    threads = await _collect_welcome_threads(bot, channel_int)
+    if not threads:
+        return
+
+    now = datetime.now(timezone.utc)
+    for thread in threads:
+        await _process_incomplete_thread(thread, now)
+
+
+async def _collect_welcome_threads(bot: commands.Bot, channel_id: int) -> list[discord.Thread]:
+    threads: dict[int, discord.Thread] = {}
+
+    channel = bot.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(channel_id)
+        except Exception:
+            log.debug("welcome reminder: failed to fetch parent channel", exc_info=True)
+            channel = None
+
+    if channel is None:
+        return []
+
+    for candidate in getattr(channel, "threads", []) or []:
+        if getattr(candidate, "parent_id", None) == channel_id:
+            threads[candidate.id] = candidate
+
+    guild = getattr(channel, "guild", None)
+    if guild is not None:
+        try:
+            active_threads = await guild.active_threads()
+        except Exception:
+            log.debug("welcome reminder: failed to list active threads", exc_info=True)
+        else:
+            for thread in active_threads:
+                if getattr(thread, "parent_id", None) == channel_id:
+                    threads.setdefault(thread.id, thread)
+
+    return [thread for thread in threads.values() if thread_scopes.is_welcome_parent(thread)]
+
+
+async def _resolve_target_user(thread: discord.Thread, parts: ThreadNameParts) -> tuple[int | None, str]:
+    cached = _TARGET_CACHE.get(getattr(thread, "id", 0))
+    if cached is not None:
+        return cached, parts.username
+
+    message = await locate_welcome_message(thread)
+    target_id, _ = extract_target_from_message(message)
+    _TARGET_CACHE[getattr(thread, "id", 0)] = target_id
+    return target_id, parts.username
+
+
+def _load_session(applicant_id: int | None, thread_id: int) -> Session | None:
+    if applicant_id is None:
+        return None
+    try:
+        return Session.load_from_sheet(applicant_id, thread_id)
+    except Exception:
+        log.exception(
+            "failed to load onboarding session for reminders",
+            extra={"thread_id": thread_id, "applicant_id": applicant_id},
+        )
+    return None
+
+
+def _persist_reminder_state(session: Session | None, *, action: str, timestamp: datetime) -> None:
+    if session is None:
+        return
+
+    if action == "reminder":
+        session.first_reminder_at = timestamp
+    elif action == "warning":
+        session.warning_sent_at = timestamp
+    elif action == "close":
+        session.auto_closed_at = timestamp
+
+    try:
+        session.save_to_sheet()
+    except Exception:
+        log.exception(
+            "failed to persist welcome reminder state",
+            extra={
+                "thread_id": getattr(session, "thread_id", None),
+                "applicant_id": getattr(session, "applicant_id", None),
+                "action": action,
+            },
+        )
+
+
+async def _process_incomplete_thread(thread: discord.Thread, now: datetime) -> None:
+    parsed = parse_welcome_thread_name(getattr(thread, "name", None))
+    if parsed is None or parsed.state == "closed":
+        return
+
+    created_at = _normalize_dt(getattr(thread, "created_at", None))
+    applicant_id, username = await _resolve_target_user(thread, parsed)
+
+    session = _load_session(applicant_id, int(getattr(thread, "id", 0)))
+    has_progress = bool(getattr(session, "answers", {}))
+    action = _determine_reminder_action(
+        now, created_at, session, has_progress=has_progress
+    )
+    if action is None:
+        return
+
+    if applicant_id is None:
+        log.debug(
+            "welcome reminder skipped (no target)",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    mention = f"<@{applicant_id}>"
+    session = session or Session(
+        thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id)
+    )
+
+    if action == "reminder":
+        content = (
+            f"{mention} Hey! You haven't started your onboarding yet. "
+            "Please press the **Open questions** button above to begin the questionnaire so we can match you with the right clan."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "welcome reminder send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome reminder posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "warning":
+        content = (
+            f"{mention} You still haven't completed your onboarding. "
+            "This thread will be closed automatically in 12 hours unless you finish the questionnaire."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "welcome warning send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome warning posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "close":
+        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
+        try:
+            await thread.edit(name=new_name)
+        except Exception:
+            log.warning(
+                "welcome auto-close rename failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+            )
+        try:
+            await thread.send(
+                "User did not complete onboarding. Recruiters please proceed to remove the user from the server."
+            )
+        except Exception:
+            log.warning(
+                "welcome auto-close notice failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning(
+                "welcome auto-close archive failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome auto-close completed",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
 
 
 async def rename_thread_to_reserved(
@@ -1636,3 +1922,4 @@ class WelcomeTicketWatcher(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(WelcomeWatcher(bot))
     await bot.add_cog(WelcomeTicketWatcher(bot))
+    _ensure_reminder_job(bot)

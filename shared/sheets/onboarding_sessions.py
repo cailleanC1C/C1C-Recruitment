@@ -5,9 +5,9 @@ from typing import Any, Dict, Optional
 import json
 import os
 
+from shared.config import get_onboarding_sessions_tab
 from shared.sheets import core
 
-TAB_NAME = "OnboardingSessions"
 FIELDS = [
     "user_id",
     "thread_id",
@@ -15,6 +15,9 @@ FIELDS = [
     "step_index",
     "completed",
     "completed_at",
+    "first_reminder_at",
+    "warning_sent_at",
+    "auto_closed_at",
     "answers_json",
     "updated_at",
 ]
@@ -28,7 +31,10 @@ def _sheet():
     sheet_id = os.getenv("ONBOARDING_SHEET_ID", "").strip()
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
-    return core.get_worksheet(sheet_id, TAB_NAME)
+    tab_name = get_onboarding_sessions_tab().strip()
+    if not tab_name:
+        raise RuntimeError("ONBOARDING_SESSIONS_TAB not set in sheet/env config")
+    return core.get_worksheet(sheet_id, tab_name)
 
 
 def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
@@ -97,15 +103,33 @@ def save(payload: Dict[str, Any]) -> None:
         "step_index": int(payload.get("step_index", 0) or 0),
         "completed": bool(payload.get("completed", False)),
         "completed_at": payload.get("completed_at") or "",
+        "first_reminder_at": payload.get("first_reminder_at") or "",
+        "warning_sent_at": payload.get("warning_sent_at") or "",
+        "auto_closed_at": payload.get("auto_closed_at") or "",
         "answers_json": json.dumps(payload.get("answers", {}), separators=(",", ":")),
         "updated_at": _now_iso(),
     }
     values = [record[key] for key in FIELDS]
 
     if target_row:
-        worksheet.update(f"A{target_row}:H{target_row}", [values])
+        worksheet.update(_range_for_row(target_row), [values])
         return
 
     if not rows:
-        worksheet.update("A1:H1", [FIELDS])
+        worksheet.update(_range_for_row(1), [FIELDS])
     worksheet.append_row(values)
+
+
+def _range_for_row(row: int) -> str:
+    end_column = _column_letter(len(FIELDS))
+    return f"A{row}:{end_column}{row}"
+
+
+def _column_letter(index: int) -> str:
+    """Return spreadsheet column label for 1-indexed ``index``."""
+
+    label = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        label = chr(65 + remainder) + label
+    return label

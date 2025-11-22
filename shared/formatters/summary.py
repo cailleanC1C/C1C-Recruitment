@@ -76,7 +76,19 @@ def cvc_priority(value: Any) -> str:
 
     if value is None:
         return ""
-    key = str(value).strip()
+
+    key: str | None
+    if isinstance(value, dict):
+        label = value.get("label") or value.get("value")
+        if isinstance(label, str):
+            key = label.strip()
+        elif label is not None:
+            key = str(label).strip()
+        else:
+            key = str(value).strip()
+    else:
+        key = str(value).strip()
+
     if not key:
         return ""
     return _PRIORITY_MAP.get(key, key)

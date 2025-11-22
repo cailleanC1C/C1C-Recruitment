@@ -6,6 +6,9 @@
 - **Fix:** Refreshed onboarding inline wizard cards even when the cached message cannot be resolved, re-rendering in the thread so saved answers clear the “Input is required” state and enable **Next**.
 - **Fix:** Synced onboarding wizard navigation with thread-answer capture so **Next**/**Back** keep the active step aligned instead of looping to earlier questions.
 - **Change:** Cleaned up onboarding threads by deleting user reply messages after answers are captured so only the wizard card and recruiter summary remain.
+- **Fix:** CvC priority in the recruitment summary now renders the human-friendly label instead of raw dict structures.
+- **Change:** Reservation auto-release now renames reserved welcome threads back to the default `W####-user` pattern after posting the expiry notice.
+- **Feature:** Added timed welcome-thread reminders (5h nudge, 24h warning, 36h auto-close) with recruiter notifications and automatic rename to `Closed-…-NONE` when onboarding stalls.
   
 ### v0.9.7 — 2025-11-20
 - **Shard tracker:** Added the `!shards` command, which opens a per-user shard tracker panel in a private thread. Tracks stash, mercy counters, and last pulls for Ancient, Void, Sacred, and Primal shards, including separate Legendary and Mythical paths for Primals.

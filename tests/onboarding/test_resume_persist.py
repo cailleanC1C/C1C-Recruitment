@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 
 from modules.onboarding.sessions import Session
 
@@ -22,6 +23,8 @@ def test_session_round_trip_sheet(session_factory, monkeypatch):
     session = session_factory()
     session.answers = {"w_ign": "Caillean", "w_stage": "Early Game"}
     session.step_index = 2
+    session.first_reminder_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+    session.warning_sent_at = datetime(2025, 1, 3, tzinfo=timezone.utc)
 
     session.save_to_sheet()
 
@@ -29,3 +32,5 @@ def test_session_round_trip_sheet(session_factory, monkeypatch):
     assert restored is not None
     assert restored.answers.get("w_ign") == "Caillean"
     assert restored.step_index == 2
+    assert restored.first_reminder_at == session.first_reminder_at
+    assert restored.warning_sent_at == session.warning_sent_at

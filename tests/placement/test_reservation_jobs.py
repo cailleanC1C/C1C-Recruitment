@@ -18,10 +18,17 @@ class FakeChannel:
         self.guild = guild or SimpleNamespace(id=1234)
         self.name = name
         self.sent: list[str] = []
+        self.archived = False
 
     async def send(self, *, content: str | None = None, **_: object) -> None:
         if content is not None:
             self.sent.append(content)
+
+    async def edit(self, **kwargs) -> None:
+        if "name" in kwargs:
+            self.name = kwargs["name"]
+        if "archived" in kwargs:
+            self.archived = kwargs["archived"]
 
 
 class FakeBot:
@@ -162,7 +169,7 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
         recomputed.append(clan_tag)
 
     summary_thread = FakeChannel(4444)
-    fake_thread = FakeChannel(7777)
+    fake_thread = FakeChannel(7777, name="Res-W0777-User-C1CT")
     bot = FakeBot({7777: fake_thread, 4444: summary_thread})
 
     monkeypatch.setattr(reservation_jobs, "_reservations_enabled", lambda: True)
@@ -176,5 +183,6 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
     assert updates == [(2, "expired", 6)]
     assert len(fake_thread.sent) == 1
     assert "expired" in fake_thread.sent[0]
+    assert fake_thread.name == "W0777-User"
     assert summary_thread.sent and "auto-release" in summary_thread.sent[0]
     assert recomputed == ["AAA"]
