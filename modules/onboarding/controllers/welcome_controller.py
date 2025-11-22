@@ -19,6 +19,7 @@ from modules.onboarding.schema import (
     load_welcome_questions,
     parse_values_list,
 )
+from modules.onboarding.sessions import Session, utc_now
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
@@ -1164,6 +1165,118 @@ class BaseWelcomeController:
             except Exception:
                 self.recruiter_role_ids = []
 
+    def _resolve_applicant_id(
+        self, thread_id: int, session: SessionData | None = None
+    ) -> int | None:
+        target_id = self._target_users.get(thread_id)
+        if target_id is not None:
+            try:
+                return int(target_id)
+            except (TypeError, ValueError):
+                return None
+
+        thread = self._thread_for(thread_id)
+        owner = getattr(thread, "owner", None)
+        owner_id = getattr(owner, "id", None) or getattr(thread, "owner_id", None)
+        if owner_id is not None:
+            try:
+                return int(owner_id)
+            except (TypeError, ValueError):
+                pass
+
+        respondent = getattr(session, "respondent_id", None)
+        if respondent is not None:
+            try:
+                return int(respondent)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @staticmethod
+    def _load_or_create_sheet_session(thread_id: int, applicant_id: int) -> Session:
+        existing = None
+        try:
+            existing = Session.load_from_sheet(applicant_id, thread_id)
+        except Exception:
+            existing = None
+        if existing is not None:
+            return existing
+        return Session(thread_id=thread_id, applicant_id=applicant_id)
+
+    def _final_step_index(self, thread_id: int, session: SessionData | None) -> int:
+        visible_indices = self._visible_indices(thread_id)
+        if visible_indices:
+            return max(visible_indices)
+
+        questions = self._questions.get(thread_id) or []
+        if questions:
+            return max(len(questions) - 1, 0)
+
+        try:
+            if session and session.current_question_index is not None:
+                return max(int(session.current_question_index), 0)
+        except (TypeError, ValueError):
+            pass
+        return 0
+
+    def _persist_session_start(
+        self,
+        thread_id: int,
+        *,
+        panel_message_id: int | None,
+        session_data: SessionData | None = None,
+    ) -> None:
+        applicant_id = self._resolve_applicant_id(thread_id, session_data)
+        if applicant_id is None:
+            return
+
+        try:
+            sheet_session = self._load_or_create_sheet_session(thread_id, applicant_id)
+        except Exception:
+            log.warning("welcome:persist_start_failed", exc_info=True)
+            return
+
+        if panel_message_id is not None:
+            sheet_session.panel_message_id = panel_message_id
+        sheet_session.completed = False
+        sheet_session.step_index = 0
+        sheet_session.last_updated = utc_now()
+
+        try:
+            sheet_session.save_to_sheet()
+        except Exception:
+            log.warning("welcome:sheet_start_save_failed", exc_info=True)
+
+    def _persist_session_completion(
+        self,
+        thread_id: int,
+        *,
+        session_data: SessionData | None,
+        answers: Mapping[str, Any],
+        panel_message_id: int | None,
+    ) -> None:
+        applicant_id = self._resolve_applicant_id(thread_id, session_data)
+        if applicant_id is None:
+            return
+
+        try:
+            sheet_session = self._load_or_create_sheet_session(thread_id, applicant_id)
+        except Exception:
+            log.warning("welcome:persist_complete_failed", exc_info=True)
+            return
+
+        if panel_message_id is not None:
+            sheet_session.panel_message_id = panel_message_id
+        sheet_session.step_index = self._final_step_index(thread_id, session_data)
+        sheet_session.answers = dict(answers)
+        sheet_session.mark_completed()
+        sheet_session.last_updated = utc_now()
+
+        try:
+            sheet_session.save_to_sheet()
+        except Exception:
+            log.warning("welcome:sheet_complete_save_failed", exc_info=True)
+
     async def wait_until_ready(self, timeout: float = 0.0) -> bool:
         if timeout and timeout > 0:
             try:
@@ -1727,6 +1840,13 @@ class BaseWelcomeController:
                 answers=dict(answers),
             )
 
+            self._persist_session_completion(
+                thread_id,
+                session_data=session,
+                answers=dict(answers),
+                panel_message_id=self._panel_messages.get(thread_id),
+            )
+
         self.answers_by_thread.pop(thread_id, None)
         self._cleanup_session(thread_id)
 
@@ -1972,6 +2092,12 @@ class BaseWelcomeController:
                 target_user_id=target_user_id,
                 ambiguous_target=target_user_id is None,
             )
+
+        self._persist_session_start(
+            thread_id,
+            panel_message_id=int(getattr(message, "id", 0)) if message else None,
+            session_data=session,
+        )
 
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
         thread_id = int(thread.id)
@@ -3253,6 +3379,13 @@ class BaseWelcomeController:
             actor=interaction.user,
             session=session,
             answers=dict(session.answers),
+        )
+
+        self._persist_session_completion(
+            thread_id,
+            session_data=session,
+            answers=dict(session.answers),
+            panel_message_id=self._panel_messages.get(thread_id),
         )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
