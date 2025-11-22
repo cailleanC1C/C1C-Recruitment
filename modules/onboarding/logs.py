@@ -264,6 +264,11 @@ async def log_onboarding_panel_lifecycle(
     """Emit a single lifecycle log entry for onboarding panel events."""
 
     event_slug = (event or "event").strip().lower() or "event"
+    emit_events = {"open", "complete", "timeout", "error"}
+    if event_slug not in emit_events:
+        log.debug("welcome panel lifecycle skipped", extra={"event": event_slug})
+        return
+
     ticket_code: str | None
     if isinstance(ticket, discord.Thread):
         ticket_code = _resolve_ticket_from_thread(ticket)
@@ -275,6 +280,7 @@ async def log_onboarding_panel_lifecycle(
 
     actor_label = _normalize_actor(actor)
     channel_label = _normalize_channel(channel) or "#unknown"
+    actor_name = format_actor_handle(actor) or actor_label
 
     question_label: str | None = None
     if questions is not None:
@@ -307,84 +313,41 @@ async def log_onboarding_panel_lifecycle(
             extras_items.append(f"{key}={cleaned}")
     extras_items.sort()
 
-    severity = _resolve_severity(event_slug, resolved_result)
-    level = _SEVERITY_LEVEL.get(severity, logging.INFO)
+    level_map = {
+        "open": logging.INFO,
+        "complete": logging.INFO,
+        "timeout": logging.WARNING,
+        "error": logging.ERROR,
+    }
+    emoji_map = {
+        "open": "🧭",
+        "complete": "✅",
+        "timeout": "⚠️",
+        "error": "❌",
+    }
 
-    result_text = _stringify(resolved_result) if resolved_result else None
-    if result_text == "-":
-        result_text = None
-    include_reason = severity in {"warning", "error"} and resolved_reason
-    reason_text = _stringify(resolved_reason) if include_reason else None
-    if reason_text == "-":
-        reason_text = None
+    level = level_map.get(event_slug, logging.INFO)
+    emoji = emoji_map.get(event_slug, logfmt.LOG_EMOJI["lifecycle"])
 
-    ticket_field = ticket_code or None
-    actor_field = actor_label or None
-    channel_field = channel_label or None
-    questions_field = question_label or None
-    extras_payload = extras_items or None
+    fields: list[str] = ["scope=welcome"]
+    if ticket_code:
+        fields.append(f"ticket={ticket_code}")
+    if actor_name and actor_name != "-":
+        fields.append(f"actor={actor_name}")
+    if channel_label and channel_label != "-":
+        fields.append(f"channel={channel_label}")
+    if question_label:
+        fields.append(f"questions={question_label}")
+    fields.append(f"action={event_slug}")
+    if event_slug == "complete" and level_detail_value:
+        fields.append(f"level_detail={level_detail_value}")
+    if event_slug in {"timeout", "error"} and resolved_reason:
+        fields.append(f"reason={resolved_reason}")
 
-    if event_slug == "open":
-        message = logfmt.LogTemplates.welcome_panel_open(
-            ticket=ticket_field,
-            actor=actor_field,
-            channel=channel_field,
-            questions=questions_field,
-            result=result_text,
-            reason=reason_text,
-            extras=extras_payload,
-        )
-    elif event_slug == "start":
-        message = logfmt.LogTemplates.welcome_panel_start(
-            ticket=ticket_field,
-            actor=actor_field,
-            channel=channel_field,
-            questions=questions_field,
-            schema=schema_label,
-            result=result_text,
-            reason=reason_text,
-            extras=extras_payload,
-        )
-    elif event_slug == "restart":
-        message = logfmt.LogTemplates.welcome_panel_restart(
-            ticket=ticket_field,
-            actor=actor_field,
-            channel=channel_field,
-            questions=questions_field,
-            schema=schema_label,
-            result=result_text,
-            reason=reason_text,
-            extras=extras_payload,
-        )
-    elif event_slug == "complete":
-        message = logfmt.LogTemplates.welcome_panel_complete(
-            ticket=ticket_field,
-            actor=actor_field,
-            channel=channel_field,
-            questions=questions_field,
-            level_detail=level_detail_value,
-            result=result_text,
-            reason=reason_text,
-            extras=extras_payload,
-        )
-    else:
-        message = logfmt.LogTemplates.welcome_panel_generic(
-            event=event_slug,
-            ticket=ticket_field,
-            actor=actor_field,
-            channel=channel_field,
-            questions=questions_field,
-            schema=schema_label,
-            level_detail=level_detail_value,
-            result=result_text,
-            reason=reason_text,
-            extras=extras_payload,
-        )
-
+    message = f"{emoji} Welcome panel — " + " • ".join(fields)
     log.log(level, "%s", message)
-    tagged = f"{lifecycle_tag()} {message}"
     try:
-        await rt.send_log_message(tagged)
+        await rt.send_log_message(message)
     except Exception:
         log.warning("failed to emit onboarding lifecycle log", exc_info=True)
 

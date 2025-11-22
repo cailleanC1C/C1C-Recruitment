@@ -70,6 +70,12 @@ def refresh_bucket_results(results: Sequence["RefreshResult"]) -> list[BucketRes
         reason = None
         if not getattr(item, "ok", False):
             reason = human_reason(getattr(item, "error", None) or snapshot.last_error)
+        metadata = snapshot.metadata
+        if snapshot.name == "onboarding_questions" and metadata:
+            metadata = {k: v for k, v in metadata.items() if k not in {"sheet", "tab"}}
+            if not metadata:
+                metadata = None
+
         buckets.append(
             BucketResult(
                 name=getattr(item, "name", None) or snapshot.name,
@@ -79,7 +85,7 @@ def refresh_bucket_results(results: Sequence["RefreshResult"]) -> list[BucketRes
                 ttl_ok=ttl_ok,
                 retries=retries,
                 reason=reason,
-                metadata=snapshot.metadata,
+                metadata=metadata,
             )
         )
     return buckets

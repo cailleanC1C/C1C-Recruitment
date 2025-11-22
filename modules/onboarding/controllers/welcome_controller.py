@@ -1626,6 +1626,15 @@ class BaseWelcomeController:
 
         return "\n\n".join(lines)
 
+    def build_panel_content(self, thread_id: int, step: int) -> str:
+        """Render the full panel content (header + question block) from scratch."""
+
+        header = self._modal_intro_text()
+        question_block = self.render_step(thread_id, step)
+        if header and question_block:
+            return f"{header}\n\n{question_block}"
+        return question_block or header or ""
+
     async def finish_inline_wizard(
         self,
         thread_id: int,
@@ -2177,7 +2186,7 @@ class BaseWelcomeController:
             index = resolved_index
             self._set_current_step_for_thread(thread_id, index)
             try:
-                content = self.render_step(thread_id, index)
+                content = self.build_panel_content(thread_id, index)
             except Exception:
                 log.warning("failed to render inline step", exc_info=True)
                 raise
@@ -2185,6 +2194,12 @@ class BaseWelcomeController:
             if session is not None:
                 session.current_question_index = index
                 session.status = "in_progress"
+
+        if wizard is not None:
+            try:
+                content = wizard._apply_requirement_suffix(content, wizard._question())
+            except Exception:
+                log.debug("failed to apply requirement suffix", exc_info=True)
 
         diag_state["step_index"] = index
         diag_state["total_steps"] = total_questions
@@ -2354,7 +2369,7 @@ class BaseWelcomeController:
         if not questions:
             return
         try:
-            content = self.render_step(thread_id, index)
+            content = self.build_panel_content(thread_id, index)
         except Exception:
             log.debug("failed to render inline content during refresh", exc_info=True)
             return

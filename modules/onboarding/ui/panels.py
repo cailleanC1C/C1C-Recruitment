@@ -1257,7 +1257,7 @@ class OpenQuestionsPanelView(discord.ui.View):
 
             self._configure_components()
             question = self._question()
-            content = self.controller.render_step(self.thread_id, self.step)
+            content = self.controller.build_panel_content(self.thread_id, self.step)
             content = self._apply_requirement_suffix(content, question)
             show_status = False
             if question is not None:
