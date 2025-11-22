@@ -209,6 +209,23 @@ def test_status_row_visible_for_text_inputs() -> None:
             def _visibility_map(self, _tid: int) -> dict[str, dict[str, str]]:
                 return {}
 
+            def build_panel_content(self, tid: int, step: int) -> str:
+                base = self.render_step(tid, step)
+
+                questions = self.questions_by_thread.get(tid, [])
+                question = questions[step] if 0 <= step < len(questions) else None
+
+                if not question:
+                    return base
+
+                q_type = getattr(question, "type", "")
+                is_text_input = q_type in ("short", "long")
+
+                if is_text_input and not self.has_answer(tid, question):
+                    return f"{base}\n\nWaiting for your reply."
+
+                return base
+
         class DummyMessage:
             def __init__(self) -> None:
                 self.last_edit: SimpleNamespace | None = None
@@ -267,6 +284,23 @@ def test_status_row_hidden_for_select_and_bool() -> None:
 
             def _visibility_map(self, _tid: int) -> dict[str, dict[str, str]]:
                 return {}
+
+            def build_panel_content(self, tid: int, step: int) -> str:
+                base = self.render_step(tid, step)
+
+                questions = self.questions_by_thread.get(tid, [])
+                question = questions[step] if 0 <= step < len(questions) else None
+
+                if not question:
+                    return base
+
+                q_type = getattr(question, "type", "")
+                is_text_input = q_type in ("short", "long")
+
+                if is_text_input and not self.has_answer(tid, question):
+                    return f"{base}\n\nWaiting for your reply."
+
+                return base
 
         class DummyMessage:
             def __init__(self) -> None:

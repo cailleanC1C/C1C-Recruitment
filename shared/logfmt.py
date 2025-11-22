@@ -299,6 +299,8 @@ class LogTemplates:
                 details.append(result.reason)
             if result.metadata:
                 for key, value in sorted(result.metadata.items()):
+                    if result.name == "onboarding_questions" and key in {"sheet", "tab"}:
+                        continue
                     if key and value:
                         details.append(f"{key}={value}")
             detail_text = ", ".join(details) if details else "-"

@@ -49,7 +49,7 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - **Config:** `shared.config` + `docs/ops/Config.md` define required env keys (`ONBOARDING_SHEET_ID`, optional `ONBOARDING_CONFIG_TAB`) and sheet tab overrides.
 - **Sheets access:** `shared/sheets/onboarding_questions`, `shared/sheets/onboarding_sessions`, and `shared/sheets/onboarding` supply cached question rows, persistence helpers, and tab upserts. All I/O honours service-account credentials (`GSPREAD_CREDENTIALS`/`GOOGLE_SERVICE_ACCOUNT_JSON`).
 - **Caches:** `shared.cache.telemetry` + cache scheduler refresh `onboarding_questions`; modules register buckets at startup so `!ops refresh onboarding_questions` works.
-- **Logging:** `modules/onboarding/logs` standardises structured events (launch, resume, summary posted, errors) and ties into the runtime log channel configured in `docs/ops/Logging.md`.
+- **Logging:** `modules/onboarding/logs` standardises structured events (launch, resume, summary posted, errors) and ties into the runtime log channel configured in `docs/ops/Logging.md`. Failed panel opens now emit severity-appropriate levels with explicit `result`/`reason` fields so ops dashboards can distinguish errors from successful launches.
 - **Tests:** `tests/onboarding/**` cover cache wiring, sheet ID enforcement, watcher placement reconciliation, and welcome dialog controllers per ADR-0022.
 
 ## Related Docs
@@ -60,4 +60,4 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - [`docs/Runbook.md`](../Runbook.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-22 (v0.9.7)

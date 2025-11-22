@@ -17,6 +17,6 @@ def test_refresh_message_includes_onboarding_metadata() -> None:
     message = format_refresh_message("startup", [bucket], total_s=0.5)
 
     assert "onboarding_questions ok" in message
-    assert "sheet=abcdef" in message
-    assert "tab=OnboardingQuestions" in message
+    assert "sheet=abcdef" not in message
+    assert "tab=OnboardingQuestions" not in message
     assert "0.5s" in message
