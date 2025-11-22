@@ -218,6 +218,7 @@ _RESULT_SEVERITY = {
     "failed": "error",
     "failure": "error",
     "exception": "error",
+    "timeout": "warning",
     "skipped": "warning",
     "not_eligible": "warning",
     "partial": "warning",
@@ -326,8 +327,14 @@ async def log_onboarding_panel_lifecycle(
         "error": "❌",
     }
 
-    level = level_map.get(event_slug, logging.INFO)
-    emoji = emoji_map.get(event_slug, logfmt.LOG_EMOJI["lifecycle"])
+    severity = _resolve_severity(event_slug, resolved_result)
+    level = _SEVERITY_LEVEL.get(severity, level_map.get(event_slug, logging.INFO))
+    severity_emoji = {
+        "error": logfmt.LOG_EMOJI["error"],
+        "warning": logfmt.LOG_EMOJI["warning"],
+        "success": logfmt.LOG_EMOJI["success"],
+    }
+    emoji = severity_emoji.get(severity, emoji_map.get(event_slug, logfmt.LOG_EMOJI["lifecycle"]))
 
     fields: list[str] = ["scope=welcome"]
     if ticket_code:
@@ -339,10 +346,14 @@ async def log_onboarding_panel_lifecycle(
     if question_label:
         fields.append(f"questions={question_label}")
     fields.append(f"action={event_slug}")
+    result_label = _stringify(resolved_result) if resolved_result is not None else None
+    if result_label and result_label != "-":
+        fields.append(f"result={result_label}")
     if event_slug == "complete" and level_detail_value:
         fields.append(f"level_detail={level_detail_value}")
-    if event_slug in {"timeout", "error"} and resolved_reason:
-        fields.append(f"reason={resolved_reason}")
+    reason_label = _stringify(resolved_reason) if resolved_reason is not None else None
+    if reason_label and reason_label != "-":
+        fields.append(f"reason={reason_label}")
 
     message = f"{emoji} Welcome panel — " + " • ".join(fields)
     log.log(level, "%s", message)

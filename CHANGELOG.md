@@ -1,6 +1,7 @@
 # Changelog
 
 ### v0.9.7 — 2025-11-21
+- **Ops:** Restored onboarding lifecycle logs for welcome panel opens to include `result`/`reason` fields with severity-driven levels, restoring observability for failed launches.
 - **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”
 - **Docs:** Clarified the inline reply capture model for onboarding (no Enter Answer button) and reinforced respondent binding behaviour.
 - **Fix:** Refreshed onboarding inline wizard cards even when the cached message cannot be resolved, re-rendering in the thread so saved answers clear the “Input is required” state and enable **Next**.

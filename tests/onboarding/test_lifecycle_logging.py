@@ -62,13 +62,14 @@ def test_lifecycle_helper_formats_neutral(monkeypatch, caplog):
     assert any("Welcome panel — scope=welcome" in record.getMessage() for record in caplog.records)
 
 
-def test_lifecycle_helper_hides_reason_when_info(monkeypatch):
+def test_lifecycle_helper_logs_error_reason(monkeypatch, caplog):
     sent: list[str] = []
 
     async def fake_send(message: str) -> None:
         sent.append(message)
 
     monkeypatch.setattr(logs.rt, "send_log_message", fake_send)
+    caplog.set_level(logging.DEBUG, logger="c1c.onboarding.logs")
 
     async def runner() -> None:
         await logs.log_onboarding_panel_lifecycle(
@@ -78,12 +79,47 @@ def test_lifecycle_helper_hides_reason_when_info(monkeypatch):
             channel="#WELCOME CENTER › welcome",
             questions=16,
             schema_version="v1",
-            reason="should_hide",
+            result="error",
+            reason="discord_http_50013",
         )
 
     asyncio.run(runner())
 
-    assert sent and "reason=should_hide" not in sent[0]
+    assert sent, "expected log message"
+    assert "result=error" in sent[0]
+    assert "reason=discord_http_50013" in sent[0]
+    record = next(record for record in caplog.records if "Welcome panel" in record.getMessage())
+    assert record.levelno == logging.ERROR
+
+
+def test_lifecycle_helper_warns_on_timeout(monkeypatch, caplog):
+    sent: list[str] = []
+
+    async def fake_send(message: str) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(logs.rt, "send_log_message", fake_send)
+    caplog.set_level(logging.DEBUG, logger="c1c.onboarding.logs")
+
+    async def runner() -> None:
+        await logs.log_onboarding_panel_lifecycle(
+            event="timeout",
+            ticket="W0481-caillean",
+            actor="@Recruit",
+            channel="#WELCOME CENTER › welcome",
+            questions=16,
+            schema_version="v1",
+            result="timeout",
+            reason="view_timeout",
+        )
+
+    asyncio.run(runner())
+
+    assert sent, "expected log message"
+    assert "result=timeout" in sent[0]
+    assert "reason=view_timeout" in sent[0]
+    record = next(record for record in caplog.records if "Welcome panel" in record.getMessage())
+    assert record.levelno == logging.WARNING
 
 
 def test_welcome_watcher_logs_open_once(monkeypatch):
