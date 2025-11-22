@@ -3,9 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 import json
-import os
 
-from shared.config import get_onboarding_sessions_tab
+from shared.config import get_onboarding_sessions_tab, get_onboarding_sheet_id
 from shared.sheets import core
 
 FIELDS = [
@@ -28,7 +27,7 @@ def _now_iso() -> str:
 
 
 def _sheet():
-    sheet_id = os.getenv("ONBOARDING_SHEET_ID", "").strip()
+    sheet_id = get_onboarding_sheet_id().strip()
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
     tab_name = get_onboarding_sessions_tab().strip()
