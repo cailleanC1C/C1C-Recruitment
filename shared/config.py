@@ -40,7 +40,9 @@ __all__ = [
     "get_onboarding_sheet_id",
     "get_milestones_sheet_id",
     "get_onboarding_questions_tab",
+    "get_onboarding_sessions_tab",
     "resolve_onboarding_tab",
+    "resolve_onboarding_sessions_tab",
     "get_admin_role_ids",
     "get_staff_role_ids",
     "get_recruiter_role_ids",
@@ -446,6 +448,7 @@ def _load_config() -> Dict[str, object]:
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
         "MILESTONES_SHEET_ID": (os.getenv("MILESTONES_SHEET_ID") or "").strip(),
         "ONBOARDING_TAB": (os.getenv("ONBOARDING_TAB") or "").strip(),
+        "ONBOARDING_SESSIONS_TAB": (os.getenv("ONBOARDING_SESSIONS_TAB") or "").strip(),
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
         "RECRUITER_ROLE_IDS": _int_set(os.getenv("RECRUITER_ROLE_IDS")),
@@ -788,6 +791,40 @@ def resolve_onboarding_tab(config: Mapping[str, object] | object) -> str:
     tab = _lookup("ONBOARDING_TAB")
     if not tab:
         raise KeyError("missing config key: ONBOARDING_TAB")
+    return tab
+
+
+def get_onboarding_sessions_tab() -> str:
+    try:
+        return resolve_onboarding_sessions_tab(cfg)
+    except KeyError:
+        return ""
+
+
+def resolve_onboarding_sessions_tab(config: Mapping[str, object] | object) -> str:
+    """
+    Resolve the tab containing onboarding session rows (user_id, thread_id, answers, etc.).
+    """
+
+    source = cfg if config is None else config
+    getter = getattr(source, "get", None)
+    if getter is None and isinstance(source, Mapping):
+        getter = source.get
+    if getter is None:
+        raise TypeError("config must provide a get() method")
+
+    def _lookup(key: str) -> str:
+        try:
+            value = getter(key, None)  # type: ignore[misc]
+        except Exception:
+            return ""
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    tab = _lookup("ONBOARDING_SESSIONS_TAB")
+    if not tab:
+        raise KeyError("missing config key: ONBOARDING_SESSIONS_TAB")
     return tab
 
 

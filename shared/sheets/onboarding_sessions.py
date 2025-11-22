@@ -5,9 +5,9 @@ from typing import Any, Dict, Optional
 import json
 import os
 
+from shared.config import get_onboarding_sessions_tab
 from shared.sheets import core
 
-TAB_NAME = "OnboardingSessions"
 FIELDS = [
     "user_id",
     "thread_id",
@@ -31,7 +31,10 @@ def _sheet():
     sheet_id = os.getenv("ONBOARDING_SHEET_ID", "").strip()
     if not sheet_id:
         raise RuntimeError("ONBOARDING_SHEET_ID not set")
-    return core.get_worksheet(sheet_id, TAB_NAME)
+    tab_name = get_onboarding_sessions_tab().strip()
+    if not tab_name:
+        raise RuntimeError("ONBOARDING_SESSIONS_TAB not set in sheet/env config")
+    return core.get_worksheet(sheet_id, tab_name)
 
 
 def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
