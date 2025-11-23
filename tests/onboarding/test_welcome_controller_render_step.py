@@ -10,6 +10,7 @@ def test_render_step_prompts_for_text_questions(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(store, "get", lambda _thread_id: None)
     bot = SimpleNamespace()
     controller = WelcomeController(bot)
+    controller.session_status = lambda _thread_id: None
     thread_id = 4242
     question = SimpleNamespace(label="IGN", qid="ign", options=[], type="short", required=False)
     controller._questions[thread_id] = [question]
@@ -28,6 +29,7 @@ def test_render_step_formats_heading_and_help(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(store, "get", lambda _thread_id: session)
     bot = SimpleNamespace()
     controller = WelcomeController(bot)
+    controller.session_status = lambda _thread_id: None
     thread_id = 99
     question = SimpleNamespace(
         label="What's your IGN?",
@@ -51,6 +53,7 @@ def test_render_step_marks_optional(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(store, "get", lambda _thread_id: session)
     bot = SimpleNamespace()
     controller = WelcomeController(bot)
+    controller.session_status = lambda _thread_id: None
     thread_id = 7
     question = SimpleNamespace(label="IGN", qid="ign", options=[], type="short", required=True, help="")
     controller._questions[thread_id] = [question]

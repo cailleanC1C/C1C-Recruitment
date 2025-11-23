@@ -66,6 +66,80 @@ def test_build_embeds_from_rows_filters_and_groups():
     assert "🔹 **Clan Delta:** open 2 | inactives 2 | reserved 0" in mid_game.value
 
 
+def test_open_spots_pager_switches_pages():
+    rows = _sample_rows()
+    headers = dru._headers_map(rows[0])
+    sections = dru._extract_report_sections(rows, headers)
+
+    async def runner():
+        pager = dru.OpenSpotsPager(sections)
+
+        interaction_details = MagicMock()
+        interaction_details.response = AsyncMock()
+        interaction_details.response.edit_message = AsyncMock()
+        interaction_details.response.defer = AsyncMock()
+
+        await pager.set_details(interaction_details)
+
+        interaction_summary = MagicMock()
+        interaction_summary.response = AsyncMock()
+        interaction_summary.response.edit_message = AsyncMock()
+        interaction_summary.response.defer = AsyncMock()
+
+        await pager.set_summary(interaction_summary)
+
+        return pager, interaction_details, interaction_summary
+
+    pager, interaction_details, interaction_summary = asyncio.run(runner())
+
+    assert pager.current_page == "summary"
+    assert pager.summary_button.disabled is True
+    assert pager.details_button.disabled is False
+
+    args, kwargs = interaction_details.response.edit_message.await_args
+    assert kwargs["embeds"][0].title == "Bracket Details"
+
+    args, kwargs = interaction_summary.response.edit_message.await_args
+    assert kwargs["embeds"][0].title == "Summary Open Spots"
+
+
+def test_post_daily_recruiter_update_sends_pager(monkeypatch):
+    rows = _sample_rows()
+    headers = dru._headers_map(rows[0])
+
+    async def fake_fetch():
+        return rows, headers
+
+    class DummyChannel:
+        def __init__(self):
+            self.sent = []
+            self.guild = None
+
+        async def send(self, **kwargs):
+            self.sent.append(kwargs)
+
+    channel = DummyChannel()
+
+    bot = MagicMock()
+    bot.get_channel.return_value = channel
+    bot.fetch_channel = AsyncMock()
+    bot.wait_until_ready = AsyncMock()
+
+    monkeypatch.setattr(dru, "_fetch_report_rows", fake_fetch)
+    monkeypatch.setattr(dru, "_destination_channel_id", lambda: 123)
+    monkeypatch.setattr(dru, "_role_mentions", lambda: ())
+    monkeypatch.setattr(dru.discord, "TextChannel", DummyChannel)
+
+    ok, error = asyncio.run(dru.post_daily_recruiter_update(bot))
+
+    assert ok is True
+    assert error == "-"
+    assert channel.sent
+    sent_kwargs = channel.sent[0]
+    assert len(sent_kwargs["embeds"]) == 1
+    assert isinstance(sent_kwargs["view"], dru.OpenSpotsPager)
+
+
 def test_parse_utc_time_returns_aware_time():
     parsed = dru._parse_utc_time("09:30")
     assert parsed.hour == 9
