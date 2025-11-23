@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.9.7 — 2025-11-23
+- **Reservations:** Routed same-day reservation reminders to the recruiters channel with ticket jump links instead of ticket threads.
+- **Logging:** Auto-release now leaves the human summary in the ticket, posts structured audit lines to the logging channel, and stops sending expiry notices to the Clanmatch panel.
+- **Config & docs:** Added configurable recruiter and logging channel IDs plus updated documentation and templates for the new routing.
+
 ### v0.9.7 — 2025-11-21
 - **Ops:** Restored onboarding lifecycle logs for welcome panel opens to include `result`/`reason` fields with severity-driven levels, restoring observability for failed launches.
 - **Fix:** Hardened onboarding inline reply capture so answers typed into welcome threads bind the respondent automatically, survive session restores, and unblock **Next** when “Input is required.”

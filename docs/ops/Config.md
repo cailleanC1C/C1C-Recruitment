@@ -24,7 +24,7 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 
 **Required at startup:** `DISCORD_TOKEN`, `GSPREAD_CREDENTIALS`, `RECRUITMENT_SHEET_ID`
 
-**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `SERVER_MAP_CHANNEL_ID`, `SERVER_MAP_CATEGORY_BLACKLIST`, `SERVER_MAP_CHANNEL_BLACKLIST`, `WHO_WE_ARE_CHANNEL_ID`, `SERVER_MAP_REFRESH_DAYS`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
+**Optional for startup:** `ONBOARDING_SHEET_ID`*, `ENV_NAME`, `BOT_NAME`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL`, `LOG_CHANNEL_ID`, `LOGGING_CHANNEL_ID`, `RECRUITERS_CHANNEL_ID`, `SERVER_MAP_CHANNEL_ID`, `SERVER_MAP_CATEGORY_BLACKLIST`, `SERVER_MAP_CHANNEL_BLACKLIST`, `WHO_WE_ARE_CHANNEL_ID`, `SERVER_MAP_REFRESH_DAYS`, `WATCHDOG_CHECK_SEC`, `WATCHDOG_STALL_SEC`, `WATCHDOG_DISCONNECT_GRACE_SEC`
 
 All sheet-facing modules now require their dedicated `*_SHEET_ID` variables; 
 
@@ -75,6 +75,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `LEAD_ROLE_IDS` | csv | — | Lead role IDs for escalations. |
 | `CLAN_LEAD_IDS` | csv | — | Discord user IDs allowed to inspect clan-level reservations in the interact channel. |
 | `ADMIN_IDS` | csv | — | Optional list of Discord user IDs treated as admins. |
+| `RECRUITERS_CHANNEL_ID` | snowflake | — | Recruiter lounge channel receiving reservation reminders (with ticket jump links). |
 | `RECRUITERS_THREAD_ID` | snowflake | — | Thread receiving recruitment updates. |
 | `RECRUITMENT_INTERACT_CHANNEL` | snowflake | — | Channel where recruiters and clan leads review reservation rosters. |
 | `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
@@ -83,6 +84,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
+| `LOGGING_CHANNEL_ID` | snowflake | — | Logging/audit channel receiving structured reservation auto-release entries. |
 | `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
 | `SERVER_MAP_CATEGORY_BLACKLIST` | csv | — | Comma-separated Discord category IDs hidden from the rendered server map. |
 | `SERVER_MAP_CHANNEL_BLACKLIST` | csv | — | Comma-separated Discord channel IDs hidden from the server map, even when their parent category is visible. |
@@ -278,4 +280,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.7)
