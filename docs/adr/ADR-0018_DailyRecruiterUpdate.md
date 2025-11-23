@@ -38,8 +38,9 @@ We implemented a new **reporting pipeline** under `modules/recruitment/reporting
   - Render only rows where any of open/inactive/reserved > 0.
 - **Output formatting:**
   - Message body: `# Update YYYY-MM-DD` then mentions built from `RECRUITER_ROLE_IDS`.
-  - Embed title: `Summary Open Spots`.
-  - Footer: `last updated {UTC timestamp} • daily UTC snapshot`.
+  - Embeds: two-card payload (`Summary Open Spots` for overview + per-bracket rollups, `Bracket Details` for clan-level lines).
+  - Bullet format: `🔹 **Label:** open X | inactives Y | reserved Z` for all summary and detail lines.
+  - Footer: `last updated {UTC timestamp} • daily UTC snapshot` on the Summary embed.
 - **Logging:** every success/failure line uses existing CoreOps style, e.g.  
   `[report] recruiters • actor=scheduled guild=<id> dest=<id> date=YYYY-MM-DD result=ok error=-`.
 - **CoreOps integration:**
@@ -76,7 +77,7 @@ We implemented a new **reporting pipeline** under `modules/recruitment/reporting
 |------------|-----------|-------|
 | Scheduler loop | `daily_recruiter_update.py` | Runs at `REPORT_DAILY_POST_TIME` UTC |
 | Manual command | `!report recruiters` | Admin-gated trigger |
-| Formatter | same module | Builds embed + message body |
+| Formatter | same module | Builds embeds + message body |
 | Config | `.env` + Sheets Config tab | Supplies time, dest, and tab name |
 | Logging | CoreOps logger | Reuses `[report]` format |
 | Docs | `docs/adr/ADR-0018.md`, README, CommandMatrix, Config docs | Updated accordingly |
@@ -86,4 +87,4 @@ We implemented a new **reporting pipeline** under `modules/recruitment/reporting
 ## Status
 Final. Shipped with **Phase 6 — Reporting v1**. Feature toggle `recruitment_reports` defaults ON (`TRUE`) and remains enabled across environments; disable it only when the Sheet or destination is misconfigured.
 
-Doc last updated: 2025-10-31 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.7)
