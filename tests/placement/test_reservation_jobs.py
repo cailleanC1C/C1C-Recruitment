@@ -104,12 +104,14 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
         recomputed.append((clan_tag, guild))
 
     fake_thread = FakeChannel(5555, name="Res-W0455-ReminderUser-C1CE")
-    bot = FakeBot({5555: fake_thread})
+    recruiters_channel = FakeChannel(9999, guild=fake_thread.guild)
+    bot = FakeBot({5555: fake_thread, 9999: recruiters_channel})
 
     monkeypatch.setattr(reservation_jobs, "_reservations_enabled", lambda: True)
     monkeypatch.setattr(reservation_jobs.reservations, "load_reservation_ledger", fake_load)
     monkeypatch.setattr(reservation_jobs.availability, "recompute_clan_availability", fake_recompute)
     monkeypatch.setattr(reservation_jobs, "get_recruiter_role_ids", lambda: {42})
+    monkeypatch.setattr(reservation_jobs, "get_recruiters_channel_id", lambda: 9999)
 
     logs: list[str] = []
 
@@ -120,14 +122,14 @@ def test_reservations_reminder_daily_posts_message(monkeypatch):
 
     asyncio.run(reservation_jobs.reservations_reminder_daily(bot=bot, today=today))
 
-    assert len(fake_thread.sent) == 1
-    content = fake_thread.sent[0]
+    assert len(recruiters_channel.sent) == 1
+    assert not fake_thread.sent
+    content = recruiters_channel.sent[0]
     lines = content.splitlines()
     assert lines[0] == "<@&42>"
-    assert lines[1].startswith("Reminder: The reserved spot")
-    assert lines[2] == ""
-    assert lines[3].startswith("• To keep this seat")
-    assert "!reserve release" in content
+    assert lines[1].startswith("📌 **Reservation ending today**")
+    assert "auto-release" in content or "release" in content
+    assert "Ticket: https://discord.com/channels/1234/5555" in content
 
     assert recomputed == [("AAA", fake_thread.guild)]
     assert logs and "reservation_reminder" in logs[0] and "result=notified" in logs[0]
@@ -168,15 +170,15 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
     async def fake_recompute(clan_tag: str, *, guild=None):
         recomputed.append(clan_tag)
 
-    summary_thread = FakeChannel(4444)
+    log_channel = FakeChannel(4444)
     fake_thread = FakeChannel(7777, name="Res-W0777-User-C1CT")
-    bot = FakeBot({7777: fake_thread, 4444: summary_thread})
+    bot = FakeBot({7777: fake_thread, 4444: log_channel})
 
     monkeypatch.setattr(reservation_jobs, "_reservations_enabled", lambda: True)
     monkeypatch.setattr(reservation_jobs.reservations, "load_reservation_ledger", fake_load)
     monkeypatch.setattr(reservation_jobs.reservations, "update_reservation_status", fake_update)
     monkeypatch.setattr(reservation_jobs.availability, "recompute_clan_availability", fake_recompute)
-    monkeypatch.setattr(reservation_jobs, "get_recruiters_thread_id", lambda: 4444)
+    monkeypatch.setattr(reservation_jobs, "get_logging_channel_id", lambda: 4444)
 
     asyncio.run(reservation_jobs.reservations_autorelease_daily(bot=bot, today=today))
 
@@ -184,5 +186,6 @@ def test_reservations_autorelease_daily_expires_overdue(monkeypatch):
     assert len(fake_thread.sent) == 1
     assert "expired" in fake_thread.sent[0]
     assert fake_thread.name == "W0777-User"
-    assert summary_thread.sent and "auto-release" in summary_thread.sent[0]
+    assert log_channel.sent and "auto-release" in log_channel.sent[0]
+    assert f"ticket=https://discord.com/channels/{fake_thread.guild.id}/7777" in log_channel.sent[0]
     assert recomputed == ["AAA"]

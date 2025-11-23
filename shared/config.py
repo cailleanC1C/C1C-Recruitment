@@ -27,6 +27,7 @@ __all__ = [
     "get_log_channel_id",
     "get_notify_channel_id",
     "get_notify_ping_role_id",
+    "get_recruiters_channel_id",
     "get_recruiters_thread_id",
     "get_welcome_general_channel_id",
     "get_welcome_channel_id",
@@ -455,6 +456,8 @@ def _load_config() -> Dict[str, object]:
         "LEAD_ROLE_IDS": _int_set(os.getenv("LEAD_ROLE_IDS")),
         "CLAN_LEAD_IDS": _int_set(os.getenv("CLAN_LEAD_IDS")),
         "RECRUITERS_THREAD_ID": _first_int(os.getenv("RECRUITERS_THREAD_ID")),
+        "RECRUITERS_CHANNEL_ID": _first_int(os.getenv("RECRUITERS_CHANNEL_ID")),
+        "LOGGING_CHANNEL_ID": _first_int(os.getenv("LOGGING_CHANNEL_ID")),
         "RECRUITMENT_INTERACT_CHANNEL": _first_int(
             os.getenv("RECRUITMENT_INTERACT_CHANNEL")
         ),
@@ -690,12 +693,20 @@ def get_log_channel_id() -> Optional[int]:
     return _optional_id("LOG_CHANNEL_ID")
 
 
+def get_logging_channel_id() -> Optional[int]:
+    return _optional_id("LOGGING_CHANNEL_ID")
+
+
 def get_notify_channel_id() -> Optional[int]:
     return _optional_id("NOTIFY_CHANNEL_ID")
 
 
 def get_notify_ping_role_id() -> Optional[int]:
     return _optional_id("NOTIFY_PING_ROLE_ID")
+
+
+def get_recruiters_channel_id() -> Optional[int]:
+    return _optional_id("RECRUITERS_CHANNEL_ID")
 
 
 def get_recruiters_thread_id() -> Optional[int]:
@@ -1121,3 +1132,4 @@ def redact_value(key: str, value: object) -> str:
         return redact_ids(int(v) for v in iterable if isinstance(v, int))
 
     return _redact_value(key, value)
+    "get_logging_channel_id",

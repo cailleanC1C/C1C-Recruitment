@@ -18,7 +18,11 @@ from modules.onboarding.watcher_welcome import (
     parse_welcome_thread_name,
 )
 from modules.recruitment import availability
-from shared.config import get_recruiter_role_ids, get_recruiters_thread_id
+from shared.config import (
+    get_logging_channel_id,
+    get_recruiter_role_ids,
+    get_recruiters_channel_id,
+)
 from shared.sheets import reservations
 
 log = logging.getLogger(__name__)
@@ -29,13 +33,6 @@ _FEATURE_KEYS = ("FEATURE_RESERVATIONS", "feature_reservations", "placement_rese
 
 _REMINDER_TASK: asyncio.Task | None = None
 _AUTORELEASE_TASK: asyncio.Task | None = None
-
-
-def _control_thread_hint() -> str:
-    thread_id = get_recruiters_thread_id()
-    if thread_id:
-        return f"<#{thread_id}>"
-    return "the recruiter control thread"
 
 
 async def reservations_reminder_daily(
@@ -68,6 +65,16 @@ async def reservations_reminder_daily(
 
     await active_bot.wait_until_ready()
 
+    recruiters_channel_id = get_recruiters_channel_id()
+    recruiters_channel = None
+    if recruiters_channel_id:
+        recruiters_channel = await _resolve_channel(active_bot, recruiters_channel_id)
+        if recruiters_channel is None:
+            log.warning(
+                "recruiters channel missing for reservation reminders",
+                extra={"channel_id": recruiters_channel_id},
+            )
+
     recruiter_ping = _recruiter_ping()
     recompute_context: dict[str, discord.Guild | None] = {}
 
@@ -95,29 +102,40 @@ async def reservations_reminder_daily(
                 "⚠️ reservation_reminder — ticket=%s • user=%s • clan=%s • expires=%s • result=error • reason=missing_channel"
                 % (ticket_code, username_label, clan_label, until_display),
             )
-            continue
 
         extend_example = (current_date + dt.timedelta(days=7)).isoformat()
-        control_hint = _control_thread_hint()
+        guild_id = getattr(getattr(thread, "guild", None), "id", None)
+        ticket_link = _ticket_link(guild_id, row.thread_id)
         message_lines = [
-            f"Reminder: The reserved spot in `{clan_label}` for {user_display} ends today.",
+            "📌 **Reservation ending today**",
+            f"Clan: `{clan_label}` • Recruit: {user_display}",
+            "If no action is taken, I’ll release the seat automatically later today.",
             "",
-            f"• To keep this seat, head to {control_hint} and run `!reserve extend {user_display} {clan_label} {extend_example}`.",
-            f"• To free it immediately, use {control_hint} and run `!reserve release {user_display} {clan_label}`.",
-            "",
-            "If you do nothing, I’ll release the seat automatically later today.",
+            "**Actions**",
+            f"• Extend: `!reserve extend {user_display} {clan_label} {extend_example}`",
+            f"• Release now: `!reserve release {user_display} {clan_label}`",
         ]
+        if ticket_link:
+            message_lines.append(f"Ticket: {ticket_link}")
         content = "\n".join(message_lines)
         if recruiter_ping:
             content = f"{recruiter_ping}\n{content}"
 
+        if recruiters_channel is None:
+            human_log.human(
+                "warning",
+                "⚠️ reservation_reminder — ticket=%s • user=%s • clan=%s • expires=%s • result=error • reason=missing_recruiters_channel"
+                % (ticket_code, username_label, clan_label, until_display),
+            )
+            continue
+
         try:
-            await thread.send(content=content)
+            await recruiters_channel.send(content=content)
         except Exception:
             log.warning(
                 "failed to send reservation reminder",
                 exc_info=True,
-                extra={"thread_id": row.thread_id, "clan_tag": clan_label},
+                extra={"channel_id": getattr(recruiters_channel, "id", None), "clan_tag": clan_label},
             )
             human_log.human(
                 "warning",
@@ -178,14 +196,14 @@ async def reservations_autorelease_daily(
     else:
         log.warning("reservation auto-release proceeding without bot context")
 
-    recruiters_thread = None
-    recruiters_thread_id = get_recruiters_thread_id()
-    if active_bot is not None and recruiters_thread_id:
-        recruiters_thread = await _resolve_channel(active_bot, recruiters_thread_id)
-        if recruiters_thread is None:
+    logging_channel = None
+    logging_channel_id = get_logging_channel_id()
+    if active_bot is not None and logging_channel_id:
+        logging_channel = await _resolve_channel(active_bot, logging_channel_id)
+        if logging_channel is None:
             log.warning(
-                "recruiters summary thread missing",
-                extra={"thread_id": recruiters_thread_id},
+                "logging channel missing for reservation auto-release",
+                extra={"channel_id": logging_channel_id},
             )
 
     clan_context: dict[str, discord.Guild | None] = {}
@@ -233,17 +251,20 @@ async def reservations_autorelease_daily(
                 extra={"thread_id": row.thread_id, "clan_tag": clan_label},
             )
 
+        ticket_link = _ticket_link(getattr(guild, "id", None), row.thread_id)
         summary_line = (
             f"⚠️ Reservation expired — clan=`{clan_label}` • user=`{user_display}` • until=`{until_display}` • action=auto-release"
         )
-        if recruiters_thread is not None:
+        if ticket_link:
+            summary_line = f"{summary_line} • ticket={ticket_link}"
+        if logging_channel is not None:
             try:
-                await recruiters_thread.send(content=summary_line)
+                await logging_channel.send(content=summary_line)
             except Exception:
                 log.warning(
                     "failed to post reservation expiry summary",
                     exc_info=True,
-                    extra={"thread_id": recruiters_thread_id},
+                    extra={"channel_id": logging_channel_id},
                 )
 
         human_log.human(
@@ -406,6 +427,13 @@ def _user_display(row: reservations.ReservationRow) -> str:
 
 def _format_date(value: dt.date | None) -> str:
     return value.isoformat() if value else "-"
+
+
+def _ticket_link(guild_id: int | None, thread_id: int | str | None) -> str | None:
+    thread_snowflake = _to_int(thread_id)
+    if guild_id is None or thread_snowflake is None:
+        return None
+    return f"https://discord.com/channels/{guild_id}/{thread_snowflake}"
 
 
 def _to_int(value: int | str | None) -> int | None:
