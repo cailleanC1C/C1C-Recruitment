@@ -1691,12 +1691,6 @@ class BaseWelcomeController:
         next_index, _ = self.resolve_step(thread_id, step, direction=1)
         return next_index is None
 
-    def session_status(self, thread_id: int) -> str | None:
-        session = store.get(thread_id)
-        if session is None:
-            return None
-        return getattr(session, "status", None)
-
     def render_step(self, thread_id: int, step: int) -> str:
         questions = self._questions.get(thread_id) or []
         status = self.session_status(thread_id)
