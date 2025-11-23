@@ -92,7 +92,7 @@ Primary source: **Reports sheet tab** defined by `REPORTS_TAB` (default `Statist
   - `Key` → label printed after the bullet.
   - `open spots`, `inactives`, `reserved spots` → integer values; treat missing/blank as 0.
 - **Render rule:** only output a bullet line if **at least one** of `open spots`, `inactives`, or `reserved spots` is **> 0** (to avoid clutter).
-- Output line format: `🔹{Key}: open {open} | inactives {inactives} | reserved {reserved}`.
+- Output line format: `🔹 **{Key}:** open {open} | inactives {inactives} | reserved {reserved}`.
 
 - We **always** render the **Top 10** and **Top 5** lines if present in the General Overview block.
 
@@ -105,15 +105,17 @@ Mirror our production style (like `!env`).
 - Use Discord header markdown: `# Update {YYYY-MM-DD}`.
 - Role mentions from `RECRUITER_ROLE_IDS` (comma/space separated list handled by existing role-mention util), one per line below the header.
 
-**Embed**
-- Title: `Summary Open Spots`
-- Section 1: **General Overview** (from sheet’s *General Overview* block)
-- Section 2: **Per Bracket** with sub-sections in this order:
-  - `Elite End Game`, `Early End Game`, `Late Game`, `Mid Game`, `Early Game`, `Beginners`
-- Each section lists rows in the blue-diamond format specified in §8.
+**Embeds**
+- Embed 1: `Summary Open Spots`
+  - Section 1: **General Overview** (from sheet’s *General Overview* block)
+  - Section 2: **Per Bracket** with sub-sections in this order:
+    - `Elite End Game`, `Early End Game`, `Late Game`, `Mid Game`, `Early Game`, `Beginners`
+  - Each bullet uses the bolded blue-diamond format specified in §8.
+- Embed 2: `Bracket Details`
+  - One sub-section per bracket (ordered as above), with clan-level bullet lines using the same bolded label format.
 
 **Footer**
-- Include: `last updated {sheet_timestamp_utc}` and a note that this is a daily UTC snapshot.
+- Include: `last updated {sheet_timestamp_utc}` and a note that this is a daily UTC snapshot on the **Summary** embed.
 
 **Branding**
 - Same embed header/footer chrome/colors as `!env`.
@@ -213,4 +215,4 @@ All success/failure lines go to `LOG_CHANNEL_ID` (and stdout). No extra debug sp
 ## 20) Future Work (Next Steps)
 None planned. TXT export/logging extras are out of scope.
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.7)

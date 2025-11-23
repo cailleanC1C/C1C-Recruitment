@@ -25,47 +25,45 @@ def _sample_rows():
     ]
 
 
-def test_build_embed_from_rows_filters_and_groups():
+def test_build_embeds_from_rows_filters_and_groups():
     rows = _sample_rows()
     headers = dru._headers_map(rows[0])
-    embed = dru._build_embed_from_rows(rows, headers)
+    summary_embed, details_embed = dru._build_embeds_from_rows(rows, headers)
 
-    assert isinstance(embed, Embed)
-    # Three logical blocks plus dividers and per-bracket detail sections
-    assert len(embed.fields) == 7
+    assert isinstance(summary_embed, Embed)
+    assert isinstance(details_embed, Embed)
 
-    general_field = embed.fields[0]
+    assert summary_embed.title == "Summary Open Spots"
+    assert details_embed.title == "Bracket Details"
+
+    assert len(summary_embed.fields) == 3
+
+    general_field = summary_embed.fields[0]
     assert general_field.name == "General Overview"
-    assert "Ops Summary" in general_field.value
+    assert "🔹 **Ops Summary:** open 3" in general_field.value
     assert "Ops Idle" not in general_field.value
 
-    divider_field = embed.fields[1]
+    divider_field = summary_embed.fields[1]
     assert divider_field.name.strip() == ""
     assert divider_field.value in {"﹘﹘﹘", "▫▪▫▪▫▪▫"}
 
-    per_bracket = embed.fields[2]
-    assert per_bracket.name == "**Per Bracket**"
-    assert "Elite End Game: open 2 | inactives 0 | reserved 1" in per_bracket.value
-    assert "Mid Game: open 0 | inactives 0 | reserved 0" in per_bracket.value
+    per_bracket = summary_embed.fields[2]
+    assert per_bracket.name == "Per Bracket"
+    assert "🔹 **Elite End Game:** open 2 | inactives 0 | reserved 1" in per_bracket.value
+    assert "🔹 **Mid Game:** open 0 | inactives 0 | reserved 0" in per_bracket.value
 
-    second_divider = embed.fields[3]
-    assert second_divider.name.strip() == ""
-    assert second_divider.value in {"﹘﹘﹘", "▫▪▫▪▫▪▫"}
+    assert len(details_embed.fields) == 2
 
-    detail_header = embed.fields[4]
-    assert detail_header.name == "**Bracket Details**"
-    assert detail_header.value.strip() == ""
-
-    elite_end_game = embed.fields[5]
+    elite_end_game = details_embed.fields[0]
     assert elite_end_game.name == "Elite End Game"
     assert elite_end_game.inline is False
-    assert "Clan Alpha" in elite_end_game.value
+    assert "🔹 **Clan Alpha:** open 5 | inactives 0 | reserved 1" in elite_end_game.value
     assert "Clan Beta" not in elite_end_game.value
 
-    mid_game = embed.fields[6]
+    mid_game = details_embed.fields[1]
     assert mid_game.name == "Mid Game"
     assert mid_game.inline is False
-    assert "Clan Delta" in mid_game.value
+    assert "🔹 **Clan Delta:** open 2 | inactives 2 | reserved 0" in mid_game.value
 
 
 def test_parse_utc_time_returns_aware_time():

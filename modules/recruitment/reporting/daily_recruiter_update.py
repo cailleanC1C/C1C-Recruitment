@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, time, timezone
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import discord
 from discord.ext import tasks
@@ -191,7 +191,7 @@ def _format_line(
     if not always and (open_value, inactive_value, reserved_value) == (0, 0, 0):
         return None
     return (
-        f"\U0001F539{label}: open {open_value} "
+        f"\U0001F539 **{label}:** open {open_value} "
         f"| inactives {inactive_value} | reserved {reserved_value}"
     )
 
@@ -208,6 +208,12 @@ def _add_block_divider(embed: discord.Embed) -> None:
 
     add_fullwidth_field(embed, name="\n", value="\u25AB\u25AA\u25AB\u25AA\u25AB\u25AA\u25AB")
 
+
+class ReportSections(NamedTuple):
+    general_lines: List[str]
+    per_bracket_lines: List[str]
+    detail_blocks: List[Tuple[str, List[str]]]
+
 async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     sheet_id = get_recruitment_sheet_id().strip()
     if not sheet_id:
@@ -219,20 +225,9 @@ async def _fetch_report_rows() -> Tuple[List[List[str]], HeadersMap]:
     return matrix, headers
 
 
-def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -> discord.Embed:
-    embed = discord.Embed(
-        title="Summary Open Spots",
-        colour=discord.Colour.dark_teal(),
-    )
-
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    embed.set_footer(
-        text=(
-            "last updated "
-            f"{timestamp} • daily snapshot, for most accurate numbers use `!clanmatch`"
-        )
-    )
-
+def _extract_report_sections(
+    rows: Sequence[Sequence[str]], headers: HeadersMap
+) -> ReportSections:
     general_index = _find_row_equals(rows, 0, "general overview")
     per_bracket_index = _find_row_equals(rows, 0, "per bracket")
     details_index = _find_row_equals(rows, 0, "bracket details")
@@ -260,14 +255,6 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             if line:
                 general_lines.append(line)
 
-    if general_lines:
-        add_fullwidth_field(
-            embed,
-            name="General Overview",
-            value="\n".join(general_lines),
-        )
-        _add_block_divider(embed)
-
     per_bracket_lines: List[str] = []
     if per_bracket_index != -1:
         stop_value = "bracket details" if details_index != -1 else "__stop__"
@@ -285,14 +272,6 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             line = _format_line(headers, row, always=True)
             if line:
                 per_bracket_lines.append(line)
-
-    if per_bracket_lines:
-        add_fullwidth_field(
-            embed,
-            name="**Per Bracket**",
-            value="\n".join(per_bracket_lines),
-        )
-        _add_block_divider(embed)
 
     details_start = -1
     if details_index != -1:
@@ -319,16 +298,44 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
         if formatted:
             detail_blocks.append((key, formatted))
 
-    if detail_blocks:
-        add_fullwidth_field(embed, name="**Bracket Details**", value="\n")
-        for key, formatted in detail_blocks:
-            add_fullwidth_field(
-                embed,
-                name=key.title(),
-                value="\n".join(formatted),
-            )
+    return ReportSections(
+        general_lines=general_lines,
+        per_bracket_lines=per_bracket_lines,
+        detail_blocks=detail_blocks,
+    )
 
-    # Safety: ensure all fields remain full width (belt + suspenders)
+
+def _build_summary_embed(sections: ReportSections) -> discord.Embed:
+    embed = discord.Embed(
+        title="Summary Open Spots",
+        colour=discord.Colour.dark_teal(),
+    )
+
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    embed.set_footer(
+        text=(
+            "last updated "
+            f"{timestamp} • daily snapshot, for most accurate numbers use `!clanmatch`"
+        )
+    )
+
+    if sections.general_lines:
+        add_fullwidth_field(
+            embed,
+            name="General Overview",
+            value="\n".join(sections.general_lines),
+        )
+
+    if sections.general_lines and sections.per_bracket_lines:
+        _add_block_divider(embed)
+
+    if sections.per_bracket_lines:
+        add_fullwidth_field(
+            embed,
+            name="Per Bracket",
+            value="\n".join(sections.per_bracket_lines),
+        )
+
     for field in getattr(embed, "fields", []):
         try:
             field.inline = False
@@ -336,6 +343,37 @@ def _build_embed_from_rows(rows: Sequence[Sequence[str]], headers: HeadersMap) -
             pass
 
     return embed
+
+
+def _build_details_embed(sections: ReportSections) -> discord.Embed:
+    embed = discord.Embed(
+        title="Bracket Details",
+        colour=discord.Colour.dark_teal(),
+    )
+
+    for key, formatted in sections.detail_blocks:
+        add_fullwidth_field(
+            embed,
+            name=key.title(),
+            value="\n".join(formatted),
+        )
+
+    for field in getattr(embed, "fields", []):
+        try:
+            field.inline = False
+        except Exception:
+            pass
+
+    return embed
+
+
+def _build_embeds_from_rows(
+    rows: Sequence[Sequence[str]], headers: HeadersMap
+) -> Tuple[discord.Embed, discord.Embed]:
+    sections = _extract_report_sections(rows, headers)
+    summary_embed = _build_summary_embed(sections)
+    details_embed = _build_details_embed(sections)
+    return summary_embed, details_embed
 
 
 def _report_content(date_text: str) -> str:
@@ -421,12 +459,12 @@ async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
         fetch_error = _format_error(exc)
         log.warning("failed to fetch recruiter report rows", exc_info=True)
 
-    embed = _build_embed_from_rows(rows, headers)
+    summary_embed, details_embed = _build_embeds_from_rows(rows, headers)
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     content = _report_content(today)
 
     try:
-        await channel.send(content=content, embed=embed)
+        await channel.send(content=content, embeds=[summary_embed, details_embed])
     except Exception as exc:
         log.warning("failed to send recruiter report", exc_info=True)
         return False, _format_error(exc)
