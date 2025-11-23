@@ -367,6 +367,57 @@ def _build_details_embed(sections: ReportSections) -> discord.Embed:
     return embed
 
 
+class OpenSpotsPager(discord.ui.View):
+    def __init__(self, sections: ReportSections, *, timeout: float | None = 600) -> None:
+        super().__init__(timeout=timeout)
+        self.sections = sections
+        self.current_page = "summary"
+
+        self.summary_button.disabled = True
+        self.details_button.disabled = False
+
+    def _set_page_state(self, page: str) -> None:
+        self.current_page = page
+        self.summary_button.disabled = page == "summary"
+        self.details_button.disabled = page == "details"
+
+    async def set_summary(self, interaction: discord.Interaction) -> None:
+        if self.current_page == "summary":
+            await interaction.response.defer()
+            return
+        self._set_page_state("summary")
+        embed = _build_summary_embed(self.sections)
+        await interaction.response.edit_message(embeds=[embed], view=self)
+
+    async def set_details(self, interaction: discord.Interaction) -> None:
+        if self.current_page == "details":
+            await interaction.response.defer()
+            return
+        self._set_page_state("details")
+        embed = _build_details_embed(self.sections)
+        await interaction.response.edit_message(embeds=[embed], view=self)
+
+    @discord.ui.button(
+        label="Summary",
+        style=discord.ButtonStyle.secondary,
+        custom_id="open_spots_summary",
+    )
+    async def summary_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await self.set_summary(interaction)
+
+    @discord.ui.button(
+        label="Bracket Details",
+        style=discord.ButtonStyle.secondary,
+        custom_id="open_spots_details",
+    )
+    async def details_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await self.set_details(interaction)
+
+
 def _build_embeds_from_rows(
     rows: Sequence[Sequence[str]], headers: HeadersMap
 ) -> Tuple[discord.Embed, discord.Embed]:
@@ -459,12 +510,14 @@ async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
         fetch_error = _format_error(exc)
         log.warning("failed to fetch recruiter report rows", exc_info=True)
 
-    summary_embed, details_embed = _build_embeds_from_rows(rows, headers)
+    sections = _extract_report_sections(rows, headers)
+    summary_embed = _build_summary_embed(sections)
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     content = _report_content(today)
+    pager_view = OpenSpotsPager(sections)
 
     try:
-        await channel.send(content=content, embeds=[summary_embed, details_embed])
+        await channel.send(content=content, embeds=[summary_embed], view=pager_view)
     except Exception as exc:
         log.warning("failed to send recruiter report", exc_info=True)
         return False, _format_error(exc)
@@ -524,6 +577,7 @@ __all__ = [
     "ensure_scheduler_started",
     "feature_enabled",
     "log_manual_result",
+    "OpenSpotsPager",
     "post_daily_recruiter_update",
     "scheduler_daily_recruiter_update",
 ]
