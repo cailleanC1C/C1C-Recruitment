@@ -368,8 +368,8 @@ def _build_details_embed(sections: ReportSections) -> discord.Embed:
 
 
 class OpenSpotsPager(discord.ui.View):
-    def __init__(self, sections: ReportSections, *, timeout: float | None = 600) -> None:
-        super().__init__(timeout=timeout)
+    def __init__(self, sections: ReportSections) -> None:
+        super().__init__(timeout=None)
         self.sections = sections
         self.current_page = "summary"
 

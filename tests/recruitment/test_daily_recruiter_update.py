@@ -72,7 +72,7 @@ def test_open_spots_pager_switches_pages():
     sections = dru._extract_report_sections(rows, headers)
 
     async def runner():
-        pager = dru.OpenSpotsPager(sections, timeout=None)
+        pager = dru.OpenSpotsPager(sections)
 
         interaction_details = MagicMock()
         interaction_details.response = AsyncMock()
