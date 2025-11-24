@@ -170,12 +170,6 @@ def _promo_tab() -> str:
     )
 
 
-def _resolve_onboarding_and_welcome_tab() -> tuple[str, str]:
-    """Return the onboarding sheet ID and configured welcome tab name."""
-
-    return _sheet_id(), _welcome_tab()
-
-
 def _clanlist_tab() -> str:
     return _config_lookup("clanlist_tab", "ClanList") or "ClanList"
 
@@ -184,10 +178,6 @@ def _worksheet(tab: str):
     return core.get_worksheet(_sheet_id(), tab)
 
 
-def _resolve_onboarding_and_promo_tab() -> tuple[str, str]:
-    """Return the onboarding sheet ID and promo tab name."""
-
-    return _sheet_id(), _promo_tab()
 def _resolve_onboarding_and_clanlist_tab() -> Tuple[str, str]:
     """Return the onboarding sheet id and configured clan list tab name."""
 
