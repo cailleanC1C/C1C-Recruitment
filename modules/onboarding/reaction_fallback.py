@@ -176,10 +176,6 @@ class OnboardingReactionFallbackCog(commands.Cog):
         if thread is None:
             return
 
-        if not (
-            thread_scopes.is_welcome_parent(thread)
-            or thread_scopes.is_promo_parent(thread)
-        ):
         in_welcome_scope = thread_scopes.is_welcome_parent(thread)
         in_promo_scope = thread_scopes.is_promo_parent(thread)
 
