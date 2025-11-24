@@ -197,6 +197,7 @@ explicitly configured in the sheet.
 
 ### Onboarding
 - `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, options, visibility_rules, nav_rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
+- Feature toggles `PROMO_ENABLED` and `promo_dialog` gate promo onboarding dialogs (`promo.r`, `promo.m`, `promo.l`). Both must be enabled for promo dialogs to run once detected.
 
 ### Onboarding sheet keys
 - 'ONBOARDING_TAB'

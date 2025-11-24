@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import Any, Literal, Mapping
+from typing import Any, Mapping
 
 import discord
 from discord.utils import utcnow
@@ -29,11 +29,26 @@ _DESCRIPTIONS = {
         "Got your request! A coordinator will review your move and follow up here.\n"
         "Please leave the thread unlocked until we reply.",
     ),
+    "promo.r": (
+        "🔥 C1C • Returning player request received",
+        "Got your request! A coordinator will review your return and follow up here.\n"
+        "Please leave the thread unlocked until we reply.",
+    ),
+    "promo.m": (
+        "🔥 C1C • Member move request received",
+        "Got your request! A coordinator will review your move and follow up here.\n"
+        "Please leave the thread unlocked until we reply.",
+    ),
+    "promo.l": (
+        "🔥 C1C • Leadership move request received",
+        "Got your request! A coordinator will review your move and follow up here.\n"
+        "Please leave the thread unlocked until we reply.",
+    ),
 }
 
 
 def build_summary_embed(
-    flow: Literal["welcome", "promo"],
+    flow: str,
     answers: dict[str, Any],
     author: discord.Member,
     schema_hash: str,
@@ -52,13 +67,13 @@ def build_summary_embed(
 
 
 def _build_onboarding_summary(
-    flow: Literal["welcome", "promo"],
+    flow: str,
     answers: Mapping[str, Any],
     author: discord.Member,
     schema_hash: str,
     visibility: Mapping[str, Mapping[str, str]] | None,
 ) -> discord.Embed:
-    title, description = _DESCRIPTIONS[flow]
+    title, description = _description_for_flow(flow)
     embed = discord.Embed(title=title, description=description, colour=_COLOUR, timestamp=utcnow())
     embed.set_footer(text=_FOOTER)
 
@@ -103,6 +118,14 @@ def _build_onboarding_summary(
         embed.add_field(name=qid, value=value, inline=False)
 
     return embed
+
+
+def _description_for_flow(flow: str) -> tuple[str, str, str]:
+    if flow == "welcome":
+        return _DESCRIPTIONS["welcome"]
+    if flow.startswith("promo"):
+        return _DESCRIPTIONS.get(flow, _DESCRIPTIONS["promo"])
+    return _DESCRIPTIONS.get(flow, _DESCRIPTIONS["welcome"])
 
 
 def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
