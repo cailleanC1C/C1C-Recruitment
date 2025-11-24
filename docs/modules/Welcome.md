@@ -40,6 +40,11 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 3. Every placement emits the 🧭 reservation log entry summarizing the action (`closed_same_clan`, `closed_other_clan`, `cancelled`) and before/after seat counts so ops can audit adjustments.
 4. Manual closes without the Ticket Tool message fall back to the same helpers; the watcher reconstructs the row and still prompts for a clan if it was missing.
 
+### 5. Inactivity handling (empty welcome/promo tickets)
+- The inactivity scanner runs every 15 minutes and only targets threads with **zero onboarding answers** (no session row yet or session with an empty `answers` set and `completed=False`).
+- **Welcome tickets:** 3 h after thread creation it pings the recruit to start the questions, at 24 h it warns that the ticket will close in 12 h, and at 36 h it renames to `Closed-W####-user-NONE`, posts the inactivity notice, and archives/locks the thread. This path is distinct from the existing 5 h/24 h/36 h ladder used for partially answered onboarding sessions.
+- **Promo tickets:** Follow the same 3 h/24 h/36 h ladder for empty move requests but use promo-specific wording and skip the recruiter removal notice.
+
 ## Integration Points
 - **Onboarding engine** — `modules/onboarding/welcome_flow` handles question loading, validation, skip logic, and persistence. Welcome passes thread/user context plus interaction handles and reacts to callbacks (validation errors, resume vs restart, completion payload).
 - **Recruitment & Placement** — Placement helpers (`modules/placement/reservations.py`, `reservation_jobs.py`) reuse welcome thread parsing (`parse_welcome_thread_name`) and rely on Welcome to keep thread names consistent. Recruiters also use `!reserve`, `!onb resume`, and other CommandMatrix-listed commands inside welcome threads.
@@ -62,4 +67,4 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 - [`docs/modules/Placement.md`](Placement.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.7)

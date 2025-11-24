@@ -14,6 +14,8 @@ FIELDS = [
     "step_index",
     "completed",
     "completed_at",
+    "empty_first_reminder_at",
+    "empty_warning_sent_at",
     "first_reminder_at",
     "warning_sent_at",
     "auto_closed_at",
@@ -66,6 +68,8 @@ def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
                 "step_index": int(row.get("step_index", 0) or 0),
                 "completed": completed,
                 "completed_at": completed_at,
+                "empty_first_reminder_at": row.get("empty_first_reminder_at") or "",
+                "empty_warning_sent_at": row.get("empty_warning_sent_at") or "",
                 "answers": answers,
             }
     return None
@@ -102,6 +106,8 @@ def save(payload: Dict[str, Any]) -> None:
         "step_index": int(payload.get("step_index", 0) or 0),
         "completed": bool(payload.get("completed", False)),
         "completed_at": payload.get("completed_at") or "",
+        "empty_first_reminder_at": payload.get("empty_first_reminder_at") or "",
+        "empty_warning_sent_at": payload.get("empty_warning_sent_at") or "",
         "first_reminder_at": payload.get("first_reminder_at") or "",
         "warning_sent_at": payload.get("warning_sent_at") or "",
         "auto_closed_at": payload.get("auto_closed_at") or "",

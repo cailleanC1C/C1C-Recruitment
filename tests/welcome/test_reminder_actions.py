@@ -9,12 +9,12 @@ def _dt(hours: float) -> datetime:
 
 
 def test_reminder_triggers_when_no_progress():
-    now = _dt(6)
+    now = _dt(3.5)
     created = _dt(0)
     action = watcher_welcome._determine_reminder_action(
         now, created, None, has_progress=False
     )
-    assert action == "reminder"
+    assert action == "reminder_empty"
 
 
 def test_reminder_skipped_when_progress_exists():
@@ -34,18 +34,18 @@ def test_warning_after_one_day():
     action = watcher_welcome._determine_reminder_action(
         now, created, None, has_progress=False
     )
-    assert action == "warning"
+    assert action == "warning_empty"
 
 
 def test_auto_close_after_threshold_even_if_warning_sent():
     now = _dt(37)
     created = _dt(0)
     session = Session(thread_id=1, applicant_id=2)
-    session.warning_sent_at = _dt(25)
+    session.empty_warning_sent_at = _dt(25)
     action = watcher_welcome._determine_reminder_action(
         now, created, session, has_progress=False
     )
-    assert action == "close"
+    assert action == "close_empty"
 
 
 def test_completed_sessions_skip_actions():
@@ -57,3 +57,16 @@ def test_completed_sessions_skip_actions():
         now, created, session, has_progress=False
     )
     assert action is None
+
+
+def test_warning_still_triggers_for_incomplete_progress():
+    now = _dt(25)
+    created = _dt(0)
+    session = Session(thread_id=1, applicant_id=2)
+    session.answers = {"w_ign": "C1C"}
+
+    action = watcher_welcome._determine_reminder_action(
+        now, created, session, has_progress=True
+    )
+
+    assert action == "warning"
