@@ -26,6 +26,8 @@ class Session:
     last_updated: datetime = field(init=False)
     completed: bool = False
     completed_at: datetime | None = None
+    empty_first_reminder_at: datetime | None = None
+    empty_warning_sent_at: datetime | None = None
     first_reminder_at: datetime | None = None
     warning_sent_at: datetime | None = None
     auto_closed_at: datetime | None = None
@@ -65,6 +67,12 @@ class Session:
             "answers": dict(self.answers),
             "completed": self.completed,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "empty_first_reminder_at": self.empty_first_reminder_at.isoformat()
+            if self.empty_first_reminder_at
+            else None,
+            "empty_warning_sent_at": self.empty_warning_sent_at.isoformat()
+            if self.empty_warning_sent_at
+            else None,
             "first_reminder_at": self.first_reminder_at.isoformat()
             if self.first_reminder_at
             else None,
@@ -83,6 +91,12 @@ class Session:
             "answers": self.answers,
             "completed": bool(self.completed),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "empty_first_reminder_at": self.empty_first_reminder_at.isoformat()
+            if self.empty_first_reminder_at
+            else None,
+            "empty_warning_sent_at": self.empty_warning_sent_at.isoformat()
+            if self.empty_warning_sent_at
+            else None,
             "first_reminder_at": self.first_reminder_at.isoformat()
             if self.first_reminder_at
             else None,
@@ -114,6 +128,12 @@ class Session:
                 session.completed_at = datetime.fromisoformat(normalized)
             except Exception:
                 session.completed_at = None
+        empty_first = row.get("empty_first_reminder_at")
+        if empty_first:
+            session.empty_first_reminder_at = _parse_iso(empty_first)
+        empty_warning = row.get("empty_warning_sent_at")
+        if empty_warning:
+            session.empty_warning_sent_at = _parse_iso(empty_warning)
         reminder_token = row.get("first_reminder_at")
         if reminder_token:
             session.first_reminder_at = _parse_iso(reminder_token)

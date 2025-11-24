@@ -28,6 +28,7 @@ from modules.onboarding.sessions import Session
 from shared.config import (
     get_admin_role_ids,
     get_guardian_knight_role_ids,
+    get_promo_channel_id,
     get_recruitment_coordinator_role_ids,
     get_welcome_channel_id,
     get_ticket_tool_bot_id,
@@ -44,7 +45,9 @@ log = logging.getLogger("c1c.onboarding.welcome_watcher")
 
 _REMINDER_JOB_NAME = "welcome_incomplete_scan"
 _REMINDER_INTERVAL_SECONDS = 900
+_EMPTY_FIRST_REMINDER_AFTER = timedelta(hours=3)
 _FIRST_REMINDER_AFTER = timedelta(hours=5)
+_EMPTY_WARNING_AFTER = timedelta(hours=24)
 _WARNING_AFTER = timedelta(hours=24)
 _AUTO_CLOSE_AFTER = timedelta(hours=36)
 
@@ -200,6 +203,14 @@ def _normalize_dt(value: datetime | None) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _session_has_any_answers(session: Session | None) -> bool:
+    if session is None:
+        return False
+    if getattr(session, "answers", {}):
+        return True
+    return getattr(session, "step_index", 0) > 0
+
+
 def _determine_reminder_action(
     now: datetime,
     created_at: datetime,
@@ -213,6 +224,20 @@ def _determine_reminder_action(
         return None
 
     age = now - created_at
+
+    if not has_progress:
+        if age >= _AUTO_CLOSE_AFTER:
+            if session is None or session.auto_closed_at is None:
+                return "close_empty"
+            return None
+        if age >= _EMPTY_WARNING_AFTER:
+            if session is None or session.empty_warning_sent_at is None:
+                return "warning_empty"
+            return None
+        if age >= _EMPTY_FIRST_REMINDER_AFTER:
+            if session is None or session.empty_first_reminder_at is None:
+                return "reminder_empty"
+        return None
 
     if age >= _AUTO_CLOSE_AFTER:
         if session is None or session.auto_closed_at is None:
@@ -252,32 +277,38 @@ def _ensure_reminder_job(bot: commands.Bot) -> None:
 
 
 async def _scan_incomplete_threads(bot: commands.Bot) -> None:
-    if not feature_flags.is_enabled("welcome_dialog"):
-        return
-    if not feature_flags.is_enabled("recruitment_welcome"):
-        return
-
-    channel_id = get_welcome_channel_id()
-    try:
-        channel_int = int(channel_id) if channel_id is not None else None
-    except (TypeError, ValueError):
-        channel_int = None
-
-    if channel_int is None:
-        return
-
     await bot.wait_until_ready()
 
-    threads = await _collect_welcome_threads(bot, channel_int)
-    if not threads:
-        return
-
     now = datetime.now(timezone.utc)
-    for thread in threads:
-        await _process_incomplete_thread(thread, now)
+
+    if feature_flags.is_enabled("welcome_dialog") and feature_flags.is_enabled("recruitment_welcome"):
+        channel_id = get_welcome_channel_id()
+        try:
+            channel_int = int(channel_id) if channel_id is not None else None
+        except (TypeError, ValueError):
+            channel_int = None
+
+        if channel_int is not None:
+            threads = await _collect_threads(bot, channel_int, scope_check=thread_scopes.is_welcome_parent)
+            for thread in threads:
+                await _process_incomplete_thread(thread, now)
+
+    if feature_flags.is_enabled("promo_enabled") and feature_flags.is_enabled("enable_promo_hook"):
+        promo_channel = get_promo_channel_id()
+        try:
+            promo_channel_int = int(promo_channel) if promo_channel is not None else None
+        except (TypeError, ValueError):
+            promo_channel_int = None
+
+        if promo_channel_int is not None:
+            threads = await _collect_threads(bot, promo_channel_int, scope_check=thread_scopes.is_promo_parent)
+            for thread in threads:
+                await _process_promo_empty_thread(thread, now)
 
 
-async def _collect_welcome_threads(bot: commands.Bot, channel_id: int) -> list[discord.Thread]:
+async def _collect_threads(
+    bot: commands.Bot, channel_id: int, *, scope_check
+) -> list[discord.Thread]:
     threads: dict[int, discord.Thread] = {}
 
     channel = bot.get_channel(channel_id)
@@ -306,7 +337,7 @@ async def _collect_welcome_threads(bot: commands.Bot, channel_id: int) -> list[d
                 if getattr(thread, "parent_id", None) == channel_id:
                     threads.setdefault(thread.id, thread)
 
-    return [thread for thread in threads.values() if thread_scopes.is_welcome_parent(thread)]
+    return [thread for thread in threads.values() if scope_check(thread)]
 
 
 async def _resolve_target_user(thread: discord.Thread, parts: ThreadNameParts) -> tuple[int | None, str]:
@@ -339,9 +370,15 @@ def _persist_reminder_state(session: Session | None, *, action: str, timestamp: 
 
     if action == "reminder":
         session.first_reminder_at = timestamp
+    elif action == "reminder_empty":
+        session.empty_first_reminder_at = timestamp
     elif action == "warning":
         session.warning_sent_at = timestamp
+    elif action == "warning_empty":
+        session.empty_warning_sent_at = timestamp
     elif action == "close":
+        session.auto_closed_at = timestamp
+    elif action == "close_empty":
         session.auto_closed_at = timestamp
 
     try:
@@ -366,10 +403,8 @@ async def _process_incomplete_thread(thread: discord.Thread, now: datetime) -> N
     applicant_id, username = await _resolve_target_user(thread, parsed)
 
     session = _load_session(applicant_id, int(getattr(thread, "id", 0)))
-    has_progress = bool(getattr(session, "answers", {}))
-    action = _determine_reminder_action(
-        now, created_at, session, has_progress=has_progress
-    )
+    has_progress = _session_has_any_answers(session)
+    action = _determine_reminder_action(now, created_at, session, has_progress=has_progress)
     if action is None:
         return
 
@@ -384,6 +419,88 @@ async def _process_incomplete_thread(thread: discord.Thread, now: datetime) -> N
     session = session or Session(
         thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id)
     )
+
+    if action == "reminder_empty":
+        content = (
+            f"Hey {mention}, your welcome ticket is open but we haven't seen any answers yet. "
+            "Please click **Open questions** on the panel above and fill them out, or type a message here so we know how to help you find the right clan."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "welcome empty reminder send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome empty reminder posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "warning_empty":
+        content = (
+            f"Quick heads-up, {mention}: your welcome ticket is still empty. "
+            "If you don't start the questions or reply in this thread in the next 12 hours, this ticket will be closed for inactivity. "
+            "You can always open a new ticket later if you still need help."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "welcome empty warning send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome empty warning posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "close_empty":
+        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
+        try:
+            await thread.edit(name=new_name)
+        except Exception:
+            log.warning(
+                "welcome empty auto-close rename failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+            )
+        close_notice = (
+            "Ticket closed due to inactivity.\n"
+            "The onboarding questions were never started. Recruiters please proceed to remove the user from the server.\n"
+            "If you still need a clan later, you're welcome to open a new ticket."
+        )
+        try:
+            await thread.send(close_notice)
+        except Exception:
+            log.warning(
+                "welcome empty auto-close notice failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning(
+                "welcome empty auto-close archive failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "welcome empty auto-close completed",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
 
     if action == "reminder":
         content = (
@@ -459,6 +576,114 @@ async def _process_incomplete_thread(thread: discord.Thread, now: datetime) -> N
         _persist_reminder_state(session, action=action, timestamp=now)
         log.info(
             "welcome auto-close completed",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+
+
+async def _process_promo_empty_thread(thread: discord.Thread, now: datetime) -> None:
+    parsed = parse_promo_thread_name(getattr(thread, "name", None))
+    if parsed is None:
+        return
+
+    created_at = _normalize_dt(getattr(thread, "created_at", None))
+    applicant_id, username = await _resolve_target_user(thread, parsed)
+    session = _load_session(applicant_id, int(getattr(thread, "id", 0)))
+    has_progress = _session_has_any_answers(session)
+    action = _determine_reminder_action(now, created_at, session, has_progress=has_progress)
+
+    if action not in {"reminder_empty", "warning_empty", "close_empty"}:
+        return
+
+    if applicant_id is None:
+        log.debug(
+            "promo inactivity reminder skipped (no target)",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    mention = f"<@{applicant_id}>"
+    session = session or Session(
+        thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id)
+    )
+
+    if action == "reminder_empty":
+        content = (
+            f"Hey {mention}, your move request ticket is open but we haven't seen any details yet. "
+            "Please click **Open questions** on the panel above or type a message here so we can help with your clan move."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "promo empty reminder send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "promo empty reminder posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "warning_empty":
+        content = (
+            f"Quick heads-up, {mention}: your promo ticket is still empty. "
+            "If you don't start the questions or reply here in the next 12 hours, this ticket will be closed for inactivity. "
+            "You can always open a new ticket later if you still want to move clans."
+        )
+        try:
+            await thread.send(content)
+        except Exception:
+            log.warning(
+                "promo empty warning send failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+            return
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "promo empty warning posted",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
+    if action == "close_empty":
+        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
+        try:
+            await thread.edit(name=new_name)
+        except Exception:
+            log.warning(
+                "promo empty auto-close rename failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+            )
+        close_notice = (
+            "Promo ticket closed due to inactivity.\n"
+            "No move details were provided.\n"
+            "If you still want to request a move later, feel free to open a new promo ticket anytime."
+        )
+        try:
+            await thread.send(close_notice)
+        except Exception:
+            log.warning(
+                "promo empty auto-close notice failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning(
+                "promo empty auto-close archive failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        _persist_reminder_state(session, action=action, timestamp=now)
+        log.info(
+            "promo empty auto-close completed",
             extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
         )
 
