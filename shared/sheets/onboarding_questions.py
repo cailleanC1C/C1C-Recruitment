@@ -7,7 +7,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterable, Literal, Mapping, Sequence, Tuple
+from typing import Iterable, Mapping, Sequence, Tuple
 
 from shared.config import (
     cfg,
@@ -51,7 +51,7 @@ class Option:
 class Question:
     """Normalized representation of an onboarding question row."""
 
-    flow: Literal["welcome", "promo"]
+    flow: str
     order: str
     qid: str
     label: str
@@ -309,12 +309,11 @@ def _order_sort_key(order: str) -> tuple[int, str]:
     return prefix_num, suffix
 
 
-def _build_questions(
-    flow: Literal["welcome", "promo"], rows: Sequence[Mapping[str, str]]
-) -> list[Question]:
+def _build_questions(flow: str, rows: Sequence[Mapping[str, str]]) -> list[Question]:
     questions: list[Question] = []
     for row in rows:
         row_flow = row.get("flow")
+        # Flow names are opaque strings (e.g., "welcome", "promo.r"); compare exactly.
         if _normalise_whitespace(row_flow) != flow:
             continue
         qid = row.get("qid") or ""
@@ -359,7 +358,7 @@ def _build_questions(
     return questions
 
 
-def get_questions(flow: Literal["welcome", "promo"]) -> list[Question]:
+def get_questions(flow: str) -> list[Question]:
     """Return the parsed onboarding questions for ``flow``."""
 
     questions = _questions_tuple(flow)
@@ -389,20 +388,20 @@ def _hash_payload(questions: Iterable[Question]) -> str:
     return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
-def _questions_tuple(flow: Literal["welcome", "promo"]) -> Tuple[Question, ...]:
+def _questions_tuple(flow: str) -> Tuple[Question, ...]:
     global _cached_rows_snapshot, _cached_questions_by_flow
 
     rows = _cached_rows()
     if rows is not _cached_rows_snapshot:
         _cached_rows_snapshot = rows
-        _cached_questions_by_flow = {
-            "welcome": tuple(_build_questions("welcome", rows)),
-            "promo": tuple(_build_questions("promo", rows)),
-        }
+        _cached_questions_by_flow = {}
+
+    if flow not in _cached_questions_by_flow:
+        _cached_questions_by_flow[flow] = tuple(_build_questions(flow, rows))
     return _cached_questions_by_flow.get(flow, ())
 
 
-def schema_hash(flow: Literal["welcome", "promo"]) -> str:
+def schema_hash(flow: str) -> str:
     """Return the stable schema hash for the onboarding question flow."""
 
     questions = _questions_tuple(flow)

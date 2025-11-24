@@ -10,8 +10,8 @@ from modules.onboarding.controllers.welcome_controller import BaseWelcomeControl
 class PromoController(BaseWelcomeController):
     """Render the promo onboarding dialog."""
 
-    def __init__(self, bot: commands.Bot) -> None:
-        super().__init__(bot, flow="promo")
+    def __init__(self, bot: commands.Bot, *, flow: str = "promo") -> None:
+        super().__init__(bot, flow=flow)
 
     def _modal_title_prefix(self) -> str:
         return "Promo questions"

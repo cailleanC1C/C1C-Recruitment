@@ -1,6 +1,7 @@
 """Shared entrypoint for onboarding welcome flows."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 import discord
@@ -18,9 +19,44 @@ from modules.onboarding.controllers.welcome_controller import (
     locate_welcome_message,
 )
 from modules.onboarding.ui import panels
+from modules.onboarding.watcher_welcome import parse_promo_thread_name
 from shared.sheets import onboarding_questions
 
-__all__ = ["start_welcome_dialog"]
+__all__ = ["resolve_onboarding_flow", "start_welcome_dialog"]
+
+_PROMO_FLOW_MAP = {"R": "promo.r", "M": "promo.m", "L": "promo.l"}
+
+
+@dataclass(frozen=True, slots=True)
+class FlowResolution:
+    flow: str | None
+    ticket_code: str | None = None
+    error: str | None = None
+
+
+def resolve_onboarding_flow(thread: discord.Thread) -> FlowResolution:
+    """Return the onboarding flow for ``thread`` or an error description."""
+
+    if thread_scopes.is_welcome_parent(thread):
+        return FlowResolution("welcome")
+
+    if thread_scopes.is_promo_parent(thread):
+        parts = parse_promo_thread_name(getattr(thread, "name", None))
+        if not parts:
+            return FlowResolution(None, error="promo_ticket_parse_failed")
+
+        prefix = (parts.ticket_code or "")[:1].upper()
+        flow = _PROMO_FLOW_MAP.get(prefix)
+        if not flow:
+            return FlowResolution(None, ticket_code=parts.ticket_code, error="promo_ticket_unknown_prefix")
+
+        return FlowResolution(flow, ticket_code=parts.ticket_code)
+
+    return FlowResolution(None, error="scope_or_role")
+
+
+def _is_promo_flow(flow: str) -> bool:
+    return flow.startswith("promo")
 
 
 async def start_welcome_dialog(
@@ -34,13 +70,8 @@ async def start_welcome_dialog(
 ) -> None:
     """Launch the shared welcome dialog flow when all gates pass."""
 
-    flow = (
-        "welcome"
-        if thread_scopes.is_welcome_parent(thread)
-        else "promo"
-        if thread_scopes.is_promo_parent(thread)
-        else "unknown"
-    )
+    resolution = resolve_onboarding_flow(thread)
+    flow = resolution.flow or "unknown"
     actor = initiator if isinstance(initiator, (discord.Member, discord.User)) else None
 
     def _context(
@@ -62,6 +93,33 @@ async def start_welcome_dialog(
             payload.update(extra)
         return payload
 
+    async def _safe_notify(message: str) -> None:
+        try:
+            await thread.send(message)
+        except Exception:
+            return
+
+    context_defaults: dict[str, Any] = {}
+    if resolution.ticket_code:
+        context_defaults["ticket_code"] = resolution.ticket_code
+
+    if resolution.flow is None:
+        await logs.send_welcome_log(
+            "warn",
+            **_context(
+                {
+                    "result": "scope_gate",
+                    "reason": resolution.error or "scope_or_role",
+                    **context_defaults,
+                }
+            ),
+        )
+        if resolution.error and resolution.error.startswith("promo_ticket"):
+            await _safe_notify(
+                "⚠️ I couldn't start the promo dialog for this ticket. Please check the promo ticket number and try again."
+            )
+        return
+
     target_user_id: int | None = None
     target_message_id: int | None = None
     try:
@@ -75,7 +133,6 @@ async def start_welcome_dialog(
     else:
         target_user_id, target_message_id = extract_target_from_message(welcome_message)
 
-    context_defaults: dict[str, Any] = {}
     if target_user_id is not None:
         context_defaults["target_user_id"] = target_user_id
     if target_message_id is not None:
@@ -107,16 +164,25 @@ async def start_welcome_dialog(
         )
         return
 
+    if _is_promo_flow(flow) and not feature_flags.is_enabled("promo_enabled"):
+        await logs.send_welcome_log(
+            "info",
+            **_context({"result": "feature_disabled", "reason": "promo_enabled", **context_defaults}),
+        )
+        await _safe_notify("⚠️ Promo dialogs are currently disabled.")
+        return
+
+    if _is_promo_flow(flow) and not feature_flags.is_enabled("promo_dialog"):
+        await logs.send_welcome_log(
+            "info",
+            **_context({"result": "feature_disabled", "reason": "promo_dialog", **context_defaults}),
+        )
+        await _safe_notify("⚠️ Promo dialogs are currently disabled.")
+        return
+
     if not feature_flags.is_enabled("welcome_dialog"):
         await logs.send_welcome_log(
             "info", **_context({"result": "feature_disabled", **context_defaults})
-        )
-        return
-
-    if flow == "unknown":
-        await logs.send_welcome_log(
-            "warn",
-            **_context({"result": "scope_gate", "reason": "scope_or_role", **context_defaults}),
         )
         return
 
@@ -196,7 +262,7 @@ async def start_welcome_dialog(
     if flow == "welcome":
         controller = WelcomeController(controller_bot)
     else:
-        controller = PromoController(controller_bot)
+        controller = PromoController(controller_bot, flow=flow)
     if anchor_message_id is not None:
         try:
             controller._panel_messages[int(thread.id)] = int(anchor_message_id)

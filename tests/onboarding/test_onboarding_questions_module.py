@@ -103,3 +103,35 @@ def test_parse_options_supports_compact_digits() -> None:
         ("4", "4"),
         ("5", "5"),
     ]
+
+
+def test_build_questions_supports_promo_subflows() -> None:
+    rows = (
+        {"flow": "promo.r", "order": "1", "qid": "r1", "label": "R", "type": "short"},
+        {"flow": "promo.m", "order": "2", "qid": "m1", "label": "M", "type": "short"},
+        {"flow": "welcome", "order": "3", "qid": "w1", "label": "W", "type": "short"},
+    )
+
+    promo_r = onboarding_questions._build_questions("promo.r", rows)
+    promo_m = onboarding_questions._build_questions("promo.m", rows)
+    welcome = onboarding_questions._build_questions("welcome", rows)
+
+    assert [question.qid for question in promo_r] == ["r1"]
+    assert [question.qid for question in promo_m] == ["m1"]
+    assert [question.qid for question in welcome] == ["w1"]
+
+
+def test_schema_hash_varies_by_flow() -> None:
+    rows = (
+        {"flow": "promo.r", "order": "1", "qid": "r1", "label": "R", "type": "short"},
+        {"flow": "promo.m", "order": "1", "qid": "m1", "label": "M", "type": "short"},
+    )
+
+    promo_r_hash = onboarding_questions._hash_payload(
+        onboarding_questions._build_questions("promo.r", rows)
+    )
+    promo_m_hash = onboarding_questions._hash_payload(
+        onboarding_questions._build_questions("promo.m", rows)
+    )
+
+    assert promo_r_hash != promo_m_hash
