@@ -238,6 +238,23 @@ def test_wrong_parent_rejected(monkeypatch, caplog):
     assert details["result"] == "wrong_scope"
 
 
+def test_promo_parent_allows_dialog(monkeypatch, caplog):
+    start_mock, caplog, join_mock = asyncio.run(
+        _run_event(
+            monkeypatch,
+            caplog,
+            message_content="Close the ticket By Reacting With 🎫 please!",
+            welcome_parent=False,
+            promo_parent=True,
+        )
+    )
+
+    start_mock.assert_awaited_once()
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "emoji_received"
+
+
 def test_role_gate_rejected(monkeypatch, caplog):
     start_mock, caplog, join_mock = asyncio.run(
         _run_event(
