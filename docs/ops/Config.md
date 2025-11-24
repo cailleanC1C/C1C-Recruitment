@@ -81,7 +81,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `WELCOME_GENERAL_CHANNEL_ID` | snowflake | — | Public welcome channel ID (optional). |
 | `WELCOME_CHANNEL_ID` | snowflake | — | Private welcome ticket channel ID. |
 | `TICKET_TOOL_BOT_ID` | snowflake | — | Discord user ID of the Ticket Tool bot. Required when Ticket Tool-driven ticket workflows (welcome/onboarding/reservations) are enabled so threads can be associated with the correct bot. |
-| `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID. |
+| `PROMO_CHANNEL_ID` | snowflake | — | Promo ticket channel ID used for R/M/L promo tickets. |
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
 | `LOGGING_CHANNEL_ID` | snowflake | — | Logging/audit channel receiving structured reservation auto-release entries. |
@@ -204,6 +204,18 @@ explicitly configured in the sheet.
 - 'PROMO_TICKETS_TAB'
 - 'CLANLIST_TAB'
 
+**Promo tab columns (PROMO_TICKETS_TAB)**
+
+```
+ticket number | username | clantag | date closed | type | thread created | year | month | join_month | clan name | progression
+```
+
+Promo tickets use the R/M/L prefixes to map to `type` values:
+
+- `R####` → `returning player`
+- `M####` → `player move request`
+- `L####` → `clan lead move request`
+
 Leave values blank only if a module is disabled via toggles.
 
 #### Feature Toggles
@@ -219,6 +231,12 @@ Feature Toggles:
   placement_reservations = ON
   clan_profile = ON
 ```
+
+### Feature toggle highlights
+
+- `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK` — control welcome watcher activation.
+- `PROMO_ENABLED`, `ENABLE_PROMO_HOOK` — control promo watcher activation (no dialogs yet).
+- `welcome_dialog`, `promo_dialog` — dialog/panel toggles; promo dialog is reserved for future onboarding steps.
 
 ### Milestones sheet keys
 - `SHARD_MERCY_TAB` — worksheet name that stores the Shard & Mercy tracker rows
@@ -250,10 +268,11 @@ Feature Toggles:
   welcome_dialog,TRUE
   placement_target_select,TRUE
   placement_reservations,TRUE
-  SERVER_MAP,TRUE
-  WELCOME_ENABLED,TRUE
-  ENABLE_WELCOME_HOOK,TRUE
-  ENABLE_PROMO_WATCHER,TRUE
+    SERVER_MAP,TRUE
+    WELCOME_ENABLED,TRUE
+    ENABLE_WELCOME_HOOK,TRUE
+    PROMO_ENABLED,TRUE
+    ENABLE_PROMO_HOOK,TRUE
   ```
 
 **Behavior**
@@ -280,4 +299,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-23 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.7)

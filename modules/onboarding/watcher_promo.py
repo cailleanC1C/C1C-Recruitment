@@ -1,38 +1,90 @@
-"""Async promo-thread watcher that logs closures to Sheets."""
-
+"""Promo ticket watcher that logs lifecycle events to Sheets."""
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
 import logging
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import discord
 from discord.ext import commands
 
 from modules.common import feature_flags
-from modules.common import runtime as rt
 from modules.onboarding import thread_scopes
-from modules.onboarding.welcome_flow import start_welcome_dialog
-from shared.config import get_promo_channel_id
-from shared.sheets.async_core import acall_with_backoff, aget_worksheet
-from shared.sheets.onboarding import _resolve_onboarding_and_promo_tab
+from modules.onboarding.watcher_welcome import parse_promo_thread_name
+from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
+from shared.sheets import onboarding as onboarding_sheets
+from shared.sheets.onboarding import PROMO_HEADERS
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.onboarding.promo_watcher")
+_CLOSED_MESSAGE_TOKEN = "ticket closed"
+
+
+@dataclass(slots=True)
+class PromoTicketContext:
+    thread_id: int
+    ticket_number: str
+    username: str
+    promo_type: str
+    thread_created: str
+    year: str
+    month: str
+    join_month: str = ""
+    clan_tag: str = ""
+    clan_name: str = ""
+    progression: str = ""
+    state: str = "open"
+    prompt_message_id: Optional[int] = None
+    close_detected: bool = False
+
+
+class PromoClanSelect(discord.ui.Select):
+    def __init__(self, parent_view: "PromoClanSelectView", tags: List[str]) -> None:
+        options = [discord.SelectOption(label=tag, value=tag) for tag in tags[:25]]
+        placeholder = "Select a clan tag"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
+        self._parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction) -> None:  # pragma: no cover - UI callback
+        if not self.values:
+            await interaction.response.defer()
+            return
+        await self._parent_view.handle_selection(interaction, self.values[0])
+
+
+class PromoClanSelectView(discord.ui.View):
+    def __init__(self, watcher: "PromoTicketWatcher", context: PromoTicketContext, tags: List[str]):
+        super().__init__(timeout=300)
+        self.watcher = watcher
+        self.context = context
+        self.message: Optional[discord.Message] = None
+        self.select = PromoClanSelect(self, tags)
+        self.add_item(self.select)
+
+    async def handle_selection(self, interaction: discord.Interaction, tag: str) -> None:
+        await interaction.response.defer()
+        await self.watcher.finalize_from_interaction(self.context, tag, interaction, self)
+
+    async def on_timeout(self) -> None:  # pragma: no cover - timeout path
+        if self.message is None:
+            return
+        for child in self.children:
+            child.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            log.debug("promo tag picker timeout edit failed", exc_info=True)
 
 
 def _transitioned_to_closed(before: discord.Thread, after: discord.Thread) -> bool:
-    """Return ``True`` when the thread transitions into an archived/locked state."""
-
     before_archived = bool(getattr(before, "archived", False))
     after_archived = bool(getattr(after, "archived", False))
     before_locked = bool(getattr(before, "locked", False))
     after_locked = bool(getattr(after, "locked", False))
 
-    reopened = (before_archived and not after_archived) or (
-        before_locked and not after_locked
-    )
+    reopened = (before_archived and not after_archived) or (before_locked and not after_locked)
     if reopened:
         return False
     just_archived = (not before_archived) and after_archived
@@ -40,153 +92,397 @@ def _transitioned_to_closed(before: discord.Thread, after: discord.Thread) -> bo
     return just_archived or just_locked
 
 
-def _thread_owner_name(thread: discord.Thread) -> str:
-    owner = thread.owner
-    if owner is None and thread.guild is not None and thread.owner_id:
-        owner = thread.guild.get_member(thread.owner_id)
-    if owner is None:
-        owner_id = getattr(thread, "owner_id", None)
-        return str(owner_id or "unknown")
-    display = getattr(owner, "display_name", None) or getattr(owner, "name", None)
-    if display:
-        return str(display)
-    return str(getattr(owner, "id", "unknown"))
+def _format_timestamp(value: dt.datetime) -> str:
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
-async def _send_runtime(message: str) -> None:
-    try:
-        await rt.send_log_message(message)
-    except Exception:
-        log.warning("failed to send promo watcher log message", exc_info=True)
-
-
-def _announce(bot: commands.Bot, message: str) -> None:
-    log.info("promo watcher notice: %s", message)
-
-    async def runner() -> None:
-        await _send_runtime(message)
-
-    asyncio.create_task(runner())
-
-
-class _ThreadClosureWatcher(commands.Cog):
-    log_prefix: str
-
-    def __init__(self, bot: commands.Bot, *, channel_id: int) -> None:
+class PromoTicketWatcher(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.channel_id = channel_id
-        self._sheet_tab: tuple[str, str] | None = None
-        self._worksheet: Optional[Any] = None
+        channel_id = get_promo_channel_id()
+        try:
+            self.channel_id = int(channel_id) if channel_id is not None else None
+        except (TypeError, ValueError):
+            self.channel_id = None
+        self.ticket_tool_id = get_ticket_tool_bot_id()
+        self._tickets: Dict[int, PromoTicketContext] = {}
+        self._clan_tags: List[str] = []
 
-    def _resolve_sheet_tab(self) -> tuple[str, str]:
-        raise NotImplementedError
+        if self.channel_id is None:
+            log.warning("promo ticket watcher disabled — invalid PROMO_CHANNEL_ID")
 
-    async def _ensure_sheet_tab(self) -> tuple[str, str] | None:
-        if self._sheet_tab is None:
-            try:
-                self._sheet_tab = self._resolve_sheet_tab()
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                await _send_runtime(
-                    f"[{self.log_prefix}] degraded: cannot resolve tab (will retry on next event): {exc}"
-                )
-                return None
-        return self._sheet_tab
+    @staticmethod
+    def _features_enabled() -> bool:
+        return feature_flags.is_enabled("promo_enabled") and feature_flags.is_enabled("enable_promo_hook")
 
-    async def _worksheet_handle(self):
-        sheet_tab = await self._ensure_sheet_tab()
-        if sheet_tab is None:
+    def _is_ticket_thread(self, thread: discord.Thread | None) -> bool:
+        if thread is None:
+            return False
+        return thread_scopes.is_promo_parent(thread)
+
+    def _is_ticket_tool(self, user: discord.abc.User | None) -> bool:
+        if user is None:
+            return False
+        if self.ticket_tool_id is not None:
+            return getattr(user, "id", None) == self.ticket_tool_id
+        return False
+
+    async def _load_clan_tags(self) -> List[str]:
+        if self._clan_tags:
+            return self._clan_tags
+        try:
+            tags = await asyncio.to_thread(onboarding_sheets.load_clan_tags)
+        except Exception:
+            log.exception("failed to load clan tags for promo watcher")
+            return []
+        normalized = []
+        seen = set()
+        for tag in tags:
+            cleaned = str(tag or "").strip().upper()
+            if cleaned and cleaned not in seen:
+                normalized.append(cleaned)
+                seen.add(cleaned)
+        self._clan_tags = normalized
+        return self._clan_tags
+
+    async def _ensure_context(self, thread: discord.Thread) -> Optional[PromoTicketContext]:
+        context = self._tickets.get(thread.id)
+        if context is not None:
+            return context
+
+        parts = parse_promo_thread_name(thread.name)
+        if parts is None:
+            log.warning(
+                "promo_watcher: unable to parse ticket name", extra={"thread_id": getattr(thread, "id", None)}
+            )
             return None
-        sheet_id, tab_name = sheet_tab
-        if self._worksheet is None:
-            self._worksheet = await aget_worksheet(sheet_id, tab_name)
-        return self._worksheet
+
+        now = getattr(thread, "created_at", None) or dt.datetime.now(UTC)
+        created_str = _format_timestamp(now)
+        context = PromoTicketContext(
+            thread_id=thread.id,
+            ticket_number=parts.ticket_code,
+            username=parts.username,
+            promo_type=parts.promo_type,
+            thread_created=created_str,
+            year=str(now.year),
+            month=now.strftime("%B"),
+        )
+
+        try:
+            found = await asyncio.to_thread(onboarding_sheets.find_promo_row, parts.ticket_code)
+        except Exception:
+            log.exception("failed to read promo row during context ensure", extra={"ticket": parts.ticket_code})
+            found = None
+
+        if found:
+            _, values = found
+            context.clan_tag = values.get("clantag", "") or context.clan_tag
+            context.clan_name = values.get("clan name", "") or context.clan_name
+            context.progression = values.get("progression", "") or context.progression
+            context.thread_created = values.get("thread created", "") or context.thread_created
+            context.year = values.get("year", "") or context.year
+            context.month = values.get("month", "") or context.month
+            context.join_month = values.get("join_month", "") or context.join_month
+
+        self._tickets[thread.id] = context
+        return context
+
+    async def _log_ticket_open(self, thread: discord.Thread, context: PromoTicketContext) -> None:
+        row = [
+            context.ticket_number,
+            context.username,
+            context.clan_tag,
+            "",
+            context.promo_type,
+            context.thread_created,
+            context.year,
+            context.month,
+            context.join_month,
+            context.clan_name,
+            context.progression,
+        ]
+        try:
+            result = await asyncio.to_thread(onboarding_sheets.upsert_promo, row, PROMO_HEADERS)
+        except Exception:
+            log.exception(
+                "failed to log promo ticket open",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            return
+        log.info(
+            "promo_ticket_open — ticket=%s • user=%s • result=row_%s",
+            context.ticket_number,
+            context.username,
+            result,
+        )
+
+    async def _ensure_row_initialized(self, thread: discord.Thread, context: PromoTicketContext) -> None:
+        try:
+            found = await asyncio.to_thread(onboarding_sheets.find_promo_row, context.ticket_number)
+        except Exception:
+            log.exception(
+                "failed to locate promo row for closure",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            found = None
+
+        if found:
+            _, values = found
+            context.clan_tag = values.get("clantag", "") or context.clan_tag
+            context.clan_name = values.get("clan name", "") or context.clan_name
+            context.progression = values.get("progression", "") or context.progression
+            context.thread_created = values.get("thread created", "") or context.thread_created
+            context.year = values.get("year", "") or context.year
+            context.month = values.get("month", "") or context.month
+            context.join_month = values.get("join_month", "") or context.join_month
+            return
+
+        await self._log_ticket_open(thread, context)
+
+    async def _send_invalid_tag_notice(self, thread: discord.Thread, actor: discord.abc.User | None, candidate: str) -> None:
+        notice = (
+            "⚠️ That clan tag was not recognized. Please pick a tag from the menu or reply with a valid tag"
+            " (e.g. C1CE)."
+        )
+        if actor is not None:
+            try:
+                await actor.send(notice)
+                return
+            except Exception:
+                log.debug("failed to send invalid promo tag DM", exc_info=True)
+        try:
+            await thread.send(notice, delete_after=30)
+        except Exception:
+            log.debug("failed to send invalid promo tag notice", exc_info=True)
+
+    async def _begin_clan_prompt(self, thread: discord.Thread, context: PromoTicketContext) -> None:
+        tags = await self._load_clan_tags()
+        if not tags:
+            log.warning("promo watcher unable to load clan tags for close prompt", extra={"ticket": context.ticket_number})
+            return
+
+        await self._ensure_row_initialized(thread, context)
+
+        context.state = "awaiting_clan"
+        content = (
+            f"Which clan tag applies to {context.username} (ticket {context.ticket_number})?\n"
+            "Use the picker below or reply with a clan tag. After selecting, please reply with progression and"
+            " optional clan name as `progression | clan name`, or type `skip` to leave them blank."
+        )
+        view = PromoClanSelectView(self, context, tags)
+        try:
+            message = await thread.send(content, view=view)
+        except Exception:
+            context.state = "open"
+            log.exception(
+                "failed to post promo clan selection prompt",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            return
+        view.message = message
+        context.prompt_message_id = message.id
+
+    async def finalize_from_interaction(
+        self,
+        context: PromoTicketContext,
+        tag: str,
+        interaction: discord.Interaction,
+        view: PromoClanSelectView,
+    ) -> None:
+        thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
+        if thread is None:
+            await interaction.followup.send(
+                "⚠️ I lost track of the ticket thread. Please try again.", ephemeral=True
+            )
+            return
+        await self._finalize_clan_tag(
+            thread,
+            context,
+            tag,
+            actor=getattr(interaction, "user", None),
+            prompt_message=interaction.message,
+            view=view,
+        )
+
+    async def _finalize_clan_tag(
+        self,
+        thread: discord.Thread,
+        context: PromoTicketContext,
+        final_tag: str,
+        *,
+        actor: discord.abc.User | None,
+        prompt_message: Optional[discord.Message],
+        view: Optional[PromoClanSelectView],
+    ) -> None:
+        final_tag = (final_tag or "").strip().upper()
+        if not final_tag:
+            return
+
+        tags = await self._load_clan_tags()
+        if final_tag not in tags:
+            await self._send_invalid_tag_notice(thread, actor, final_tag)
+            return
+
+        context.clan_tag = final_tag
+        context.state = "awaiting_details"
+
+        if view is not None:
+            view.stop()
+        if prompt_message is None and context.prompt_message_id:
+            try:
+                prompt_message = await thread.fetch_message(context.prompt_message_id)
+            except Exception:
+                prompt_message = None
+
+        followup = (
+            f"Logged clan tag **{final_tag}**."
+            " Please reply with progression (e.g. `TH10`) and optional clan name in the format"
+            " `progression | clan name`, or type `skip` to leave them blank."
+        )
+        if prompt_message is not None:
+            try:
+                await prompt_message.edit(content=followup, view=None)
+            except Exception:
+                await thread.send(followup)
+        else:
+            await thread.send(followup)
+
+    async def _complete_close(
+        self,
+        thread: discord.Thread,
+        context: PromoTicketContext,
+        progression: str,
+        clan_name: str,
+    ) -> None:
+        timestamp = _format_timestamp(dt.datetime.now(UTC))
+        row = [
+            context.ticket_number,
+            context.username,
+            context.clan_tag,
+            timestamp,
+            context.promo_type,
+            context.thread_created,
+            context.year,
+            context.month,
+            context.join_month,
+            clan_name,
+            progression,
+        ]
+        try:
+            result = await asyncio.to_thread(onboarding_sheets.upsert_promo, row, PROMO_HEADERS)
+        except Exception:
+            log.exception(
+                "failed to finalize promo closure",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            await thread.send("⚠️ I couldn't update the promo log. Please try again later.")
+            return
+
+        context.clan_name = clan_name
+        context.progression = progression
+        context.state = "closed"
+        log.info(
+            "promo_ticket_close — ticket=%s • user=%s • result=row_%s",
+            context.ticket_number,
+            context.username,
+            result,
+        )
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        if not self._features_enabled():
+            return
+        if not self._is_ticket_thread(thread):
+            return
+        context = await self._ensure_context(thread)
+        if context is None:
+            return
+        await self._log_ticket_open(thread, context)
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
-        if after.parent_id != self.channel_id:
+        if not self._features_enabled():
+            return
+        if not self._is_ticket_thread(after):
+            return
+        context = await self._ensure_context(after)
+        if context is None:
+            return
+        if context.state in {"awaiting_clan", "awaiting_details", "closed"}:
             return
         if not _transitioned_to_closed(before, after):
             return
-        await self._record_closure(after)
+        await self._begin_clan_prompt(after, context)
 
-        if not feature_flags.is_enabled("welcome_dialog"):
+    def _parse_progression_payload(self, payload: str) -> tuple[str, str]:
+        text = (payload or "").strip()
+        if not text or text.lower() == "skip":
+            return "", ""
+        if "|" in text:
+            parts = text.split("|", 1)
+            return parts[0].strip(), parts[1].strip()
+        return text, ""
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if not self._features_enabled():
             return
-        if not thread_scopes.is_promo_parent(after):
+        thread = message.channel if isinstance(message.channel, discord.Thread) else None
+        if not self._is_ticket_thread(thread):
+            return
+        if thread is None:
             return
 
-        try:
-            await start_welcome_dialog(after, self.bot.user, "ticket", bot=self.bot)
-        except Exception:
-            log.exception(
-                "%s watcher failed to launch dialog",
-                self.log_prefix,
-                extra={"thread_id": after.id},
-            )
+        context = await self._ensure_context(thread)
+        if context is None:
+            return
 
-    async def _record_closure(self, thread: discord.Thread) -> None:
-        timestamp = dt.datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        owner_name = _thread_owner_name(thread)
-        row = [timestamp, str(thread.id), thread.name or "", owner_name]
-        try:
-            worksheet = await self._worksheet_handle()
-            if worksheet is None:
+        if self._is_ticket_tool(message.author):
+            content = (message.content or "").lower()
+            if _CLOSED_MESSAGE_TOKEN in content:
+                context.close_detected = True
+                await self._begin_clan_prompt(thread, context)
+            return
+
+        if getattr(message.author, "bot", False):
+            return
+
+        if context.state == "awaiting_clan":
+            candidate = (message.content or "").strip().upper()
+            if not candidate:
                 return
-            await acall_with_backoff(
-                worksheet.append_row,
-                row,
-                value_input_option="RAW",
+            tags = await self._load_clan_tags()
+            if candidate not in tags:
+                await self._send_invalid_tag_notice(thread, message.author, candidate)
+                return
+            await self._finalize_clan_tag(
+                thread,
+                context,
+                candidate,
+                actor=message.author,
+                prompt_message=None,
+                view=None,
             )
-            await _send_runtime(
-                f"[{self.log_prefix}] thread={thread.id} name={thread.name!r} owner={owner_name}"
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            log.exception(
-                "%s watcher failed to log closure", self.log_prefix, extra={"thread_id": thread.id}
-            )
-            await _send_runtime(
-                f"[{self.log_prefix}] error logging thread={thread.id} name={thread.name!r}: {exc}"
-            )
-            self._worksheet = None
+            return
 
-
-class PromoWatcher(_ThreadClosureWatcher):
-    log_prefix = "promo_watcher"
-
-    def _resolve_sheet_tab(self) -> tuple[str, str]:
-        return _resolve_onboarding_and_promo_tab()
+        if context.state == "awaiting_details":
+            progression, clan_name = self._parse_progression_payload(message.content or "")
+            await self._complete_close(thread, context, progression, clan_name)
 
 
 async def setup(bot: commands.Bot) -> None:
-    if not feature_flags.is_enabled("welcome_dialog"):
-        _announce(
-            bot,
-            "📴 Promo watcher disabled: FeatureToggles['welcome_dialog'] is OFF.",
-        )
+    if not feature_flags.is_enabled("promo_enabled"):
+        log.info("📴 Promo watcher disabled: FeatureToggles['promo_enabled'] is OFF.")
         return
-    if not feature_flags.is_enabled("welcome_enabled"):
-        _announce(
-            bot,
-            "📴 Promo watcher disabled: FeatureToggles['welcome_enabled'] is OFF.",
-        )
-        return
-    if not feature_flags.is_enabled("enable_promo_watcher"):
-        _announce(
-            bot,
-            "📴 Promo watcher disabled: FeatureToggles['enable_promo_watcher'] is OFF.",
-        )
+    if not feature_flags.is_enabled("enable_promo_hook"):
+        log.info("📴 Promo watcher disabled: FeatureToggles['enable_promo_hook'] is OFF.")
         return
 
     channel_id = get_promo_channel_id()
     if not channel_id:
-        _announce(bot, "⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
+        log.info("⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
         return
 
-    await bot.add_cog(PromoWatcher(bot, channel_id=channel_id))
-    log.info(
-        "promo watcher enabled",
-        extra={"channel_id": channel_id},
-    )
+    await bot.add_cog(PromoTicketWatcher(bot))
+    log.info("promo watcher enabled", extra={"channel_id": channel_id})

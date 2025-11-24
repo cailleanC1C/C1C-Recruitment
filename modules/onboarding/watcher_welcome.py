@@ -55,9 +55,15 @@ _TRIGGER_PHRASE = "awake by reacting with"
 _TICKET_EMOJI = "🎫"
 
 _TICKET_CODE_RE = re.compile(r"(W\d{4})", re.IGNORECASE)
+_PROMO_TICKET_CODE_RE = re.compile(r"([RML]\d{4})", re.IGNORECASE)
 _CLOSED_MESSAGE_TOKEN = "ticket closed"
 _NO_PLACEMENT_TAG = "NONE"
 _WELCOME_HEADERS = onboarding_sheets.WELCOME_HEADERS
+_PROMO_TYPE_MAP = {
+    "R": "returning player",
+    "M": "player move request",
+    "L": "clan lead move request",
+}
 
 
 def _normalize_ticket_code(ticket: str | None) -> str:
@@ -73,6 +79,22 @@ def _normalize_ticket_code(ticket: str | None) -> str:
     match = _TICKET_CODE_RE.search(token)
     if match:
         return match.group(1).upper()
+    return ""
+
+
+def _normalize_promo_ticket(ticket: str | None) -> str:
+    token = (ticket or "").strip().lstrip("#")
+    if not token:
+        return ""
+    prefix = token[:1].upper()
+    digits = token[1:5]
+    if prefix in _PROMO_TYPE_MAP and len(digits) == 4 and digits.isdigit():
+        return f"{prefix}{digits}"
+    match = _PROMO_TICKET_CODE_RE.search(token)
+    if match:
+        normalized = match.group(1).upper()
+        if normalized[:1] in _PROMO_TYPE_MAP:
+            return normalized
     return ""
 
 
@@ -103,6 +125,42 @@ def parse_welcome_thread_name(name: str | None) -> Optional[ThreadNameParts]:
         ticket_code=ticket_code,
         username=username,
         prefix=prefix,
+        clan_tag=clan_tag,
+    )
+
+
+def parse_promo_thread_name(name: str | None) -> Optional["PromoThreadNameParts"]:
+    if not name:
+        return None
+
+    match = _PROMO_TICKET_CODE_RE.search(name)
+    if not match:
+        return None
+
+    ticket_code = _normalize_promo_ticket(match.group(1))
+    if not ticket_code:
+        return None
+
+    suffix = name[match.end():].strip(" -_")
+    username = suffix or ""
+    clan_tag: Optional[str] = None
+    if suffix:
+        parts = suffix.split("-", 1)
+        username = parts[0].strip(" -_")
+        if len(parts) > 1:
+            clan_tag = parts[1].strip(" -_") or None
+
+    if not username:
+        return None
+
+    promo_type = _PROMO_TYPE_MAP.get(ticket_code[:1], "")
+    if not promo_type:
+        return None
+
+    return PromoThreadNameParts(
+        ticket_code=ticket_code,
+        username=username,
+        promo_type=promo_type,
         clan_tag=clan_tag,
     )
 
@@ -469,6 +527,14 @@ class ThreadNameParts:
         if prefix.startswith("res"):
             return "reserved"
         return "open"
+
+
+@dataclass(frozen=True)
+class PromoThreadNameParts:
+    ticket_code: str
+    username: str
+    promo_type: str
+    clan_tag: Optional[str] = None
 
 
 @dataclass(slots=True)

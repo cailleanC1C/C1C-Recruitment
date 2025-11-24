@@ -180,7 +180,8 @@ off in production until the panels ship._
   - `recruitment_welcome` — welcome command.
   - `welcome_enabled` — global enable for onboarding automation listeners.
   - `enable_welcome_hook` — enables the welcome thread watcher.
-  - `enable_promo_watcher` — enables the promo thread watcher.
+  - `promo_enabled` — global enable for promo lifecycle logging.
+  - `enable_promo_hook` — enables the promo thread watcher.
   - `recruitment_reports` — Daily Recruiter Update (UTC scheduler + `!report recruiters`).
   - `placement_target_select` — stub module for future placement picker.
   - `placement_reservations` — stub module for future reservation workflow.
@@ -196,4 +197,4 @@ off in production until the panels ship._
 - Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags with context for quick filtering in Discord (transitioning from `[watcher|lifecycle]` to `[lifecycle]` during the dual-tag release).
 - Failures fall back to stale caches when safe and always raise a structured log to `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.7)
