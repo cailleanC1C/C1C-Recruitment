@@ -69,6 +69,11 @@ def patch_member_type(monkeypatch):
     return DummyMember
 
 
+@pytest.fixture(autouse=True)
+def patch_ticket_tool(monkeypatch):
+    monkeypatch.setattr(reaction_fallback, "get_ticket_tool_bot_id", lambda: 5555)
+
+
 def _build_payload(member, thread, message):
     return SimpleNamespace(
         emoji=reaction_fallback.FALLBACK_EMOJI,
@@ -91,8 +96,10 @@ async def _run_event(
     promo_parent: bool = False,
     thread_join: bool = True,
     thread_join_error: Exception | None = None,
+    message_author_id: int | None = None,
 ):
-    message = SimpleNamespace(id=7001, content=message_content)
+    author = SimpleNamespace(id=message_author_id) if message_author_id is not None else None
+    message = SimpleNamespace(id=7001, content=message_content, author=author)
     thread = DummyThread(message)
     member = reaction_fallback.discord.Member(1234)
     guild = DummyGuild(member, thread)
@@ -264,3 +271,40 @@ def test_thread_join_failure_logs(monkeypatch, caplog):
     details = _find_log(caplog, "result")
     assert details["result"] == "thread_join_failed"
     assert details["trigger"] == "thread_join"
+
+
+def test_promo_trigger_starts_dialog(monkeypatch, caplog):
+    start_mock, caplog, join_mock = asyncio.run(
+        _run_event(
+            monkeypatch,
+            caplog,
+            message_content="Ticket Tool says <!-- trigger:promo.r -->",
+            welcome_parent=False,
+            promo_parent=True,
+            message_author_id=5555,
+        )
+    )
+
+    start_mock.assert_awaited_once()
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "trigger")
+    assert details["trigger"] == "promo_trigger"
+    assert details.get("promo_flow") == "promo.r"
+
+
+def test_promo_trigger_rejected_for_wrong_author(monkeypatch, caplog):
+    start_mock, caplog, join_mock = asyncio.run(
+        _run_event(
+            monkeypatch,
+            caplog,
+            message_content="Ticket Tool says <!-- trigger:promo.m -->",
+            welcome_parent=False,
+            promo_parent=True,
+            message_author_id=1234,
+        )
+    )
+
+    start_mock.assert_not_called()
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "no_trigger"
