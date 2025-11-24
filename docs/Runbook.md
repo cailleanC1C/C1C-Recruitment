@@ -95,8 +95,8 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
 ### Watchers & keepalive
 - [`Watchers.md`](Watchers.md) is the canonical source for watcher gating,
   scheduler cadences, watchdog thresholds, and keepalive expectations.
-- Promo/welcome watchers are gated by sheet toggles (`enable_promo_watcher`,
-  `enable_welcome_hook`). Disable the toggle first during incidents, then follow
+- Promo/welcome watchers are gated by sheet toggles (`promo_enabled`,
+  `enable_promo_hook`, `enable_welcome_hook`). Disable the toggle first during incidents, then follow
   the escalation steps in `docs/ops/Watchers.md`.
 
 ## Maintenance cadence
@@ -124,4 +124,4 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   mitigation tips.
 - [`docs/ops/Watchers.md`](Watchers.md) — watcher gating and scheduler details.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.7)

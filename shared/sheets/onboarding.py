@@ -25,6 +25,19 @@ _CLAN_TAG_TS: float = 0.0
 log = logging.getLogger(__name__)
 
 WELCOME_HEADERS: List[str] = ["ticket_number", "username", "clantag", "date_closed"]
+PROMO_HEADERS: List[str] = [
+    "ticket number",
+    "username",
+    "clantag",
+    "date closed",
+    "type",
+    "thread created",
+    "year",
+    "month",
+    "join_month",
+    "clan name",
+    "progression",
+]
 WELCOME_TICKET_INDEX = 0
 WELCOME_CLAN_TAG_INDEX = 2
 WELCOME_DATE_CLOSED_INDEX = 3
@@ -298,21 +311,35 @@ def find_welcome_row(ticket: str | None) -> Optional[Tuple[int, List[str]]]:
 def upsert_promo(
     row_values: Sequence[str],
     headers: Sequence[str],
-    *,
-    ticket: str,
-    promo_type: str,
-    created: str,
 ) -> str:
-    """Insert or update a promo ticket row based on ticket + type + created."""
+    """Insert or update a promo ticket row based on its ticket number."""
 
     ws = _worksheet(_promo_tab())
-    keys = [
-        ("ticket number", _fmt_ticket),
-        ("type", lambda value: (value or "").strip().lower()),
-        ("thread created", lambda value: (value or "").strip()),
-    ]
-    search = [ticket, promo_type, created]
-    return _upsert(ws, keys, row_values, headers, search_values=search)
+    keys = [("ticket number", _fmt_ticket)]
+    return _upsert(ws, keys, row_values, headers)
+
+
+def find_promo_row(ticket: str | None) -> Optional[Tuple[int, Dict[str, str]]]:
+    """Return the (1-indexed) row number and values for ``ticket`` if present."""
+
+    if not ticket:
+        return None
+
+    ws = _worksheet(_promo_tab())
+    header = _ensure_headers(ws, PROMO_HEADERS)
+    ticket_col = _column_index(header, "ticket number")
+    target = _fmt_ticket(ticket)
+
+    values = core.call_with_backoff(ws.get_all_values)
+    for row_idx, row in enumerate(values[1:], start=2):
+        current = row[ticket_col] if ticket_col < len(row) else ""
+        if _fmt_ticket(current) == target:
+            mapped = {
+                header[idx]: row[idx] if idx < len(row) else ""
+                for idx in range(len(header))
+            }
+            return row_idx, mapped
+    return None
 
 
 def dedupe() -> Dict[str, int]:
@@ -327,8 +354,6 @@ def dedupe() -> Dict[str, int]:
             _worksheet(_promo_tab()),
             key_columns=[
                 ("ticket number", _fmt_ticket),
-                ("type", lambda value: (value or "").strip().lower()),
-                ("thread created", lambda value: (value or "").strip()),
             ],
         ),
     }

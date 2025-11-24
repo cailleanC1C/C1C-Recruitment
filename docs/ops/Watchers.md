@@ -17,7 +17,7 @@ source of truth covers every automation hook:
 | Name | Location | Trigger | Responsibilities | Logging | Feature toggles / config |
 | --- | --- | --- | --- | --- | --- |
 | **Welcome watcher** | `modules.onboarding.watcher_welcome.WelcomeWatcher` | Ticket Tool greeting, 🎫 emoji, manual ticket close, Ticket Tool close message | Posts/reposts the onboarding questionnaire, records answers into the onboarding Sheet, prompts for clan confirmation, reconciles reservations, and renames threads on closure. Also emits the onboarding lifecycle notice during startup. | `c1c.onboarding.welcome_watcher` logger with `[welcome_watcher] …` and `[watcher\|lifecycle]` startup messages routed to `LOG_CHANNEL_ID`. | Requires `WELCOME_CHANNEL_ID`, `WELCOME_TICKETS_TAB`, and FeatureToggles keys `welcome_enabled`, `enable_welcome_hook`, `welcome_dialog`, and `recruitment_welcome`. | 
-| **Promo watcher** | `modules.onboarding.watcher_promo.PromoWatcher` | Promo ticket close messages | Mirrors the welcome watcher for promo threads by logging closures to the promo Sheet tab and posting placement summaries. | `c1c.onboarding.promo_watcher` logger with `[promo_watcher] …` messages in the ops log channel. | Requires `PROMO_CHANNEL_ID` plus FeatureToggles keys `welcome_enabled`, `welcome_dialog`, and `enable_promo_watcher`. |
+| **Promo watcher** | `modules.onboarding.watcher_promo.PromoTicketWatcher` | Promo ticket open + close events | Logs promo ticket lifecycle events to `PROMO_TICKETS_TAB`, maps R/M/L prefixes to type strings, and prompts for clan tag/progression on closure. Dialog/panel hooks are deferred. | `c1c.onboarding.promo_watcher` logger with `[promo_watcher] …` messages in the ops log channel. | Requires `PROMO_CHANNEL_ID` plus FeatureToggles keys `promo_enabled` and `enable_promo_hook`. |
 | **Bot permission watcher** | `modules.ops.watchers_permissions.BotPermissionWatcher` | `on_guild_channel_create` and `on_guild_channel_update` (category move) | Automatically reapplies the bot-role overwrite profile when new channels are created or moved under an allowed category, matching the behaviour of `!perm bot sync`. | Posts `🔐 Bot permissions applied automatically …` via `modules.common.runtime.send_log_message`; WARN lines log as `Watcher failed to update overwrites` when Discord rejects the write. | Respects `config/bot_access_lists.json` and the persisted `threads_default` option managed by the `!perm bot` command group. |
 
 ### Scheduled jobs & loops
@@ -97,4 +97,4 @@ keeps the bot “warm” in two layers:
   scheduler wiring, and watchdog contracts.
 - [`docs/modules/`](../modules) — module owners for the watchers listed here.
 
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.7)
