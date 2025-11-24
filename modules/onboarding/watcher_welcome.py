@@ -64,6 +64,11 @@ _PROMO_TYPE_MAP = {
     "M": "player move request",
     "L": "clan lead move request",
 }
+_PROMO_TRIGGER_MAP = {
+    "<!-- trigger:promo.r -->": "promo.r",
+    "<!-- trigger:promo.m -->": "promo.m",
+    "<!-- trigger:promo.l -->": "promo.l",
+}
 
 
 def _normalize_ticket_code(ticket: str | None) -> str:
@@ -96,6 +101,14 @@ def _normalize_promo_ticket(ticket: str | None) -> str:
         if normalized[:1] in _PROMO_TYPE_MAP:
             return normalized
     return ""
+
+
+def _promo_flow_from_content(content: str | None) -> str | None:
+    text = content or ""
+    for trigger, flow in _PROMO_TRIGGER_MAP.items():
+        if trigger in text:
+            return flow
+    return None
 
 
 def parse_welcome_thread_name(name: str | None) -> Optional[ThreadNameParts]:
@@ -925,6 +938,7 @@ class WelcomeWatcher(commands.Cog):
         self._onb_registered: bool = False
         self._onb_reg_error: str | None = None
         self._announced = False
+        self.ticket_tool_id = get_ticket_tool_bot_id()
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -1027,6 +1041,12 @@ class WelcomeWatcher(commands.Cog):
         )
 
     @staticmethod
+    def _promo_features_enabled() -> bool:
+        return feature_flags.is_enabled("promo_enabled") and feature_flags.is_enabled(
+            "enable_promo_hook"
+        )
+
+    @staticmethod
     def _thread_owner_id(thread: discord.Thread | None) -> int | None:
         if thread is None:
             return None
@@ -1095,17 +1115,114 @@ class WelcomeWatcher(commands.Cog):
             context.update(extra)
         return context
 
+    def _is_ticket_tool_author(self, user: discord.abc.User | None) -> bool:
+        if user is None or self.ticket_tool_id is None:
+            return False
+        return getattr(user, "id", None) == self.ticket_tool_id
+
+    async def _handle_promo_greeting(
+        self, message: discord.Message, thread: discord.Thread
+    ) -> bool:
+        if not self._promo_features_enabled():
+            return False
+        if not thread_scopes.is_promo_parent(thread):
+            return False
+        if not self._is_ticket_tool_author(getattr(message, "author", None)):
+            return False
+
+        flow = _promo_flow_from_content(getattr(message, "content", None))
+        if flow is None:
+            return False
+
+        try:
+            await message.add_reaction("👍")
+        except Exception:  # pragma: no cover - best effort
+            log.debug("failed to add promo auto-reaction", exc_info=True)
+
+        await self._post_panel(thread, actor=message.author, source="promo.trigger", flow=flow)
+        return True
+
+    async def _resolve_thread(self, payload: RawReactionActionEvent) -> discord.Thread | None:
+        if payload.guild_id is None:
+            return None
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return None
+        thread = guild.get_thread(payload.channel_id)
+        if thread is None:
+            channel = self.bot.get_channel(payload.channel_id)
+            thread = channel if isinstance(channel, discord.Thread) else None
+        if thread is None:
+            try:
+                channel = await self.bot.fetch_channel(payload.channel_id)
+            except Exception:  # pragma: no cover - network fallback
+                channel = None
+            if isinstance(channel, discord.Thread):
+                thread = channel
+        return thread
+
+    async def _maybe_handle_promo_reaction(
+        self, payload: RawReactionActionEvent, thread: discord.Thread
+    ) -> bool:
+        if not self._promo_features_enabled():
+            return False
+        if not thread_scopes.is_promo_parent(thread):
+            return False
+
+        bot_user = getattr(self.bot, "user", None)
+        if bot_user and payload.user_id == getattr(bot_user, "id", None):
+            return True
+
+        guild = self.bot.get_guild(payload.guild_id) if payload.guild_id else None
+        member: discord.Member | None = payload.member
+        if member is None and guild is not None:
+            member = guild.get_member(payload.user_id)
+        actor: discord.abc.User | None = member or payload.member
+
+        if not self._eligible_member(member, thread):
+            context = self._log_context(
+                thread,
+                actor,
+                source="promo_emoji",
+                result="not_eligible",
+                reason="missing_role_or_owner",
+                emoji=_TICKET_EMOJI,
+            )
+            await logs.send_welcome_log("warn", **context)
+            return True
+
+        try:
+            message = await thread.fetch_message(payload.message_id)
+        except Exception:  # pragma: no cover - network fallback
+            return True
+
+        if not self._is_ticket_tool_author(getattr(message, "author", None)):
+            return True
+
+        flow = _promo_flow_from_content(getattr(message, "content", None))
+        if flow is None:
+            return True
+
+        await self._post_panel(thread, actor=actor, source="promo.emoji", flow=flow)
+        return True
+
     async def _post_panel(
         self,
         thread: discord.Thread,
         *,
         actor: discord.abc.User | None,
         source: str,
+        flow: str = "welcome",
+        ticket_code: str | None = None,
     ) -> None:
-        parts = parse_welcome_thread_name(getattr(thread, "name", None))
-        ticket_code = getattr(parts, "ticket_code", None)
+        thread_name = getattr(thread, "name", None)
+        resolved_flow = flow or "welcome"
+        if ticket_code is None:
+            parser = parse_promo_thread_name if resolved_flow.startswith("promo") else parse_welcome_thread_name
+            parts = parser(thread_name)
+            ticket_code = getattr(parts, "ticket_code", None)
         parent_channel = getattr(thread, "parent", None)
-        question_count, schema_version = logs.question_stats("welcome")
+        question_count, schema_version = logs.question_stats(resolved_flow)
 
         async def _emit(result: str | None = None, reason: str | None = None) -> None:
             payload: dict[str, object] = {
@@ -1128,6 +1245,30 @@ class WelcomeWatcher(commands.Cog):
             await _emit(result="error", reason="thread_join_failed")
             return
 
+        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
+        existing_panel = await panels.find_panel_message(thread, bot_user_id=bot_user_id)
+
+        def _has_open_button(message: discord.Message | None) -> bool:
+            if message is None:
+                return False
+            for row in getattr(message, "components", []) or []:
+                for component in getattr(row, "children", []) or []:
+                    if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                        return True
+            for component in getattr(message, "components", []) or []:
+                if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                    return True
+            return False
+
+        if existing_panel is not None:
+            if not _has_open_button(existing_panel):
+                try:
+                    await existing_panel.edit(view=panels.OpenQuestionsPanelView())
+                except Exception:
+                    log.debug("failed to attach open questions view to existing panel", exc_info=True)
+            await _emit(result="skipped", reason="panel_exists")
+            return
+
         view = panels.OpenQuestionsPanelView()
         content = "Ready when you are — tap below to open the onboarding questions."
         try:
@@ -1145,10 +1286,12 @@ class WelcomeWatcher(commands.Cog):
     # ---- listeners ----------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        if not self._features_enabled():
-            return
         thread = message.channel if isinstance(message.channel, discord.Thread) else None
         if thread is None:
+            return
+        if await self._handle_promo_greeting(message, thread):
+            return
+        if not self._features_enabled():
             return
         target_channel_id = self.channel_id
         if target_channel_id is None or thread.parent_id != target_channel_id:
@@ -1188,27 +1331,19 @@ class WelcomeWatcher(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: RawReactionActionEvent) -> None:
-        if not self._features_enabled():
-            return
         if str(payload.emoji) != _TICKET_EMOJI:
+            return
+        thread = await self._resolve_thread(payload)
+        if thread is None:
+            return
+        if await self._maybe_handle_promo_reaction(payload, thread):
+            return
+        if not self._features_enabled():
             return
         if payload.guild_id is None:
             return
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
-            return
-        thread = guild.get_thread(payload.channel_id)
-        if thread is None:
-            channel = self.bot.get_channel(payload.channel_id)
-            thread = channel if isinstance(channel, discord.Thread) else None
-        if thread is None:
-            try:
-                channel = await self.bot.fetch_channel(payload.channel_id)
-            except Exception:  # pragma: no cover - network fallback
-                channel = None
-            if isinstance(channel, discord.Thread):
-                thread = channel
-        if thread is None:
             return
         target_channel_id = self.channel_id
         if (

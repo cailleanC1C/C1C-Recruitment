@@ -35,4 +35,18 @@ The promo watcher (`modules.onboarding.watcher_promo.PromoTicketWatcher`):
 - **Toggles:** `PROMO_ENABLED`, `ENABLE_PROMO_HOOK` (promo dialog toggle
   reserved for later: `promo_dialog`)
 
+## Onboarding hooks
+
+- Ticket Tool greetings in promo threads must retain the hidden trigger line at
+  the bottom of the template:
+  - `<!-- trigger:promo.r -->` — Returning Player
+  - `<!-- trigger:promo.m -->` — Member / Player Move Request
+  - `<!-- trigger:promo.l -->` — Leadership Move Request
+- When `PROMO_ENABLED` and `ENABLE_PROMO_HOOK` are on, the bot reacts to the
+  trigger, posts the Open Questions panel, and launches the corresponding promo
+  flow when the panel is opened.
+- Recruiters can also add 🎫 to the Ticket Tool greeting to surface the panel if
+  the watcher misses the trigger. Removing the trigger lines prevents the bot
+  from recognising promo tickets.
+
 Doc last updated: 2025-11-24 (v0.9.7)

@@ -48,6 +48,7 @@ __all__ = [
     "OpenQuestionsPanelView",
     "WelcomePanel",
     "bind_controller",
+    "find_panel_message",
     "get_controller",
     "get_panel_message_id",
     "is_panel_live",
@@ -255,6 +256,35 @@ def register_panel_message(thread_id: int, message_id: int) -> None:
 
 def get_panel_message_id(thread_id: int) -> Optional[int]:
     return _PANEL_MESSAGES.get(thread_id)
+
+
+async def find_panel_message(
+    thread: discord.Thread, *, bot_user_id: int | None
+) -> Optional[discord.Message]:
+    """Return an existing panel message authored by the bot, if any.
+
+    The search is intentionally shallow (up to the last 20 messages) to keep
+    network calls predictable. The helper mirrors the logic used by the fallback
+    cog and ensures panel creation is idempotent across welcome and promo
+    triggers.
+    """
+
+    history = getattr(thread, "history", None)
+    if bot_user_id is None or history is None or not callable(history):
+        return None
+
+    async for message in history(limit=20):
+        author = getattr(message, "author", None)
+        if author is None or getattr(author, "id", None) != bot_user_id:
+            continue
+        for row in getattr(message, "components", []) or []:
+            for component in getattr(row, "children", []) or []:
+                if getattr(component, "custom_id", None) == OPEN_QUESTIONS_CUSTOM_ID:
+                    return message
+        for component in getattr(message, "components", []) or []:
+            if getattr(component, "custom_id", None) == OPEN_QUESTIONS_CUSTOM_ID:
+                return message
+    return None
 
 
 def is_panel_live(message_id: int | None) -> bool:
