@@ -16,14 +16,28 @@ from modules.onboarding.controllers.welcome_controller import (
 )
 from modules.onboarding.ui import panels
 from modules.onboarding.welcome_flow import start_welcome_dialog
+from shared.config import get_ticket_tool_bot_id
 
 # Fallback: 🎫 on the Ticket Tool close-button message
 FALLBACK_EMOJI = "🎫"  # :ticket:
 TRIGGER_TOKEN = "[#welcome:ticket]"
+PROMO_TRIGGER_MAP = {
+    "<!-- trigger:promo.r -->": "promo.r",
+    "<!-- trigger:promo.m -->": "promo.m",
+    "<!-- trigger:promo.l -->": "promo.l",
+}
 
 
 def normalize_spaces(value: str) -> str:
     return " ".join(value.split())
+
+
+def _promo_trigger_flow(content: str | None) -> str | None:
+    text = content or ""
+    for trigger, flow in PROMO_TRIGGER_MAP.items():
+        if trigger in text:
+            return flow
+    return None
 
 
 def _base_context(
@@ -95,21 +109,7 @@ async def _find_panel_message(
     *,
     bot_user_id: int | None,
 ) -> Optional[discord.Message]:
-    history = getattr(thread, "history", None)
-    if bot_user_id is None or history is None or not callable(history):
-        return None
-    async for message in history(limit=20):
-        author = getattr(message, "author", None)
-        if author is None or getattr(author, "id", None) != bot_user_id:
-            continue
-        for row in getattr(message, "components", []) or []:
-            for component in getattr(row, "children", []) or []:
-                if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
-                    return message
-        for component in getattr(message, "components", []) or []:
-            if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
-                return message
-    return None
+    return await panels.find_panel_message(thread, bot_user_id=bot_user_id)
 
 
 class OnboardingReactionFallbackCog(commands.Cog):
@@ -120,15 +120,6 @@ class OnboardingReactionFallbackCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: RawReactionActionEvent) -> None:
-        if not feature_flags.is_enabled("welcome_dialog"):
-            await _log_reject(
-                "disabled",
-                trigger="feature_disabled",
-                result="feature_disabled",
-                level="info",
-            )
-            return
-
         if str(payload.emoji) != FALLBACK_EMOJI:
             return
 
@@ -189,6 +180,10 @@ class OnboardingReactionFallbackCog(commands.Cog):
             thread_scopes.is_welcome_parent(thread)
             or thread_scopes.is_promo_parent(thread)
         ):
+        in_welcome_scope = thread_scopes.is_welcome_parent(thread)
+        in_promo_scope = thread_scopes.is_promo_parent(thread)
+
+        if not (in_welcome_scope or in_promo_scope):
             await _log_reject(
                 "wrong_scope",
                 member=member,
@@ -196,6 +191,29 @@ class OnboardingReactionFallbackCog(commands.Cog):
                 parent_id=getattr(thread, "parent_id", None),
                 trigger="scope_gate",
                 result="wrong_scope",
+            )
+            return
+
+        if in_promo_scope:
+            if not feature_flags.is_enabled("promo_enabled") or not feature_flags.is_enabled("enable_promo_hook"):
+                await _log_reject(
+                    "disabled",
+                    member=member,
+                    thread=thread,
+                    parent_id=getattr(thread, "parent_id", None),
+                    trigger="feature_disabled",
+                    result="feature_disabled",
+                )
+                return
+        elif not feature_flags.is_enabled("welcome_dialog"):
+            await _log_reject(
+                "disabled",
+                member=member,
+                thread=thread,
+                parent_id=getattr(thread, "parent_id", None),
+                trigger="feature_disabled",
+                result="feature_disabled",
+                level="info",
             )
             return
 
@@ -230,6 +248,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
             except (TypeError, ValueError):
                 pass
 
+        ticket_tool_id = get_ticket_tool_bot_id()
         actor_is_privileged = rbac.is_admin_member(member) or rbac.is_recruiter(member)
         actor_is_target = target_user_id is not None and int(member.id) == int(target_user_id)
 
@@ -267,24 +286,53 @@ class OnboardingReactionFallbackCog(commands.Cog):
 
         content = (getattr(message, "content", "") or "")
         content_lower = normalize_spaces(content.lower())
+        author_id = getattr(getattr(message, "author", None), "id", None)
+        author_is_ticket_tool = ticket_tool_id is not None and author_id == ticket_tool_id
 
-        phrase_match = "by reacting with" in content_lower
-        token_match = TRIGGER_TOKEN in content
-        eligible = phrase_match or token_match
+        if in_promo_scope:
+            promo_flow = _promo_trigger_flow(content)
+            target_extra["promo_flow"] = promo_flow
+            if not author_is_ticket_tool:
+                await _log_reject(
+                    "not_ticket_tool",
+                    member=member,
+                    thread=thread,
+                    parent_id=getattr(thread, "parent_id", None),
+                    result="no_trigger",
+                    level="warn",
+                    extra=target_extra,
+                )
+                return
+            if promo_flow is None:
+                await _log_reject(
+                    "no_trigger",
+                    member=member,
+                    thread=thread,
+                    parent_id=getattr(thread, "parent_id", None),
+                    result="no_trigger",
+                    level="warn",
+                    extra={**target_extra, "message_id": payload.message_id},
+                )
+                return
+            trigger = "promo_trigger"
+        else:
+            phrase_match = "by reacting with" in content_lower
+            token_match = TRIGGER_TOKEN in content
+            eligible = phrase_match or token_match
 
-        if not eligible:
-            await _log_reject(
-                "no_trigger",
-                member=member,
-                thread=thread,
-                parent_id=getattr(thread, "parent_id", None),
-                result="no_trigger",
-                level="warn",
-                extra={**target_extra, "message_id": payload.message_id},
-            )
-            return
+            if not eligible:
+                await _log_reject(
+                    "no_trigger",
+                    member=member,
+                    thread=thread,
+                    parent_id=getattr(thread, "parent_id", None),
+                    result="no_trigger",
+                    level="warn",
+                    extra={**target_extra, "message_id": payload.message_id},
+                )
+                return
 
-        trigger = "token_match" if token_match and not phrase_match else "phrase_match"
+            trigger = "token_match" if token_match and not phrase_match else "phrase_match"
 
         context = _base_context(member=member, thread=thread, message_id=payload.message_id)
         context.update({"trigger": trigger, "result": "emoji_received"})
