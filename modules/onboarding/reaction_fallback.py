@@ -185,7 +185,10 @@ class OnboardingReactionFallbackCog(commands.Cog):
         if thread is None:
             return
 
-        if not thread_scopes.is_welcome_parent(thread):
+        if not (
+            thread_scopes.is_welcome_parent(thread)
+            or thread_scopes.is_promo_parent(thread)
+        ):
             await _log_reject(
                 "wrong_scope",
                 member=member,
