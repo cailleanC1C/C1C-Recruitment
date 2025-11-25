@@ -275,6 +275,11 @@ async def on_resumed():
 
 
 @bot.event
+async def on_error(event: str, *_args, **_kwargs) -> None:
+    log.exception("Unhandled exception in %s", event)
+
+
+@bot.event
 async def on_socket_response(_payload):
     hb.touch()
 
