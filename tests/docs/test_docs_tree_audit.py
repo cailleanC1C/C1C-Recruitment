@@ -14,7 +14,9 @@ ALLOWED_OPS_MD = {
     "CommandMatrix.md",
     "Config.md",
     "Logging.md",
+    "OnboardingFlows.md",
     "PermCommandQuickstart.md",
+    "PromoTickets.md",
     "Watchers.md",
     "ShardTracker.md",
 }
