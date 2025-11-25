@@ -602,27 +602,71 @@ class PromoTicketWatcher(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     if not feature_flags.is_enabled("promo_enabled"):
-        log.info("📴 Promo watcher disabled: FeatureToggles['promo_enabled'] is OFF.")
-        return
-    if not feature_flags.is_enabled("enable_promo_hook"):
-        log.info("📴 Promo watcher disabled: FeatureToggles['enable_promo_hook'] is OFF.")
+        log_lifecycle(
+            log,
+            "promo",
+            "enabled",
+            scope_label="Promo watcher",
+            emoji="📴",
+            result="disabled",
+            reason="feature_promo_enabled_off",
+        )
         return
 
-    channel_id = get_promo_channel_id()
-    if not channel_id:
-        log.info("⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
+    if not feature_flags.is_enabled("enable_promo_hook"):
+        log_lifecycle(
+            log,
+            "promo",
+            "enabled",
+            scope_label="Promo watcher",
+            emoji="📴",
+            result="disabled",
+            reason="feature_enable_promo_hook_off",
+        )
+        return
+
+    raw_channel_id = get_promo_channel_id()
+    if not raw_channel_id:
+        log_lifecycle(
+            log,
+            "promo",
+            "enabled",
+            scope_label="Promo watcher",
+            emoji="⚠️",
+            result="skipped",
+            reason="missing_promo_channel",
+            channel=None,
+            channel_id=None,
+        )
+        return
+
+    try:
+        channel_id = int(raw_channel_id)
+    except (TypeError, ValueError):
+        log_lifecycle(
+            log,
+            "promo",
+            "enabled",
+            scope_label="Promo watcher",
+            emoji="⚠️",
+            result="skipped",
+            reason="invalid_promo_channel",
+            channel_id=raw_channel_id,
+        )
         return
 
     watcher = PromoTicketWatcher(bot)
+    watcher.channel_id = channel_id
+    watcher.promo_channel_label = _channel_readable_label(bot, channel_id)
+
     await bot.add_cog(watcher)
-    label = _channel_readable_label(bot, watcher.channel_id)
     log_lifecycle(
         log,
         "promo",
         "enabled",
         scope_label="Promo watcher",
         emoji="✅",
-        channel=label,
-        channel_id=watcher.channel_id,
+        channel=watcher.promo_channel_label,
+        channel_id=channel_id,
         triggers=len(_PROMO_TRIGGER_MAP),
     )
