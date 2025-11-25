@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding import thread_scopes
 from modules.onboarding import watcher_promo
 from modules.onboarding.watcher_welcome import parse_promo_thread_name
@@ -157,6 +158,29 @@ def test_upsert_promo_inserts_and_updates(monkeypatch: pytest.MonkeyPatch) -> No
     row_idx, mapping = found
     assert row_idx == 2
     assert mapping["clantag"] == "C1CE"
+
+
+def test_promo_clan_tag_helper_text_matches_welcome(promo_setup):
+    watcher, _calls, promo_parent, ticket_tool_id = promo_setup
+    thread = DummyThread("R3333-helper", promo_parent)
+
+    async def run_flow():
+        await watcher.on_thread_create(thread)
+        close_message = SimpleNamespace(
+            content="Ticket closed via bot",
+            author=DummyAuthor(id=ticket_tool_id, bot=False),
+            channel=thread,
+        )
+        await watcher.on_message(close_message)
+
+    asyncio.run(run_flow())
+
+    assert thread.sent, "expected clan tag prompt to be sent"
+    prompt_content, _view, _message = thread.sent[0]
+    assert CLAN_TAG_PROMPT_HELPER in prompt_content
+    lower_content = (prompt_content or "").lower()
+    assert "progression" not in lower_content
+    assert "skip" not in lower_content
 
 
 def test_promo_watcher_logs_open_on_thread_create(promo_setup):

@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands
 
 from modules.common import feature_flags
+from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding import logs as onboarding_logs
 from modules.onboarding import thread_scopes
 from modules.onboarding.watcher_welcome import (
@@ -353,11 +354,7 @@ class PromoTicketWatcher(commands.Cog):
         await self._ensure_row_initialized(thread, context)
 
         context.state = "awaiting_clan"
-        content = (
-            f"Which clan tag applies to {context.username} (ticket {context.ticket_number})?\n"
-            "Use the picker below or reply with a clan tag. After selecting, please reply with progression and"
-            " optional clan name as `progression | clan name`, or type `skip` to leave them blank."
-        )
+        content = f"Which clan tag applies to {context.username} (ticket {context.ticket_number})?\n{CLAN_TAG_PROMPT_HELPER}"
         view = PromoClanSelectView(self, context, tags)
         try:
             message = await thread.send(content, view=view)
