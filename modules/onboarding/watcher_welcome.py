@@ -20,6 +20,7 @@ from modules.common import feature_flags
 from modules.common import runtime as rt
 from modules.common.logs import log as human_log
 from modules.onboarding import logs, thread_membership, thread_scopes
+from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding.ui import panels
 from modules.onboarding.controllers.welcome_controller import (
     extract_target_from_message,
@@ -2099,7 +2100,7 @@ class WelcomeTicketWatcher(commands.Cog):
         context.state = "awaiting_clan"
         content = (
             f"Which clan tag for {context.username} (ticket {context.ticket_number})?\n"
-            "Pick one from the menu below, or simply type the tag as a message."
+            f"{CLAN_TAG_PROMPT_HELPER}"
         )
         view = ClanSelectView(self, context, tags)
         try:
