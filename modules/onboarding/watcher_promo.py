@@ -21,6 +21,7 @@ from modules.onboarding.watcher_welcome import (
     parse_promo_thread_name,
     post_open_questions_panel,
 )
+from modules.onboarding.ui import panels
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
 from shared.logs import log_lifecycle
 from shared.sheets import onboarding as onboarding_sheets
@@ -529,6 +530,21 @@ class PromoTicketWatcher(commands.Cog):
         if context is None:
             return
 
+        try:
+            thread_id_int = int(thread.id)
+        except (TypeError, ValueError):
+            thread_id_int = None
+        controller = panels.get_controller(thread_id_int) if thread_id_int is not None else None
+        handler = getattr(controller, "handle_rolling_message", None) if controller else None
+        if callable(handler):
+            try:
+                handled = await handler(message)
+            except Exception:
+                log.warning("promo rolling card handler raised", exc_info=True)
+            else:
+                if handled:
+                    return
+
         if self._is_ticket_tool(message.author):
             content = (message.content or "").lower()
             if _CLOSED_MESSAGE_TOKEN in content:
@@ -537,6 +553,16 @@ class PromoTicketWatcher(commands.Cog):
                 return
 
             trigger_key, flow_key = _promo_trigger_from_content(message.content)
+            has_trigger_marker = "<!-- trigger:" in (message.content or "")
+            if has_trigger_marker and not trigger_key:
+                self._log_missing_trigger(
+                    message.author,
+                    thread,
+                    reason="missing_trigger",
+                    trigger=None,
+                    start=start,
+                )
+                return
             if trigger_key and not flow_key:
                 self._log_missing_trigger(
                     message.author,
@@ -547,13 +573,6 @@ class PromoTicketWatcher(commands.Cog):
                 )
                 return
             if not trigger_key or not flow_key:
-                self._log_missing_trigger(
-                    message.author,
-                    thread,
-                    reason="missing_trigger",
-                    trigger=trigger_key,
-                    start=start,
-                )
                 return
 
             outcome = await post_open_questions_panel(
@@ -595,6 +614,44 @@ class PromoTicketWatcher(commands.Cog):
         if context.state == "awaiting_details":
             progression, clan_name = self._parse_progression_payload(message.content or "")
             await self._complete_close(thread, context, progression, clan_name)
+            return
+
+        trigger_key, flow_key = _promo_trigger_from_content(message.content)
+        has_trigger_marker = "<!-- trigger:" in (message.content or "")
+        if has_trigger_marker and not trigger_key:
+            self._log_missing_trigger(
+                message.author,
+                thread,
+                reason="missing_trigger",
+                trigger=None,
+                start=start,
+            )
+            return
+        if trigger_key and not flow_key:
+            self._log_missing_trigger(
+                message.author,
+                thread,
+                reason="unknown_flow",
+                trigger=trigger_key,
+                start=start,
+            )
+            return
+        if not trigger_key or not flow_key:
+            return
+
+        outcome = await post_open_questions_panel(
+            self.bot,
+            thread,
+            actor=message.author,
+            flow=flow_key,
+        )
+        self._log_panel_outcome(
+            message.author,
+            thread,
+            outcome=outcome,
+            trigger=flow_key,
+            flow=flow_key,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

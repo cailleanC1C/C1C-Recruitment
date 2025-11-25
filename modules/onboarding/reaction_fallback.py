@@ -190,9 +190,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
             )
             return
 
-        if in_promo_scope:
-            return
-        elif not feature_flags.is_enabled("welcome_dialog"):
+        if not in_promo_scope and not feature_flags.is_enabled("welcome_dialog"):
             await _log_reject(
                 "disabled",
                 member=member,
