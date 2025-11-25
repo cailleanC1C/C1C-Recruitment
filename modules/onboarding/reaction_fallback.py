@@ -191,16 +191,7 @@ class OnboardingReactionFallbackCog(commands.Cog):
             return
 
         if in_promo_scope:
-            if not feature_flags.is_enabled("promo_enabled") or not feature_flags.is_enabled("enable_promo_hook"):
-                await _log_reject(
-                    "disabled",
-                    member=member,
-                    thread=thread,
-                    parent_id=getattr(thread, "parent_id", None),
-                    trigger="feature_disabled",
-                    result="feature_disabled",
-                )
-                return
+            return
         elif not feature_flags.is_enabled("welcome_dialog"):
             await _log_reject(
                 "disabled",

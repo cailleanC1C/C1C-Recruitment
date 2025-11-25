@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import asyncio
+from time import monotonic
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -67,11 +68,6 @@ _PROMO_TYPE_MAP = {
     "M": "player move request",
     "L": "clan lead move request",
 }
-_PROMO_TRIGGER_MAP = {
-    "<!-- trigger:promo.r -->": "promo.r",
-    "<!-- trigger:promo.m -->": "promo.m",
-    "<!-- trigger:promo.l -->": "promo.l",
-}
 
 
 def _normalize_ticket_code(ticket: str | None) -> str:
@@ -104,14 +100,6 @@ def _normalize_promo_ticket(ticket: str | None) -> str:
         if normalized[:1] in _PROMO_TYPE_MAP:
             return normalized
     return ""
-
-
-def _promo_flow_from_content(content: str | None) -> str | None:
-    text = content or ""
-    for trigger, flow in _PROMO_TRIGGER_MAP.items():
-        if trigger in text:
-            return flow
-    return None
 
 
 def parse_welcome_thread_name(name: str | None) -> Optional[ThreadNameParts]:
@@ -775,6 +763,15 @@ class PromoThreadNameParts:
     clan_tag: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class PanelOutcome:
+    result: str
+    reason: str | None
+    ticket_code: str | None
+    thread_name: str | None
+    elapsed_ms: int
+
+
 @dataclass(slots=True)
 class TicketContext:
     thread_id: int
@@ -1082,15 +1079,89 @@ def _channel_readable_label(bot: commands.Bot, channel_id: int | None) -> str:
     return f"#{cid}"
 
 
-def _announce(bot: commands.Bot, message: str, *, level: int = logging.INFO) -> None:
-    log.log(level, "%s", message)
+async def post_open_questions_panel(
+    bot: commands.Bot,
+    thread: discord.Thread,
+    *,
+    actor: discord.abc.User | None,
+    flow: str = "welcome",
+    ticket_code: str | None = None,
+) -> PanelOutcome:
+    start = monotonic()
 
-    async def runner() -> None:
-        await _send_runtime(message)
+    def _elapsed() -> int:
+        return int((monotonic() - start) * 1000)
 
-    # discord.py 2.x restricts accessing Client.loop here; schedule via asyncio
-    asyncio.create_task(runner())
+    thread_name = getattr(thread, "name", None)
+    resolved_flow = flow or "welcome"
+    if ticket_code is None:
+        parser = parse_promo_thread_name if resolved_flow.startswith("promo") else parse_welcome_thread_name
+        parts = parser(thread_name)
+        ticket_code = getattr(parts, "ticket_code", None)
 
+    parent_channel = getattr(thread, "parent", None)
+    question_count, schema_version = logs.question_stats(resolved_flow)
+
+    async def _emit(result: str | None = None, reason: str | None = None) -> None:
+        payload: dict[str, object] = {
+            "ticket": ticket_code or thread,
+            "actor": actor,
+            "channel": parent_channel,
+            "questions": question_count,
+            "schema_version": schema_version,
+        }
+        if result is not None:
+            payload["result"] = result
+        if reason is not None:
+            payload["reason"] = reason
+        await logs.log_onboarding_panel_lifecycle(event="open", **payload)
+
+    joined, join_error = await thread_membership.ensure_thread_membership(thread)
+    if not joined:
+        if join_error is not None:
+            log.warning("failed to join welcome thread", exc_info=True)
+        await _emit(result="error", reason="thread_join_failed")
+        return PanelOutcome("error", "thread_join_failed", ticket_code, thread_name, _elapsed())
+
+    bot_user_id = getattr(getattr(bot, "user", None), "id", None)
+    existing_panel = await panels.find_panel_message(thread, bot_user_id=bot_user_id)
+
+    def _has_open_button(message: discord.Message | None) -> bool:
+        if message is None:
+            return False
+        for row in getattr(message, "components", []) or []:
+            for component in getattr(row, "children", []) or []:
+                if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                    return True
+        for component in getattr(message, "components", []) or []:
+            if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
+                return True
+        return False
+
+    if existing_panel is not None:
+        if not _has_open_button(existing_panel):
+            try:
+                await existing_panel.edit(view=panels.OpenQuestionsPanelView())
+            except Exception:
+                log.debug("failed to attach open questions view to existing panel", exc_info=True)
+        await _emit(result="skipped", reason="panel_exists")
+        return PanelOutcome("skipped", "panel_exists", ticket_code, thread_name, _elapsed())
+
+    view = panels.OpenQuestionsPanelView()
+    content = "Ready when you are — tap below to open the onboarding questions."
+    try:
+        await thread.send(content, view=view)
+    except Exception:
+        log.exception("failed to post onboarding panel message")
+        await _emit(result="error", reason="panel_send_failed")
+        return PanelOutcome("error", "panel_send_failed", ticket_code, thread_name, _elapsed())
+
+    if ticket_code:
+        await _emit(result="panel_created")
+        return PanelOutcome("panel_created", None, ticket_code, thread_name, _elapsed())
+
+    await _emit(result="skipped", reason="ticket_not_parsed")
+    return PanelOutcome("skipped", "ticket_not_parsed", ticket_code, thread_name, _elapsed())
 
 def _log_finalize_summary(
     context: TicketContext,
@@ -1174,48 +1245,96 @@ class WelcomeWatcher(commands.Cog):
 
         channel_id = get_welcome_channel_id()
         if not channel_id:
-            _announce(self.bot, "📴 Welcome watcher disabled — WELCOME_CHANNEL_ID missing.")
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="📴",
+                result="disabled",
+                reason="missing_channel_id",
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
             return
 
         try:
             channel_id_int = int(channel_id)
         except (TypeError, ValueError):
             self.channel_id = None
-            _announce(
-                self.bot,
-                "⚠️ Welcome watcher not enabled — invalid WELCOME_CHANNEL_ID.",
-                level=logging.WARNING,
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="⚠️",
+                result="error",
+                reason="invalid_channel_id",
+                channel_id=channel_id,
             )
+            if line:
+                asyncio.create_task(_send_runtime(line))
             return
 
         self.channel_id = channel_id_int
 
         if not feature_flags.is_enabled("welcome_dialog"):
-            _announce(
-                self.bot,
-                "📴 Welcome watcher disabled — FeatureToggles['welcome_dialog'] is OFF.",
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="📴",
+                result="disabled",
+                reason="feature_welcome_dialog_off",
             )
+            if line:
+                asyncio.create_task(_send_runtime(line))
             return
 
         if not feature_flags.is_enabled("recruitment_welcome"):
-            _announce(
-                self.bot,
-                "📴 Welcome watcher disabled — FeatureToggles['recruitment_welcome'] is OFF.",
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="📴",
+                result="disabled",
+                reason="feature_recruitment_welcome_off",
             )
+            if line:
+                asyncio.create_task(_send_runtime(line))
             return
 
         self._register_persistent_view()
 
         if self._onb_registered:
             label = _channel_readable_label(self.bot, self.channel_id)
-            _announce(self.bot, f"✅ Welcome watcher enabled — channel={label}")
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="✅",
+                channel=label,
+                channel_id=self.channel_id,
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
         else:
             reason = self._onb_reg_error or "unknown"
-            _announce(
-                self.bot,
-                f"⚠️ Welcome watcher not enabled — reason={reason}",
-                level=logging.WARNING,
+            line = log_lifecycle(
+                log,
+                "welcome",
+                "enabled",
+                scope_label="Welcome watcher",
+                emoji="⚠️",
+                result="error",
+                channel_id=self.channel_id,
+                reason=reason,
             )
+            if line:
+                asyncio.create_task(_send_runtime(line))
 
     def _register_persistent_view(self) -> None:
         registration = panels.register_persistent_views(self.bot)
@@ -1228,9 +1347,32 @@ class WelcomeWatcher(commands.Cog):
         duplicate = bool(registration.get("duplicate_registration"))
         error = registration.get("error")
 
+        def _component_count(kind: str, fallback: int) -> int:
+            if isinstance(registration.get(kind), int):
+                return int(registration[kind])
+            if isinstance(components, str):
+                for part in components.split(","):
+                    if not part:
+                        continue
+                    if ":" not in part:
+                        continue
+                    key, value = part.split(":", 1)
+                    if key.strip() == kind:
+                        try:
+                            return int(value)
+                        except (TypeError, ValueError):
+                            return fallback
+            return fallback
+
+        buttons = _component_count("buttons", 2)
+        selects = _component_count("selects", 0)
+        textinputs = _component_count("textinputs", 0)
+
         payload: dict[str, object] = {
             "view": view_name,
-            "components": components,
+            "buttons": buttons,
+            "selects": selects,
+            "textinputs": textinputs,
             "result": "ok" if registered else "error",
         }
         if threads_default is not None:
@@ -1242,10 +1384,13 @@ class WelcomeWatcher(commands.Cog):
         if error is not None:
             payload["reason"] = f"{error.__class__.__name__}: {error}"
 
-        try:
-            log_lifecycle(log, "onboarding", "view_registered", **payload)
-        except Exception:
-            pass
+        log_lifecycle(
+            log,
+            "welcome",
+            "view_registered",
+            scope_label="Welcome watcher",
+            **payload,
+        )
 
         if registered:
             self._onb_registered = True
@@ -1263,12 +1408,6 @@ class WelcomeWatcher(commands.Cog):
     def _features_enabled() -> bool:
         return feature_flags.is_enabled("recruitment_welcome") and feature_flags.is_enabled(
             "welcome_dialog"
-        )
-
-    @staticmethod
-    def _promo_features_enabled() -> bool:
-        return feature_flags.is_enabled("promo_enabled") and feature_flags.is_enabled(
-            "enable_promo_hook"
         )
 
     @staticmethod
@@ -1345,27 +1484,49 @@ class WelcomeWatcher(commands.Cog):
             return False
         return getattr(user, "id", None) == self.ticket_tool_id
 
-    async def _handle_promo_greeting(
-        self, message: discord.Message, thread: discord.Thread
-    ) -> bool:
-        if not self._promo_features_enabled():
-            return False
-        if not thread_scopes.is_promo_parent(thread):
-            return False
-        if not self._is_ticket_tool_author(getattr(message, "author", None)):
-            return False
+    def _log_panel_outcome(
+        self,
+        actor: discord.abc.User | None,
+        thread: discord.Thread,
+        outcome: PanelOutcome,
+        *,
+        flow: str | None = None,
+        trigger: str | None = None,
+    ) -> None:
+        if outcome.result == "skipped" and outcome.reason not in {
+            "panel_send_failed",
+            "thread_join_failed",
+            "panel_exists",
+            "ticket_not_parsed",
+        }:
+            return
 
-        flow = _promo_flow_from_content(getattr(message, "content", None))
-        if flow is None:
-            return False
+        actor_handle = logs.format_actor_handle(actor) or "<unknown>"
+        thread_ref = outcome.thread_name or getattr(thread, "id", None) or "<unknown>"
+        emoji = "📘" if outcome.result == "panel_created" else "⚠️"
 
-        try:
-            await message.add_reaction("👍")
-        except Exception:  # pragma: no cover - best effort
-            log.debug("failed to add promo auto-reaction", exc_info=True)
+        payload: dict[str, object] = {
+            "actor": actor_handle,
+            "thread": thread_ref,
+            "result": outcome.result,
+            "ms": outcome.elapsed_ms,
+        }
+        if outcome.reason:
+            payload["reason"] = outcome.reason
+        if flow:
+            payload["flow"] = flow
+        if trigger:
+            payload["trigger"] = trigger
 
-        await self._post_panel(thread, actor=message.author, source="promo.trigger", flow=flow)
-        return True
+        log_lifecycle(
+            log,
+            "welcome",
+            "triggered",
+            scope_label="Welcome panel",
+            emoji=emoji,
+            dedupe=False,
+            **payload,
+        )
 
     async def _resolve_thread(self, payload: RawReactionActionEvent) -> discord.Thread | None:
         if payload.guild_id is None:
@@ -1386,51 +1547,6 @@ class WelcomeWatcher(commands.Cog):
                 thread = channel
         return thread
 
-    async def _maybe_handle_promo_reaction(
-        self, payload: RawReactionActionEvent, thread: discord.Thread
-    ) -> bool:
-        if not self._promo_features_enabled():
-            return False
-        if not thread_scopes.is_promo_parent(thread):
-            return False
-
-        bot_user = getattr(self.bot, "user", None)
-        if bot_user and payload.user_id == getattr(bot_user, "id", None):
-            return True
-
-        guild = self.bot.get_guild(payload.guild_id) if payload.guild_id else None
-        member: discord.Member | None = payload.member
-        if member is None and guild is not None:
-            member = guild.get_member(payload.user_id)
-        actor: discord.abc.User | None = member or payload.member
-
-        if not self._eligible_member(member, thread):
-            context = self._log_context(
-                thread,
-                actor,
-                source="promo_emoji",
-                result="not_eligible",
-                reason="missing_role_or_owner",
-                emoji=_TICKET_EMOJI,
-            )
-            await logs.send_welcome_log("warn", **context)
-            return True
-
-        try:
-            message = await thread.fetch_message(payload.message_id)
-        except Exception:  # pragma: no cover - network fallback
-            return True
-
-        if not self._is_ticket_tool_author(getattr(message, "author", None)):
-            return True
-
-        flow = _promo_flow_from_content(getattr(message, "content", None))
-        if flow is None:
-            return True
-
-        await self._post_panel(thread, actor=actor, source="promo.emoji", flow=flow)
-        return True
-
     async def _post_panel(
         self,
         thread: discord.Thread,
@@ -1440,73 +1556,14 @@ class WelcomeWatcher(commands.Cog):
         flow: str = "welcome",
         ticket_code: str | None = None,
     ) -> None:
-        thread_name = getattr(thread, "name", None)
-        resolved_flow = flow or "welcome"
-        if ticket_code is None:
-            parser = parse_promo_thread_name if resolved_flow.startswith("promo") else parse_welcome_thread_name
-            parts = parser(thread_name)
-            ticket_code = getattr(parts, "ticket_code", None)
-        parent_channel = getattr(thread, "parent", None)
-        question_count, schema_version = logs.question_stats(resolved_flow)
-
-        async def _emit(result: str | None = None, reason: str | None = None) -> None:
-            payload: dict[str, object] = {
-                "ticket": ticket_code or thread,
-                "actor": actor,
-                "channel": parent_channel,
-                "questions": question_count,
-                "schema_version": schema_version,
-            }
-            if result is not None:
-                payload["result"] = result
-            if reason is not None:
-                payload["reason"] = reason
-            await logs.log_onboarding_panel_lifecycle(event="open", **payload)
-
-        joined, join_error = await thread_membership.ensure_thread_membership(thread)
-        if not joined:
-            if join_error is not None:
-                log.warning("failed to join welcome thread", exc_info=True)
-            await _emit(result="error", reason="thread_join_failed")
-            return
-
-        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
-        existing_panel = await panels.find_panel_message(thread, bot_user_id=bot_user_id)
-
-        def _has_open_button(message: discord.Message | None) -> bool:
-            if message is None:
-                return False
-            for row in getattr(message, "components", []) or []:
-                for component in getattr(row, "children", []) or []:
-                    if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
-                        return True
-            for component in getattr(message, "components", []) or []:
-                if getattr(component, "custom_id", None) == panels.OPEN_QUESTIONS_CUSTOM_ID:
-                    return True
-            return False
-
-        if existing_panel is not None:
-            if not _has_open_button(existing_panel):
-                try:
-                    await existing_panel.edit(view=panels.OpenQuestionsPanelView())
-                except Exception:
-                    log.debug("failed to attach open questions view to existing panel", exc_info=True)
-            await _emit(result="skipped", reason="panel_exists")
-            return
-
-        view = panels.OpenQuestionsPanelView()
-        content = "Ready when you are — tap below to open the onboarding questions."
-        try:
-            await thread.send(content, view=view)
-        except Exception:
-            log.exception("failed to post onboarding panel message")
-            await _emit(result="error", reason="panel_send_failed")
-            return
-
-        if ticket_code:
-            await _emit()
-        else:
-            await _emit(result="skipped", reason="ticket_not_parsed")
+        outcome = await post_open_questions_panel(
+            self.bot,
+            thread,
+            actor=actor,
+            flow=flow,
+            ticket_code=ticket_code,
+        )
+        self._log_panel_outcome(actor, thread, outcome, flow=flow)
 
     # ---- listeners ----------------------------------------------------------------
     @commands.Cog.listener()
@@ -1514,12 +1571,12 @@ class WelcomeWatcher(commands.Cog):
         thread = message.channel if isinstance(message.channel, discord.Thread) else None
         if thread is None:
             return
-        if await self._handle_promo_greeting(message, thread):
+
+        target_channel_id = self.channel_id
+        parent_ref = getattr(thread, "parent_id", None)
+        if target_channel_id is None or parent_ref != target_channel_id:
             return
         if not self._features_enabled():
-            return
-        target_channel_id = self.channel_id
-        if target_channel_id is None or thread.parent_id != target_channel_id:
             return
         if not thread_scopes.is_welcome_parent(thread):
             return
@@ -1560,8 +1617,6 @@ class WelcomeWatcher(commands.Cog):
             return
         thread = await self._resolve_thread(payload)
         if thread is None:
-            return
-        if await self._maybe_handle_promo_reaction(payload, thread):
             return
         if not self._features_enabled():
             return

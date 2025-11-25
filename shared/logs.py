@@ -20,7 +20,16 @@ def _fmt_kvs(kvs: dict[str, Any]) -> str:
     return " • ".join(parts)
 
 
-def log_lifecycle(logger: Any, scope: str, event: str, **fields: Any) -> None:
+def log_lifecycle(
+    logger: Any,
+    scope: str,
+    event: str,
+    *,
+    scope_label: str | None = None,
+    emoji: str = "📘",
+    dedupe: bool = True,
+    **fields: Any,
+) -> str | None:
     """Log a human-readable lifecycle line with dedupe and blank-field filtering.
 
     Parameters
@@ -43,12 +52,12 @@ def log_lifecycle(logger: Any, scope: str, event: str, **fields: Any) -> None:
     now = monotonic()
     key = (scope, event)
     last = _lifecycle_dedupe.get(key, 0.0)
-    if now - last < 5.0:
-        return
+    if dedupe and now - last < 5.0:
+        return None
     _lifecycle_dedupe[key] = now
 
-    prefix = "📘"
-    title = f"{scope.capitalize()} watcher"
+    prefix = emoji or "📘"
+    title = scope_label or f"{scope.capitalize()} watcher"
     kv_text = _fmt_kvs(fields)
     line = f"{prefix} {title} — event={event}" + (f" • {kv_text}" if kv_text else "")
     try:
@@ -56,3 +65,5 @@ def log_lifecycle(logger: Any, scope: str, event: str, **fields: Any) -> None:
     except Exception:
         # Logging should never raise upstream.
         pass
+
+    return line

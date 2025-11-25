@@ -5,21 +5,34 @@ import asyncio
 import datetime as dt
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from time import monotonic
+from typing import Dict, List, Optional, Tuple
 
 import discord
 from discord.ext import commands
 
 from modules.common import feature_flags
+from modules.onboarding import logs as onboarding_logs
 from modules.onboarding import thread_scopes
-from modules.onboarding.watcher_welcome import parse_promo_thread_name
+from modules.onboarding.watcher_welcome import (
+    _channel_readable_label,
+    PanelOutcome,
+    parse_promo_thread_name,
+    post_open_questions_panel,
+)
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
+from shared.logs import log_lifecycle
 from shared.sheets import onboarding as onboarding_sheets
 from shared.sheets.onboarding import PROMO_HEADERS
 
 UTC = dt.timezone.utc
 log = logging.getLogger("c1c.onboarding.promo_watcher")
 _CLOSED_MESSAGE_TOKEN = "ticket closed"
+_PROMO_TRIGGER_MAP: Dict[str, str] = {
+    "<!-- trigger:promo.r -->": "promo.r",
+    "<!-- trigger:promo.m -->": "promo.m",
+    "<!-- trigger:promo.l -->": "promo.l",
+}
 
 
 @dataclass(slots=True)
@@ -96,6 +109,14 @@ def _format_timestamp(value: dt.datetime) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _promo_trigger_from_content(content: str | None) -> Tuple[str | None, str | None]:
+    text = content or ""
+    for marker, flow in _PROMO_TRIGGER_MAP.items():
+        if marker in text:
+            return marker, flow
+    return None, None
+
+
 class PromoTicketWatcher(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -126,6 +147,73 @@ class PromoTicketWatcher(commands.Cog):
         if self.ticket_tool_id is not None:
             return getattr(user, "id", None) == self.ticket_tool_id
         return False
+
+    def _log_panel_outcome(
+        self,
+        actor: discord.abc.User | None,
+        thread: discord.Thread,
+        *,
+        outcome: PanelOutcome,
+        trigger: str | None,
+        flow: str | None,
+    ) -> None:
+        actor_handle = onboarding_logs.format_actor_handle(actor) or "<unknown>"
+        thread_ref = getattr(thread, "name", None) or getattr(thread, "id", None) or "<unknown>"
+        emoji = "📘" if outcome.result == "panel_created" else "⚠️"
+
+        payload: dict[str, object] = {
+            "actor": actor_handle,
+            "thread": thread_ref,
+            "trigger": trigger,
+            "flow": flow,
+            "result": outcome.result,
+            "ms": outcome.elapsed_ms,
+        }
+        if outcome.reason:
+            payload["reason"] = outcome.reason
+
+        log_lifecycle(
+            log,
+            "promo",
+            "triggered",
+            scope_label="Promo panel",
+            emoji=emoji,
+            dedupe=False,
+            **payload,
+        )
+
+    def _log_missing_trigger(
+        self,
+        actor: discord.abc.User | None,
+        thread: discord.Thread,
+        *,
+        reason: str,
+        trigger: str | None,
+        start: float,
+    ) -> None:
+        actor_handle = onboarding_logs.format_actor_handle(actor) or "<unknown>"
+        thread_ref = getattr(thread, "name", None) or getattr(thread, "id", None) or "<unknown>"
+        elapsed_ms = int((monotonic() - start) * 1000)
+
+        payload: dict[str, object] = {
+            "actor": actor_handle,
+            "thread": thread_ref,
+            "result": "skipped",
+            "reason": reason,
+            "ms": elapsed_ms,
+        }
+        if trigger:
+            payload["trigger"] = trigger
+
+        log_lifecycle(
+            log,
+            "promo",
+            "triggered",
+            scope_label="Promo panel",
+            emoji="⚠️",
+            dedupe=False,
+            **payload,
+        )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:
@@ -426,14 +514,20 @@ class PromoTicketWatcher(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
+        channel_ref = (
+            getattr(message.channel, "parent_id", None)
+            if isinstance(message.channel, discord.Thread)
+            else getattr(message.channel, "id", None)
+        )
+        if self.channel_id is None or channel_ref != self.channel_id:
+            return
         if not self._features_enabled():
             return
         thread = message.channel if isinstance(message.channel, discord.Thread) else None
-        if not self._is_ticket_thread(thread):
-            return
-        if thread is None:
+        if thread is None or not self._is_ticket_thread(thread):
             return
 
+        start = monotonic()
         context = await self._ensure_context(thread)
         if context is None:
             return
@@ -443,6 +537,41 @@ class PromoTicketWatcher(commands.Cog):
             if _CLOSED_MESSAGE_TOKEN in content:
                 context.close_detected = True
                 await self._begin_clan_prompt(thread, context)
+                return
+
+            trigger_key, flow_key = _promo_trigger_from_content(message.content)
+            if trigger_key and not flow_key:
+                self._log_missing_trigger(
+                    message.author,
+                    thread,
+                    reason="unknown_flow",
+                    trigger=trigger_key,
+                    start=start,
+                )
+                return
+            if not trigger_key or not flow_key:
+                self._log_missing_trigger(
+                    message.author,
+                    thread,
+                    reason="missing_trigger",
+                    trigger=trigger_key,
+                    start=start,
+                )
+                return
+
+            outcome = await post_open_questions_panel(
+                self.bot,
+                thread,
+                actor=message.author,
+                flow=flow_key,
+            )
+            self._log_panel_outcome(
+                message.author,
+                thread,
+                outcome=outcome,
+                trigger=flow_key,
+                flow=flow_key,
+            )
             return
 
         if getattr(message.author, "bot", False):
@@ -484,5 +613,16 @@ async def setup(bot: commands.Bot) -> None:
         log.info("⚠️ Promo watcher disabled: PROMO_CHANNEL_ID missing.")
         return
 
-    await bot.add_cog(PromoTicketWatcher(bot))
-    log.info("promo watcher enabled", extra={"channel_id": channel_id})
+    watcher = PromoTicketWatcher(bot)
+    await bot.add_cog(watcher)
+    label = _channel_readable_label(bot, watcher.channel_id)
+    log_lifecycle(
+        log,
+        "promo",
+        "enabled",
+        scope_label="Promo watcher",
+        emoji="✅",
+        channel=label,
+        channel_id=watcher.channel_id,
+        triggers=len(_PROMO_TRIGGER_MAP),
+    )
