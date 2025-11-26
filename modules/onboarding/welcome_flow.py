@@ -229,28 +229,16 @@ async def start_welcome_dialog(
         )
         return
 
-    if flow == "welcome":
-        await logs.log_onboarding_panel_lifecycle(
-            event="start",
-            ticket=thread,
-            actor=actor,
-            channel=getattr(thread, "parent", None),
-            questions=len(questions),
-            schema_version=schema_version,
-            scope=flow,
-        )
-    else:
-        await logs.send_welcome_log(
-            "info",
-            **_context(
-                {
-                    "result": "started",
-                    "schema": schema_version,
-                    "questions": len(questions),
-                    **context_defaults,
-                }
-            ),
-        )
+    normalized_scope = "promo" if str(flow or "").startswith("promo") else (flow or "welcome")
+    await logs.log_onboarding_panel_lifecycle(
+        event="start",
+        ticket=thread,
+        actor=actor,
+        channel=getattr(thread, "parent", None),
+        questions=len(questions),
+        schema_version=schema_version,
+        scope=normalized_scope,
+    )
 
     controller_bot = bot or _resolve_bot(thread)
     if controller_bot is None:

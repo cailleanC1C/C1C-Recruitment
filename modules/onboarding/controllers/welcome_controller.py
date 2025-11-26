@@ -1912,14 +1912,13 @@ class BaseWelcomeController:
         session: SessionData | None,
         answers: Mapping[str, Any],
     ) -> None:
-        if self.flow != "welcome":
-            return
         question_count = len(self._questions.get(thread_id, [])) if hasattr(self, "_questions") else None
         schema_version = getattr(session, "schema_hash", None)
         extras: dict[str, Any] | None = None
         level_detail = _extract_level_detail(answers)
         if level_detail:
             extras = {"level_detail": level_detail}
+        scope = "promo" if str(self.flow or "").startswith("promo") else (self.flow or "welcome")
         await logs.log_onboarding_panel_lifecycle(
             event="complete",
             ticket=thread,
@@ -1928,8 +1927,7 @@ class BaseWelcomeController:
             questions=question_count,
             schema_version=schema_version,
             extras=extras,
-            scope=self.flow,
-            scope_label="Promo panel" if self.flow == "promo" else "Welcome panel",
+            scope=scope,
         )
 
     async def _send_panel_with_retry(

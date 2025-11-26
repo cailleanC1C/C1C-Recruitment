@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from typing import Any, Mapping
-
 import discord
 from discord.utils import utcnow
 
 from modules.recruitment.summary_embed import build_welcome_summary_embed
 from modules.recruitment.summary_map import SUMMARY_FRAME
 from shared import theme
-from shared.sheets import onboarding_questions
+from shared.sheets import onboarding_questions, Question
 
 _COLOUR = discord.Colour(0x1F8BFF)
 _FOOTER = "blue flame lit • C1C"
@@ -93,29 +92,9 @@ def _build_onboarding_summary(
             {"flow": flow, "expected": expected_hash, "received": schema_hash},
         )
 
-    rendered_qids: set[str] = set()
-    for question in questions:
-        if _is_hidden(question.qid, visibility):
-            continue
-        value = _format_answer(question.type, answers.get(question.qid))
-        if not value:
-            continue
-        rendered_qids.add(question.qid)
-        if len(value) > 1024:
-            value = f"{value[:1021]}..."
-        embed.add_field(name=question.label, value=value, inline=False)
-
-    for qid, stored in answers.items():
-        if qid in rendered_qids:
-            continue
-        if _is_hidden(qid, visibility):
-            continue
-        value = _stringify_collection(stored)
-        if not value:
-            continue
-        if len(value) > 1024:
-            value = f"{value[:1021]}..."
-        embed.add_field(name=qid, value=value, inline=False)
+    fields = build_onboarding_summary_fields(questions, answers, visibility)
+    for field in fields:
+        embed.add_field(**field)
 
     return embed
 
@@ -223,4 +202,44 @@ def _is_hidden(qid: str, visibility: Mapping[str, Mapping[str, str]] | None) -> 
     return state == "skip"
 
 
-__all__ = ["build_summary_embed"]
+def build_onboarding_summary_fields(
+    questions: Iterable[Question],
+    answers: Mapping[str, Any],
+    visibility: Mapping[str, Mapping[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """Return embed fields for onboarding summaries using bold labels."""
+
+    rendered_qids: set[str] = set()
+    fields: list[dict[str, Any]] = []
+
+    for question in questions:
+        if _is_hidden(question.qid, visibility):
+            continue
+        value = _format_answer(question.type, answers.get(question.qid))
+        if not value:
+            continue
+        rendered_qids.add(question.qid)
+        cleaned_value = value if len(value) <= 1024 else f"{value[:1021]}..."
+        fields.append({
+            "name": f"**{question.label}**",
+            "value": cleaned_value,
+            "inline": False,
+        })
+
+    for qid, stored in answers.items():
+        if qid in rendered_qids or _is_hidden(qid, visibility):
+            continue
+        value = _stringify_collection(stored)
+        if not value:
+            continue
+        cleaned_value = value if len(value) <= 1024 else f"{value[:1021]}..."
+        fields.append({
+            "name": f"**{qid}**",
+            "value": cleaned_value,
+            "inline": False,
+        })
+
+    return fields
+
+
+__all__ = ["build_summary_embed", "build_onboarding_summary_fields"]
