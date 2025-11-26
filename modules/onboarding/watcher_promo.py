@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands
 
 from modules.common import feature_flags
+from modules.common import runtime as rt
 from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding import logs as onboarding_logs
 from modules.onboarding import thread_scopes
@@ -35,6 +36,13 @@ _PROMO_TRIGGER_MAP: Dict[str, str] = {
     "<!-- trigger:promo.m -->": "promo.m",
     "<!-- trigger:promo.l -->": "promo.l",
 }
+
+
+async def _send_runtime(message: str) -> None:
+    try:
+        await rt.send_log_message(message)
+    except Exception:  # pragma: no cover - runtime notification best-effort
+        log.warning("failed to send promo watcher log message", exc_info=True)
 
 
 @dataclass(slots=True)
@@ -130,6 +138,7 @@ class PromoTicketWatcher(commands.Cog):
         self.ticket_tool_id = get_ticket_tool_bot_id()
         self._tickets: Dict[int, PromoTicketContext] = {}
         self._clan_tags: List[str] = []
+        self._announced = False
 
         if self.channel_id is None:
             log.warning("promo ticket watcher disabled — invalid PROMO_CHANNEL_ID")
@@ -654,73 +663,92 @@ class PromoTicketWatcher(commands.Cog):
         )
 
 
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        # Guard against firing multiple times on reconnects
+        if self._announced:
+            return
+        self._announced = True
+
+        channel_id = get_promo_channel_id()
+        if not channel_id:
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="📴",
+                result="disabled",
+                reason="missing_promo_channel",
+                channel=None,
+                channel_id=None,
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        try:
+            channel_id_int = int(channel_id)
+        except (TypeError, ValueError):
+            self.channel_id = None
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="⚠️",
+                result="error",
+                reason="invalid_promo_channel",
+                channel_id=channel_id,
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        self.channel_id = channel_id_int
+
+        if not feature_flags.is_enabled("promo_enabled"):
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="📴",
+                result="disabled",
+                reason="feature_promo_enabled_off",
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        if not feature_flags.is_enabled("enable_promo_hook"):
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="📴",
+                result="disabled",
+                reason="feature_enable_promo_hook_off",
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        label = _channel_readable_label(self.bot, channel_id_int)
+        line = log_lifecycle(
+            log,
+            "promo",
+            "enabled",
+            scope_label="Promo watcher",
+            emoji="✅",
+            channel=label,
+            channel_id=channel_id_int,
+            triggers=len(_PROMO_TRIGGER_MAP),
+        )
+        if line:
+            asyncio.create_task(_send_runtime(line))
+
+
 async def setup(bot: commands.Bot) -> None:
-    if not feature_flags.is_enabled("promo_enabled"):
-        log_lifecycle(
-            log,
-            "promo",
-            "enabled",
-            scope_label="Promo watcher",
-            emoji="📴",
-            result="disabled",
-            reason="feature_promo_enabled_off",
-        )
-        return
-
-    if not feature_flags.is_enabled("enable_promo_hook"):
-        log_lifecycle(
-            log,
-            "promo",
-            "enabled",
-            scope_label="Promo watcher",
-            emoji="📴",
-            result="disabled",
-            reason="feature_enable_promo_hook_off",
-        )
-        return
-
-    raw_channel_id = get_promo_channel_id()
-    if not raw_channel_id:
-        log_lifecycle(
-            log,
-            "promo",
-            "enabled",
-            scope_label="Promo watcher",
-            emoji="⚠️",
-            result="skipped",
-            reason="missing_promo_channel",
-            channel=None,
-            channel_id=None,
-        )
-        return
-
-    try:
-        channel_id = int(raw_channel_id)
-    except (TypeError, ValueError):
-        log_lifecycle(
-            log,
-            "promo",
-            "enabled",
-            scope_label="Promo watcher",
-            emoji="⚠️",
-            result="skipped",
-            reason="invalid_promo_channel",
-            channel_id=raw_channel_id,
-        )
-        return
-
-    watcher = PromoTicketWatcher(bot)
-    watcher.channel_id = channel_id
-    watcher.promo_channel_label = _channel_readable_label(bot, channel_id)
-
-    await bot.add_cog(watcher)
-    log_lifecycle(
-        log,
-        "promo",
-        "enabled",
-        scope_label="Promo watcher",
-        emoji="✅",
-        channel=watcher.promo_channel_label,
-        channel_id=channel_id,
-        triggers=len(_PROMO_TRIGGER_MAP),
-    )
+    await bot.add_cog(PromoTicketWatcher(bot))

@@ -775,12 +775,6 @@ class OpenQuestionsPanelView(discord.ui.View):
                     payload["error"] = str(error)
                 await diag.log_event("warning", "wizard_launch_failed", **payload)
             await self._ensure_error_notice(interaction)
-            prompt_retry = getattr(controller, "prompt_retry", None)
-            if callable(prompt_retry):
-                try:
-                    await prompt_retry(interaction, thread_id)
-                except Exception:  # pragma: no cover - best-effort fallback
-                    log.warning("failed to post retry prompt", exc_info=True)
 
         await _ensure_deferred(interaction)
 
