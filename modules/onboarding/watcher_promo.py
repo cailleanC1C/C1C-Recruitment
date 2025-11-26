@@ -38,9 +38,7 @@ _PROMO_TRIGGER_MAP: Dict[str, str] = {
 }
 
 
-async def _send_runtime(message: str | None) -> None:
-    if not message:
-        return
+async def _send_runtime(message: str) -> None:
     try:
         await rt.send_log_message(message)
     except Exception:  # pragma: no cover - runtime notification best-effort
@@ -665,10 +663,47 @@ class PromoTicketWatcher(commands.Cog):
         )
 
 
+    @commands.Cog.listener()
     async def on_ready(self) -> None:
         if self._announced:
             return
         self._announced = True
+
+        raw_channel_id = get_promo_channel_id()
+        if not raw_channel_id:
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="📴",
+                result="disabled",
+                reason="missing_promo_channel",
+                channel=None,
+                channel_id=None,
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        try:
+            channel_id = int(raw_channel_id)
+        except (TypeError, ValueError):
+            line = log_lifecycle(
+                log,
+                "promo",
+                "enabled",
+                scope_label="Promo watcher",
+                emoji="⚠️",
+                result="error",
+                reason="invalid_promo_channel",
+                channel_id=raw_channel_id,
+            )
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
+
+        self.channel_id = channel_id
 
         if not feature_flags.is_enabled("promo_enabled"):
             line = log_lifecycle(
@@ -698,50 +733,14 @@ class PromoTicketWatcher(commands.Cog):
                 asyncio.create_task(_send_runtime(line))
             return
 
-        raw_channel_id = get_promo_channel_id()
-        if not raw_channel_id:
-            line = log_lifecycle(
-                log,
-                "promo",
-                "enabled",
-                scope_label="Promo watcher",
-                emoji="⚠️",
-                result="skipped",
-                reason="missing_promo_channel",
-                channel=None,
-                channel_id=None,
-            )
-            if line:
-                asyncio.create_task(_send_runtime(line))
-            return
-
-        try:
-            channel_id = int(raw_channel_id)
-        except (TypeError, ValueError):
-            line = log_lifecycle(
-                log,
-                "promo",
-                "enabled",
-                scope_label="Promo watcher",
-                emoji="⚠️",
-                result="skipped",
-                reason="invalid_promo_channel",
-                channel_id=raw_channel_id,
-            )
-            if line:
-                asyncio.create_task(_send_runtime(line))
-            return
-
-        self.channel_id = channel_id
-        self.promo_channel_label = _channel_readable_label(self.bot, channel_id)
-
+        label = _channel_readable_label(self.bot, channel_id)
         line = log_lifecycle(
             log,
             "promo",
             "enabled",
             scope_label="Promo watcher",
             emoji="✅",
-            channel=self.promo_channel_label,
+            channel=label,
             channel_id=channel_id,
             triggers=len(_PROMO_TRIGGER_MAP),
         )
