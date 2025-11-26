@@ -843,9 +843,28 @@ class OpenQuestionsPanelView(discord.ui.View):
         try:
             content = controller.render_step(thread_id, step=0)
             content = view._apply_requirement_suffix(content, view._question())
-        except Exception as exc:
-            log.warning("failed to render onboarding wizard step", exc_info=True)
-            await _hard_fail("render_failed", error=exc)
+        except Exception as err:  # pragma: no cover - best-effort fallback
+            # Surface enough context so we can see *what* actually blew up.
+            try:
+                current_step = getattr(controller, "current_step", None)
+            except Exception:  # pragma: no cover - defensive
+                current_step = None
+
+            log.warning(
+                "failed to render onboarding wizard step • flow=%r step=%r error=%r",
+                getattr(controller, "flow_id", None),
+                current_step,
+                err,
+                exc_info=True,
+            )
+            logs.human(
+                "error",
+                "onboarding.wizard_render_failed",
+                flow=getattr(controller, "flow_id", None),
+                step=current_step,
+                error=str(err),
+            )
+            await _hard_fail("render_failed", error=err)
             return
 
         message: discord.Message | None = None
