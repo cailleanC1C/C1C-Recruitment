@@ -62,6 +62,33 @@ def test_lifecycle_helper_formats_neutral(monkeypatch, caplog):
     assert any("Welcome panel — scope=welcome" in record.getMessage() for record in caplog.records)
 
 
+def test_lifecycle_helper_supports_promo_scope(monkeypatch, caplog):
+    sent: list[str] = []
+
+    async def fake_send(message: str) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(logs.rt, "send_log_message", fake_send)
+    caplog.set_level(logging.INFO, logger="c1c.onboarding.logs")
+
+    async def runner() -> None:
+        await logs.log_onboarding_panel_lifecycle(
+            event="open",
+            ticket="PM0101-recruit",
+            actor="@Recruit",
+            channel="#PROMO › promo",
+            questions=18,
+            schema_version="abcdef123456",
+            scope="promo",
+        )
+
+    asyncio.run(runner())
+
+    assert sent, "expected log message"
+    assert sent[0].startswith("🧭 Promo panel — scope=promo"), sent[0]
+    assert any("Promo panel — scope=promo" in record.getMessage() for record in caplog.records)
+
+
 def test_lifecycle_helper_logs_error_reason(monkeypatch, caplog):
     sent: list[str] = []
 

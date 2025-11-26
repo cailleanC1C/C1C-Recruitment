@@ -4,6 +4,9 @@
 - **Reservations:** Routed same-day reservation reminders to the recruiters channel with ticket jump links instead of ticket threads.
 - **Logging:** Auto-release now leaves the human summary in the ticket, posts structured audit lines to the logging channel, and stops sending expiry notices to the Clanmatch panel.
 - **Config & docs:** Added configurable recruiter and logging channel IDs plus updated documentation and templates for the new routing.
+- **Onboarding:** Restored the welcome wizard `session_status` hook expected by the inline UI so renders no longer fail when the status row is shown.
+- **Promo UX:** Reused the existing wizard card when fallback answers arrive in promo threads and deleted the raw reply, preventing duplicate panels and thread clutter.
+- **Telemetry:** Logged promo onboarding events with `scope=promo`/“Promo panel” labels instead of “Welcome,” keeping watcher and gate logs aligned with the flow.
 
 ### v0.9.7 — 2025-11-21
 - **Ops:** Restored onboarding lifecycle logs for welcome panel opens to include `result`/`reason` fields with severity-driven levels, restoring observability for failed launches.

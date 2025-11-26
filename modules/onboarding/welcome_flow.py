@@ -237,6 +237,7 @@ async def start_welcome_dialog(
             channel=getattr(thread, "parent", None),
             questions=len(questions),
             schema_version=schema_version,
+            scope=flow,
         )
     else:
         await logs.send_welcome_log(

@@ -102,14 +102,18 @@ def _log_gate(
     allowed: bool,
     reason: str,
     fallback_thread: discord.Thread | None = None,
+    flow: str | None = None,
 ) -> None:
     channel_obj: discord.abc.GuildChannel | discord.Thread | None
     channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else fallback_thread
     emoji = "✅" if allowed else "🔐"
     status = "ok" if allowed else "deny"
+    scope = (flow or "welcome").strip().lower() or "welcome"
+    scope_label = "Promo" if scope == "promo" else "Welcome"
     gate_log.info(
-        "%s Welcome — gate=%s • user=%s • channel=%s • reason=%s",
+        "%s %s — gate=%s • user=%s • channel=%s • reason=%s",
         emoji,
+        scope_label,
         status,
         _display_name(getattr(interaction, "user", None)),
         _channel_path(channel_obj),
@@ -1691,6 +1695,30 @@ class BaseWelcomeController:
         next_index, _ = self.resolve_step(thread_id, step, direction=1)
         return next_index is None
 
+    def session_status(
+        self, thread_id: int, question: object | None = None
+    ) -> str | None:
+        """Return the session status for the given thread/question."""
+
+        session = store.get(thread_id)
+        if session is None:
+            return None
+
+        if question is not None:
+            try:
+                key = self._question_key(question)
+            except Exception:
+                key = None
+            if key:
+                stored = self._answer_for(thread_id, key)
+                if stored is not None:
+                    return "answered"
+
+        status = getattr(session, "status", None)
+        if isinstance(status, str) and status.strip():
+            return status.strip()
+        return None
+
     def render_step(self, thread_id: int, step: int) -> str:
         questions = self._questions.get(thread_id) or []
         status = self.session_status(thread_id)
@@ -1900,6 +1928,8 @@ class BaseWelcomeController:
             questions=question_count,
             schema_version=schema_version,
             extras=extras,
+            scope=self.flow,
+            scope_label="Promo panel" if self.flow == "promo" else "Welcome panel",
         )
 
     async def _send_panel_with_retry(
@@ -3529,7 +3559,13 @@ class BaseWelcomeController:
 
         if actor_id is not None and actor_id in allowed_cache:
             fallback_thread = interaction.channel if isinstance(interaction.channel, discord.Thread) else self._thread_for(thread_id)
-            _log_gate(interaction, allowed=True, reason="cached", fallback_thread=fallback_thread)
+            _log_gate(
+                interaction,
+                allowed=True,
+                reason="cached",
+                fallback_thread=fallback_thread,
+                flow=self.flow,
+            )
             if log_context is not None:
                 await self._log_access("info", "allowed", thread_id, interaction, log_context)
             return True, None
@@ -3538,7 +3574,13 @@ class BaseWelcomeController:
         subject = interaction.channel if isinstance(interaction.channel, discord.Thread) else None
 
         if subject is None:
-            _log_gate(interaction, allowed=False, reason="no_thread", fallback_thread=thread)
+            _log_gate(
+                interaction,
+                allowed=False,
+                reason="no_thread",
+                fallback_thread=thread,
+                flow=self.flow,
+            )
             if log_context is not None:
                 await self._log_access("warn", "denied_scope", thread_id, interaction, log_context)
             await _safe_ephemeral(
@@ -3549,7 +3591,13 @@ class BaseWelcomeController:
 
         perms = subject.permissions_for(cast(discord.abc.Snowflake, actor))
         if not perms.view_channel:
-            _log_gate(interaction, allowed=False, reason="no_view_channel", fallback_thread=subject)
+            _log_gate(
+                interaction,
+                allowed=False,
+                reason="no_view_channel",
+                fallback_thread=subject,
+                flow=self.flow,
+            )
             if log_context is not None:
                 await self._log_access(
                     "warn",
@@ -3569,7 +3617,13 @@ class BaseWelcomeController:
             allowed_cache.add(int(actor_id))
         if log_context is not None:
             await self._log_access("info", "allowed", thread_id, interaction, log_context)
-        _log_gate(interaction, allowed=True, reason="view_channel", fallback_thread=subject)
+        _log_gate(
+            interaction,
+            allowed=True,
+            reason="view_channel",
+            fallback_thread=subject,
+            flow=self.flow,
+        )
         return True, None
 
     def _store_select_answer(

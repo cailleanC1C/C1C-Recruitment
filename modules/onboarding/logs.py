@@ -261,6 +261,8 @@ async def log_onboarding_panel_lifecycle(
     result: str | None = None,
     reason: str | None = None,
     extras: Mapping[str, Any] | None = None,
+    scope: str | None = None,
+    scope_label: str | None = None,
 ) -> None:
     """Emit a single lifecycle log entry for onboarding panel events."""
 
@@ -336,7 +338,10 @@ async def log_onboarding_panel_lifecycle(
     }
     emoji = severity_emoji.get(severity, emoji_map.get(event_slug, logfmt.LOG_EMOJI["lifecycle"]))
 
-    fields: list[str] = ["scope=welcome"]
+    resolved_scope = (scope or "welcome").strip().lower() or "welcome"
+    resolved_label = scope_label or ("Promo panel" if resolved_scope == "promo" else "Welcome panel")
+
+    fields: list[str] = [f"scope={resolved_scope}"]
     if ticket_code:
         fields.append(f"ticket={ticket_code}")
     if actor_name and actor_name != "-":
@@ -355,7 +360,7 @@ async def log_onboarding_panel_lifecycle(
     if reason_label and reason_label != "-":
         fields.append(f"reason={reason_label}")
 
-    message = f"{emoji} Welcome panel — " + " • ".join(fields)
+    message = f"{emoji} {resolved_label} — " + " • ".join(fields)
     log.log(level, "%s", message)
     try:
         await rt.send_log_message(message)

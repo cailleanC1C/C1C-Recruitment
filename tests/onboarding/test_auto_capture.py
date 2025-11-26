@@ -350,3 +350,73 @@ def test_start_session_from_button_seeds_respondent() -> None:
         store.end(thread_id)
 
     asyncio.run(runner())
+
+
+def test_session_status_tracks_answers() -> None:
+    async def runner() -> None:
+        loop = asyncio.get_running_loop()
+        controller = WelcomeController(SimpleNamespace(loop=loop, logger=None))
+
+        thread_id = 7000
+        question = SimpleNamespace(
+            qid="w_inline",
+            label="IGN",
+            type="short",
+            required=True,
+            validate="",
+            help="",
+            options=(),
+        )
+        controller._questions[thread_id] = [question]
+
+        session = store.ensure(thread_id, flow=controller.flow, schema_hash="hash")
+        session.status = "in_progress"
+
+        controller.answers_by_thread[thread_id] = {}
+        assert controller.session_status(thread_id, question) == "in_progress"
+
+        controller.answers_by_thread[thread_id]["w_inline"] = "Name"
+        assert controller.session_status(thread_id, question) == "answered"
+
+        store.end(thread_id)
+
+    asyncio.run(runner())
+
+
+def test_refresh_inline_message_reuses_existing_message(monkeypatch) -> None:
+    async def runner() -> None:
+        loop = asyncio.get_running_loop()
+        controller = WelcomeController(SimpleNamespace(loop=loop, logger=None))
+
+        thread_id = 8000
+        question = SimpleNamespace(
+            qid="w_clean",
+            label="IGN",
+            type="short",
+            required=True,
+            validate="",
+            help="",
+            options=(),
+        )
+        controller._questions[thread_id] = [question]
+        controller.answers_by_thread[thread_id] = {}
+
+        session = store.ensure(thread_id, flow=controller.flow, schema_hash="hash")
+        session.pending_step = {"kind": "inline", "index": 0}
+        session.current_question_index = 0
+        session.status = "in_progress"
+
+        message = SimpleNamespace(id=999, edit=AsyncMock())
+        controller._inline_messages[thread_id] = message
+
+        thread = SimpleNamespace(id=thread_id, send=AsyncMock(), fetch_message=AsyncMock())
+        controller._threads[thread_id] = thread
+
+        await controller._refresh_inline_message(thread_id, index=0)
+
+        message.edit.assert_awaited()
+        thread.send.assert_not_awaited()
+
+        store.end(thread_id)
+
+    asyncio.run(runner())
