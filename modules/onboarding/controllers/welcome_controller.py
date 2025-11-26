@@ -108,12 +108,16 @@ def _log_gate(
     channel_obj = interaction.channel if isinstance(interaction.channel, (discord.Thread, discord.abc.GuildChannel)) else fallback_thread
     emoji = "✅" if allowed else "🔐"
     status = "ok" if allowed else "deny"
-    scope = (flow or "welcome").strip().lower() or "welcome"
-    scope_label = "Promo" if scope == "promo" else "Welcome"
+    context: dict[str, str] = {}
+    flow_value = (flow or "welcome").strip().lower() or "welcome"
+    scope = "promo" if str(flow_value).startswith("promo") else "welcome"
+    label = "Promo" if scope == "promo" else "Welcome"
+    context["scope"] = scope
+    context["scope_label"] = f"{label} gate"
     gate_log.info(
         "%s %s — gate=%s • user=%s • channel=%s • reason=%s",
         emoji,
-        scope_label,
+        context["scope_label"],
         status,
         _display_name(getattr(interaction, "user", None)),
         _channel_path(channel_obj),
