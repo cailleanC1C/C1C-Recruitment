@@ -140,6 +140,7 @@ class PromoTicketWatcher(commands.Cog):
         self.ticket_tool_id = get_ticket_tool_bot_id()
         self._tickets: Dict[int, PromoTicketContext] = {}
         self._clan_tags: List[str] = []
+        self._announced = False
 
         if self.channel_id is None:
             log.warning("promo ticket watcher disabled — invalid PROMO_CHANNEL_ID")
@@ -664,10 +665,13 @@ class PromoTicketWatcher(commands.Cog):
         )
 
 
-async def setup(bot: commands.Bot) -> None:
-    if not feature_flags.is_enabled("promo_enabled"):
-        await _send_runtime(
-            log_lifecycle(
+    async def on_ready(self) -> None:
+        if self._announced:
+            return
+        self._announced = True
+
+        if not feature_flags.is_enabled("promo_enabled"):
+            line = log_lifecycle(
                 log,
                 "promo",
                 "enabled",
@@ -676,12 +680,12 @@ async def setup(bot: commands.Bot) -> None:
                 result="disabled",
                 reason="feature_promo_enabled_off",
             )
-        )
-        return
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
 
-    if not feature_flags.is_enabled("enable_promo_hook"):
-        await _send_runtime(
-            log_lifecycle(
+        if not feature_flags.is_enabled("enable_promo_hook"):
+            line = log_lifecycle(
                 log,
                 "promo",
                 "enabled",
@@ -690,13 +694,13 @@ async def setup(bot: commands.Bot) -> None:
                 result="disabled",
                 reason="feature_enable_promo_hook_off",
             )
-        )
-        return
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
 
-    raw_channel_id = get_promo_channel_id()
-    if not raw_channel_id:
-        await _send_runtime(
-            log_lifecycle(
+        raw_channel_id = get_promo_channel_id()
+        if not raw_channel_id:
+            line = log_lifecycle(
                 log,
                 "promo",
                 "enabled",
@@ -707,14 +711,14 @@ async def setup(bot: commands.Bot) -> None:
                 channel=None,
                 channel_id=None,
             )
-        )
-        return
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
 
-    try:
-        channel_id = int(raw_channel_id)
-    except (TypeError, ValueError):
-        await _send_runtime(
-            log_lifecycle(
+        try:
+            channel_id = int(raw_channel_id)
+        except (TypeError, ValueError):
+            line = log_lifecycle(
                 log,
                 "promo",
                 "enabled",
@@ -724,23 +728,26 @@ async def setup(bot: commands.Bot) -> None:
                 reason="invalid_promo_channel",
                 channel_id=raw_channel_id,
             )
-        )
-        return
+            if line:
+                asyncio.create_task(_send_runtime(line))
+            return
 
-    watcher = PromoTicketWatcher(bot)
-    watcher.channel_id = channel_id
-    watcher.promo_channel_label = _channel_readable_label(bot, channel_id)
+        self.channel_id = channel_id
+        self.promo_channel_label = _channel_readable_label(self.bot, channel_id)
 
-    await bot.add_cog(watcher)
-    await _send_runtime(
-        log_lifecycle(
+        line = log_lifecycle(
             log,
             "promo",
             "enabled",
             scope_label="Promo watcher",
             emoji="✅",
-            channel=watcher.promo_channel_label,
+            channel=self.promo_channel_label,
             channel_id=channel_id,
             triggers=len(_PROMO_TRIGGER_MAP),
         )
-    )
+        if line:
+            asyncio.create_task(_send_runtime(line))
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(PromoTicketWatcher(bot))
