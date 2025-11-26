@@ -7,6 +7,10 @@
 - **Onboarding:** Restored the welcome wizard `session_status` hook expected by the inline UI so renders no longer fail when the status row is shown.
 - **Promo UX:** Reused the existing wizard card when fallback answers arrive in promo threads and deleted the raw reply, preventing duplicate panels and thread clutter.
 - **Telemetry:** Logged promo onboarding events with `scope=promo`/“Promo panel” labels instead of “Welcome,” keeping watcher and gate logs aligned with the flow.
+- **Onboarding:** Unified wizard panel reuse for welcome/promo opens, resumes, and restarts so only one question card is active per thread.
+- **Onboarding:** Restored the “Input is required/optional” suffix on every step header rather than just the first/last cards.
+- **Onboarding:** Piped fallback text answers through the same cleanup path as button/select answers so captured replies are deleted once stored.
+- **Promo:** Switched promo lifecycle logs and completion handling to the promo scope/labels and routed promo summaries through the shared CI-style builder.
 
 ### v0.9.7 — 2025-11-21
 - **Ops:** Restored onboarding lifecycle logs for welcome panel opens to include `result`/`reason` fields with severity-driven levels, restoring observability for failed launches.
@@ -345,4 +349,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-26 (v0.9.7)

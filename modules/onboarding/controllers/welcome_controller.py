@@ -1742,18 +1742,11 @@ class BaseWelcomeController:
         stored = self._answer_for(thread_id, key)
         formatted = _preview_value_for_question(question, stored)
         progress = self._progress_label(thread_id, resolved_index)
+        visibility = self._visibility_map(thread_id)
+        state = _visible_state(visibility, key) if key else "show"
+        required = "Input is optional" if state == "optional" or not getattr(question, "required", True) else "Input is required"
 
-        badge: str | None = None
-        if key:
-            visibility = self._visibility_map(thread_id)
-            state = _visible_state(visibility, key)
-            if state == "optional":
-                badge = "Input is optional"
-
-        header = f"**Onboarding • {progress}"
-        if badge:
-            header = f"{header} • {badge}"
-        header = f"{header}**"
+        header = f"**Onboarding • {progress} • {required}**"
 
         lines = [header, f"## {label}"]
 
@@ -1912,8 +1905,6 @@ class BaseWelcomeController:
         session: SessionData | None,
         answers: Mapping[str, Any],
     ) -> None:
-        if self.flow != "welcome":
-            return
         question_count = len(self._questions.get(thread_id, [])) if hasattr(self, "_questions") else None
         schema_version = getattr(session, "schema_hash", None)
         extras: dict[str, Any] | None = None
@@ -2610,6 +2601,38 @@ class BaseWelcomeController:
             except Exception:
                 pass
 
+    async def _consume_answer(
+        self,
+        *,
+        thread_id: int,
+        session: SessionData,
+        question: Question,
+        value: Any,
+        index: int,
+        author_id: int | None,
+        answer_message: discord.Message | None = None,
+    ) -> None:
+        await self.set_answer(thread_id, self._question_key(question), value)
+
+        session.respondent_id = session.respondent_id or author_id
+        session.status = "in_progress"
+        session.current_question_index = index
+        session.touch()
+
+        if answer_message is not None:
+            self._record_captured_message(thread_id, answer_message)
+            await self._react_to_message(answer_message, "✅")
+
+        await self._refresh_inline_message(thread_id, index=index)
+
+        if answer_message is not None:
+            try:
+                await answer_message.delete()
+            except (discord.Forbidden, discord.NotFound):
+                pass
+            except discord.HTTPException:
+                pass
+
     def _resolve_inline_index(self, thread_id: int, session: SessionData) -> tuple[int | None, str]:
         questions = self._questions.get(thread_id) or []
         pending = session.pending_step or {}
@@ -2723,22 +2746,15 @@ class BaseWelcomeController:
             return True
 
         value = cleaned if cleaned is not None else content
-        await self.set_answer(thread_id, self._question_key(question), value)
-
-        session.respondent_id = session.respondent_id or author_id
-        session.status = "in_progress"
-        session.current_question_index = index
-        session.touch()
-
-        self._record_captured_message(thread_id, message)
-        await self._react_to_message(message, "✅")
-        await self._refresh_inline_message(thread_id, index=index)
-        try:
-            await message.delete()
-        except (discord.Forbidden, discord.NotFound):
-            pass
-        except discord.HTTPException:
-            pass
+        await self._consume_answer(
+            thread_id=thread_id,
+            session=session,
+            question=question,
+            value=value,
+            index=index,
+            author_id=author_id,
+            answer_message=message,
+        )
         try:
             qkey = self._question_key(question)
         except Exception:

@@ -33,5 +33,9 @@ same Open Questions panel as welcome tickets:
 - Once the panel is opened, `start_welcome_dialog` resolves the flow key
   (`promo.r`, `promo.m`, `promo.l`) and loads the corresponding question set
   from `ONBOARDING_TAB`.
+- Both welcome and promo flows reuse the same single wizard card per thread;
+  open, resume, and restart always edit the existing card instead of posting
+  new copies. Every step header shows `Onboarding • {current}/{total} • Input
+  is required/optional` to reflect the active question.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-26 (v0.9.7)

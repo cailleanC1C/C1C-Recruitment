@@ -686,15 +686,20 @@ class OpenQuestionsPanelView(discord.ui.View):
     )
     async def launch(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         """Start the inline onboarding wizard inside the active thread."""
-
         await self._launch_logic(interaction)
 
     async def _launch_logic(self, interaction: discord.Interaction) -> None:
-        if not interaction.response.is_done():
-            try:
-                await interaction.response.defer()
-            except Exception:
-                pass
+        response_done = False
+        response = getattr(interaction, "response", None)
+        if response is not None:
+            state = getattr(response, "is_done", None)
+            if callable(state):
+                try:
+                    response_done = bool(state())
+                except Exception:
+                    response_done = False
+            elif isinstance(state, bool):
+                response_done = state
 
         channel = getattr(interaction, "channel", None)
         thread_identifier = getattr(channel, "id", None) if isinstance(channel, discord.Thread) else None
@@ -754,177 +759,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             logs.human("error", "onboarding.launch_edit_failed", error=str(err))
             return
 
-        controller, thread_id = self._resolve(interaction)
-        if controller is None or thread_id is None:
-            await self._restart_from_view(interaction, log_context="launch_resolve_failed")
-            return
-
-        diag_state = diag.interaction_state(interaction)
-        diag_state["thread_id"] = thread_id
-        diag_state["custom_id"] = OPEN_QUESTIONS_CUSTOM_ID
-
-        channel = getattr(interaction, "channel", None)
-        if not isinstance(channel, discord.Thread):
-            await self._ensure_error_notice(interaction)
-            return
-
-        async def _hard_fail(reason: str, *, error: Exception | None = None) -> None:
-            if diag.is_enabled():
-                payload = {"reason": reason, **diag_state}
-                if error is not None:
-                    payload["error"] = str(error)
-                await diag.log_event("warning", "wizard_launch_failed", **payload)
-            await self._ensure_error_notice(interaction)
-
-        await _ensure_deferred(interaction)
-
-        def _schema_failure_payload(error_text: str) -> dict[str, object]:
-            payload = logs.thread_context(channel)
-            payload.update(
-                {
-                    "actor": logs.format_actor(getattr(interaction, "user", None)),
-                    "view": "panel",
-                    "source": "panel",
-                    "result": "schema_load_failed",
-                    "error": error_text,
-                }
-            )
-            actor_name = logs.format_actor_handle(getattr(interaction, "user", None))
-            if actor_name:
-                payload["actor_name"] = actor_name
-            return payload
-
-        loader = getattr(controller, "get_or_load_questions", None)
-        thread_questions: Sequence[Any] | None = None
-        try:
-            if callable(loader):
-                thread_questions = await loader(thread_id)
-        except KeyError as exc:
-            log.warning("⚠️ onboarding wizard config error: %s", exc)
-            message = str(exc.args[0]) if exc.args else str(exc)
-            payload = _schema_failure_payload(message)
-            await logs.send_welcome_exception("error", exc, **payload)
-            await _hard_fail("config_missing", error=exc)
-            return
-        except RuntimeError as exc:
-            message = str(exc).strip()
-            if "cache is empty" in message:
-                payload = _schema_failure_payload(message)
-                await logs.send_welcome_exception("error", exc, **payload)
-                await _hard_fail("cache_empty", error=exc)
-                return
-            log.warning("onboarding question preload failed", exc_info=True)
-            await _hard_fail("preload_exception", error=exc)
-            return
-        except Exception as exc:  # defensive guard
-            log.warning("onboarding question preload failed", exc_info=True)
-            await _hard_fail("preload_exception", error=exc)
-            return
-
-        questions_dict = getattr(controller, "questions_by_thread", {})
-        if not thread_questions and isinstance(questions_dict, dict):
-            thread_questions = questions_dict.get(thread_id)
-        if not thread_questions:
-            log.warning(
-                "⚠️ onboarding wizard: no questions available for thread %s", thread_id
-            )
-            error_message = "no onboarding questions mapped for thread"
-            payload = _schema_failure_payload(error_message)
-            await logs.send_welcome_exception(
-                "error",
-                RuntimeError(error_message),
-                **payload,
-            )
-            await _hard_fail("no_questions")
-            return
-
-        view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
-
-        async def _render_or_update_wizard(
-            *, content: str, view: OnboardWizard
-        ) -> discord.Message | None:
-            existing_map = getattr(controller, "_inline_messages", None)
-            id_map = getattr(controller, "_inline_message_ids", None)
-
-            message_obj: discord.Message | None = None
-            if isinstance(existing_map, dict):
-                message_obj = existing_map.get(thread_id)
-                if message_obj is not None:
-                    try:
-                        await message_obj.edit(content=content, view=view)
-                        return message_obj
-                    except Exception:
-                        existing_map.pop(thread_id, None)
-                        message_obj = None
-
-            if message_obj is None and isinstance(id_map, dict):
-                message_id = id_map.get(thread_id)
-                fetcher = getattr(channel, "fetch_message", None)
-                if message_id and callable(fetcher):
-                    try:
-                        fetched = await fetcher(message_id)
-                        await fetched.edit(content=content, view=view)
-                    except Exception:
-                        id_map.pop(thread_id, None)
-                    else:
-                        if isinstance(existing_map, dict):
-                            existing_map[thread_id] = fetched
-                        try:
-                            id_map[thread_id] = int(getattr(fetched, "id", 0))
-                        except Exception:
-                            id_map.pop(thread_id, None)
-                        return fetched
-
-            try:
-                message_obj = await channel.send(content, view=view)
-            except Exception:
-                await _hard_fail("send_failed")
-                raise
-
-            if isinstance(existing_map, dict) and isinstance(message_obj, discord.Message):
-                existing_map[thread_id] = message_obj
-            if isinstance(id_map, dict):
-                try:
-                    id_map[thread_id] = int(getattr(message_obj, "id", 0))
-                except Exception:
-                    id_map.pop(thread_id, None)
-            return message_obj
-
-        try:
-            content = controller.render_step(thread_id, step=0)
-            content = view._apply_requirement_suffix(content, view._question())
-        except Exception as err:  # pragma: no cover - best-effort fallback
-            # Surface enough context so we can see *what* actually blew up.
-            try:
-                current_step = getattr(controller, "current_step", None)
-            except Exception:  # pragma: no cover - defensive
-                current_step = None
-
-            log.warning(
-                "failed to render onboarding wizard step • flow=%r step=%r error=%r",
-                getattr(controller, "flow_id", None),
-                current_step,
-                err,
-                exc_info=True,
-            )
-            logs.human(
-                "error",
-                "onboarding.wizard_render_failed",
-                flow=getattr(controller, "flow_id", None),
-                step=current_step,
-                error=str(err),
-            )
-            await _hard_fail("render_failed", error=err)
-            return
-
-        message: discord.Message | None = None
-        message = await _render_or_update_wizard(content=content, view=view)
-
-        if isinstance(message, discord.Message):
-            view.attach(message)
-
-        if diag.is_enabled():
-            await diag.log_event("info", "wizard_launch_sent", **diag_state)
+        await self._handle_launch(interaction, response_was_done=response_done)
 
     async def _post_retry_start(self, interaction: discord.Interaction, *, reason: str) -> None:
         """Post a small prompt with a retry button that uses a fresh interaction."""
