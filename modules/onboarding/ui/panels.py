@@ -1570,7 +1570,7 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return None
             if state == "optional":
                 return "Input is optional"
-            return "Input is required"
+            return "Input is required" if self._question_required(question) else "Input is optional"
 
         def _apply_requirement_suffix(self, content: str, question: Any | None) -> str:
             if not isinstance(content, str) or not content:
