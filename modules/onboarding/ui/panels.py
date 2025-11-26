@@ -840,6 +840,56 @@ class OpenQuestionsPanelView(discord.ui.View):
 
         view = OnboardWizard(controller=controller, thread_id=thread_id, step=0)
 
+        async def _render_or_update_wizard(
+            *, content: str, view: OnboardWizard
+        ) -> discord.Message | None:
+            existing_map = getattr(controller, "_inline_messages", None)
+            id_map = getattr(controller, "_inline_message_ids", None)
+
+            message_obj: discord.Message | None = None
+            if isinstance(existing_map, dict):
+                message_obj = existing_map.get(thread_id)
+                if message_obj is not None:
+                    try:
+                        await message_obj.edit(content=content, view=view)
+                        return message_obj
+                    except Exception:
+                        existing_map.pop(thread_id, None)
+                        message_obj = None
+
+            if message_obj is None and isinstance(id_map, dict):
+                message_id = id_map.get(thread_id)
+                fetcher = getattr(channel, "fetch_message", None)
+                if message_id and callable(fetcher):
+                    try:
+                        fetched = await fetcher(message_id)
+                        await fetched.edit(content=content, view=view)
+                    except Exception:
+                        id_map.pop(thread_id, None)
+                    else:
+                        if isinstance(existing_map, dict):
+                            existing_map[thread_id] = fetched
+                        try:
+                            id_map[thread_id] = int(getattr(fetched, "id", 0))
+                        except Exception:
+                            id_map.pop(thread_id, None)
+                        return fetched
+
+            try:
+                message_obj = await channel.send(content, view=view)
+            except Exception:
+                await _hard_fail("send_failed")
+                raise
+
+            if isinstance(existing_map, dict) and isinstance(message_obj, discord.Message):
+                existing_map[thread_id] = message_obj
+            if isinstance(id_map, dict):
+                try:
+                    id_map[thread_id] = int(getattr(message_obj, "id", 0))
+                except Exception:
+                    id_map.pop(thread_id, None)
+            return message_obj
+
         try:
             content = controller.render_step(thread_id, step=0)
             content = view._apply_requirement_suffix(content, view._question())
@@ -868,11 +918,7 @@ class OpenQuestionsPanelView(discord.ui.View):
             return
 
         message: discord.Message | None = None
-        try:
-            message = await channel.send(content, view=view)
-        except Exception:
-            await _hard_fail("send_failed")
-            raise
+        message = await _render_or_update_wizard(content=content, view=view)
 
         if isinstance(message, discord.Message):
             view.attach(message)
@@ -1374,7 +1420,8 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return
             if self._is_completed():
                 log.debug(
-                    "🛈 welcome_lifecycle — scope=welcome • phase=idle_refresh_skipped • reason=completed"
+                    "🛈 welcome_lifecycle — scope=%s • phase=idle_refresh_skipped • reason=completed",
+                    getattr(self.controller, "flow", "welcome"),
                 )
                 return
             try:

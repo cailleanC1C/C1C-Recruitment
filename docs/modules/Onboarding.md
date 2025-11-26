@@ -42,6 +42,7 @@ The onboarding module is the generic questionnaire engine that powers welcome an
    - `visibility_rules` determine which questions should render. `nav_rules` allow branching (skip to `w_cvc` if Siege = "yes", etc.).
    - Incoming answers are normalised (trimmed strings, canonical booleans, sorted multi-select tokens) before being stored.
    - Validation failures return sheet-authored error strings so Welcome can display consistent inline hints.
+   - Inline replies (welcome and promo) delete the raw message once captured and refresh the existing wizard card via `session_status` instead of posting a duplicate panel.
 4. **Persistence & resume** — after every mutation the engine writes to `OnboardingSessions`. Re-opening the wizard loads `answers_json`, rebuilds visibility maps, and resumes at the first incomplete question.
 5. **Completion** — when `step_index` exceeds the last visible question the engine marks the session `completed`, freezes answers, emits summary logs (`modules/onboarding/logs.question_stats`), and hands the normalized payload to Welcome for embed formatting. Completed sessions reject restarts; staff can use `!onb resume @user` (CommandMatrix entry) to rebind panels inside a ticket thread when Discord ate the message.
 
@@ -60,4 +61,4 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - [`docs/Runbook.md`](../Runbook.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-22 (v0.9.7)
+Doc last updated: 2025-11-26 (v0.9.7)
