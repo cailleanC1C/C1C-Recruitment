@@ -13,14 +13,22 @@ class PromoController(BaseWelcomeController):
     def __init__(self, bot: commands.Bot, *, flow: str = "promo") -> None:
         super().__init__(bot, flow=flow)
 
+    def session_status(self, thread_id: int) -> str | None:
+        """Promo wizard hook used by BaseWelcomeController.render_step.
+
+        Returning None keeps the nav logic in BaseWelcomeController using
+        the standard is_session_completed() path without blowing up.
+        """
+        return None
+
     def _modal_title_prefix(self) -> str:
         return "Promo questions"
 
     def _modal_intro_text(self) -> str:
-        return "Let's gather your details. Press the button below to begin."
+        return "🎉 Let's gather your promo details. Press the button below to begin."
 
     def _select_intro_text(self) -> str:
-        return "Choose the options that apply for you."
+        return "🎯 Choose the options that apply for this promo."
 
 
 __all__ = ["PromoController"]
