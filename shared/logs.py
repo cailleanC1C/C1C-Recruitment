@@ -22,8 +22,8 @@ def _fmt_kvs(kvs: dict[str, Any]) -> str:
 
 def log_lifecycle(
     logger: Any,
-    scope: str,
-    event: str,
+    scope: str = "welcome",
+    event: str = "event",
     *,
     scope_label: str | None = None,
     emoji: str = "📘",
@@ -50,14 +50,17 @@ def log_lifecycle(
     """
 
     now = monotonic()
-    key = (scope, event)
+    resolved_scope = (scope or "welcome").strip().lower() or "welcome"
+    key = (resolved_scope, event)
     last = _lifecycle_dedupe.get(key, 0.0)
     if dedupe and now - last < 5.0:
         return None
     _lifecycle_dedupe[key] = now
 
     prefix = emoji or "📘"
-    title = scope_label or f"{scope.capitalize()} watcher"
+    label = "Promo panel" if resolved_scope == "promo" else "Welcome panel"
+    title = scope_label or label
+    fields.setdefault("flow", resolved_scope)
     kv_text = _fmt_kvs(fields)
     line = f"{prefix} {title} — event={event}" + (f" • {kv_text}" if kv_text else "")
     try:

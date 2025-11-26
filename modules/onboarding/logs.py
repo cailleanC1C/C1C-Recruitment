@@ -261,7 +261,7 @@ async def log_onboarding_panel_lifecycle(
     result: str | None = None,
     reason: str | None = None,
     extras: Mapping[str, Any] | None = None,
-    scope: str | None = None,
+    scope: str = "welcome",
     scope_label: str | None = None,
 ) -> None:
     """Emit a single lifecycle log entry for onboarding panel events."""

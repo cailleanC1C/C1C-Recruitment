@@ -1,6 +1,7 @@
 # Changelog
 
 ### v0.9.7 — 2025-11-23
+- Align promo onboarding logs and summaries with CI: promo panel events now log as `scope=promo`, and member-move summaries share the same layout as welcome summaries.
 - **Reservations:** Routed same-day reservation reminders to the recruiters channel with ticket jump links instead of ticket threads.
 - **Logging:** Auto-release now leaves the human summary in the ticket, posts structured audit lines to the logging channel, and stops sending expiry notices to the Clanmatch panel.
 - **Config & docs:** Added configurable recruiter and logging channel IDs plus updated documentation and templates for the new routing.
@@ -345,4 +346,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-26 (v0.9.7)
