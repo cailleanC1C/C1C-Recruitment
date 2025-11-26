@@ -19,7 +19,7 @@ from discord.ext import commands
 from modules.common import feature_flags
 from modules.common import runtime as rt
 from modules.common.logs import log as human_log
-from modules.onboarding import logs, thread_membership, thread_scopes
+from modules.onboarding import logs, thread_membership, thread_scopes, welcome_flow
 from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding.ui import panels
 from modules.onboarding.controllers.welcome_controller import (
@@ -1094,14 +1094,29 @@ async def post_open_questions_panel(
         return int((monotonic() - start) * 1000)
 
     thread_name = getattr(thread, "name", None)
-    resolved_flow = flow or "welcome"
+
+    resolution = welcome_flow.resolve_onboarding_flow(thread)
+    normalized_flow = (flow or resolution.flow or "welcome").strip().lower()
+
+    promo_flows = {"promo.r", "promo.m", "promo.l"}
+    invalid_reason: str | None = None
+    if normalized_flow.startswith("promo"):
+        if normalized_flow not in promo_flows:
+            invalid_reason = "invalid_flow_key"
+        elif not resolution.flow:
+            invalid_reason = resolution.error or "scope_or_role"
+        else:
+            normalized_flow = resolution.flow
+    elif resolution.flow:
+        normalized_flow = resolution.flow
+
     if ticket_code is None:
-        parser = parse_promo_thread_name if resolved_flow.startswith("promo") else parse_welcome_thread_name
+        parser = parse_promo_thread_name if normalized_flow.startswith("promo") else parse_welcome_thread_name
         parts = parser(thread_name)
         ticket_code = getattr(parts, "ticket_code", None)
 
     parent_channel = getattr(thread, "parent", None)
-    question_count, schema_version = logs.question_stats(resolved_flow)
+    question_count, schema_version = logs.question_stats(normalized_flow)
 
     async def _emit(result: str | None = None, reason: str | None = None) -> None:
         payload: dict[str, object] = {
@@ -1116,6 +1131,10 @@ async def post_open_questions_panel(
         if reason is not None:
             payload["reason"] = reason
         await logs.log_onboarding_panel_lifecycle(event="open", **payload)
+
+    if invalid_reason is not None:
+        await _emit(result="error", reason=invalid_reason)
+        return PanelOutcome("error", invalid_reason, ticket_code, thread_name, _elapsed())
 
     joined, join_error = await thread_membership.ensure_thread_membership(thread)
     if not joined:
