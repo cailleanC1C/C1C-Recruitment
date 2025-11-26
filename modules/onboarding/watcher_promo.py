@@ -665,12 +665,13 @@ class PromoTicketWatcher(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        # Guard against firing multiple times on reconnects
         if self._announced:
             return
         self._announced = True
 
-        raw_channel_id = get_promo_channel_id()
-        if not raw_channel_id:
+        channel_id = get_promo_channel_id()
+        if not channel_id:
             line = log_lifecycle(
                 log,
                 "promo",
@@ -687,8 +688,9 @@ class PromoTicketWatcher(commands.Cog):
             return
 
         try:
-            channel_id = int(raw_channel_id)
+            channel_id_int = int(channel_id)
         except (TypeError, ValueError):
+            self.channel_id = None
             line = log_lifecycle(
                 log,
                 "promo",
@@ -697,13 +699,13 @@ class PromoTicketWatcher(commands.Cog):
                 emoji="⚠️",
                 result="error",
                 reason="invalid_promo_channel",
-                channel_id=raw_channel_id,
+                channel_id=channel_id,
             )
             if line:
                 asyncio.create_task(_send_runtime(line))
             return
 
-        self.channel_id = channel_id
+        self.channel_id = channel_id_int
 
         if not feature_flags.is_enabled("promo_enabled"):
             line = log_lifecycle(
@@ -733,7 +735,7 @@ class PromoTicketWatcher(commands.Cog):
                 asyncio.create_task(_send_runtime(line))
             return
 
-        label = _channel_readable_label(self.bot, channel_id)
+        label = _channel_readable_label(self.bot, channel_id_int)
         line = log_lifecycle(
             log,
             "promo",
@@ -741,7 +743,7 @@ class PromoTicketWatcher(commands.Cog):
             scope_label="Promo watcher",
             emoji="✅",
             channel=label,
-            channel_id=channel_id,
+            channel_id=channel_id_int,
             triggers=len(_PROMO_TRIGGER_MAP),
         )
         if line:
