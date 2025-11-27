@@ -1559,54 +1559,25 @@ class OpenQuestionsPanelView(discord.ui.View):
                 return bool(question.get("required"))
             return bool(getattr(question, "required", False))
 
-        def _question_visibility_state(self, question: Any | None) -> str:
-            key = self._question_key(question)
-            if not key:
-                return "show"
-            mapper = getattr(self.controller, "_visibility_map", None)
-            if not callable(mapper):
-                return "show"
-            try:
-                visibility = mapper(self.thread_id)
-            except Exception:
-                log.debug("failed to resolve visibility map for inline wizard", exc_info=True)
-                return "show"
-            return _visible_state(visibility, key)
-
-        def _requirement_suffix(self, question: Any | None) -> str | None:
-            if question is None:
-                return None
-            state = self._question_visibility_state(question)
-            if state == "skip":
-                return None
-            if state == "optional":
-                return "Input is optional"
-            return "Input is required" if self._question_required(question) else "Input is optional"
-
         def _apply_requirement_suffix(self, content: str, question: Any | None) -> str:
-            if not isinstance(content, str) or not content:
+            """Append a consistent required/optional suffix for the current question."""
+            if not question:
                 return content
-            suffix = self._requirement_suffix(question)
-            if not suffix:
+
+            required = getattr(question, "required", False)
+            if isinstance(question, dict):
+                required = question.get("required", required)
+            required = bool(required)
+            suffix = "Input is required" if required else "Input is optional"
+
+            # Content is usually like: "Onboarding • {current}/{total}"
+            # We always append the requirement, even if something already added a count.
+            if suffix in content:
                 return content
-            header_prefix = "**Onboarding • "
-            if not content.startswith(header_prefix):
-                return content
-            newline = content.find("\n")
-            if newline == -1:
-                header_line = content
-                remainder = ""
-            else:
-                header_line = content[:newline]
-                remainder = content[newline:]
-            if suffix in header_line:
-                return content
-            if header_line.endswith("**"):
-                header_line = header_line[:-2]
-                header_line = f"{header_line} • {suffix}**"
-            else:
-                header_line = f"{header_line} • {suffix}"
-            return f"{header_line}{remainder}"
+
+            # Avoid double spaces / dots at the end
+            content = content.rstrip(" .")
+            return f"{content} • {suffix}"
 
         @staticmethod
         def _note_tokens(note: Any) -> list[str]:
