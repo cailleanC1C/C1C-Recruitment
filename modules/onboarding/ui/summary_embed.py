@@ -11,7 +11,8 @@ from discord.utils import utcnow
 from modules.recruitment.summary_embed import build_welcome_summary_embed
 from modules.recruitment.summary_map import SUMMARY_FRAME
 from shared import theme
-from shared.sheets.onboarding_questions import onboarding_questions, Question
+from shared.sheets import onboarding_questions
+from shared.sheets.onboarding_questions import Question
 
 _COLOUR = discord.Colour(0x1F8BFF)
 _FOOTER = "blue flame lit • C1C"
