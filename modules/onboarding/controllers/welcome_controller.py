@@ -37,6 +37,30 @@ gate_log = logging.getLogger("c1c.onboarding.gate")
 launch_log = logging.getLogger("c1c.onboarding.controller")
 
 
+async def _delete_captured_answer_message(message: discord.Message | None) -> None:
+    """Best-effort cleanup for user answer messages in onboarding threads.
+
+    Used for both normal answers and promo/welcome fallback captures so that
+    threads stay clean once the inline wizard has been updated.
+    """
+
+    if message is None:
+        return
+    try:
+        if getattr(getattr(message, "author", None), "bot", False):
+            return
+
+        delete = getattr(message, "delete", None)
+        if delete is None:
+            return
+
+        result = delete()
+        if asyncio.iscoroutine(result):
+            await result
+    except Exception:
+        log.warning("failed to delete onboarding answer message", exc_info=True)
+
+
 # --- Sheet-driven validator (no fallbacks/coercion) --------------------------
 NUMERIC_HINTS = ("number",)
 
@@ -2725,12 +2749,7 @@ class BaseWelcomeController:
         self._record_captured_message(thread_id, message)
         await self._react_to_message(message, "✅")
         await self._refresh_inline_message(thread_id, index=index)
-        try:
-            await message.delete()
-        except (discord.Forbidden, discord.NotFound):
-            pass
-        except discord.HTTPException:
-            pass
+        await _delete_captured_answer_message(message)
         try:
             qkey = self._question_key(question)
         except Exception:
