@@ -1581,6 +1581,76 @@ class BaseWelcomeController:
             except Exception:
                 log.warning("failed to recompute visibility during inline capture", exc_info=True)
 
+    async def _refresh_panel(self, *, session: SessionData) -> None:
+        thread_identifier = getattr(session, "thread_id", None)
+        try:
+            thread_id = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            thread_id = None
+        if thread_id is None:
+            return
+
+        index: int | None = None
+        pending = session.pending_step or {}
+        if isinstance(pending, dict):
+            try:
+                raw_index = pending.get("index")
+                index = int(raw_index) if raw_index is not None else None
+            except (TypeError, ValueError):
+                index = None
+        if index is None:
+            try:
+                current = session.current_question_index
+                index = int(current) if current is not None else None
+            except (TypeError, ValueError):
+                index = None
+        if index is None:
+            return
+
+        await self._refresh_inline_message(thread_id, index=index)
+
+    async def _consume_answer(
+        self,
+        *,
+        session: SessionData,
+        question: object,
+        value: str,
+        answer_message: discord.Message | None,
+    ) -> None:
+        session.answers = session.answers or {}
+        try:
+            qid = getattr(question, "qid", None) or question.qid  # type: ignore[attr-defined]
+        except Exception:
+            qid = None
+        if isinstance(qid, str) and qid:
+            session.answers[qid] = value
+
+        thread_identifier = getattr(session, "thread_id", None)
+        try:
+            thread_id = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            thread_id = None
+        if thread_id is None and answer_message is not None:
+            try:
+                thread_id = int(getattr(getattr(answer_message, "channel", None), "id", None))
+            except (TypeError, ValueError):
+                thread_id = None
+            else:
+                session.thread_id = thread_id
+
+        if thread_id is not None:
+            key = self._question_key(question)
+            if key:
+                await self.set_answer(thread_id, key, value)
+
+        if answer_message is not None:
+            try:
+                await answer_message.delete()
+            except Exception:
+                pass
+
+        await self._refresh_panel(session=session)
+
     def has_answer(self, thread_id: int, question: Question | dict[str, Any]) -> bool:
         key = self._question_key(question)
         if not key:
@@ -2670,6 +2740,9 @@ class BaseWelcomeController:
         if session is None:
             return False
 
+        if session.thread_id is None:
+            session.thread_id = thread_id
+
         author_identifier = getattr(author, "id", None)
         try:
             author_id = int(author_identifier)
@@ -2725,7 +2798,6 @@ class BaseWelcomeController:
             return True
 
         value = cleaned if cleaned is not None else content
-        await self.set_answer(thread_id, self._question_key(question), value)
 
         session.respondent_id = session.respondent_id or author_id
         session.status = "in_progress"
@@ -2734,13 +2806,12 @@ class BaseWelcomeController:
 
         self._record_captured_message(thread_id, message)
         await self._react_to_message(message, "✅")
-        await self._refresh_inline_message(thread_id, index=index)
-        try:
-            await message.delete()
-        except (discord.Forbidden, discord.NotFound):
-            pass
-        except discord.HTTPException:
-            pass
+        await self._consume_answer(
+            session=session,
+            question=question,
+            value=value,
+            answer_message=message,
+        )
         try:
             qkey = self._question_key(question)
         except Exception:
