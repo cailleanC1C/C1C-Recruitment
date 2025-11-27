@@ -58,9 +58,22 @@ def log_lifecycle(
     _lifecycle_dedupe[key] = now
 
     prefix = emoji or "📘"
-    label = "Promo panel" if resolved_scope == "promo" else "Welcome panel"
-    title = scope_label or label
+
+    # Normalized title: promo/welcome panels get explicit labels, everything
+    # else falls back to a generic watcher-style label.
+    if scope_label:
+        title = scope_label
+    else:
+        if resolved_scope.startswith("promo"):
+            title = "Promo panel"
+        elif resolved_scope.startswith("welcome"):
+            title = "Welcome panel"
+        else:
+            title = f"{resolved_scope.capitalize()} watcher"
+
+    # Ensure all lifecycle logs carry the normalized flow for CI.
     fields.setdefault("flow", resolved_scope)
+
     kv_text = _fmt_kvs(fields)
     line = f"{prefix} {title} — event={event}" + (f" • {kv_text}" if kv_text else "")
     try:
