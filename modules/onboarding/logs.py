@@ -266,6 +266,17 @@ async def log_onboarding_panel_lifecycle(
 ) -> None:
     """Emit a single lifecycle log entry for onboarding panel events."""
 
+    # Normalize scope for CI and choose a sensible default label.
+    scope_slug = (scope or "welcome").strip().lower() or "welcome"
+    if scope_label is None:
+        if scope_slug.startswith("promo"):
+            scope_label = "Promo panel"
+        elif scope_slug.startswith("welcome"):
+            scope_label = "Welcome panel"
+        else:
+            scope_label = f"{scope_slug.capitalize()} panel"
+    scope = scope_slug
+
     event_slug = (event or "event").strip().lower() or "event"
     emit_events = {"open", "complete", "timeout", "error"}
     if event_slug not in emit_events:
@@ -338,8 +349,12 @@ async def log_onboarding_panel_lifecycle(
     }
     emoji = severity_emoji.get(severity, emoji_map.get(event_slug, logfmt.LOG_EMOJI["lifecycle"]))
 
-    resolved_scope = (scope or "welcome").strip().lower() or "welcome"
-    resolved_label = scope_label or ("Promo panel" if resolved_scope == "promo" else "Welcome panel")
+    resolved_scope = scope
+    resolved_label = scope_label or (
+        "Promo panel"
+        if resolved_scope.startswith("promo")
+        else "Welcome panel" if resolved_scope.startswith("welcome") else f"{resolved_scope.capitalize()} panel"
+    )
 
     fields: list[str] = [f"scope={resolved_scope}"]
     if ticket_code:
