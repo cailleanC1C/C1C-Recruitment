@@ -2651,6 +2651,68 @@ class BaseWelcomeController:
 
         return None, pending_kind or "unknown"
 
+    async def _refresh_panel(self, *, session: SessionData) -> None:
+        thread_identifier = getattr(session, "thread_id", None)
+        try:
+            thread_id = int(thread_identifier) if thread_identifier is not None else None
+        except (TypeError, ValueError):
+            thread_id = None
+        if thread_id is None:
+            return
+
+        session.answers = session.answers or {}
+        try:
+            session.visibility = rules.evaluate_visibility(
+                self._questions.get(thread_id, []),
+                session.answers,
+            )
+        except Exception:
+            session.visibility = session.visibility or {}
+
+        pending = session.pending_step or {}
+        index: int | None = None
+        if isinstance(pending, dict) and pending.get("kind") == "inline":
+            try:
+                index = int(pending.get("index", 0))
+            except (TypeError, ValueError):
+                index = None
+
+        if index is None:
+            try:
+                index = (
+                    int(session.current_question_index)
+                    if session.current_question_index is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                index = None
+
+        if index is None:
+            index = 0
+
+        await self._refresh_inline_message(thread_id, index=index)
+
+    async def _consume_answer_unified(
+        self,
+        *,
+        session,
+        question,
+        value: str,
+        answer_message: discord.Message | None,
+    ) -> None:
+        # 1) store value
+        session.answers[question.qid] = value
+
+        # 2) delete fallback message if provided
+        if answer_message is not None:
+            try:
+                await answer_message.delete()
+            except Exception:
+                pass  # soft-fail per guardrails
+
+        # 3) refresh the wizard via existing logic
+        await self._refresh_panel(session=session)
+
     async def handle_thread_message(self, message: discord.Message) -> bool:
         channel = getattr(message, "channel", None)
         thread_identifier = getattr(channel, "id", None)
@@ -2725,8 +2787,7 @@ class BaseWelcomeController:
             return True
 
         value = cleaned if cleaned is not None else content
-        await self.set_answer(thread_id, self._question_key(question), value)
-
+        session.answers = session.answers or {}
         session.respondent_id = session.respondent_id or author_id
         session.status = "in_progress"
         session.current_question_index = index
@@ -2734,13 +2795,12 @@ class BaseWelcomeController:
 
         self._record_captured_message(thread_id, message)
         await self._react_to_message(message, "✅")
-        await self._refresh_inline_message(thread_id, index=index)
-        try:
-            await message.delete()
-        except (discord.Forbidden, discord.NotFound):
-            pass
-        except discord.HTTPException:
-            pass
+        await self._consume_answer_unified(
+            session=session,
+            question=question,
+            value=value,
+            answer_message=message,
+        )
         try:
             qkey = self._question_key(question)
         except Exception:
@@ -2998,6 +3058,9 @@ class BaseWelcomeController:
             await _safe_ephemeral(interaction, "⚠️ This onboarding session is no longer active.")
             return
 
+        session.answers = session.answers or {}
+        session.current_question_index = index
+
         questions_for_thread = await self.get_or_load_questions(thread_id, session=session)
         if not questions_for_thread:
             await logs.send_welcome_log(
@@ -3087,6 +3150,7 @@ class BaseWelcomeController:
 
             if not answer:
                 await self.set_answer(thread_id, question.qid, None)
+                await self._refresh_panel(session=session)
                 continue
 
             ok, cleaned, err = self.validate_answer(meta, answer)
@@ -3103,7 +3167,13 @@ class BaseWelcomeController:
                     type=meta.get("type"),
                 )
 
-            await self.set_answer(thread_id, question.qid, cleaned)
+            value = cleaned if cleaned is not None else answer
+            await self._consume_answer_unified(
+                session=session,
+                question=question,
+                value=value,
+                answer_message=None,
+            )
 
         session.visibility = rules.evaluate_visibility(
             questions_for_thread,
