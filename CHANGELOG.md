@@ -1,5 +1,14 @@
 # Changelog
 
+### v0.9.7 — 2025-11-27
+**Onboarding System – Maintenance & CI Alignment**
+* Fixed `summary_embed` import error (`Question` now correctly imported from the sheets module), restoring normal onboarding boot.
+* Removed duplicate wizard spawns by introducing a shared `_wizard_messages` registry and unified message-reuse logic.
+* Cleaned up requirement-suffix handling so wizard headers use a single, consistent required/optional check.
+* Normalized logging across **welcome** and **promo** flows:
+  all lifecycle events now emit the correct `scope` and `scope_label`, with no stray “Welcome panel” lines for promo.
+* Minor CI tidy-up: ensured actor/channel normalization and summary field generation match current standards.
+
 ### v0.9.7 — 2025-11-23
 - Align promo onboarding logs and summaries with CI: promo panel events now log as `scope=promo`, and member-move summaries share the same layout as welcome summaries.
 - **Reservations:** Routed same-day reservation reminders to the recruiters channel with ticket jump links instead of ticket threads.
@@ -346,4 +355,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-26 (v0.9.7)
+Doc last updated: 2025-11-27 (v0.9.7)
