@@ -1747,13 +1747,7 @@ class BaseWelcomeController:
         formatted = _preview_value_for_question(question, stored)
         progress = self._progress_label(thread_id, resolved_index)
 
-        requirement = "Input is required" if self._question_required(question) else "Input is optional"
-        if key:
-            visibility = self._visibility_map(thread_id)
-            state = _visible_state(visibility, key)
-            if state == "optional":
-                requirement = "Input is optional"
-        header = f"**Onboarding • {progress} • {requirement}**"
+        header = f"**Onboarding • {progress}**"
 
         lines = [header, f"## {label}"]
 
