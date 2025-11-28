@@ -229,7 +229,7 @@ async def start_welcome_dialog(
         )
         return
 
-    normalized_scope = "promo" if str(flow or "").startswith("promo") else (flow or "welcome")
+    normalized_scope = "promo" if str(flow or "").startswith("promo") else "welcome"
     await logs.log_onboarding_panel_lifecycle(
         event="start",
         ticket=thread,

@@ -268,14 +268,15 @@ async def log_onboarding_panel_lifecycle(
 
     # Normalize scope for CI and choose a sensible default label.
     scope_slug = (scope or "welcome").strip().lower() or "welcome"
+    resolved_scope = "promo" if scope_slug.startswith("promo") else "welcome" if scope_slug.startswith("welcome") else scope_slug
     if scope_label is None:
-        if scope_slug.startswith("promo"):
+        if resolved_scope.startswith("promo"):
             scope_label = "Promo panel"
-        elif scope_slug.startswith("welcome"):
+        elif resolved_scope.startswith("welcome"):
             scope_label = "Welcome panel"
         else:
-            scope_label = f"{scope_slug.capitalize()} panel"
-    scope = scope_slug
+            scope_label = f"{resolved_scope.capitalize()} panel"
+    scope = resolved_scope
 
     event_slug = (event or "event").strip().lower() or "event"
     emit_events = {"open", "complete", "timeout", "error"}
@@ -356,7 +357,8 @@ async def log_onboarding_panel_lifecycle(
         else "Welcome panel" if resolved_scope.startswith("welcome") else f"{resolved_scope.capitalize()} panel"
     )
 
-    fields: list[str] = [f"scope={resolved_scope}"]
+    fields: list[str] = [f"flow={resolved_scope}", f"scope_label={resolved_label}"]
+    fields.append(f"scope={resolved_scope}")
     if ticket_code:
         fields.append(f"ticket={ticket_code}")
     if actor_name and actor_name != "-":

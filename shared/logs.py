@@ -51,7 +51,8 @@ def log_lifecycle(
 
     now = monotonic()
     resolved_scope = (scope or "welcome").strip().lower() or "welcome"
-    key = (resolved_scope, event)
+    flow_scope = "promo" if resolved_scope.startswith("promo") else "welcome" if resolved_scope.startswith("welcome") else resolved_scope
+    key = (flow_scope, event)
     last = _lifecycle_dedupe.get(key, 0.0)
     if dedupe and now - last < 5.0:
         return None
@@ -64,15 +65,17 @@ def log_lifecycle(
     if scope_label:
         title = scope_label
     else:
-        if resolved_scope.startswith("promo"):
+        if flow_scope.startswith("promo"):
             title = "Promo panel"
-        elif resolved_scope.startswith("welcome"):
+        elif flow_scope.startswith("welcome"):
             title = "Welcome panel"
         else:
-            title = f"{resolved_scope.capitalize()} watcher"
+            title = f"{flow_scope.capitalize()} watcher"
 
     # Ensure all lifecycle logs carry the normalized flow for CI.
-    fields.setdefault("flow", resolved_scope)
+    fields.setdefault("scope", flow_scope)
+    fields.setdefault("flow", flow_scope)
+    fields.setdefault("scope_label", title)
 
     kv_text = _fmt_kvs(fields)
     line = f"{prefix} {title} — event={event}" + (f" • {kv_text}" if kv_text else "")
