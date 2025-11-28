@@ -21,7 +21,7 @@ _DESCRIPTIONS = {
     "welcome": (
         "🔥 C1C • Welcome aboard!",
         "Thanks for sharing your details — our coordinators will match you soon.\n"
-        "Keep your thread open until a recruiter confirms placement.",
+        "Please leave the thread unlocked until we reply.",
     ),
     "promo": (
         "🔥 C1C • Promo request received",
@@ -62,6 +62,8 @@ def build_summary_embed(
             log.exception("welcome.summary.build_failed", extra={"flow": flow})
             return _fallback_welcome_embed(author)
 
+        return _apply_branding(embed, flow, append_existing=True)
+
     return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
 
 
@@ -99,7 +101,7 @@ def _build_onboarding_summary(
     return embed
 
 
-def _description_for_flow(flow: str) -> tuple[str, str, str]:
+def _description_for_flow(flow: str) -> tuple[str, str]:
     if flow == "welcome":
         return _DESCRIPTIONS["welcome"]
     if flow.startswith("promo"):
@@ -133,6 +135,29 @@ def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
             embed.set_author(name=display_name or "", icon_url=avatar.url)
         elif display_name:
             embed.set_author(name=display_name)
+
+    return _apply_branding(embed, "welcome", append_existing=True)
+
+
+def _apply_branding(embed: discord.Embed, flow: str, *, append_existing: bool = False) -> discord.Embed:
+    """Normalize title/description/colour/footer across flows."""
+
+    title, description = _description_for_flow(flow)
+    existing_description = (embed.description or "").strip()
+    identity_block = ""
+    if append_existing and existing_description and existing_description != description:
+        if "\n\n" in existing_description:
+            _, identity_block = existing_description.split("\n\n", 1)
+        else:
+            identity_block = existing_description
+
+    embed.title = title
+    embed.description = description
+    if identity_block:
+        embed.description = f"{description}\n\n{identity_block}"
+    embed.colour = _COLOUR
+    embed.timestamp = embed.timestamp or utcnow()
+    embed.set_footer(text=_FOOTER)
 
     return embed
 
