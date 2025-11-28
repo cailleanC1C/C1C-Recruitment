@@ -43,12 +43,11 @@ _DESCRIPTIONS: dict[str, tuple[str, str]] = {
 
 
 def build_summary_embed(
-    *,
     flow: str,
     answers: Mapping[str, Any],
-    author: discord.Member,
-    schema_hash: str,
-    visibility: Mapping[str, Mapping[str, str]] | None,
+    author: discord.abc.User | discord.Member | None = None,
+    schema_hash: str | None = None,
+    visibility: Mapping[str, Any] | None = None,
 ) -> discord.Embed:
     """Build a summary embed for the given onboarding flow."""
 
@@ -58,7 +57,7 @@ def build_summary_embed(
 
     # Promo flows still use the legacy recruitment summary builder for now.
     try:
-        return build_welcome_summary_embed(answers, author)
+        return build_welcome_summary_embed(answers, visibility, author=author)
     except Exception:  # pragma: no cover - defensive fallback
         log.warning("welcome.summary.fallback", exc_info=True)
         return _fallback_welcome_embed(author)
