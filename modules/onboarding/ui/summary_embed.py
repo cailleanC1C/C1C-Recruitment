@@ -8,7 +8,6 @@ from typing import Any, Mapping
 import discord
 from discord.utils import utcnow
 
-from modules.recruitment.summary_embed import build_welcome_summary_embed
 from modules.recruitment.summary_map import SUMMARY_FRAME
 from shared import theme
 from shared.sheets import onboarding_questions
@@ -58,7 +57,7 @@ def build_summary_embed(
 
     if flow == "welcome":
         try:
-            embed = build_welcome_summary_embed(answers, visibility, author=author)
+            return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
         except Exception:
             log.exception("welcome.summary.build_failed", extra={"flow": flow})
             return _fallback_welcome_embed(author)
