@@ -146,6 +146,7 @@ def _log_gate(
         _display_name(getattr(interaction, "user", None)),
         _channel_path(channel_obj),
         reason,
+        extra=context,
     )
 
 
