@@ -27,6 +27,8 @@ The promo watcher (`modules.onboarding.watcher_promo.PromoTicketWatcher`):
 - On closure, prompts for a clan tag and progression text; responses update the
   `clantag`, `date closed`, `clan name`, and `progression` fields. Dialog/panel
   onboarding for promo tickets will arrive in a later release.
+- Lifecycle logs surface as `Promo panel — scope=promo` entries; welcome only
+  handles threads that begin with `W####-…`.
 
 ## Configuration
 
@@ -49,4 +51,4 @@ The promo watcher (`modules.onboarding.watcher_promo.PromoTicketWatcher`):
   the watcher misses the trigger. Removing the trigger lines prevents the bot
   from recognising promo tickets.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.7)

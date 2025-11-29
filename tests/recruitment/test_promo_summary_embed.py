@@ -82,3 +82,99 @@ def test_promo_m_inline_pairs_and_siege_detail():
     assert "Siege setup" in war_section.value
     assert "CvC priority" in war_section.value
     assert "Minimum CvC points" not in war_section.value
+
+
+def test_build_promo_leadership_summary_full_sections():
+    answers = {
+        "pl_player_name": "Lead Recruit",
+        "pl_reporter": "Coordinator",
+        "pl_current_clan": "Alpha",
+        "pl_target_clan": "Beta",
+        "pl_power": 12_600,
+        "pl_level_detail": "Endgame",
+        "pl_playstyle": "Competitive",
+        "pl_CB": "Ultra-Nightmare",
+        "pl_hydra_diff": "Nightmare",
+        "pl_hydra_clash": 12_600,
+        "pl_chimera_diff": "Hard",
+        "pl_chimera_clash": 1_250_000,
+        "pl_siege": "Yes",
+        "pl_siege_detail": "Front anchor",
+        "pl_cvc": "High",
+        "pl_cvc_points": 120_000,
+        "pl_move_reason": "Shift leadership coverage",
+        "pl_move_urgency": "This cycle",
+        "pl_move_window": "After CvC",
+        "pl_notes": "Ready for transfer",
+    }
+
+    embed = build_promo_summary_embed("promo.l", answers, _visibility_map(answers))
+
+    assert embed.title == "C1C – Leadership move request"
+    assert "coordinator will review the move" in (embed.description or "")
+
+    player_section = next(field for field in embed.fields if "Player & reporter" in field.name)
+    assert "Lead Recruit" in player_section.value
+    assert "Target clan" in player_section.value
+
+    performance_section = next(field for field in embed.fields if "Performance snapshot" in field.name)
+    assert "Power & level" in performance_section.value
+    assert "Hydra" in performance_section.value
+    assert "Avg Chimera Clash" in performance_section.value
+
+    war_section = next(field for field in embed.fields if "War modes" in field.name)
+    assert "Siege participation" in war_section.value
+    assert "CvC" in war_section.value
+    assert "Avg CvC points" in war_section.value
+
+    rationale_section = next(
+        field for field in embed.fields if "Move rationale" in field.name
+    )
+    assert "Move reason" in rationale_section.value
+    assert "Timing window" in rationale_section.value
+    assert "Notes" in rationale_section.value
+
+
+def test_build_promo_leadership_summary_handles_missing_optionals():
+    answers = {
+        "pl_player_name": "Lead Recruit",
+        "pl_reporter": "Coordinator",
+        "pl_current_clan": "Alpha",
+        "pl_target_clan": "",
+        "pl_power": None,
+        "pl_level_detail": "",
+        "pl_playstyle": "Competitive",
+        "pl_CB": "Ultra-Nightmare",
+        "pl_hydra_diff": "",
+        "pl_hydra_clash": None,
+        "pl_chimera_diff": "Hard",
+        "pl_chimera_clash": None,
+        "pl_siege": "No",
+        "pl_siege_detail": "",
+        "pl_cvc": "",
+        "pl_cvc_points": None,
+        "pl_move_reason": "",
+        "pl_move_urgency": "",
+        "pl_move_window": "",
+        "pl_notes": None,
+    }
+
+    embed = build_promo_summary_embed("promo.l", answers, _visibility_map(answers))
+
+    player_section = next(field for field in embed.fields if "Player & reporter" in field.name)
+    assert "Target clan" not in player_section.value
+
+    performance_section = next(field for field in embed.fields if "Performance snapshot" in field.name)
+    assert "Power" not in performance_section.value
+    assert "Hydra" not in performance_section.value
+    assert "Chimera" in performance_section.value
+
+    war_section = next(field for field in embed.fields if "War modes" in field.name)
+    assert "Siege participation" in war_section.value
+    assert "Siege detail" not in war_section.value
+    assert "CvC" not in war_section.value
+
+    rationale_section = next(
+        (field for field in embed.fields if "Move rationale" in field.name), None
+    )
+    assert rationale_section is None

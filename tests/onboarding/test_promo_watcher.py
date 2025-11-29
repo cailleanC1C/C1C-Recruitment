@@ -95,6 +95,15 @@ def test_parse_promo_thread_name_maps_types() -> None:
     assert parse_promo_thread_name("bad-name") is None
 
 
+def test_promo_recognizes_leadership_thread_name() -> None:
+    parsed = parse_promo_thread_name("L0005-caillean")
+
+    assert parsed is not None
+    assert parsed.ticket_code == "L0005"
+    assert parsed.username == "caillean"
+    assert parsed.promo_type == "clan lead move request"
+
+
 def test_upsert_promo_inserts_and_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     rows: list[list[str]] = []
 
