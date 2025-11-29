@@ -9,6 +9,7 @@ from typing import Any
 import discord
 from discord.utils import utcnow
 
+from modules.recruitment.summary_embed import build_promo_summary_embed, build_welcome_summary_embed
 from modules.recruitment.summary_map import SUMMARY_FRAME
 from shared import theme
 from shared.sheets import onboarding_questions
@@ -60,6 +61,18 @@ def build_summary_embed(
 ) -> discord.Embed:
     """Build a summary embed for the given onboarding flow."""
 
+    # Welcome uses the sheet-driven, readability-spec layout.
+    if flow == "welcome":
+        return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
+
+    if flow.startswith("promo"):
+        try:
+            return build_promo_summary_embed(flow, answers, visibility, author=author)
+        except Exception:  # pragma: no cover - defensive fallback
+            log.warning("promo.summary.fallback", exc_info=True)
+            return _fallback_welcome_embed(author)
+
+    # Fallback to the recruitment summary builder for any other flows.
     try:
         questions = onboarding_questions.get_questions(flow)
         expected_hash = onboarding_questions.schema_hash(flow)

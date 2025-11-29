@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 __all__ = [
@@ -63,11 +64,11 @@ def abbr_number(value: Any) -> str:
     if absolute < 1_000:
         return original or str(int(numeric))
     if absolute < 1_000_000:
-        compact = numeric / 1_000
-        formatted = f"{compact:.1f}".rstrip("0").rstrip(".")
-        return f"{formatted} K"
+        rounded = math.floor((numeric / 1_000) + 0.5)
+        return f"{int(rounded)} K"
     compact = numeric / 1_000_000
-    formatted = f"{compact:.1f}".rstrip("0").rstrip(".")
+    rounded = math.floor(compact * 10 + 0.5) / 10
+    formatted = f"{rounded:.1f}".rstrip("0").rstrip(".")
     return f"{formatted} M"
 
 

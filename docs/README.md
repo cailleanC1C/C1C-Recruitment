@@ -74,6 +74,7 @@ Collaboration Contract and core infra conventions.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
+* [`Promo_Summary_Spec.md`](ops/Promo_Summary_Spec.md) — promo summary embeds readability spec and per-flow layout mapping.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
 * Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
 
@@ -107,4 +108,35 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-28 (v0.9.7)
+
+Doc last updated: 2025-11-28 (v0.9.7)
+Testing & Validation
+ Run the full test suite: pytest
+
+ Add / update targeted tests for promo summary embed formatting.
+
+ Manually test all three promo flows in a test environment:
+
+Create one ticket for each of promo.r, promo.m, promo.l with representative answers, including:
+
+Siege “no” and Siege “yes with detail”
+
+Different CvC priorities
+
+Power < 1k, ~50k, and > 1m
+
+Confirm:
+
+Sections appear in the right order.
+
+Inline pairs use •.
+
+Hide rules and numeric formatting match the spec.
+
+Siege participation always appears; Siege detail respects the participation answer.
+
+[meta]
+labels: codex, comp:shared, comp:modules, comp:ops, tests, docs, enhancement, P2
+milestone: Harmonize v1.0
+[/meta]

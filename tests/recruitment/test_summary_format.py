@@ -20,7 +20,8 @@ def _snapshot_path(name: str) -> Path:
 
 def test_abbr_number_variants() -> None:
     assert abbr_number(999) == "999"
-    assert abbr_number("1200") == "1.2 K"
+    assert abbr_number("1200") == "1 K"
+    assert abbr_number(12_600) == "13 K"
     assert abbr_number(12_600_000) == "12.6 M"
 
 

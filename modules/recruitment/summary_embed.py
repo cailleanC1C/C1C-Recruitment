@@ -1,4 +1,4 @@
-"""Builder for the recruitment welcome summary embed."""
+"""Builders for recruitment welcome and promo summary embeds."""
 
 from __future__ import annotations
 
@@ -6,17 +6,31 @@ from typing import Any, Mapping
 
 import discord
 
-from modules.recruitment.summary_map import SUMMARY_FRAME, SUMMARY_SECTIONS
-from shared.formatters.summary import abbr_number, cvc_priority, inline_merge, is_hide_value
+from modules.recruitment.summary_map import SUMMARY_FRAME, SUMMARY_LAYOUTS, SUMMARY_SECTIONS
+from shared.formatters.summary import abbr_number, cvc_priority, inline_merge
 from shared import theme
 
-__all__ = ["build_welcome_summary_embed"]
+__all__ = ["build_promo_summary_embed", "build_welcome_summary_embed"]
 
-_SECTION_TITLES = {
+_DEFAULT_SECTION_TITLES = {
     "bossing": "🧩 Progress & Bossing",
     "war": "⚔️ War Modes",
     "notes": "🧭 Notes",
 }
+
+_HIDE_TOKENS = {"", "0", "no", "none", "dunno"}
+
+
+def build_promo_summary_embed(
+    flow: str,
+    answers: Mapping[str, Any],
+    visibility: Mapping[str, Mapping[str, str]] | None,
+    *,
+    author: discord.abc.User | discord.Member | None = None,
+) -> discord.Embed:
+    """Return the embed summarising promo questionnaire answers for ``flow``."""
+
+    return _build_summary_embed(flow, answers, visibility, author=author)
 
 
 def build_welcome_summary_embed(
@@ -27,20 +41,35 @@ def build_welcome_summary_embed(
 ) -> discord.Embed:
     """Return the embed summarising the welcome questionnaire answers."""
 
-    icon_token = theme.get_icon(SUMMARY_FRAME.get("icon", ""))
-    title = SUMMARY_FRAME.get("title", "C1C • Recruitment Summary")
+    return _build_summary_embed("welcome", answers, visibility, author=author)
+
+
+def _build_summary_embed(
+    flow: str,
+    answers: Mapping[str, Any],
+    visibility: Mapping[str, Mapping[str, str]] | None,
+    *,
+    author: discord.abc.User | discord.Member | None = None,
+) -> discord.Embed:
+    layout = _layout_for(flow)
+    frame = layout.get("frame", SUMMARY_FRAME)
+    sections = layout.get("sections", SUMMARY_SECTIONS)
+    section_titles = {**_DEFAULT_SECTION_TITLES, **layout.get("section_titles", {})}
+
+    icon_token = theme.get_icon(frame.get("icon", ""))
+    title = frame.get("title", "C1C • Recruitment Summary")
     if icon_token:
         title = f"{icon_token} {title}"
 
-    colour_name = SUMMARY_FRAME.get("color", "c1c_blue")
+    colour_name = frame.get("color", "c1c_blue")
     colour = getattr(theme.colors, colour_name, theme.colors.c1c_blue)
 
-    description = SUMMARY_FRAME.get(
+    description = frame.get(
         "description", "Keep this thread open until a recruiter confirms placement."
     )
 
     embed = discord.Embed(title=title, description=description, colour=colour)
-    footer = SUMMARY_FRAME.get("footer")
+    footer = frame.get("footer")
     if footer:
         embed.set_footer(text=footer)
 
@@ -57,7 +86,7 @@ def build_welcome_summary_embed(
 
     identity_lines: list[str] = []
 
-    for section in SUMMARY_SECTIONS:
+    for section in sections:
         section_lines = _render_section(section, answers_map, visible_gids)
         if not section_lines:
             continue
@@ -65,7 +94,7 @@ def build_welcome_summary_embed(
         if name == "identity":
             identity_lines.extend(section_lines)
             continue
-        header = _SECTION_TITLES.get(name, name.title() if name else "")
+        header = section.get("title") or section_titles.get(name, name.title() if name else "")
         embed.add_field(name=header or "Summary", value="\n".join(section_lines), inline=False)
 
     if identity_lines:
@@ -174,9 +203,10 @@ def _resolved_value(
         return ""
     raw = answers.get(gid)
     formatted = _format_value(field, raw)
-    if gid == "w_siege_detail":
-        siege_value = _format_value({}, answers.get("w_siege"))
-        if is_hide_value(siege_value):
+    required_gid = field.get("requires")
+    if required_gid:
+        required_value = _format_value({}, answers.get(required_gid))
+        if should_hide_value(required_value):
             return ""
     hide_tokens = {
         str(token).strip().lower()
@@ -185,9 +215,12 @@ def _resolved_value(
     }
     if formatted and hide_tokens and formatted.strip().lower() in hide_tokens:
         return ""
-    if gid != "w_siege" and is_hide_value(formatted):
+    force_show = bool(field.get("force_show"))
+    if should_hide_value(formatted, force_show=force_show):
+        if force_show:
+            return "—"
         return ""
-    if gid == "w_siege" and not formatted:
+    if force_show and not formatted:
         return "—"
     return formatted
 
@@ -211,12 +244,8 @@ def _format_value(field: Mapping[str, Any], value: Any) -> str:
         if not formatted:
             formatted = base
     truncate = field.get("truncate") if isinstance(field, Mapping) else None
-    if truncate and formatted and len(formatted) > int(truncate):
-        trimmed = formatted[: int(truncate)].rstrip()
-        if len(trimmed) < len(formatted):
-            formatted = f"{trimmed}…"
-        else:
-            formatted = trimmed
+    if truncate and formatted:
+        formatted = truncate_text(formatted, int(truncate))
     return formatted
 
 
@@ -242,3 +271,29 @@ def _stringify(value: Any) -> str:
         return ""
     text = str(value).strip()
     return text
+
+
+def should_hide_value(value: Any, *, force_show: bool = False) -> bool:
+    if force_show:
+        return False
+    if value is None:
+        return True
+    token = str(value).strip().lower()
+    return token in _HIDE_TOKENS
+
+
+def truncate_text(value: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    trimmed = value[: max(limit - 1, 0)].rstrip()
+    return f"{trimmed}…"
+
+
+def _layout_for(flow: str) -> Mapping[str, Any]:
+    if flow in SUMMARY_LAYOUTS:
+        return SUMMARY_LAYOUTS[flow]
+    return SUMMARY_LAYOUTS.get(
+        "welcome", {"frame": SUMMARY_FRAME, "sections": SUMMARY_SECTIONS}
+    )
