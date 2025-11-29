@@ -25,6 +25,8 @@ from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
+from modules.onboarding.ui.summary_embed import _is_fallback_summary, build_summary_embed
+from modules.onboarding.ui.summary_retry import RetryWelcomeSummaryView
 from modules.onboarding.ui.summary_embed import build_summary_embed, _fallback_welcome_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
@@ -1455,6 +1457,39 @@ class BaseWelcomeController:
         embed.set_footer(text="C1C Onboarding")
         return embed
 
+    async def _build_and_send_summary(
+        self,
+        *,
+        thread: discord.Thread | discord.TextChannel,
+        flow: str,
+        answers: Mapping[str, Any],
+        visibility: Mapping[str, Any] | None,
+        author: discord.abc.User | discord.Member | None,
+        schema_hash: str | None,
+        mention_text: str | None = None,
+        allowed_mentions: discord.AllowedMentions | None = None,
+    ) -> tuple[discord.Message, discord.Embed]:
+        summary_embed = build_summary_embed(
+            flow,
+            answers,
+            author,
+            schema_hash or "",
+            visibility,
+        )
+
+        view: discord.ui.View | None = None
+        if flow == "welcome" and _is_fallback_summary(summary_embed):
+            view = RetryWelcomeSummaryView(thread_id=thread.id)
+
+        summary_message = await thread.send(
+            content=mention_text or None,
+            embed=summary_embed,
+            view=view,
+            allowed_mentions=allowed_mentions if mention_text else None,
+        )
+
+        return summary_message, summary_embed
+
     def _thread_for(self, thread_id: int) -> discord.Thread | None:
         return self._threads.get(thread_id)
 
@@ -1907,6 +1942,7 @@ class BaseWelcomeController:
             log.warning("failed to resolve summary author; falling back to thread owner", exc_info=True)
             summary_author = getattr(thread, "owner", None) or interaction.user
 
+        schema = session.schema_hash if session else schema_hash(self.flow)
         recruiter_ids = list(getattr(self, "recruiter_role_ids", []) or [])
         if not recruiter_ids:
             recruiter_ids = list(getattr(self, "RECRUITER_ROLE_IDS", []) or [])
@@ -1940,7 +1976,10 @@ class BaseWelcomeController:
             )
 
         self.answers_by_thread.pop(thread_id, None)
-        self._cleanup_session(thread_id)
+        self._cleanup_session(
+            thread_id,
+            preserve_session=bool(summary_embed and _is_fallback_summary(summary_embed)),
+        )
 
     def _log_fields(
         self,
@@ -3476,7 +3515,10 @@ class BaseWelcomeController:
             )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
-        self._cleanup_session(thread_id)
+        self._cleanup_session(
+            thread_id,
+            preserve_session=bool(summary_embed and _is_fallback_summary(summary_embed)),
+        )
 
     async def _handle_edit(
         self,
@@ -3509,8 +3551,9 @@ class BaseWelcomeController:
         anchor = getattr(interaction, "message", None)
         await self._start_modal_step(thread, session, anchor=anchor)
 
-    def _cleanup_session(self, thread_id: int) -> None:
-        store.end(thread_id)
+    def _cleanup_session(self, thread_id: int, *, preserve_session: bool = False) -> None:
+        if not preserve_session:
+            store.end(thread_id)
         self._threads.pop(thread_id, None)
         self._questions.pop(thread_id, None)
         self.answers_by_thread.pop(thread_id, None)

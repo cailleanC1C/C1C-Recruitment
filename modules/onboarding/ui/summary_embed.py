@@ -65,8 +65,12 @@ def build_summary_embed(
         try:
             return build_promo_summary_embed(flow, answers, visibility, author=author)
         except Exception:  # pragma: no cover - defensive fallback
-            log.warning("promo.summary.fallback", exc_info=True)
-            return _fallback_welcome_embed(author)
+            log.error(
+                "onboarding.summary.build_failed",
+                exc_info=True,
+                extra={"flow": flow},
+            )
+            return _fallback_generic_embed(flow, author)
 
     # Fallback to the recruitment summary builder for any other flows.
     try:
@@ -413,4 +417,4 @@ def _is_effectively_empty(value: str | None) -> bool:
     return normalized in HIDE_TOKENS
 
 
-__all__ = ["build_summary_embed"]
+__all__ = ["build_summary_embed", "_is_fallback_summary"]
