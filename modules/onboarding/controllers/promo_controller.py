@@ -25,7 +25,7 @@ class PromoController(BaseWelcomeController):
         return "Promo questions"
 
     def _modal_intro_text(self) -> str:
-        return "🎉 Let's gather your promo details. Press the button below to begin."
+        return "🎉 Hold on we´ll be ready for you in a second."
 
     def _select_intro_text(self) -> str:
         return "🎯 Choose the options that apply for this promo."
