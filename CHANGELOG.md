@@ -8,6 +8,7 @@
 * Normalized logging across **welcome** and **promo** flows:
   all lifecycle events now emit the correct `scope` and `scope_label`, with no stray “Welcome panel” lines for promo.
 * Minor CI tidy-up: ensured actor/channel normalization and summary field generation match current standards.
+* Fixed the welcome recruitment summary embed to follow the Welcome Summary Embed — Readability Spec (v2.1) with sheet-driven ordering, inline pairs, CvC mapping, hide rules, and a standardized fallback.
 
 ### v0.9.7 — 2025-11-23
 - Align promo onboarding logs and summaries with CI: promo panel events now log as `scope=promo`, and member-move summaries share the same layout as welcome summaries.
