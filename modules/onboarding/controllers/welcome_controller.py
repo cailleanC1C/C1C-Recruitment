@@ -24,10 +24,9 @@ from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
-from modules.onboarding.ui.summary_embed import build_summary_embed
+from modules.onboarding.ui.summary_embed import build_summary_embed, _fallback_welcome_embed
 from modules.onboarding.ui.select_renderer import build_select_view
 from modules.onboarding.ui.summary_retry import RetryWelcomeSummaryView
-from modules.onboarding.ui.summary_embed import build_summary_embed, _fallback_welcome_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
 from shared.logfmt import channel_label, user_label
@@ -37,7 +36,6 @@ from shared.config import get_recruiter_role_ids
 log = logging.getLogger(__name__)
 gate_log = logging.getLogger("c1c.onboarding.gate")
 launch_log = logging.getLogger("c1c.onboarding.controller")
-
 
 async def _delete_captured_answer_message(message: discord.Message | None) -> None:
     """Best-effort cleanup for user answer messages in onboarding threads.
