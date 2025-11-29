@@ -1213,7 +1213,7 @@ class BaseWelcomeController:
 
         try:
             embed = build_summary_embed(
-                flow="welcome",
+                flow=self.flow,
                 answers=answers,
                 author=author,
                 schema_hash=schema_hash,
@@ -1223,7 +1223,7 @@ class BaseWelcomeController:
             log.error(
                 "onboarding.summary.build_failed_unexpected",
                 exc_info=True,
-                extra={"flow": "welcome", "thread_id": getattr(thread, "id", None)},
+                extra={"flow": self.flow, "thread_id": getattr(thread, "id", None)},
             )
             fallback_author = author if isinstance(author, discord.Member) else None
             embed = _fallback_welcome_embed(fallback_author)
@@ -1238,7 +1238,7 @@ class BaseWelcomeController:
             log.error(
                 "onboarding.summary.send_failed",
                 exc_info=True,
-                extra={"flow": "welcome", "thread_id": getattr(thread, "id", None)},
+                extra={"flow": self.flow, "thread_id": getattr(thread, "id", None)},
             )
             return False
 
