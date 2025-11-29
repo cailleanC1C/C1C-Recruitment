@@ -143,24 +143,41 @@ def _short_schema_version(raw: str | None) -> str | None:
     return f"v{slug[:6]}"
 
 
-def _resolve_ticket_from_thread(thread: discord.Thread | None) -> str | None:
+def _resolve_ticket_from_thread(
+    thread: discord.Thread | None, *, scope: str | None = None
+) -> str | None:
     if thread is None:
         return None
     name = getattr(thread, "name", None)
     if not name:
         return None
     try:
-        from modules.onboarding.watcher_welcome import parse_welcome_thread_name
+        from modules.onboarding.watcher_welcome import (
+            parse_promo_thread_name,
+            parse_welcome_thread_name,
+        )
     except Exception:
         return None
 
-    try:
-        parts = parse_welcome_thread_name(name)
-    except Exception:
-        return None
-    if not parts:
-        return None
-    return getattr(parts, "ticket_code", None)
+    parsers = []
+    normalized_scope = (scope or "").strip().lower()
+    if normalized_scope.startswith("promo"):
+        parsers.append(parse_promo_thread_name)
+    else:
+        parsers.append(parse_welcome_thread_name)
+    if not parsers or normalized_scope == "":
+        parsers = [parse_welcome_thread_name, parse_promo_thread_name]
+
+    for parser in parsers:
+        try:
+            parts = parser(name)
+        except Exception:
+            continue
+        if parts:
+            ticket = getattr(parts, "ticket_code", None)
+            if ticket:
+                return ticket
+    return None
 
 
 @lru_cache(maxsize=4)
@@ -284,12 +301,12 @@ async def log_onboarding_panel_lifecycle(
 
     ticket_code: str | None
     if isinstance(ticket, discord.Thread):
-        ticket_code = _resolve_ticket_from_thread(ticket)
+        ticket_code = _resolve_ticket_from_thread(ticket, scope=scope)
     else:
         ticket_code = ticket
     missing_ticket = ticket is not None and ticket_code is None
     if ticket_code is None and isinstance(channel, discord.Thread):
-        ticket_code = _resolve_ticket_from_thread(channel)
+        ticket_code = _resolve_ticket_from_thread(channel, scope=scope)
 
     actor_label = _normalize_actor(actor)
     channel_label = _normalize_channel(channel) or "#unknown"

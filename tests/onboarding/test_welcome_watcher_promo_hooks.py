@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.onboarding import watcher_promo
+from modules.onboarding import watcher_promo, watcher_welcome
 from modules.onboarding.watcher_welcome import PanelOutcome
 
 
@@ -98,3 +98,56 @@ def test_promo_panel_dedup(monkeypatch, promo_watcher):
     watcher_promo.post_open_questions_panel.assert_awaited_once()
     logged = [event for event in events if event.get("event") == "triggered"]
     assert logged and logged[0].get("reason") == "panel_exists"
+
+
+def test_welcome_watcher_declines_promo_thread(monkeypatch):
+    parsed = watcher_welcome.parse_welcome_thread_name("L0005-caillean")
+    assert parsed is None
+
+
+def test_promo_logs_scope_for_leadership_panel(monkeypatch):
+    recorded: list[dict] = []
+
+    async def fake_log_onboarding(**payload):
+        recorded.append(payload)
+
+    monkeypatch.setattr(
+        watcher_welcome.logs, "log_onboarding_panel_lifecycle", fake_log_onboarding
+    )
+    monkeypatch.setattr(watcher_welcome.logs, "question_stats", lambda flow: (1, "v1"))
+    monkeypatch.setattr(
+        watcher_welcome.thread_membership,
+        "ensure_thread_membership",
+        AsyncMock(return_value=(True, None)),
+    )
+    monkeypatch.setattr(watcher_welcome.panels, "find_panel_message", AsyncMock(return_value=None))
+    monkeypatch.setattr(watcher_welcome.panels, "OpenQuestionsPanelView", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        watcher_welcome.welcome_flow,
+        "resolve_onboarding_flow",
+        lambda _thread: SimpleNamespace(flow="promo.l", error=None),
+    )
+
+    class MiniThread(DummyThread):
+        def __init__(self):
+            super().__init__(name="L0005-caillean", parent_id=2024)
+            self.parent = SimpleNamespace()
+
+        async def send(self, *_args, **_kwargs):  # pragma: no cover - patched send
+            return None
+
+    thread = MiniThread()
+    actor = SimpleNamespace(display_name="Actor", bot=False)
+
+    outcome = asyncio.run(
+        watcher_promo.post_open_questions_panel(
+            SimpleNamespace(user=SimpleNamespace(id=1)),
+            thread,
+            actor=actor,
+            flow="promo.l",
+        )
+    )
+
+    assert outcome.result == "panel_created"
+    assert recorded and recorded[0].get("scope") == "promo.l"
+    assert recorded[0].get("result") == "panel_created"

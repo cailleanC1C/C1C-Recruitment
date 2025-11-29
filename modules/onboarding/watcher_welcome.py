@@ -61,6 +61,11 @@ _TICKET_EMOJI = "🎫"
 
 _TICKET_CODE_RE = re.compile(r"(W\d{4})", re.IGNORECASE)
 _PROMO_TICKET_CODE_RE = re.compile(r"([RML]\d{4})", re.IGNORECASE)
+_PROMO_THREAD_NAME_RE = re.compile(
+    r"^(?P<prefix>[RML])(?P<digits>\d{4})[-_\s]+(?P<slug>[A-Za-z0-9][A-Za-z0-9._-]*)"
+    r"(?:[-_\s]+(?P<tag>[A-Za-z0-9]+))?$",
+    re.IGNORECASE,
+)
 _CLOSED_MESSAGE_TOKEN = "ticket closed"
 _NO_PLACEMENT_TAG = "NONE"
 _WELCOME_HEADERS = onboarding_sheets.WELCOME_HEADERS
@@ -138,33 +143,32 @@ def parse_promo_thread_name(name: str | None) -> Optional["PromoThreadNameParts"
     if not name:
         return None
 
-    match = _PROMO_TICKET_CODE_RE.search(name)
+    match = _PROMO_THREAD_NAME_RE.match(name.strip())
     if not match:
         return None
 
-    ticket_code = _normalize_promo_ticket(match.group(1))
+    prefix = match.group("prefix")
+    digits = match.group("digits")
+    slug = (match.group("slug") or "").strip(" -_")
+    ticket_code = _normalize_promo_ticket(f"{prefix}{digits}")
     if not ticket_code:
         return None
-
-    suffix = name[match.end():].strip(" -_")
-    username = suffix or ""
-    clan_tag: Optional[str] = None
-    if suffix:
-        parts = suffix.split("-", 1)
-        username = parts[0].strip(" -_")
-        if len(parts) > 1:
-            clan_tag = parts[1].strip(" -_") or None
-
-    if not username:
+    if not slug:
         return None
 
     promo_type = _PROMO_TYPE_MAP.get(ticket_code[:1], "")
     if not promo_type:
         return None
+    clan_tag = (match.group("tag") or "").strip(" -_") or None
+    if clan_tag is None:
+        slug_parts = re.split(r"[-_\s]+", slug)
+        if len(slug_parts) > 1 and slug_parts[-1].isalpha() and slug_parts[-1].isupper():
+            clan_tag = slug_parts.pop().strip() or None
+            slug = "-".join(part for part in slug_parts if part)
 
     return PromoThreadNameParts(
         ticket_code=ticket_code,
-        username=username,
+        username=slug,
         promo_type=promo_type,
         clan_tag=clan_tag,
     )
@@ -1150,6 +1154,7 @@ async def post_open_questions_panel(
             "channel": parent_channel,
             "questions": question_count,
             "schema_version": schema_version,
+            "scope": normalized_flow,
         }
         if result is not None:
             payload["result"] = result

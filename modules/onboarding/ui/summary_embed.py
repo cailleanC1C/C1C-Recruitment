@@ -49,6 +49,11 @@ _DESCRIPTIONS: dict[str, tuple[str, str]] = {
         "Got your request! A coordinator will review your move and follow up here.\n"
         "Please leave the thread unlocked until we reply.",
     ),
+    "promo.l": (
+        "C1C – Leadership move request",
+        "Got your request! A coordinator will review the move and follow up here.\n"
+        "Please leave the thread unlocked until we reply.",
+    ),
 }
 
 
@@ -70,7 +75,7 @@ def build_summary_embed(
                 exc_info=True,
                 extra={"flow": flow},
             )
-            return _fallback_generic_embed(flow, author)
+            return _fallback_promo_summary_embed(author)
 
     # Fallback to the recruitment summary builder for any other flows.
     try:
@@ -93,6 +98,8 @@ def build_summary_embed(
             return _fallback_welcome_embed(
                 author if isinstance(author, discord.Member) else None
             )
+        if flow.startswith("promo"):
+            return _fallback_promo_summary_embed(author)
         return _fallback_generic_embed(flow, author)
 
 
@@ -289,6 +296,14 @@ def _base_embed(flow: str, author: discord.abc.User | discord.Member | None) -> 
 def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
     embed = _base_embed("welcome", author)
     embed.description = "Summary unavailable — see logs"
+    return embed
+
+
+def _fallback_promo_summary_embed(
+    author: discord.abc.User | discord.Member | None,
+) -> discord.Embed:
+    embed = _base_embed("promo", author)
+    embed.description = "Promo summary unavailable — please ping @RecruitmentCoordinator"
     return embed
 
 

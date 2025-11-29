@@ -9,12 +9,14 @@
 ## Overview
 
 - Promo summary embeds reuse the **same visual style** as the Welcome Summary:
-  - Sheet-driven ordering and labels
   - Section headers
   - Inline field pairs with `•` separator
   - Number abbreviation (`K` / `M`)
-- No schema changes are required; all fields reuse the existing **Promo onboarding questionnaire** columns.
-- The embed honours the **sheet-driven visibility rules** (`skip` / `optional` decisions) resolved during the promo flow.
+- Returning/member move flows continue to honour the **sheet-driven visibility rules** (`skip` / `optional` decisions).
+- Leadership move embeds now use a dedicated layout keyed off the `pl_` answer set (not the welcome layout):
+  - Player & reporter lines draw from `pl_player_name`, `pl_reporter`, and clan fields.
+  - Inline pairs keep difficulty + clash data on the same line (Hydra/Chimera, CvC points inline with CvC state).
+  - War-mode details show Siege participation on every leadership summary; Siege detail is conditional.
 - Inline formatting keeps Hydra and Chimera clash averages alongside their difficulty answers, and CvC points inline with priority.
 - Each promo flow has its own **section layout**, but all use a shared builder pattern.
 
@@ -66,10 +68,9 @@ If the sheet already stores human-readable labels, they are rendered as-is.
 
 ### Common visibility handling
 
-- Only answers with a resolved visibility state **other than** `skip` are rendered.
-- Fields become visible or hidden according to the rules engine output (same as Welcome).
-- If summary generation fails, a fallback embed is posted with the message  
-  **“Summary unavailable — see logs”** and a generic promo description line.
+- Only answers with a resolved visibility state **other than** `skip` are rendered (for flows that use sheet-driven visibility).
+- If summary generation fails, a promo-scoped fallback embed is posted with the message
+  **“Promo summary unavailable — please ping @RecruitmentCoordinator”**.
 
 ---
 
@@ -258,11 +259,10 @@ This flow is filled in by **leaders** on behalf of a member. It emphasises who i
 
 ### Inline formatting examples (`promo.l`)
 
-- `Power: 9.1 M • Bracket: Early Endgame`
-- `Hydra: Brutal • Avg Hydra Clash: 620 K`
-- `Chimera: Normal • Avg Chimera Clash: 380 K`
-- `CvC priority: High • Minimum CvC points: 80 K`
-- `Move urgency: Urgent • Window: Before next CvC`
+- `Power & level: 12.6 K — Endgame`
+- `Hydra: Nightmare • Avg Hydra Clash: 12.6 K`
+- `Chimera: Hard • Avg Chimera Clash: 1.2 M`
+- `CvC: High • Avg CvC points: 120 K`
 
 ---
 
@@ -271,8 +271,8 @@ This flow is filled in by **leaders** on behalf of a member. It emphasises who i
 - On any exception in summary construction, the bot posts a **fallback promo summary embed**:
   - Generic promo title and description:
     - Title: `🔥 C1C • Promo request received` (or flow-specific variants already used)
-    - Description: short guidance text (“Got your request! A coordinator will review your move…”)
-  - Body text: “Summary unavailable — see logs”
+    - Description: short guidance text (“Got your request! A coordinator will review your move…”) 
+  - Body text: “Promo summary unavailable — please ping @RecruitmentCoordinator”
 - The failing exception is logged with:
   - Flow id (`promo.r`, `promo.m`, `promo.l`)
   - Thread / ticket code
@@ -281,4 +281,4 @@ This flow is filled in by **leaders** on behalf of a member. It emphasises who i
 
 ---
 
-Doc last updated: 2025-11-28 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.7)
