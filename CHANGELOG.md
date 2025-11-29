@@ -1,5 +1,8 @@
 # Changelog
 
+### v0.9.7 — 2025-11-29
+- Hardened the welcome onboarding Finish step to post a summary or fallback embed even when an error occurs.
+
 ### v0.9.7 — 2025-11-28
 - Aligned promo summaries (`promo.r`, `promo.m`, `promo.l`) to the welcome readability layout with per-flow sections, inline field pairs, and refreshed hide/formatting rules.
 - Added shared number formatting and CvC priority helpers to keep promo/welcome summaries consistent across flows.
