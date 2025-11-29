@@ -129,9 +129,6 @@ def build_row(payload: Dict[str, Any], *, headers: Sequence[str] | None = None) 
 
 def _validate_header(header: Iterable[str]) -> Optional[list[str]]:
     normalized = _normalize_header(header)
-    if not normalized:
-        return list(CANONICAL_COLUMNS)
-
     if _header_matches(normalized):
         return normalized
 

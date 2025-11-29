@@ -45,6 +45,22 @@ class _FakeSheet:
         return self._rows
 
 
+class _RecordingSheet:
+    def __init__(self, rows):
+        self._rows = rows
+        self.updated: list[tuple[str, list[list[str]]]] = []
+        self.appended: list[list[str]] = []
+
+    def get_all_values(self):
+        return self._rows
+
+    def update(self, range_, values):
+        self.updated.append((range_, values))
+
+    def append_row(self, values):
+        self.appended.append(values)
+
+
 def test_onboarding_sessions_load_mapping(monkeypatch, headers):
     fixed_now = "2025-02-01T09:00:00Z"
     payload = {
@@ -74,3 +90,33 @@ def test_onboarding_sessions_load_mapping(monkeypatch, headers):
     assert result.get("warning_sent_at") == ""
     assert result.get("auto_closed_at") == ""
     assert result.get("updated_at") == fixed_now
+
+
+def test_onboarding_sessions_header_mismatch_load_noop(monkeypatch):
+    bad_headers = ["user_id", "thread_id", "legacy_col"]
+    fake_sheet = _FakeSheet([bad_headers, ["1", "2", "legacy"]])
+    monkeypatch.setattr(sheet_module, "_sheet", lambda: fake_sheet)
+
+    result = sheet_module.load(1, 2)
+
+    assert result is None
+
+
+def test_onboarding_sessions_header_mismatch_save_noop(monkeypatch):
+    bad_headers = ["user_id", "thread_id", "panel_message_id", "step_index", "completed", "completed_at", "answers_json", "updated_at", "first_reminder_at", "warning_sent_at", "auto_closed_at", "legacy_col"]
+    fake_sheet = _RecordingSheet([bad_headers])
+    monkeypatch.setattr(sheet_module, "_sheet", lambda: fake_sheet)
+
+    payload = {
+        "user_id": 123,
+        "thread_id": 456,
+        "panel_message_id": 789,
+        "step_index": 1,
+        "answers": {"foo": "bar"},
+        "completed": False,
+    }
+
+    sheet_module.save(payload)
+
+    assert not fake_sheet.updated
+    assert not fake_sheet.appended
