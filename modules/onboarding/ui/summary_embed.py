@@ -19,6 +19,16 @@ _COLOUR = discord.Colour(0x1F8BFF)
 _FOOTER = "blue flame lit • C1C"
 log = logging.getLogger(__name__)
 
+HIDE_TOKENS = {"0", "no", "none", "dunno"}
+
+CVC_PRIORITY_LABELS: dict[str, str] = {
+    "1": "Low",
+    "2": "Low-Medium",
+    "3": "Medium",
+    "4": "High-Medium",
+    "5": "High",
+}
+
 _DESCRIPTIONS: dict[str, tuple[str, str]] = {
     "welcome": (
         "🔥 C1C • Recruitment Summary",
@@ -64,21 +74,141 @@ def build_summary_embed(
 
     # Fallback to the recruitment summary builder for any other flows.
     try:
-        return build_welcome_summary_embed(answers, visibility, author=author)
+        questions = onboarding_questions.get_questions(flow)
+        expected_hash = onboarding_questions.schema_hash(flow)
+        if schema_hash and schema_hash != expected_hash:
+            log.warning(
+                "onboarding.summary.schema_mismatch %s",
+                {"flow": flow, "expected": expected_hash, "received": schema_hash},
+            )
+
+        # Welcome uses the sheet-driven, readability-spec layout.
+        if flow == "welcome":
+            return _build_welcome_summary(questions, answers, author, visibility)
+
+        return _build_generic_summary(flow, questions, answers, author, visibility)
     except Exception:  # pragma: no cover - defensive fallback
-        log.warning("welcome.summary.fallback", exc_info=True)
+        log.error("Failed to build welcome summary embed", exc_info=True, extra={"flow": flow})
         return _fallback_welcome_embed(author)
 
 
-def _build_onboarding_summary(
-    flow: str,
+def _build_welcome_summary(
+    questions: Iterable[Question],
     answers: Mapping[str, Any],
-    author: discord.Member,
-    schema_hash: str,
+    author: discord.abc.User | discord.Member | None,
     visibility: Mapping[str, Mapping[str, str]] | None,
 ) -> discord.Embed:
-    """Build the sheet-driven welcome summary embed."""
+    """Build the welcome summary embed using the readability spec v2.1."""
 
+    embed = _base_embed("welcome", author)
+
+    by_qid: dict[str, Question] = {q.qid: q for q in questions}
+
+    def formatted_answer(gid: str) -> str:
+        question = by_qid.get(gid)
+        if not question or _is_hidden(gid, visibility):
+            return ""
+        return _format_answer(question.type, answers.get(gid))
+
+    def cleaned(gid: str) -> str:
+        value = formatted_answer(gid)
+        return "" if _is_effectively_empty(value) else value.strip()
+
+    identity_lines: list[str] = []
+
+    player = cleaned("w_ign")
+    if player:
+        identity_lines.append(_label("Player", player))
+
+    power_value = formatted_answer("w_power")
+    bracket_value = formatted_answer("w_level_detail")
+    power = "" if _is_effectively_empty(power_value) else _format_short_number(answers.get("w_power") or power_value)
+    bracket = "" if _is_effectively_empty(bracket_value) else bracket_value.strip()
+    power_bracket = _format_inline_pair("Power", power, "Bracket", bracket)
+    if power_bracket:
+        identity_lines.append(power_bracket)
+
+    playstyle = cleaned("w_playstyle")
+    if playstyle:
+        identity_lines.append(_label("Playstyle", playstyle))
+
+    looking_for = cleaned("w_clan")
+    if looking_for:
+        identity_lines.append(_label("Looking for", looking_for))
+
+    if identity_lines:
+        embed.description = "\n\n".join([embed.description or "", "\n".join(identity_lines)])
+
+    progress_lines: list[str] = []
+
+    cb = cleaned("w_CB")
+    if cb:
+        progress_lines.append(_label("Clan Boss (one-key top chest)", cb))
+
+    hydra_diff = cleaned("w_hydra_diff")
+    hydra_clash_raw = formatted_answer("w_hydra_clash")
+    hydra_clash = "" if _is_effectively_empty(hydra_clash_raw) else _format_short_number(answers.get("w_hydra_clash") or hydra_clash_raw)
+    hydra_line = _format_inline_pair("Hydra", hydra_diff, "Avg Hydra Clash", hydra_clash)
+    if hydra_line:
+        progress_lines.append(hydra_line)
+
+    chimera_diff = cleaned("w_chimera_diff")
+    chimera_clash_raw = formatted_answer("w_chimera_clash")
+    chimera_clash = "" if _is_effectively_empty(chimera_clash_raw) else _format_short_number(answers.get("w_chimera_clash") or chimera_clash_raw)
+    chimera_line = _format_inline_pair("Chimera", chimera_diff, "Avg Chimera Clash", chimera_clash)
+    if chimera_line:
+        progress_lines.append(chimera_line)
+
+    if progress_lines:
+        embed.add_field(name="🧩 Progress & Bossing", value="\n".join(progress_lines), inline=False)
+
+    war_lines: list[str] = []
+
+    siege_raw = formatted_answer("w_siege")
+    siege_display = siege_raw.strip() if siege_raw else "No"
+    war_lines.append(_label("Siege participation", siege_display or "No"))
+
+    siege_detail = cleaned("w_siege_detail")
+    participates = not _is_effectively_empty(siege_raw) and siege_display.lower() not in {"no", "none"}
+    if participates and siege_detail:
+        war_lines.append(_label("Siege setup", siege_detail))
+
+    cvc_raw = formatted_answer("w_cvc")
+    cvc_priority = "" if _is_effectively_empty(cvc_raw) else CVC_PRIORITY_LABELS.get(cvc_raw.strip(), cvc_raw.strip())
+    cvc_points_raw = formatted_answer("w_cvc_points")
+    cvc_points = "" if _is_effectively_empty(cvc_points_raw) else _format_short_number(answers.get("w_cvc_points") or cvc_points_raw)
+    cvc_line = _format_inline_pair("CvC priority", cvc_priority, "Minimum CvC points", cvc_points)
+    if cvc_line:
+        war_lines.append(cvc_line)
+
+    if war_lines:
+        embed.add_field(name="⚔️ War Modes", value="\n".join(war_lines), inline=False)
+
+    notes_lines: list[str] = []
+
+    progression = cleaned("w_level")
+    if progression:
+        if len(progression) > 200:
+            progression = progression[:200]
+        notes_lines.append(_label("Progression (self-feel)", progression))
+
+    origin = cleaned("w_origin")
+    if origin:
+        notes_lines.append(_label("Heard about C1C from", origin))
+
+    if notes_lines:
+        embed.add_field(name="🧭 Notes", value="\n".join(notes_lines), inline=False)
+
+    return embed
+
+
+def _build_generic_summary(
+    flow: str,
+    questions: Iterable[Question],
+    answers: Mapping[str, Any],
+    author: discord.abc.User | discord.Member | None,
+    visibility: Mapping[str, Mapping[str, str]] | None,
+) -> discord.Embed:
     title, description = _description_for_flow(flow)
     embed = discord.Embed(title=title, description=description, colour=_COLOUR, timestamp=utcnow())
     embed.set_footer(text=_FOOTER)
@@ -91,24 +221,6 @@ def _build_onboarding_summary(
         elif display_name:
             embed.set_author(name=display_name)
 
-    questions = onboarding_questions.get_questions(flow)
-    expected_hash = onboarding_questions.schema_hash(flow)
-    if schema_hash and schema_hash != expected_hash:
-        log.warning(
-            "onboarding.summary.schema_mismatch %s",
-            {"flow": flow, "expected": expected_hash, "received": schema_hash},
-        )
-
-    # Build welcome summary fields according to the v2.1 spec.
-    # We only apply the spec for the welcome flow; promo continues to use the
-    # recruitment summary implementation for now.
-    if flow == "welcome":
-        fields = _build_welcome_fields(questions, answers, visibility)
-        for field in fields:
-            embed.add_field(**field)
-        return embed
-
-    # Fallback to the generic behavior if somehow called with a non-welcome flow.
     rendered_qids: set[str] = set()
     for question in questions:
         if _is_hidden(question.qid, visibility):
@@ -144,21 +256,20 @@ def _description_for_flow(flow: str) -> tuple[str, str]:
     return _DESCRIPTIONS.get(flow, _DESCRIPTIONS["welcome"])
 
 
-def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
-    icon_token = theme.get_icon(SUMMARY_FRAME.get("icon", ""))
-    title = SUMMARY_FRAME.get("title", "C1C • Recruitment Summary")
-    if icon_token:
-        title = f"{icon_token} {title}"
+def _base_embed(flow: str, author: discord.abc.User | discord.Member | None) -> discord.Embed:
+    colour = _COLOUR
+    title, description = _description_for_flow(flow)
 
-    colour_name = SUMMARY_FRAME.get("color", "c1c_blue")
-    colour = getattr(theme.colors, colour_name, theme.colors.c1c_blue)
+    if flow == "welcome":
+        icon_token = theme.get_icon(SUMMARY_FRAME.get("icon", ""))
+        title = SUMMARY_FRAME.get("title", title)
+        if icon_token:
+            title = f"{icon_token} {title}"
+        description = SUMMARY_FRAME.get("description", description)
+        colour_name = SUMMARY_FRAME.get("color", "c1c_blue")
+        colour = getattr(theme.colors, colour_name, _COLOUR)
 
-    embed = discord.Embed(
-        title=title,
-        description="Summary unavailable — see logs",
-        colour=colour,
-        timestamp=utcnow(),
-    )
+    embed = discord.Embed(title=title, description=description, colour=colour, timestamp=utcnow())
     embed.set_footer(text=_FOOTER)
 
     if author:
@@ -171,181 +282,55 @@ def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
     return embed
 
 
-def _build_welcome_fields(
-    questions: Iterable[Question],
-    answers: Mapping[str, Any],
-    visibility: Mapping[str, Mapping[str, str]] | None,
-) -> list[dict[str, Any]]:
-    """Build embed fields for the welcome flow using the v2.1 spec."""
-
-    # Map gid → Question for quick lookup.
-    by_gid: dict[str, Question] = {q.qid: q for q in questions}
-
-    def q(gid: str) -> Question | None:
-        return by_gid.get(gid)
-
-    def val(gid: str) -> str:
-        question = q(gid)
-        if question is None:
-            return ""
-        if _is_hidden(question.qid, visibility):
-            return ""
-        return _format_answer(question.type, answers.get(question.qid))
-
-    def raw(gid: str) -> Any:
-        return answers.get(gid)
-
-    def cleaned(v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            return ""
-        # Hide “no / none / dunno / 0” except where the spec says otherwise.
-        lowered = v.lower()
-        if lowered in {"0", "no", "none", "dunno"}:
-            return ""
-        return v
-
-    fields: list[dict[str, Any]] = []
-
-    # 1. Identity & intent
-    player = cleaned(val("w_ign"))
-    if player:
-        fields.append(_field("Player", player))
-
-    power_raw = cleaned(val("w_power"))
-    bracket_raw = cleaned(val("w_level_detail"))
-    power_fmt = _format_number(power_raw) if power_raw else ""
-    identity_line_parts: list[str] = []
-    if power_fmt:
-        identity_line_parts.append(power_fmt)
-    if bracket_raw:
-        identity_line_parts.append(bracket_raw)
-    if identity_line_parts:
-        fields.append(_field("Power • Bracket", " • ".join(identity_line_parts)))
-
-    playstyle = cleaned(val("w_playstyle"))
-    if playstyle:
-        fields.append(_field("Playstyle", playstyle))
-
-    looking_for = cleaned(val("w_clan"))
-    if looking_for:
-        fields.append(_field("Looking for", looking_for))
-
-    # 2. Progress & bossing
-    cb = cleaned(val("w_CB"))
-    if cb:
-        fields.append(_field("Clan Boss (one-key top chest)", cb))
-
-    hydra = cleaned(val("w_hydra_diff"))
-    hydra_clash_raw = val("w_hydra_clash")
-    hydra_clash_fmt = _format_number(hydra_clash_raw) if hydra_clash_raw else ""
-    hydra_parts: list[str] = []
-    if hydra:
-        hydra_parts.append(hydra)
-    if hydra_clash_fmt:
-        hydra_parts.append(f"Avg Hydra Clash: {hydra_clash_fmt}")
-    if hydra_parts:
-        fields.append(_field("Hydra • Avg Hydra Clash", " • ".join(hydra_parts)))
-
-    chimera = cleaned(val("w_chimera_diff"))
-    chimera_clash_raw = val("w_chimera_clash")
-    chimera_clash_fmt = _format_number(chimera_clash_raw) if chimera_clash_raw else ""
-    chimera_parts: list[str] = []
-    if chimera:
-        chimera_parts.append(chimera)
-    if chimera_clash_fmt:
-        chimera_parts.append(f"Avg Chimera Clash: {chimera_clash_fmt}")
-    if chimera_parts:
-        fields.append(_field("Chimera • Avg Chimera Clash", " • ".join(chimera_parts)))
-
-    # 3. War modes
-    # Siege participation is always rendered, even if “No”.
-    siege_answer = (val("w_siege") or "").strip()
-    if siege_answer:
-        fields.append(_field("Siege participation", siege_answer))
-    else:
-        fields.append(_field("Siege participation", "No"))
-
-    siege_detail = cleaned(val("w_siege_detail"))
-    siege_participates = siege_answer and siege_answer.lower() not in {"", "no", "none"}
-    if siege_participates and siege_detail:
-        fields.append(_field("Siege setup", siege_detail))
-
-    cvc_raw = (val("w_cvc") or "").strip()
-    cvc_points_raw = val("w_cvc_points")
-    cvc_priority = _map_cvc_priority(cvc_raw)
-    cvc_points_fmt = _format_number(cvc_points_raw) if cvc_points_raw else ""
-    cvc_parts: list[str] = []
-    if cvc_priority:
-        cvc_parts.append(f"CvC priority: {cvc_priority}")
-    if cvc_points_fmt:
-        cvc_parts.append(f"Minimum CvC points: {cvc_points_fmt}")
-    if cvc_parts:
-        fields.append(_field("CvC priority • Minimum CvC points", " • ".join(cvc_parts)))
-
-    # 4. Notes
-    progression = cleaned(val("w_level"))
-    if progression:
-        if len(progression) > 200:
-            progression = progression[:197] + "..."
-        fields.append(_field("Progression (self-feel)", progression))
-
-    origin = cleaned(val("w_origin"))
-    if origin:
-        fields.append(_field("Heard about C1C from", origin))
-
-    return fields
+def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
+    embed = _base_embed("welcome", author)
+    embed.description = "Summary unavailable — see logs"
+    return embed
 
 
-def _field(name: str, value: str) -> dict[str, Any]:
-    if len(value) > 1024:
-        value = f"{value[:1021]}..."
-    return {"name": name, "value": value, "inline": False}
+def _label(label: str, value: str) -> str:
+    return f"**{label}:** {value}"
 
 
-def _format_number(value: Any) -> str:
-    """Format numbers as ### K / #.# M where appropriate."""
-
-    try:
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            value = value.replace(",", "").strip()
-        num = float(value)
-    except Exception:
-        return str(value).strip()
-
-    if num < 1000:
-        if num.is_integer():
-            return f"{int(num)}"
-        return f"{num:.0f}"
-
-    if num < 1_000_000:
-        short = num / 1000.0
-        if short.is_integer():
-            return f"{int(short)} K"
-        return f"{short:.1f} K"
-
-    short = num / 1_000_000.0
-    if short.is_integer():
-        return f"{int(short)} M"
-    return f"{short:.1f} M"
+def _format_inline_pair(label_left: str, value_left: str | None, label_right: str, value_right: str | None) -> str:
+    parts: list[str] = []
+    if value_left:
+        parts.append(_label(label_left, value_left))
+    if value_right:
+        parts.append(_label(label_right, value_right))
+    return " • ".join(parts)
 
 
-def _map_cvc_priority(raw: str) -> str:
-    mapping = {
-        "1": "Low",
-        "2": "Low-Medium",
-        "3": "Medium",
-        "4": "High-Medium",
-        "5": "High",
-    }
-    value = (raw or "").strip()
-    if not value:
+def _format_short_number(raw: object) -> str:
+    # Accept str or numeric.
+    if raw is None:
         return ""
-    if value in mapping:
-        return mapping[value]
-    return value
+    if isinstance(raw, str):
+        raw = raw.strip().replace(",", "")
+        if not raw:
+            return ""
+        try:
+            value = float(raw)
+        except ValueError:
+            return str(raw)
+    else:
+        value = float(raw)
+
+    if value < 1_000:
+        return str(int(value))
+
+    if value < 1_000_000:
+        value_k = value / 1_000.0
+        text = f"{value_k:.1f}"
+        if text.endswith(".0"):
+            text = text[:-2]
+        return f"{text} K"
+
+    value_m = value / 1_000_000.0
+    text = f"{value_m:.1f}"
+    if text.endswith(".0"):
+        text = text[:-2]
+    return f"{text} M"
 
 
 def _format_answer(qtype: str, stored: Any) -> str:
@@ -353,6 +338,14 @@ def _format_answer(qtype: str, stored: Any) -> str:
 
     if stored is None:
         return ""
+
+    if qtype == "bool":
+        if isinstance(stored, str):
+            normalized = stored.strip().lower()
+            if normalized in {"no", "false", "0", "none", ""}:
+                return "No"
+            return "Yes"
+        return "Yes" if bool(stored) else "No"
 
     if qtype in {"short", "long"}:
         text = str(stored).strip()
@@ -374,6 +367,8 @@ def _format_answer(qtype: str, stored: Any) -> str:
 def _stringify_collection(stored: Any) -> str:
     if stored is None:
         return ""
+    if isinstance(stored, bool):
+        return "Yes" if stored else "No"
     if isinstance(stored, str):
         return stored.strip()
     if isinstance(stored, Mapping):
@@ -401,6 +396,13 @@ def _is_hidden(qid: str, visibility: Mapping[str, Mapping[str, str]] | None) -> 
         return False
     state = visibility.get(qid, {}).get("state")
     return state == "skip"
+
+
+def _is_effectively_empty(value: str | None) -> bool:
+    if not value:
+        return True
+    normalized = value.strip().lower()
+    return normalized in HIDE_TOKENS
 
 
 __all__ = ["build_summary_embed"]
