@@ -11,7 +11,7 @@ from typing import Sequence
 import discord
 
 from c1c_coreops.help import COREOPS_VERSION, build_coreops_footer
-from c1c_coreops.tags import lifecycle_tag
+from shared import logfmt
 from shared.utils import humanize_duration
 
 def _hms(seconds: float) -> str:
@@ -147,7 +147,7 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
         embed.add_field(name="​", value=tip_text, inline=False)
 
     footer_parts = [
-        lifecycle_tag(),
+        logfmt.LOG_EMOJI["lifecycle"],
         f"Bot v{_sanitize_inline(data.bot_version)}",
         f"CoreOps v{_sanitize_inline(data.coreops_version)}",
     ]
@@ -340,7 +340,7 @@ def build_config_embed(
     embed.add_field(name="Ops Channel", value=ops_value, inline=False)
 
     footer_parts = [
-        lifecycle_tag(),
+        logfmt.LOG_EMOJI["lifecycle"],
         f"Bot v{_sanitize_inline(bot_version)}",
         f"CoreOps v{_sanitize_inline(coreops_version)}",
     ]
@@ -511,7 +511,7 @@ def build_checksheet_tabs_embed(data: ChecksheetEmbedData) -> discord.Embed:
             embed.add_field(name="Debug preview", value="\n".join(debug_lines), inline=False)
 
     footer_parts = [
-        lifecycle_tag(),
+        logfmt.LOG_EMOJI["lifecycle"],
         f"Bot v{_sanitize_inline(data.bot_version)}",
         f"CoreOps v{_sanitize_inline(data.coreops_version)}",
     ]
@@ -628,7 +628,7 @@ def build_refresh_embed(
         table = "no buckets"
 
     embed.add_field(name="Buckets", value=f"```{table}```", inline=False)
-    footer_parts = [lifecycle_tag()]
+    footer_parts = [logfmt.LOG_EMOJI["lifecycle"]]
     if bot_version and coreops_version:
         footer_parts.extend([f"Bot v{bot_version}", f"CoreOps v{coreops_version}"])
     footer_parts.append(f"total: {total_ms} ms")

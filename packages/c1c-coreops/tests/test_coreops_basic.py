@@ -16,17 +16,13 @@ def _ensure_src_on_path() -> None:
 
 _ensure_src_on_path()
 
+from shared import logfmt
 from c1c_coreops import tags
 
 
-def test_lifecycle_tag_dual_phase_enabled():
-    assert tags.DUAL_TAG_LIFECYCLE is True
-    assert tags.lifecycle_tag() == "[watcher|lifecycle]"
+def test_lifecycle_tag_uses_logfmt_prefix():
+    assert tags.lifecycle_tag() == f"{logfmt.LOG_EMOJI['lifecycle']} **CoreOps** —"
 
 
-def test_lifecycle_tag_single_phase(monkeypatch):
-    monkeypatch.setattr(tags, "DUAL_TAG_LIFECYCLE", False)
-    try:
-        assert tags.lifecycle_tag() == tags.LIFECYCLE_TAG
-    finally:
-        monkeypatch.setattr(tags, "DUAL_TAG_LIFECYCLE", True)
+def test_lifecycle_prefix_constant_matches_function():
+    assert tags.LIFECYCLE_PREFIX == tags.lifecycle_tag()

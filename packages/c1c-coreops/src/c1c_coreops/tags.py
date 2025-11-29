@@ -1,17 +1,16 @@
-"""Log tag helpers for CoreOps lifecycle messaging."""
+"""Log helpers for CoreOps lifecycle messaging."""
 
 from __future__ import annotations
 
-WATCHER_TAG = "[watcher]"
-LIFECYCLE_TAG = "[lifecycle]"
-# set False next release to drop old tag
-DUAL_TAG_LIFECYCLE = True
+from shared import logfmt
+
+LIFECYCLE_PREFIX = f"{logfmt.LOG_EMOJI['lifecycle']} **CoreOps** —"
 
 
 def lifecycle_tag() -> str:
-    """Return the lifecycle log tag, honoring the dual-tag rollout window."""
+    """Return the lifecycle log prefix following DocStyle logging rules."""
 
-    return "[watcher|lifecycle]" if DUAL_TAG_LIFECYCLE else LIFECYCLE_TAG
+    return LIFECYCLE_PREFIX
 
 
-__all__ = ("WATCHER_TAG", "LIFECYCLE_TAG", "DUAL_TAG_LIFECYCLE", "lifecycle_tag")
+__all__ = ("LIFECYCLE_PREFIX", "lifecycle_tag")
