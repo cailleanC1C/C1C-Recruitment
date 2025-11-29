@@ -88,13 +88,11 @@ def build_summary_embed(
 
         return _build_generic_summary(flow, questions, answers, author, visibility)
     except Exception:  # pragma: no cover - defensive fallback
-        log.error(
-            "onboarding.summary.build_failed",
-            exc_info=True,
-            extra={"flow": flow},
-        )
+        log.error("onboarding.summary.build_failed", exc_info=True, extra={"flow": flow})
         if flow == "welcome":
-            return _fallback_welcome_embed(author)
+            return _fallback_welcome_embed(
+                author if isinstance(author, discord.Member) else None
+            )
         return _fallback_generic_embed(flow, author)
 
 
@@ -294,14 +292,12 @@ def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
     return embed
 
 
-def _fallback_generic_embed(flow: str, author: discord.abc.User | discord.Member | None) -> discord.Embed:
+def _fallback_generic_embed(
+    flow: str, author: discord.abc.User | discord.Member | None
+) -> discord.Embed:
     embed = _base_embed(flow, author)
     embed.description = "Summary unavailable — see logs"
     return embed
-
-
-def _is_fallback_summary(embed: discord.Embed) -> bool:
-    return (embed.description or "").strip() == "Summary unavailable — see logs"
 
 
 def _label(label: str, value: str) -> str:
