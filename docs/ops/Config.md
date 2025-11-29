@@ -197,7 +197,7 @@ explicitly configured in the sheet.
 
 ### Onboarding
 - `ONBOARDING_TAB` (string) — Sheet tab name containing the onboarding questions with headers `flow, order, qid, label, type, required, maxlen, validate, help, options, visibility_rules, nav_rules`. Preloaded at startup and refreshed weekly; missing or invalid values surface `missing config key: ONBOARDING_TAB` during refresh.
-- `ONBOARDING_SESSIONS_TAB` (string) — Worksheet storing onboarding sessions keyed by `user_id` + `thread_id`. Columns must include `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `empty_first_reminder_at`, `empty_warning_sent_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at`, `answers_json`, `updated_at`. The `empty_*` columns track the 3 h/24 h nudges for empty welcome/promo tickets.
+- `ONBOARDING_SESSIONS_TAB` (string) — Worksheet storing onboarding sessions keyed by `user_id` + `thread_id`. Columns (order enforced): `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `answers_json`, `updated_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at`.
 - Feature toggles `PROMO_ENABLED` and `promo_dialog` gate promo onboarding dialogs (`promo.r`, `promo.m`, `promo.l`). Both must be enabled for promo dialogs to run once detected.
 
 ### Onboarding sheet keys
@@ -301,4 +301,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.7)

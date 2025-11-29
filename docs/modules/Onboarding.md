@@ -24,7 +24,7 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - **Rules:** `visibility_rules` and `nav_rules` reference other `qid` values; parser rejects unknown IDs so skip logic does not drift.
 
 ### Session Persistence (`OnboardingSessions` tab)
-- **Columns:** `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at`, `answers_json`, `updated_at`.
+- **Columns (order enforced):** `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `answers_json`, `updated_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at`.
 - **`answers_json`:** compact JSON storing the latest answers keyed by `qid` (`{"w_ign": "Caillean", "w_hydra_diff": ["Hard", "Brutal"]}`, etc.).
 - **Reminder timestamps:** `first_reminder_at`/`warning_sent_at`/`auto_closed_at` prevent repeated pings and track the welcome-thread lifecycle (5h nudge → 24h warning → 36h auto-close+rename to `Closed-…-NONE`).
 - **Usage:** restored whenever the wizard restarts; stale panel IDs trigger a fresh panel bind but keep answers, visibility, and reminder history.
@@ -61,4 +61,4 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - [`docs/Runbook.md`](../Runbook.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-26 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.7)

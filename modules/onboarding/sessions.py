@@ -67,17 +67,11 @@ class Session:
             "answers": dict(self.answers),
             "completed": self.completed,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "empty_first_reminder_at": self.empty_first_reminder_at.isoformat()
-            if self.empty_first_reminder_at
-            else None,
-            "empty_warning_sent_at": self.empty_warning_sent_at.isoformat()
-            if self.empty_warning_sent_at
-            else None,
             "first_reminder_at": self.first_reminder_at.isoformat()
-            if self.first_reminder_at
+            if self.first_reminder_at or self.empty_first_reminder_at
             else None,
             "warning_sent_at": self.warning_sent_at.isoformat()
-            if self.warning_sent_at
+            if self.warning_sent_at or self.empty_warning_sent_at
             else None,
             "auto_closed_at": self.auto_closed_at.isoformat() if self.auto_closed_at else None,
         }
@@ -91,17 +85,11 @@ class Session:
             "answers": self.answers,
             "completed": bool(self.completed),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "empty_first_reminder_at": self.empty_first_reminder_at.isoformat()
-            if self.empty_first_reminder_at
+            "first_reminder_at": (self.first_reminder_at or self.empty_first_reminder_at).isoformat()
+            if (self.first_reminder_at or self.empty_first_reminder_at)
             else None,
-            "empty_warning_sent_at": self.empty_warning_sent_at.isoformat()
-            if self.empty_warning_sent_at
-            else None,
-            "first_reminder_at": self.first_reminder_at.isoformat()
-            if self.first_reminder_at
-            else None,
-            "warning_sent_at": self.warning_sent_at.isoformat()
-            if self.warning_sent_at
+            "warning_sent_at": (self.warning_sent_at or self.empty_warning_sent_at).isoformat()
+            if (self.warning_sent_at or self.empty_warning_sent_at)
             else None,
             "auto_closed_at": self.auto_closed_at.isoformat() if self.auto_closed_at else None,
         }
@@ -128,18 +116,16 @@ class Session:
                 session.completed_at = datetime.fromisoformat(normalized)
             except Exception:
                 session.completed_at = None
-        empty_first = row.get("empty_first_reminder_at")
-        if empty_first:
-            session.empty_first_reminder_at = _parse_iso(empty_first)
-        empty_warning = row.get("empty_warning_sent_at")
-        if empty_warning:
-            session.empty_warning_sent_at = _parse_iso(empty_warning)
         reminder_token = row.get("first_reminder_at")
-        if reminder_token:
-            session.first_reminder_at = _parse_iso(reminder_token)
+        reminder_at = _parse_iso(reminder_token) if reminder_token else None
+        if reminder_at:
+            session.first_reminder_at = reminder_at
+            session.empty_first_reminder_at = reminder_at
         warning_token = row.get("warning_sent_at")
-        if warning_token:
-            session.warning_sent_at = _parse_iso(warning_token)
+        warning_at = _parse_iso(warning_token) if warning_token else None
+        if warning_at:
+            session.warning_sent_at = warning_at
+            session.empty_warning_sent_at = warning_at
         auto_closed = row.get("auto_closed_at")
         if auto_closed:
             session.auto_closed_at = _parse_iso(auto_closed)
