@@ -1,50 +1,24 @@
 from types import SimpleNamespace
 
+from types import SimpleNamespace
+
 from modules.onboarding.ui import summary_embed
-from shared.sheets.onboarding_questions import Question
 
 
-def _question(qid: str, label: str, qtype: str) -> Question:
-    return Question(
-        flow="welcome",
-        order="1",
-        qid=qid,
-        label=label,
-        type=qtype,
-        required=True,
-        maxlen=None,
-        validate=None,
-        help=None,
-        options=tuple(),
-        multi_max=None,
-        rules=None,
-    )
-
-
-def test_summary_embed_formats_boolean_answers(monkeypatch):
-    question = _question("siege_interest", "Interested in Siege?", "bool")
-    monkeypatch.setattr(
-        summary_embed.onboarding_questions,
-        "get_questions",
-        lambda flow: [question],
-    )
-    monkeypatch.setattr(
-        summary_embed.onboarding_questions, "schema_hash", lambda flow: "hash123"
-    )
+def test_summary_embed_routes_promo_to_new_builder():
     author = SimpleNamespace(display_name="Recruit", display_avatar=None)
+    answers = {
+        "pr_ign": "Returning Hero",
+        "pr_siege": False,
+        "pr_cvc": 2,
+        "pr_cvc_points": 60_000,
+    }
 
-    embed_true = summary_embed.build_summary_embed(
-        "promo",
-        {"siege_interest": True},
-        author,
-        schema_hash="hash123",
+    embed = summary_embed.build_summary_embed(
+        "promo.r", answers, author, schema_hash="hash123", visibility=None
     )
-    assert embed_true.fields[0].value == "Yes"
 
-    embed_false = summary_embed.build_summary_embed(
-        "promo",
-        {"siege_interest": "no"},
-        author,
-        schema_hash="hash123",
-    )
-    assert embed_false.fields[0].value == "No"
+    assert "Returning Hero" in (embed.description or "")
+    war_section = next(field for field in embed.fields if field.name.startswith("⚔️"))
+    assert "Siege participation" in war_section.value
+    assert "Minimum CvC points:** 60 K" in war_section.value

@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.9.7 — 2025-11-28
+- Aligned promo summaries (`promo.r`, `promo.m`, `promo.l`) to the welcome readability layout with per-flow sections, inline field pairs, and refreshed hide/formatting rules.
+- Added shared number formatting and CvC priority helpers to keep promo/welcome summaries consistent across flows.
+- Documented the promo summary readability spec in the docs index and refreshed tests for the new embed layouts.
+
 ### v0.9.7 — 2025-11-27
 **Onboarding System – Maintenance & CI Alignment**
 * Fixed `summary_embed` import error (`Question` now correctly imported from the sheets module), restoring normal onboarding boot.
@@ -355,4 +360,35 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-27 (v0.9.7)
+Doc last updated: 2025-11-28 (v0.9.7)
+
+Doc last updated: 2025-11-28 (v0.9.7)
+Testing & Validation
+ Run the full test suite: pytest
+
+ Add / update targeted tests for promo summary embed formatting.
+
+ Manually test all three promo flows in a test environment:
+
+Create one ticket for each of promo.r, promo.m, promo.l with representative answers, including:
+
+Siege “no” and Siege “yes with detail”
+
+Different CvC priorities
+
+Power < 1k, ~50k, and > 1m
+
+Confirm:
+
+Sections appear in the right order.
+
+Inline pairs use •.
+
+Hide rules and numeric formatting match the spec.
+
+Siege participation always appears; Siege detail respects the participation answer.
+
+[meta]
+labels: codex, comp:shared, comp:modules, comp:ops, tests, docs, enhancement, P2
+milestone: Harmonize v1.0
+[/meta]
