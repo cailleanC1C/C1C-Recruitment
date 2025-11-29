@@ -26,6 +26,7 @@ from config.runtime import (
     get_watchdog_disconnect_grace_sec,
     get_watchdog_stall_sec,
 )
+from shared import logfmt
 from shared import socket_heartbeat as hb
 from c1c_coreops.render import (
     ChecksheetEmbedData,
@@ -73,7 +74,6 @@ from shared.sheets.recruitment import get_reports_tab_name
 
 from c1c_coreops.config import CoreOpsSettings, load_coreops_settings, normalize_command_text
 from c1c_coreops.prefix import detect_admin_bang_command
-from c1c_coreops.tags import lifecycle_tag
 from c1c_coreops.rbac import (
     admin_only,
     can_view_admin,
@@ -1486,7 +1486,7 @@ class CoreOpsCog(commands.Cog):
             reload_config()
         except Exception as exc:  # pragma: no cover - defensive guard
             msg, extra = sanitize_log(
-                f"{lifecycle_tag()} config reload failed",
+                f"{logfmt.LOG_EMOJI['lifecycle']} **CoreOps** — config reload failed",
                 extra={
                     "actor": actor,
                     "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -1504,7 +1504,7 @@ class CoreOpsCog(commands.Cog):
         await ctx.send(str(sanitize_text(message)))
 
         log_msg, extra = sanitize_log(
-            f"{lifecycle_tag()} config reload completed",
+            f"{logfmt.LOG_EMOJI['lifecycle']} **CoreOps** — config reload completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -1586,7 +1586,7 @@ class CoreOpsCog(commands.Cog):
         )
 
         log_msg, extra = sanitize_log(
-            f"{lifecycle_tag()} cache refresh completed",
+            f"{logfmt.LOG_EMOJI['refresh']} **Cache refresh** — completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,
@@ -2842,7 +2842,7 @@ class CoreOpsCog(commands.Cog):
                 )
 
         log_msg, extra = sanitize_log(
-            f"{lifecycle_tag()} cache refresh completed",
+            f"{logfmt.LOG_EMOJI['refresh']} **Cache refresh** — completed",
             extra={
                 "actor": actor,
                 "actor_id": int(actor_id) if isinstance(actor_id, int) else actor_id,

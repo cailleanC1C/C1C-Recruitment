@@ -11,7 +11,7 @@ from typing import Sequence
 import discord
 
 from c1c_coreops.help import COREOPS_VERSION, build_coreops_footer
-from c1c_coreops.tags import lifecycle_tag
+from shared import logfmt
 from shared.utils import humanize_duration
 
 def _hms(seconds: float) -> str:
@@ -147,7 +147,7 @@ def build_digest_embed(data: DigestEmbedData) -> discord.Embed:
         embed.add_field(name="​", value=tip_text, inline=False)
 
     footer_parts = [
-        lifecycle_tag(),
+        logfmt.LOG_EMOJI["lifecycle"],
         f"Bot v{_sanitize_inline(data.bot_version)}",
         f"CoreOps v{_sanitize_inline(data.coreops_version)}",
     ]

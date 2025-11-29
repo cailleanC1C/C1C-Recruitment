@@ -9,7 +9,6 @@ from typing import Any, Callable, Iterable, Mapping
 
 import discord
 
-from c1c_coreops.tags import lifecycle_tag
 from modules.common import runtime as rt
 from shared import logfmt
 from shared.dedupe import EventDeduper
@@ -712,4 +711,4 @@ def _render_payload(payload: Mapping[str, Any]) -> str | None:
 
     if not message:
         return None
-    return f"{lifecycle_tag()} {message}"
+    return message
