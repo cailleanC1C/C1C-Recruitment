@@ -61,10 +61,6 @@ def build_summary_embed(
 ) -> discord.Embed:
     """Build a summary embed for the given onboarding flow."""
 
-    # Welcome uses the sheet-driven, readability-spec layout.
-    if flow == "welcome":
-        return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
-
     if flow.startswith("promo"):
         try:
             return build_promo_summary_embed(flow, answers, visibility, author=author)
@@ -88,8 +84,12 @@ def build_summary_embed(
 
         return _build_generic_summary(flow, questions, answers, author, visibility)
     except Exception:  # pragma: no cover - defensive fallback
-        log.error("Failed to build welcome summary embed", exc_info=True, extra={"flow": flow})
-        return _fallback_welcome_embed(author)
+        log.error("onboarding.summary.build_failed", exc_info=True, extra={"flow": flow})
+        if flow == "welcome":
+            return _fallback_welcome_embed(
+                author if isinstance(author, discord.Member) else None
+            )
+        return _fallback_generic_embed(flow, author)
 
 
 def _build_welcome_summary(
@@ -284,6 +284,14 @@ def _base_embed(flow: str, author: discord.abc.User | discord.Member | None) -> 
 
 def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
     embed = _base_embed("welcome", author)
+    embed.description = "Summary unavailable — see logs"
+    return embed
+
+
+def _fallback_generic_embed(
+    flow: str, author: discord.abc.User | discord.Member | None
+) -> discord.Embed:
+    embed = _base_embed(flow, author)
     embed.description = "Summary unavailable — see logs"
     return embed
 

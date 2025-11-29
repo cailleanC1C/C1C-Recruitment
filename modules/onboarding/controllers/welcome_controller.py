@@ -25,7 +25,7 @@ from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
 from modules.onboarding.ui.select_renderer import build_select_view
-from modules.onboarding.ui.summary_embed import build_summary_embed
+from modules.onboarding.ui.summary_embed import build_summary_embed, _fallback_welcome_embed
 from modules.onboarding.ui.views import NextStepView
 from modules.onboarding.ui import panels
 from shared.logfmt import channel_label, user_label
@@ -1198,6 +1198,52 @@ class BaseWelcomeController:
             except Exception:
                 self.recruiter_role_ids = []
 
+    async def _send_welcome_summary_safe(
+        self,
+        *,
+        thread: discord.abc.Messageable,
+        answers: Mapping[str, Any],
+        author: discord.abc.User | discord.Member | None,
+        schema_hash: str | None,
+        visibility: Mapping[str, Any] | None,
+        content: str | None = None,
+        allowed_mentions: discord.AllowedMentions | None = None,
+    ) -> bool:
+        """Build and send welcome summary; fall back to a minimal embed on error."""
+
+        try:
+            embed = build_summary_embed(
+                flow=self.flow,
+                answers=answers,
+                author=author,
+                schema_hash=schema_hash,
+                visibility=visibility,
+            )
+        except Exception:
+            log.error(
+                "onboarding.summary.build_failed_unexpected",
+                exc_info=True,
+                extra={"flow": self.flow, "thread_id": getattr(thread, "id", None)},
+            )
+            fallback_author = author if isinstance(author, discord.Member) else None
+            embed = _fallback_welcome_embed(fallback_author)
+
+        try:
+            await thread.send(
+                content=content,
+                embed=embed,
+                allowed_mentions=allowed_mentions,
+            )
+        except Exception:
+            log.error(
+                "onboarding.summary.send_failed",
+                exc_info=True,
+                extra={"flow": self.flow, "thread_id": getattr(thread, "id", None)},
+            )
+            return False
+
+        return True
+
     def _resolve_applicant_id(
         self, thread_id: int, session: SessionData | None = None
     ) -> int | None:
@@ -1861,29 +1907,23 @@ class BaseWelcomeController:
             log.warning("failed to resolve summary author; falling back to thread owner", exc_info=True)
             summary_author = getattr(thread, "owner", None) or interaction.user
 
-        schema = session.schema_hash if session else schema_hash(self.flow)
-        summary_embed = build_summary_embed(
-            self.flow,
-            dict(answers),
-            summary_author,
-            schema or "",
-            visibility,
-        )
-
         recruiter_ids = list(getattr(self, "recruiter_role_ids", []) or [])
         if not recruiter_ids:
             recruiter_ids = list(getattr(self, "RECRUITER_ROLE_IDS", []) or [])
         mention_text = " ".join(f"<@&{int(role_id)}>" for role_id in recruiter_ids if role_id)
         allowed_mentions = discord.AllowedMentions(roles=True, users=False, everyone=False)
-        try:
-            await thread.send(
-                content=mention_text or None,
-                embed=summary_embed,
-                allowed_mentions=allowed_mentions if mention_text else None,
-            )
-        except Exception:
-            log.warning("failed to post onboarding summary", exc_info=True)
-        else:
+        schema = session.schema_hash if session else schema_hash(self.flow)
+        summary_success = await self._send_welcome_summary_safe(
+            thread=thread,
+            answers=dict(answers),
+            author=summary_author,
+            schema_hash=schema or "",
+            visibility=visibility,
+            content=mention_text or None,
+            allowed_mentions=allowed_mentions if mention_text else None,
+        )
+
+        if summary_success:
             await self._log_panel_completion(
                 thread_id,
                 thread=thread,
@@ -3409,31 +3449,31 @@ class BaseWelcomeController:
                     log.warning("failed to remove preview after confirmation", exc_info=True)
 
         summary_author = self._resolve_summary_author(thread, interaction)
-        summary_embed = build_summary_embed(
-            self.flow,
-            session.answers,
-            summary_author,
-            session.schema_hash or "",
-            session.visibility,
-        )
-
-        await thread.send(embed=summary_embed)
-        await thread.send("@RecruitmentCoordinator")
-
-        await self._log_panel_completion(
-            thread_id,
+        summary_success = await self._send_welcome_summary_safe(
             thread=thread,
-            actor=interaction.user,
-            session=session,
             answers=dict(session.answers),
+            author=summary_author,
+            schema_hash=session.schema_hash or "",
+            visibility=session.visibility,
         )
 
-        self._persist_session_completion(
-            thread_id,
-            session_data=session,
-            answers=dict(session.answers),
-            panel_message_id=self._panel_messages.get(thread_id),
-        )
+        if summary_success:
+            await thread.send("@RecruitmentCoordinator")
+
+            await self._log_panel_completion(
+                thread_id,
+                thread=thread,
+                actor=interaction.user,
+                session=session,
+                answers=dict(session.answers),
+            )
+
+            self._persist_session_completion(
+                thread_id,
+                session_data=session,
+                answers=dict(session.answers),
+                panel_message_id=self._panel_messages.get(thread_id),
+            )
 
         store.set_preview_message(thread_id, message_id=None, channel_id=None)
         self._cleanup_session(thread_id)
