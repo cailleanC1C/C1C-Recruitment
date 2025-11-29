@@ -24,8 +24,8 @@ from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
 from modules.onboarding.ui.modal_renderer import WelcomeQuestionnaireModal, build_modals
+from modules.onboarding.ui.summary_embed import build_summary_embed
 from modules.onboarding.ui.select_renderer import build_select_view
-from modules.onboarding.ui.summary_embed import _is_fallback_summary, build_summary_embed
 from modules.onboarding.ui.summary_retry import RetryWelcomeSummaryView
 from modules.onboarding.ui.summary_embed import build_summary_embed, _fallback_welcome_embed
 from modules.onboarding.ui.views import NextStepView
