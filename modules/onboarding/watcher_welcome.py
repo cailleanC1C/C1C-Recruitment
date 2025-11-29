@@ -686,9 +686,19 @@ async def rename_thread_to_reserved(
     normalized_tag = (clan_tag or "").strip().upper()
 
     if parts is None:
-        log.warning(
-            "⚠️ welcome_reserve_rename — ticket=unknown • tag=%s • result=skipped_unparsed",
+        thread_name = getattr(thread, "name", "unknown")
+        log.error(
+            "❌ welcome_reserve_rename_error — ticket=unknown • tag=%s • thread=%s • result=skipped_unparsed",
             normalized_tag,
+            thread_name,
+        )
+        human_log.human(
+            "error",
+            (
+                "❌ welcome_reserve_rename_error — scope=welcome "
+                f"• ticket=unknown • tag={normalized_tag} • thread={thread_name} "
+                "• reason=thread_name_unparsed"
+            ),
         )
         return False
 
@@ -811,13 +821,28 @@ def _determine_reservation_decision(
     *,
     no_placement_tag: str,
     final_is_real: bool,
+    consume_open_spot: bool = True,
+    previous_final: str | None = None,
 ) -> ReservationDecision:
     normalized_final = (final_tag or "").strip().upper()
+    normalized_previous = (previous_final or "").strip().upper()
     open_deltas: Dict[str, int] = {}
     recompute: List[str] = []
 
     if reservation_row is None:
-        if final_is_real and normalized_final and normalized_final != no_placement_tag:
+        if (
+            normalized_previous
+            and normalized_previous != no_placement_tag
+            and normalized_previous != normalized_final
+        ):
+            open_deltas[normalized_previous] = open_deltas.get(normalized_previous, 0) + 1
+            recompute.append(normalized_previous)
+        if (
+            consume_open_spot
+            and final_is_real
+            and normalized_final
+            and normalized_final != no_placement_tag
+        ):
             open_deltas[normalized_final] = -1
             recompute.append(normalized_final)
         return ReservationDecision("none", None, open_deltas, recompute)
@@ -2178,6 +2203,35 @@ class WelcomeTicketWatcher(commands.Cog):
                 await self._send_invalid_tag_notice(thread, actor, final_tag)
                 return
 
+        previous_final = ""
+        try:
+            existing_row = await asyncio.to_thread(
+                onboarding_sheets.find_welcome_row, context.ticket_number
+            )
+        except Exception:
+            existing_row = None
+            log.exception(
+                "failed to fetch onboarding row before finalize",
+                extra={
+                    "ticket": context.ticket_number,
+                    "user": context.username,
+                    "source": source,
+                },
+            )
+        else:
+            if existing_row:
+                row_values = existing_row[1]
+                clan_idx = onboarding_sheets.WELCOME_CLAN_TAG_INDEX
+                if clan_idx < len(row_values):
+                    previous_final = (row_values[clan_idx] or "").strip()
+
+        previous_final_normalized = previous_final.strip().upper()
+        consume_open_spot = final_tag != _NO_PLACEMENT_TAG and (
+            not previous_final_normalized
+            or previous_final_normalized == _NO_PLACEMENT_TAG
+            or previous_final_normalized != final_tag
+        )
+
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         row = [context.ticket_number, context.username, final_tag, timestamp]
 
@@ -2241,6 +2295,8 @@ class WelcomeTicketWatcher(commands.Cog):
                 reservation_row,
                 no_placement_tag=_NO_PLACEMENT_TAG,
                 final_is_real=final_is_real,
+                consume_open_spot=consume_open_spot,
+                previous_final=previous_final,
             )
             reservation_label = decision.label
 

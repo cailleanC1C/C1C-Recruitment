@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import discord
 from discord.ext import commands
+import pytest
 
 from modules.onboarding.watcher_welcome import (
     TicketContext,
@@ -16,6 +17,17 @@ from modules.onboarding.watcher_welcome import (
     rename_thread_to_reserved,
 )
 from shared.sheets import reservations as reservations_sheets
+
+
+@pytest.fixture(autouse=True)
+def _stub_find_welcome_row(monkeypatch):
+    def _fake_find_welcome_row(_ticket):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.find_welcome_row",
+        _fake_find_welcome_row,
+    )
 
 
 def _make_reservation(tag: str, *, created: dt.datetime | None = None) -> reservations_sheets.ReservationRow:
@@ -100,6 +112,20 @@ def test_decision_no_reservation_final_real_clan() -> None:
     assert decision.status is None
     assert decision.open_deltas == {"C1CE": -1}
     assert decision.recompute_tags == ["C1CE"]
+
+
+def test_decision_no_reservation_switches_final_clan() -> None:
+    decision = _determine_reservation_decision(
+        "VAGR",
+        None,
+        no_placement_tag=_NO_PLACEMENT_TAG,
+        final_is_real=True,
+        previous_final="C1CE",
+    )
+    assert decision.label == "none"
+    assert decision.status is None
+    assert decision.open_deltas == {"C1CE": 1, "VAGR": -1}
+    assert set(decision.recompute_tags) == {"C1CE", "VAGR"}
 
 
 def test_decision_reservation_cancelled_with_no_clan() -> None:
@@ -525,6 +551,80 @@ def test_finalize_manual_logs_manual_event(monkeypatch, caplog) -> None:
         "• reservation=none • result=ok • source=manual_fallback"
         in log_messages
     )
+
+
+def test_finalize_manual_consumes_seat_without_reservation(monkeypatch) -> None:
+    adjustments: list[tuple[str, int]] = []
+    recomputed: list[str] = []
+    rows: list[list[str]] = []
+
+    async def fake_to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("asyncio.to_thread", fake_to_thread)
+
+    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
+        rows.append(list(row))
+        return "inserted"
+
+    async def fake_find_reservations(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    async def fake_adjust(tag: str, delta: int):
+        adjustments.append((tag, delta))
+
+    async def fake_recompute(tag: str, guild=None):  # type: ignore[no-untyped-def]
+        recomputed.append(tag)
+
+    def fake_find_clan(tag: str):  # type: ignore[no-untyped-def]
+        return tag, ["", "", tag]
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
+        fake_upsert,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.reservations_sheets.find_active_reservations_for_recruit",
+        fake_find_reservations,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.adjust_manual_open_spots",
+        fake_adjust,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.availability.recompute_clan_availability",
+        fake_recompute,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.recruitment_sheets.find_clan_row",
+        fake_find_clan,
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        watcher._clan_tags = ["C1CE", _NO_PLACEMENT_TAG]
+        watcher._clan_tag_set = set(watcher._clan_tags)
+        context = TicketContext(thread_id=1, ticket_number="W2222", username="Tester")
+        context.state = "awaiting_clan"
+        context.close_source = "manual_fallback"
+        thread = _DummyThread()
+        await watcher._finalize_clan_tag(
+            thread,
+            context,
+            "C1CE",
+            actor=None,
+            source="manual_test",
+            prompt_message=None,
+            view=None,
+        )
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert ("C1CE", -1) in adjustments
+    assert recomputed == ["C1CE"]
+    assert rows and rows[0][2] == "C1CE"
 
 
 def test_finalize_rejects_unknown_tag_sends_notice(monkeypatch) -> None:
@@ -1374,3 +1474,33 @@ def test_rename_thread_to_reserved_success() -> None:
 
     assert thread.name == "Res-W0999-Tester-C1CE"
     assert thread.renames == ["Res-W0999-Tester-C1CE"]
+
+
+def test_rename_thread_to_reserved_unparsed_logs_error(monkeypatch, caplog) -> None:
+    thread = _RenameThread("W554-cail")
+    human_calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.human_log",
+        SimpleNamespace(human=lambda level, message: human_calls.append((level, message))),
+    )
+
+    caplog.set_level(logging.ERROR, logger="c1c.onboarding.welcome_watcher")
+
+    async def runner() -> None:
+        await rename_thread_to_reserved(thread, "C1CE")
+
+    asyncio.run(runner())
+
+    assert not thread.renames
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "c1c.onboarding.welcome_watcher"
+    ]
+    assert any("welcome_reserve_rename_error" in message for message in messages)
+    assert human_calls
+    level, message = human_calls[0]
+    assert level == "error"
+    assert "welcome_reserve_rename_error" in message
+    assert "thread=W554-cail" in message
