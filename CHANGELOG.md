@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.9.7 — 2025-11-29
+- Added a recruiter-only **Retry summary** button to the welcome fallback embed so stored answers can be reloaded and the summary rebuilt without leaving the thread; retry failures stay on the fallback with an ephemeral error.
+- Hardened onboarding summary fallback handling with flow-aware logging and generic embeds for non-welcome flows.
+- Documented the retry path and covered the welcome summary retry view with tests.
+
 ### v0.9.7 — 2025-11-28
 - Aligned promo summaries (`promo.r`, `promo.m`, `promo.l`) to the welcome readability layout with per-flow sections, inline field pairs, and refreshed hide/formatting rules.
 - Added shared number formatting and CvC priority helpers to keep promo/welcome summaries consistent across flows.

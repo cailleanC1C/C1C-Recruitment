@@ -58,7 +58,9 @@ Inline pairs are rendered with a mid-dot separator (`•`) to keep paired answer
 
 ## Visibility and failure handling
 - Only answers with a resolved visibility state other than `skip` are rendered.
-- If summary generation fails, a fallback embed is posted with the message “Summary unavailable — see logs”.
+- If summary generation fails, a fallback embed is posted with the message “Summary unavailable — see logs”. Recruiters see a 
+  **Retry summary** button on the fallback to rebuild the embed from the stored answers; failures surface as an ephemeral error 
+  and keep the fallback in place.
 
 ## Sample render
 ```
@@ -84,4 +86,4 @@ Progression (self-feel): Late-game damage dealer refining Hydra teams.
 Heard about C1C from: A friend in global chat
 ```
 
-Doc last updated: 2025-11-12 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.7)

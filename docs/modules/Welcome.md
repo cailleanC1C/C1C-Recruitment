@@ -33,6 +33,7 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 1. After the last question the wizard switches to the summary card with `Finish ✅`. Pressing Finish posts the recruiter summary embed into the thread and pings configured roles.
 2. Embed formatting follows the Summary spec below: grouped sections, inline pairs (`**Power:** … • **Bracket:** …`), hide rules (`w_siege_detail` suppressed if Siege answer is "No"), and compact number formatting (K/M suffixes).
    The welcome recruitment summary embed now follows the **Welcome Summary Embed — Readability Spec (v2.1)**: it uses the sheet-driven field order, inline pairs for Power/Bracket and Hydra/Chimera clash averages, maps CvC priority labels, and applies the new hide rules (including the Siege detail and CvC point handling) with a clean fallback when rendering fails.
+   When the fallback appears, recruiters see a **Retry summary** button that reloads stored answers for the thread and rebuilds the embed; failures stay on the fallback and show only to the recruiter as an ephemeral error.
 3. Once the embed is posted the wizard cleans up transient answer messages (if cleanup is enabled) and sets the session to `completed` so additional clicks display “session closed”.
 
 ### 4. Ticket Close & Placement

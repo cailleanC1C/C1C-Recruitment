@@ -61,16 +61,16 @@ def build_summary_embed(
 ) -> discord.Embed:
     """Build a summary embed for the given onboarding flow."""
 
-    # Welcome uses the sheet-driven, readability-spec layout.
-    if flow == "welcome":
-        return _build_onboarding_summary(flow, answers, author, schema_hash, visibility)
-
     if flow.startswith("promo"):
         try:
             return build_promo_summary_embed(flow, answers, visibility, author=author)
         except Exception:  # pragma: no cover - defensive fallback
-            log.warning("promo.summary.fallback", exc_info=True)
-            return _fallback_welcome_embed(author)
+            log.error(
+                "onboarding.summary.build_failed",
+                exc_info=True,
+                extra={"flow": flow},
+            )
+            return _fallback_generic_embed(flow, author)
 
     # Fallback to the recruitment summary builder for any other flows.
     try:
@@ -88,8 +88,14 @@ def build_summary_embed(
 
         return _build_generic_summary(flow, questions, answers, author, visibility)
     except Exception:  # pragma: no cover - defensive fallback
-        log.error("Failed to build welcome summary embed", exc_info=True, extra={"flow": flow})
-        return _fallback_welcome_embed(author)
+        log.error(
+            "onboarding.summary.build_failed",
+            exc_info=True,
+            extra={"flow": flow},
+        )
+        if flow == "welcome":
+            return _fallback_welcome_embed(author)
+        return _fallback_generic_embed(flow, author)
 
 
 def _build_welcome_summary(
@@ -288,6 +294,16 @@ def _fallback_welcome_embed(author: discord.Member | None) -> discord.Embed:
     return embed
 
 
+def _fallback_generic_embed(flow: str, author: discord.abc.User | discord.Member | None) -> discord.Embed:
+    embed = _base_embed(flow, author)
+    embed.description = "Summary unavailable — see logs"
+    return embed
+
+
+def _is_fallback_summary(embed: discord.Embed) -> bool:
+    return (embed.description or "").strip() == "Summary unavailable — see logs"
+
+
 def _label(label: str, value: str) -> str:
     return f"**{label}:** {value}"
 
@@ -405,4 +421,4 @@ def _is_effectively_empty(value: str | None) -> bool:
     return normalized in HIDE_TOKENS
 
 
-__all__ = ["build_summary_embed"]
+__all__ = ["build_summary_embed", "_is_fallback_summary"]

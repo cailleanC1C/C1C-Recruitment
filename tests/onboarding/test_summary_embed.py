@@ -126,3 +126,4 @@ def test_inline_helpers_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(embed, summary_embed.discord.Embed)
     assert embed.description == "Summary unavailable — see logs"
     assert embed.title.startswith("🔥 C1C • Recruitment Summary")
+    assert summary_embed._is_fallback_summary(embed)
