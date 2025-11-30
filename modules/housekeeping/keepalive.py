@@ -321,6 +321,7 @@ async def run_keepalive(bot: commands.Bot, logger: logging.Logger | None = None)
             targets[thread.id] = thread
 
     threads_touched = 0
+    touched_threads: list[discord.Thread] = []
     for thread in targets.values():
         posted, thread_errors = await _process_thread(
             thread, interval_hours=interval_hours, bot=bot, logger=logger
@@ -328,10 +329,24 @@ async def run_keepalive(bot: commands.Bot, logger: logging.Logger | None = None)
         errors += thread_errors
         if posted:
             threads_touched += 1
+            touched_threads.append(thread)
+
+    parent_channels: set[discord.abc.GuildChannel] = set()
+    for thread in touched_threads:
+        parent = getattr(thread, "parent", None)
+        if parent is not None:
+            parent_channels.add(parent)
+
+    channel_names = [f"#{channel.name}" for channel in parent_channels if getattr(channel, "name", None)]
+    channel_names.sort()
+
+    channels_count = len(parent_channels)
+    in_clause = f"[{', '.join(channel_names)}]" if channel_names else "[]"
 
     summary = (
-        f"💙 Housekeeping: keepalive — threads_touched={threads_touched} "
-        f"• errors={errors}"
+        "💙 Housekeeping: keepalive "
+        f"— threads_touched={threads_touched} • channels={channels_count} "
+        f"• in={in_clause} • errors={errors}"
     )
     logger.info(summary)
     await runtime_helpers.send_log_message(summary)
