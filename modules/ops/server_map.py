@@ -319,6 +319,11 @@ def _clean_state_entries(
     return entries
 
 
+def _humanized_channel_list(guild: discord.Guild, ids: Sequence[int]) -> str:
+    labels = [channel_label(guild, cid) for cid in ids if cid]
+    return ", ".join(labels) if labels else "none"
+
+
 async def refresh_server_map(
     bot: discord.Client,
     *,
@@ -390,11 +395,16 @@ async def refresh_server_map(
     category_blacklist = _parse_id_blacklist(raw_category_blacklist)
     channel_blacklist = _parse_id_blacklist(raw_channel_blacklist)
 
+    category_blacklist_label = _humanized_channel_list(guild, category_blacklist)
+    channel_blacklist_label = _humanized_channel_list(guild, channel_blacklist)
+
     cat_raw_display = (raw_category_blacklist or "").replace("\"", "'")
     chan_raw_display = (raw_channel_blacklist or "").replace("\"", "'")
     config_debug = (
         "📘 Server map — config • "
         f"guild={guild_name} "
+        f"• cat_blacklist={category_blacklist_label} "
+        f"• chan_blacklist={channel_blacklist_label} "
         f"• cat_blacklist_raw={cat_raw_display!r} "
         f"• chan_blacklist_raw={chan_raw_display!r} "
         f"• cat_ids={len(category_blacklist)} "
