@@ -1376,7 +1376,7 @@ class CoreOpsCog(commands.Cog):
                 snapshot_cache[name] = _get_snapshot_dict(name)
             return snapshot_cache[name]
 
-        for bucket in ("clans", "templates", "clan_tags"):
+        for bucket in ("clans", "templates", "clan_tags", "onboarding_questions"):
             known_bucket = bucket in bucket_names
             snapshot = _snapshot_for(bucket)
 
@@ -2592,6 +2592,7 @@ class CoreOpsCog(commands.Cog):
         sheet_entries = [
             _sheet_entry("recruitment", key="RECRUITMENT_SHEET_ID", label="Recruitment Sheet", fallback_index=1),
             _sheet_entry("onboarding", key="ONBOARDING_SHEET_ID", label="Onboarding Sheet", fallback_index=2),
+            _sheet_entry("milestones", key="MILESTONES_SHEET_ID", label="Milestones Sheet", fallback_index=3),
         ]
 
         snapshot_mapping: Mapping[str, object] | None
