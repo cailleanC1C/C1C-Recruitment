@@ -3884,7 +3884,8 @@ class CoreOpsCog(commands.Cog):
             "CLAN_TAGS_CACHE_TTL_SEC",
             "REFRESH_TIMES",
             "REPORT_DAILY_POST_TIME",
-            "CLEANUP_AGE_HOURS",
+            "CLEANUP_INTERVAL_HOURS",
+            "KEEPALIVE_INTERVAL_HOURS",
         ]
         lines = [self._format_simple_line(key, entries.get(key)) for key in ordered]
         seen = set(ordered)

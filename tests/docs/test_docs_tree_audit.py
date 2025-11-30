@@ -13,10 +13,13 @@ README_PATH = DOCS_ROOT / "README.md"
 ALLOWED_OPS_MD = {
     "CommandMatrix.md",
     "Config.md",
+    "Housekeeping.md",
     "Logging.md",
     "OnboardingFlows.md",
     "PermCommandQuickstart.md",
+    "Promo_Summary_Spec.md",
     "PromoTickets.md",
+    "Welcome_Summary_Spec.md",
     "Watchers.md",
     "ShardTracker.md",
 }

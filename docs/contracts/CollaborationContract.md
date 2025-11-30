@@ -246,7 +246,7 @@ milestone: Harmonize v1.0
 
 ---
 
-## Appendix A — Codex Operating Standards (Phase 7, v0.9.7)
+## Appendix A — Codex Operating Standards (Phase 7, v0.9.8.1)
 
 > **This appendix is the single source of truth for ChatGPT/Codex when drafting PRs.**  
 > If any other doc conflicts, follow this appendix for PR content and behavior.
@@ -276,7 +276,7 @@ Every Markdown file touched by a PR must end with:
 Doc last updated: YYYY-MM-DD (vX.Y.Z)
 ```
 
-For this phase: **v0.9.7**. Use the current date in **UTC** unless specified.
+For this phase: **v0.9.8.1**. Use the current date in **UTC** unless specified.
 
 ### A3. Logging Standard (Discord-posted, humanized)
 
@@ -360,7 +360,7 @@ Rules:
 - [ ] Welcome aggregated per `tag+recruit`.  
 
 **For any docs change**
-- [ ] Footer in each touched MD: `Doc last updated: YYYY-MM-DD (v0.9.7)`.
+- [ ] Footer in each touched MD: `Doc last updated: YYYY-MM-DD (v0.9.8.1)`.
 
 **For any PR**
 - [ ] One fenced code block; meta block last; milestone `Harmonize v1.0`.  
@@ -369,4 +369,4 @@ Rules:
 
 ---
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)

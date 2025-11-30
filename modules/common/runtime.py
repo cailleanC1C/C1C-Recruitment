@@ -999,7 +999,9 @@ class Runtime:
             preload_on_startup,
             register_refresh_job,
         )
-        from modules.ops import cleanup_watcher, server_map as server_map_module
+        from modules.housekeeping import cleanup as housekeeping_cleanup
+        from modules.housekeeping import keepalive as housekeeping_keepalive
+        from modules.ops import server_map as server_map_module
 
         ensure_cache_registration()
         await preload_on_startup()
@@ -1028,8 +1030,8 @@ class Runtime:
 
         cleanup_spec_entry: tuple[Any, Any] | None = None
         try:
-            cleanup_interval = cleanup_watcher.get_cleanup_interval_hours()
-            cleanup_logger = logging.getLogger("c1c.cleanup")
+            cleanup_interval = housekeeping_cleanup.get_cleanup_interval_hours()
+            cleanup_logger = logging.getLogger("c1c.housekeeping.cleanup")
             cleanup_job = self.scheduler.every(
                 hours=float(cleanup_interval),
                 tag="cleanup",
@@ -1037,7 +1039,7 @@ class Runtime:
             )
 
             async def cleanup_runner() -> None:
-                await cleanup_watcher.run_cleanup(self.bot, cleanup_logger)
+                await housekeeping_cleanup.run_cleanup(self.bot, cleanup_logger)
 
             cleanup_job.do(cleanup_runner)
             cleanup_spec_entry = (
@@ -1051,6 +1053,31 @@ class Runtime:
 
         if cleanup_spec_entry is not None:
             successes.append(cleanup_spec_entry)
+
+        keepalive_spec_entry: tuple[Any, Any] | None = None
+        try:
+            keepalive_logger = logging.getLogger("c1c.housekeeping.keepalive")
+            keepalive_job = self.scheduler.every(
+                hours=1.0,
+                tag="keepalive",
+                name="housekeeping_keepalive",
+            )
+
+            async def keepalive_runner() -> None:
+                await housekeeping_keepalive.run_keepalive(self.bot, keepalive_logger)
+
+            keepalive_job.do(keepalive_runner)
+            keepalive_spec_entry = (
+                SimpleNamespace(bucket="housekeeping_keepalive", cadence_label="1h"),
+                keepalive_job,
+            )
+        except Exception as exc:  # pragma: no cover - defensive guard
+            log.exception("failed to schedule keepalive job")
+            if failure is None:
+                failure = ("keepalive", exc)
+
+        if keepalive_spec_entry is not None:
+            successes.append(keepalive_spec_entry)
 
         self.scheduler.spawn(
             emit_schedule_log(self, successes, failure),

@@ -72,6 +72,7 @@ Collaboration Contract and core infra conventions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
+* [`Housekeeping.md`](ops/Housekeeping.md) — cleanup and thread keepalive jobs with cadences, logging formats, and env keys.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`Promo_Summary_Spec.md`](ops/Promo_Summary_Spec.md) — promo summary embeds readability spec and per-flow layout mapping.
@@ -99,8 +100,8 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 
 ## 🔧 Maintenance Rules
 * Any PR touching documentation must update this index and all affected references.  
-* All docs must end with:  
-  `Doc last updated: YYYY-MM-DD (v0.9.7)`  
+* All docs must end with:
+  `Doc last updated: YYYY-MM-DD (v0.9.8.1)`
 * `.env.example` must stay in `docs/ops/`.  
 * No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.  
 * Module docs must exclusively live under `docs/modules/`.
@@ -108,9 +109,9 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-28 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)
 
-Doc last updated: 2025-11-28 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)
 Testing & Validation
  Run the full test suite: pytest
 

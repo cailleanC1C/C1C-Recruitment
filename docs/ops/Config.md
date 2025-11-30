@@ -111,8 +111,11 @@ sync modules remain available for non-async scripts and cache warmers.
 | `CLAN_TAGS_CACHE_TTL_SEC` | int | `3600` | TTL for cached clan tags. |
 | `REPORT_DAILY_POST_TIME` | HH:MM | `09:30` | UTC time for the Daily Recruiter Update scheduler. |
 | `SERVER_MAP_REFRESH_DAYS` | int | `30` | Minimum days between scheduled server map refreshes; enforced alongside sheet runtime state. |
-| `CLEANUP_AGE_HOURS` | int | `24` | Interval (hours) between Cleanup watcher runs; enforces a full reset cadence. |
+| `CLEANUP_INTERVAL_HOURS` | int | `24` | Interval (hours) between cleanup sweeps; each run removes all non-pinned messages in configured threads. |
 | `CLEANUP_THREAD_IDS` | csv | — | Comma-separated Discord thread IDs where cleanup wipes all non-pinned messages. |
+| `KEEPALIVE_CHANNEL_IDS` | csv | — | Channels whose threads should receive keepalive heartbeats when stale. |
+| `KEEPALIVE_THREAD_IDS` | csv | — | Additional threads that should be kept alive regardless of parent channel. |
+| `KEEPALIVE_INTERVAL_HOURS` | int | `144` | Max idle hours before the keepalive job posts a heartbeat; archived threads are unarchived first. |
 
 ### Media rendering
 | Key | Type | Default | Notes |
@@ -301,4 +304,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-29 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)
