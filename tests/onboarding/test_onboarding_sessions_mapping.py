@@ -120,3 +120,32 @@ def test_onboarding_sessions_header_mismatch_save_noop(monkeypatch):
 
     assert not fake_sheet.updated
     assert not fake_sheet.appended
+
+
+def test_onboarding_sessions_load_all(monkeypatch, headers):
+    fixed_now = "2025-03-01T10:00:00Z"
+    monkeypatch.setattr(sheet_module, "_now_iso", lambda: fixed_now)
+
+    payload = {
+        "user_id": 55,
+        "thread_id": 66,
+        "panel_message_id": 77,
+        "step_index": 2,
+        "answers": {"key": "value"},
+        "completed": False,
+        "completed_at": None,
+        "first_reminder_at": None,
+        "warning_sent_at": None,
+        "auto_closed_at": None,
+    }
+
+    row = sheet_module.build_row(payload, headers=headers)
+    fake_sheet = _FakeSheet([headers, row])
+    monkeypatch.setattr(sheet_module, "_sheet", lambda: fake_sheet)
+
+    rows = sheet_module.load_all()
+
+    assert len(rows) == 1
+    assert rows[0]["user_id"] == payload["user_id"]
+    assert rows[0]["thread_id"] == payload["thread_id"]
+    assert rows[0]["answers"].get("key") == "value"

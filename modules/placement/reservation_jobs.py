@@ -445,9 +445,89 @@ def _to_int(value: int | str | None) -> int | None:
         return None
 
 
+async def release_reservations_for_thread(
+    thread_id: int | str,
+    *,
+    bot: commands.Bot | None = None,
+) -> None:
+    """Release any active reservations linked to ``thread_id``."""
+
+    if not _reservations_enabled():
+        return
+
+    try:
+        ledger = await reservations.load_reservation_ledger()
+    except Exception:
+        log.exception("failed to load reservations for thread release")
+        return
+
+    active_bot = bot or _active_bot()
+    if active_bot is not None:
+        await active_bot.wait_until_ready()
+
+    thread_snowflake = _to_int(thread_id)
+    if thread_snowflake is None:
+        return
+
+    matches = [row for row in ledger.rows if row.is_active and _to_int(row.thread_id) == thread_snowflake]
+    if not matches:
+        return
+
+    logging_channel = None
+    logging_channel_id = get_logging_channel_id()
+    if active_bot is not None and logging_channel_id:
+        logging_channel = await _resolve_channel(active_bot, logging_channel_id)
+
+    status_column = ledger.status_column()
+
+    for row in matches:
+        clan_label = _display_tag(row.clan_tag)
+        user_display = _user_display(row)
+        try:
+            await reservations.update_reservation_status(row.row_number, "expired", status_column=status_column)
+        except Exception:
+            log.exception(
+                "failed to expire reservation during onboarding close",
+                extra={"row": row.row_number, "clan_tag": clan_label},
+            )
+            continue
+
+        thread = await _resolve_channel(active_bot, row.thread_id) if active_bot is not None else None
+        if thread is not None:
+            message = (
+                f"The reserved spot in `{clan_label}` for {user_display} has expired and the seat has been released."
+            )
+            try:
+                await thread.send(content=message)
+            except Exception:
+                log.warning(
+                    "failed to post reservation expiry during onboarding close",
+                    exc_info=True,
+                    extra={"thread_id": row.thread_id, "clan_tag": clan_label},
+                )
+            await _reset_thread_name(thread)
+
+        ticket_link = _ticket_link(getattr(getattr(thread, "guild", None), "id", None), row.thread_id)
+        summary_line = (
+            f"⚠️ Reservation expired — clan=`{clan_label}` • user=`{user_display}` • action=auto-release"
+        )
+        if ticket_link:
+            summary_line = f"{summary_line} • ticket={ticket_link}"
+        if logging_channel is not None:
+            try:
+                await logging_channel.send(content=summary_line)
+            except Exception:
+                log.warning(
+                    "failed to post reservation expiry summary during onboarding close",
+                    exc_info=True,
+                    extra={"channel_id": logging_channel_id},
+                )
+
+
 __all__ = [
     "reservations_autorelease_daily",
     "reservations_reminder_daily",
+    "release_reservations_for_thread",
     "setup",
 ]
 
