@@ -10,6 +10,7 @@ import os
 import random
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Iterable, Optional, Sequence
 
@@ -464,6 +465,17 @@ async def resolve_configured_text_channel(
     return channel, None
 
 
+@dataclass(frozen=True)
+class CronSchedule:
+    minutes: set[int]
+    hours: set[int]
+    days: set[int]
+    months: set[int]
+    weekdays: set[int]
+    dom_any: bool
+    dow_any: bool
+
+
 def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
     allowed: set[int] = set()
     parts = [part.strip() for part in field.split(",") if part.strip()]
@@ -506,7 +518,7 @@ def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
     return allowed if allowed else set(range(minimum, maximum + 1))
 
 
-def _parse_cron_expression(expression: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
+def _parse_cron_expression(expression: str) -> CronSchedule:
     fields = [field for field in expression.split() if field]
     if len(fields) != 5:
         raise ValueError("cron expression must have exactly 5 fields")
@@ -516,26 +528,45 @@ def _parse_cron_expression(expression: str) -> tuple[set[int], set[int], set[int
     days = _parse_cron_field(fields[2], 1, 31)
     months = _parse_cron_field(fields[3], 1, 12)
     weekdays = _parse_cron_field(fields[4], 0, 7)
+    dom_any = fields[2].strip() == "*"
+    dow_any = fields[4].strip() == "*"
     if 7 in weekdays:
         weekdays.add(0)
         weekdays.discard(7)
-    return minutes, hours, days, months, weekdays
-
-
-def _cron_matches(candidate: datetime, fields: tuple[set[int], set[int], set[int], set[int], set[int]]) -> bool:
-    minutes, hours, days, months, weekdays = fields
-    weekday = (candidate.weekday() + 1) % 7
-    return (
-        candidate.minute in minutes
-        and candidate.hour in hours
-        and candidate.day in days
-        and candidate.month in months
-        and weekday in weekdays
+    return CronSchedule(
+        minutes=minutes,
+        hours=hours,
+        days=days,
+        months=months,
+        weekdays=weekdays,
+        dom_any=dom_any,
+        dow_any=dow_any,
     )
 
 
+def _cron_matches(candidate: datetime, schedule: CronSchedule) -> bool:
+    weekday = (candidate.weekday() + 1) % 7
+    minute_match = candidate.minute in schedule.minutes
+    hour_match = candidate.hour in schedule.hours
+    month_match = candidate.month in schedule.months
+
+    dom_match = candidate.day in schedule.days
+    dow_match = weekday in schedule.weekdays
+
+    if schedule.dom_any and schedule.dow_any:
+        day_ok = True
+    elif schedule.dom_any and not schedule.dow_any:
+        day_ok = dow_match
+    elif schedule.dow_any and not schedule.dom_any:
+        day_ok = dom_match
+    else:
+        day_ok = dom_match or dow_match
+
+    return minute_match and hour_match and month_match and day_ok
+
+
 def _next_cron_run(
-    fields: tuple[set[int], set[int], set[int], set[int], set[int]],
+    schedule: CronSchedule,
     reference: datetime | None = None,
 ) -> datetime:
     cursor = (reference or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
@@ -543,7 +574,7 @@ def _next_cron_run(
     deadline = cursor + timedelta(days=366)
 
     while cursor <= deadline:
-        if _cron_matches(cursor, fields):
+        if _cron_matches(cursor, schedule):
             return cursor
         cursor += timedelta(minutes=1)
 
