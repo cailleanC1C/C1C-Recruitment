@@ -1,8 +1,8 @@
 <!-- Keep README user-facing -->
 <!-- Dev layout reference: recruitment modules now live in modules/recruitment/, -->
 <!-- shared sheet adapters consolidate under shared/sheets/. See docs/Architecture.md. -->
-# C1C Bot — The Woadkeeper  
-Version v0.9.7
+# C1C Bot — The Woadkeeper
+Version v0.9.8.1
 
 Welcome, traveller of the Blue Flame.  
 The Woadkeeper keeps our clans organised, our newcomers guided, and our Sheets clean.  
@@ -71,4 +71,4 @@ Each module doc explains what that subsystem does and how it fits into the bigge
   - `docs/contracts/CollaborationContract.md`
   - ADRs in `docs/adr/`
 
-Doc last updated: 2025-11-21 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)

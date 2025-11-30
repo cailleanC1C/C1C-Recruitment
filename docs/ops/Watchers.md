@@ -28,26 +28,25 @@ source of truth covers every automation hook:
 | **Cache refresh – clan_tags** | Same scheduler | Every 7 d | Refreshes the clan tag autocomplete cache used in the watcher dropdowns. | `[cache] bucket=clan_tags` logs. | `CLAN_TAGS_CACHE_TTL_SEC` controls TTL; cadence fixed. |
 | **Onboarding questions refresh** | `shared.sheets.onboarding` warmers | Weekly | Reloads onboarding question forms to match the latest Config worksheet. | `[cache] bucket=onboarding_questions` (startup + scheduler) with `actor=startup` or `actor=scheduler`. | Requires `ONBOARDING_TAB` and FeatureToggles enabling onboarding modules. |
 | **Welcome inactivity reminders** | `modules.onboarding.watcher_welcome` | Every 15 m | Scans welcome threads for empty tickets (3 h nudge → 24 h warning → 36 h inactivity close) and incomplete onboarding (5 h nudge → 24 h warning → 36 h close to `Closed-W####-user-NONE` with recruiter removal notice). Promo threads reuse the empty-ticket path without the removal notice. | `c1c.onboarding.welcome_watcher` info/WARN lines for sends, rename/archive failures, and skipped targets. | `WELCOME_CHANNEL_ID`, FeatureToggles `welcome_dialog` and `recruitment_welcome`; promo flow also requires `PROMO_CHANNEL_ID` plus FeatureToggles `promo_enabled` and `enable_promo_hook`. |
-| **Cleanup watcher** | `modules.ops.cleanup_watcher` | Every `CLEANUP_AGE_HOURS` hours | Deletes all non-pinned messages in configured panel threads so each run resets the canvas. | Multi-line `🧹 **Cleanup** — …` summary posted to the ops log channel plus Python WARN lines when fetch/delete fails. | `CLEANUP_AGE_HOURS`, `CLEANUP_THREAD_IDS`. |
+| **Cleanup watcher** | `modules.housekeeping.cleanup` | Every `CLEANUP_INTERVAL_HOURS` hours | Deletes all non-pinned messages in configured panel threads so each run resets the canvas. | Summary `🧹 Cleanup — threads=<N> • messages_deleted=<M> • errors=<E>` posted to the ops log channel plus WARN lines when fetch/delete fails. | `CLEANUP_INTERVAL_HOURS`, `CLEANUP_THREAD_IDS`. |
+| **Thread keepalive** | `modules.housekeeping.keepalive` | Hourly scan (acts when idle ≥ `KEEPALIVE_INTERVAL_HOURS`) | Unarchives stale target threads and posts a heartbeat to prevent auto-archive. | Summary `💙 Housekeeping: keepalive — threads_touched=<N> • errors=<E>` with WARN lines for fetch/permission failures. | `KEEPALIVE_CHANNEL_IDS`, `KEEPALIVE_THREAD_IDS`, `KEEPALIVE_INTERVAL_HOURS`. |
 | **Daily Recruiter Update** | `modules.recruitment.reporting.daily_recruiter_update.scheduler_daily_recruiter_update` | Once per day at `REPORT_DAILY_POST_TIME` (UTC) | Posts the recruiter digest embed summarizing placements, queues, and cache freshness into `REPORT_RECRUITERS_DEST_ID`. | Structured console logs plus the Discord embed; scheduler start/stop events log via `daily_recruiter_update` helpers. | `REPORT_DAILY_POST_TIME`, `REPORT_RECRUITERS_DEST_ID`, and the `recruitment_reports` feature toggle. |
 | **Server map refresh** | `modules.ops.server_map` | Daily interval check (24 h cadence gated by `SERVER_MAP_REFRESH_DAYS`) | Generates the category/channel overview in `#server-map`, edits existing pinned messages, and pins the first block. | Start logs note `channel_fallback` vs `requested_channel`, followed by config, optional `cleaned_messages`, and summary lines with category/channel counts plus blacklist sizes; `❌` errors still surface configuration issues. | FeatureToggles entry `SERVER_MAP` gates both the scheduler and `!servermap refresh`; `SERVER_MAP_CHANNEL_ID` and `SERVER_MAP_REFRESH_DAYS` remain env-driven while runtime state lives in the Recruitment Config tab. |
 
 ### Cleanup watcher
-- **Environment.** `CLEANUP_AGE_HOURS` defines the fixed interval between runs; `CLEANUP_THREAD_IDS` lists the Discord thread IDs that will be wiped.
+- **Environment.** `CLEANUP_INTERVAL_HOURS` defines the fixed interval between runs; `CLEANUP_THREAD_IDS` lists the Discord thread IDs that will be wiped.
 - **Behavior.** On every run the watcher fetches the full history for each configured thread and deletes every non-pinned message, respecting Discord’s 14-day bulk delete rule (older messages fall back to one-by-one deletions). Pinned messages remain untouched.
-- **Logging.** The scheduler summary announces the cleanup cadence (`cleanup=<interval>h`), while each run emits a multi-line log:
+- **Logging.** Each run emits a single summary line: `🧹 Cleanup — threads=<N> • messages_deleted=<M> • errors=<E>`. WARN lines accompany fetch, permission, or delete issues and increment the error count without blocking future runs.
 
-  ```text
-  🧹 **Cleanup** — threads=3 • deleted=87 • interval=24h
-  • #WELCOME CENTER › welcome-panel-W0488-smurf • deleted=42
-  • #WELCOME CENTER › welcome-panel-W0490-smurf • deleted=45
-  ```
-
-  Warnings such as `⚠️ **Cleanup** — reason=thread_not_found • thread_id=…` accompany fetch or deletion issues with `extra={...}` fields for machine parsing.
+### Thread keepalive
+- **Environment.** `KEEPALIVE_CHANNEL_IDS` enumerates channels whose threads should be kept alive; `KEEPALIVE_THREAD_IDS` adds specific threads to the target set; `KEEPALIVE_INTERVAL_HOURS` defines the maximum idle age before a heartbeat is posted.
+- **Behavior.** The job enumerates active and archived threads in configured channels, adds any explicit thread IDs, deduplicates, and skips targets missing read/send/manage-thread permissions. Threads newer than the idle threshold are ignored. Stale threads are unarchived (if needed) before posting the heartbeat message `🔹 Thread 💙-beat (housekeeping)`.
+- **Logging.** Each run emits `💙 Housekeeping: keepalive — threads_touched=<N> • errors=<E>`, counting only threads that received a heartbeat. WARN lines capture fetch, permission, or send failures.
 
 ## Keepalive behaviour
-Render tears down idle services unless they see periodic traffic. The runtime
-keeps the bot “warm” in two layers:
+The housekeeping keepalive job (above) keeps priority threads from auto-archiving.
+Render also tears down idle services unless they see periodic traffic, so the
+runtime keeps the bot “warm” in two additional layers:
 
 1. **HTTP keepalive task.** `modules.common.keepalive.ensure_started()` launches a
    background task that `GET`s the configured keepalive route.
@@ -97,4 +96,4 @@ keeps the bot “warm” in two layers:
   scheduler wiring, and watchdog contracts.
 - [`docs/modules/`](../modules) — module owners for the watchers listed here.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)

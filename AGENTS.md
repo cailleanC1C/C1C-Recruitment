@@ -87,7 +87,7 @@ Use these to reason about health and lifecycle; if you change them, reflect chan
 - `TIMEZONE`
 - `REFRESH_TIMES`
 - `CLAN_TAGS_CACHE_TTL_SEC`
-- `CLEANUP_AGE_HOURS`
+- `CLEANUP_INTERVAL_HOURS`
 - `EMOJI_MAX_BYTES`
 - `EMOJI_PAD_SIZE`
 - `EMOJI_PAD_BOX`
@@ -127,4 +127,4 @@ For PR formatting rules, labels, and doc footers see `docs/contracts/Collaborati
 
 ---
 
-Doc last updated: 2025-11-04 (v0.9.7)
+Doc last updated: 2025-11-30 (v0.9.8.1)
