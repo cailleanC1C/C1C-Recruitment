@@ -47,14 +47,14 @@ IMAGE_SPECS: List[ImageSpec] = [
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_ELITE_END]",
-        description="Cluster Structure — Elite End Game Bracket",
+        description="Cluster Structure",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_ELITE_END_RANGE",
         filename="cluster_elite_end.png",
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_EARLY_END]",
-        description="Cluster Structure — Early End Game Bracket",
+        description="",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_EARLY_END_RANGE",
         filename="cluster_early_end.png",
