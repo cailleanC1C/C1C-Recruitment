@@ -173,11 +173,9 @@ def export_sheet_range_to_png(spreadsheet_id: str, tab_name: str, cell_range: st
 
 def build_mirralith_message_content(label: str, description: str, updated_date: str) -> str:
     lines = [
-        f"✨ {description}",
-        "",
-        f"Last updated {updated_date}",
-        "",
-        f"||{label}||",
+        f"# ✨ {description}",
+        f"*Last updated {updated_date}*",
+        f"-# ||{label}||",
     ]
     return "\n".join(lines)
 
