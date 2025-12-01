@@ -29,6 +29,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!reload onboarding` | ✅ | Reload onboarding questions and log the active schema hash. | `!reload onboarding` |
 | `!ping` | ✅ | Adds a 🏓 reaction so admins can confirm shard responsiveness. | `!ping` |
 | `!servermap refresh` | ✅ | Rebuild the pinned `#server-map` message(s) from the current Discord category/channel structure. | `!servermap refresh` |
+| `!leagues post` | ✅ | Manually run the C1C Leagues weekly posting job (Legendary, Rising Stars, Stormforged) and announcement. | `!leagues post` |
 | `!whoweare` | ✅ | Generate the live "Who We Are" role map from the WhoWeAre sheet with snarky blurbs and current role holders. | `!whoweare` |
 | `!perm bot list` | ✅ | Admin-only; show the current bot allow/deny lists with counts, IDs, and optional JSON export. More details: [`PermissionsSync`](../modules/PermissionsSync.md). | `!perm bot list [--json]` |
 | `!perm bot allow <targets…>` | ✅ | Admin-only; add channels/categories to the allow list and clear conflicting deny entries. Targets accept channel mentions or quoted category names. More details: [`PermissionsSync`](../modules/PermissionsSync.md). | `!perm bot allow <targets…>` |
@@ -66,4 +67,4 @@ Shard tracker buttons are owner-only, use shard-emoji tab selectors, and keep a 
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-12-01 (v0.9.8.2)
