@@ -33,8 +33,8 @@ def _build_cron(env_key: str, fallback: Tuple[int, int], weekday: str) -> str:
 
 
 def schedule_leagues_jobs(runtime: "Runtime") -> None:
-    monday_cron = _build_cron("LEAGUES_REMINDER_MONDAY_UTC", (13, 0), "MON")
-    wednesday_cron = _build_cron("LEAGUES_REMINDER_WEDNESDAY_UTC", (13, 0), "WED")
+    monday_cron = _build_cron("LEAGUES_REMINDER_MONDAY_UTC", (13, 0), "1")
+    wednesday_cron = _build_cron("LEAGUES_REMINDER_WEDNESDAY_UTC", (13, 0), "3")
 
     def _resolve_cog():
         return runtime.bot.get_cog("LeaguesCog")
