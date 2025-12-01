@@ -4,7 +4,7 @@
 * Clarified `CLEANUP_AGE_HOURS` behavior and updated spec for v0.9.8.1.
 * Improved QLive keep-alive logs to include channel/thread names.
 * Fixed cron ENV var parsing issue (example: `0 18 21 * *`).
-*  **Mirralith Autoposter**
+**Mirralith Autoposter**
 * Finalized module context and config requirements.
 * Defined required ENV VARs and Sheets setup.
 * Added admin command to run autoposter manually.
