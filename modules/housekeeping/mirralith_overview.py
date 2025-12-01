@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import io
 import logging
 import math
@@ -12,6 +13,7 @@ from typing import Iterable, List
 import discord
 from PIL import Image, ImageDraw, ImageFont
 
+from modules.common import runtime as runtime_helpers
 from shared.sheets import core as sheets_core
 from shared.sheets import recruitment
 from shared.sheets.export_utils import export_pdf_as_png, get_tab_gid
@@ -169,12 +171,13 @@ def export_sheet_range_to_png(spreadsheet_id: str, tab_name: str, cell_range: st
     return buffer.getvalue()
 
 
-def build_mirralith_message_content(label: str, description: str, trigger: str) -> str:
+def build_mirralith_message_content(label: str, description: str, updated_date: str) -> str:
     lines = [
         f"✨ {description}",
         "",
-        f"_Last updated via {trigger} run._",
-        label,
+        f"Last updated {updated_date}",
+        "",
+        f"||{label}||",
     ]
     return "\n".join(lines)
 
@@ -253,12 +256,22 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
         return
 
     loop = asyncio.get_running_loop()
+    run_time = dt.datetime.now(dt.timezone.utc)
+    updated_date = run_time.date().isoformat()
+    run_timestamp = run_time.strftime("%Y-%m-%d %H:%M UTC")
+
+    updated_labels: list[str] = []
+    failed_labels: list[tuple[str, str]] = []
 
     for spec in IMAGE_SPECS:
+        def record_failure(reason: str) -> None:
+            failed_labels.append((spec.label, reason))
+
         try:
             tab_name = recruitment.get_config_value(spec.tab_key, "") or ""
             range_value = recruitment.get_config_value(spec.range_key, "") or ""
         except Exception as exc:
+            record_failure("config lookup failed")
             log.warning(
                 "Mirralith config lookup failed; skipping spec",
                 extra={
@@ -270,6 +283,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             )
             continue
         if not tab_name or not range_value:
+            record_failure("tab or range missing")
             log.warning(
                 "Mirralith spec missing tab or range; skipping",
                 extra={"label": spec.label, "tab_key": spec.tab_key, "range_key": spec.range_key},
@@ -282,6 +296,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
         )
 
         if ":" not in range_value:
+            record_failure("invalid range")
             log.error(
                 "mirralith_export: invalid range (missing colon)",
                 extra={"label": spec.label, "tab": tab_name, "range": range_value},
@@ -293,6 +308,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
                 None, partial(get_tab_gid, spreadsheet_id, tab_name)
             )
         except Exception as exc:
+            record_failure("gid lookup failed")
             log.error(
                 "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
                 spec.label,
@@ -304,6 +320,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         if gid is None:
+            record_failure("gid missing")
             log.error(
                 "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
                 spec.label,
@@ -330,6 +347,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
                 ),
             )
         except Exception:
+            record_failure("export exception")
             log.exception(
                 "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
                 spec.label,
@@ -341,6 +359,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         if not png_bytes:
+            record_failure("render failed")
             log.warning(
                 "failed to export Mirralith range (PDF renderer unavailable or failed)",
                 extra={"label": spec.label, "tab": tab_name, "range": range_value},
@@ -348,18 +367,39 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         file = discord.File(io.BytesIO(png_bytes), filename=spec.filename)
-        content = build_mirralith_message_content(spec.label, spec.description, trigger)
+        content = build_mirralith_message_content(spec.label, spec.description, updated_date)
 
         try:
             await upsert_labeled_message(channel, spec.label, content, file)
+            updated_labels.append(spec.label)
         except Exception:
+            record_failure("message upsert failed")
             log.exception(
                 "failed to upsert Mirralith overview message",
                 extra={"channel_id": channel_id, "label": spec.label},
             )
-            continue
 
+    summary_parts = [
+        "🧹 Mirralith overview job finished",
+        f"Trigger: {trigger}",
+    ]
+
+    total_specs = len(IMAGE_SPECS)
+    summary_parts.append(f"Specs updated: {len(updated_labels)} / {total_specs}")
+
+    if failed_labels:
+        failed_items = ", ".join(f"{label} ({reason})" for label, reason in failed_labels)
+        summary_parts.append(f"Failed: {failed_items}")
+    else:
+        summary_parts.append("Result: all updated successfully")
+
+    summary_parts.append(f"Timestamp: {run_timestamp}")
     log.info("Mirralith overview job finished.")
+
+    try:
+        await runtime_helpers.send_log_message("\n".join(summary_parts))
+    except Exception:
+        log.warning("failed to send Mirralith overview summary to log channel", exc_info=True)
 
 
 __all__ = [
