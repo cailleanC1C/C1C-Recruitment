@@ -175,7 +175,7 @@ def build_mirralith_message_content(label: str, description: str, updated_date: 
     lines = [
         f" ",
         f"# ✨ {description}",
-        f"*Last updated {updated_date}*",
+        f"-# *Last updated {updated_date}*",
         f"-# ||{label}||",
     ]
     return "\n".join(lines)
