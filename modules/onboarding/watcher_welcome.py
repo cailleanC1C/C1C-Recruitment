@@ -2485,3 +2485,6 @@ async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(WelcomeWatcher(bot))
     await bot.add_cog(WelcomeTicketWatcher(bot))
     _ensure_reminder_job(bot)
+    from modules.onboarding.idle_watcher import ensure_idle_watcher
+
+    await ensure_idle_watcher(bot)

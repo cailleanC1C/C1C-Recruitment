@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord.ext import commands
@@ -17,6 +18,52 @@ from shared.sheets import recruitment as recruitment_sheet
 
 
 log = logging.getLogger(__name__)
+
+
+def _format_interval_label(delta: timedelta) -> str:
+    seconds = int(delta.total_seconds())
+    if seconds % 3600 == 0:
+        hours = seconds // 3600
+        return f"every {hours} hr" if hours == 1 else f"every {hours} hrs"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"every {minutes} min"
+    return f"every {seconds} sec"
+
+
+def _build_scheduler_overview(runtime, component: str | None) -> str:
+    jobs = runtime.scheduler.jobs if hasattr(runtime, "scheduler") else []
+    filter_token = component.strip().lower() if component else None
+    if filter_token:
+        jobs = [job for job in jobs if (getattr(job, "component", "") or "").lower() == filter_token]
+
+    if not jobs:
+        scope = filter_token or "any component"
+        return f"🧭 Scheduled jobs — no jobs under {scope}."
+
+    grouped: dict[str, list] = {}
+    for job in jobs:
+        key = (getattr(job, "component", "default") or "default").lower()
+        grouped.setdefault(key, []).append(job)
+
+    lines = ["🧭 Scheduled jobs" + (f" — {filter_token}" if filter_token else "")]
+    for comp in sorted(grouped):
+        lines.append(comp)
+        for job in sorted(grouped[comp], key=lambda j: (getattr(j, "next_run", None) or datetime.min)):
+            next_run = getattr(job, "next_run", None)
+            if next_run is None:
+                next_label = "pending"
+            else:
+                try:
+                    next_label = next_run.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                except Exception:
+                    next_label = "pending"
+            interval = getattr(job, "interval", None)
+            cadence = _format_interval_label(interval) if interval else "recurring"
+            name = getattr(job, "name", None) or getattr(job, "tag", None) or "job"
+            lines.append(f"• {name} — next: {next_label} ({cadence})")
+
+    return "\n".join(lines)
 
 class AppAdmin(commands.Cog):
     """Lightweight administrative utilities for bot operators."""
@@ -115,6 +162,7 @@ class AppAdmin(commands.Cog):
                 mention_author=False,
             )
             return
+
         if result.status == "disabled":
             await ctx.reply(
                 "Server map feature is currently disabled in FeatureToggles.",
@@ -126,6 +174,26 @@ class AppAdmin(commands.Cog):
             f"Server map refresh failed ({reason}). Check logs for details.",
             mention_author=False,
         )
+
+    @tier("admin")
+    @help_metadata(
+        function_group="operational",
+        section="utilities",
+        access_tier="admin",
+    )
+    @commands.command(
+        name="next",
+        hidden=True,
+        help="Show upcoming scheduled jobs. Optionally filter by component.",
+    )
+    @admin_only()
+    async def next_jobs(self, ctx: commands.Context, component: str | None = None) -> None:
+        runtime = runtime_helpers.get_active_runtime()
+        if runtime is None:
+            await ctx.reply("Scheduler unavailable.", mention_author=False)
+            return
+        message = _build_scheduler_overview(runtime, component)
+        await ctx.reply(message, mention_author=False)
 
     @tier("admin")
     @help_metadata(

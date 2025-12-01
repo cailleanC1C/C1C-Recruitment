@@ -590,13 +590,19 @@ class _RecurringJob:
         jitter: str | float | None = None,
         tag: str | None = None,
         name: str | None = None,
+        component: str | None = None,
     ) -> None:
         self._scheduler = scheduler
         self._interval = interval
         self._jitter = jitter
         self.tag = tag
         self.name = name
+        self.component = component or "default"
         self.next_run: datetime | None = None
+
+    @property
+    def interval(self) -> timedelta:
+        return self._interval
 
     def _pick_jitter(self) -> float:
         if self._jitter == "small":
@@ -720,6 +726,7 @@ class Scheduler:
 
     def __init__(self) -> None:
         self._tasks: list[asyncio.Task] = []
+        self._jobs: list[_RecurringJob] = []
 
     def spawn(self, coro: Awaitable, *, name: Optional[str] = None) -> asyncio.Task:
         if name is not None:
@@ -743,12 +750,26 @@ class Scheduler:
         jitter: str | float | None = None,
         tag: str | None = None,
         name: str | None = None,
+        component: str | None = None,
     ) -> _RecurringJob:
         total_seconds = float(hours) * 3600.0 + float(minutes) * 60.0 + float(seconds)
         if total_seconds <= 0:
             total_seconds = 60.0
         interval = timedelta(seconds=total_seconds)
-        return _RecurringJob(self, interval=interval, jitter=jitter, tag=tag, name=name)
+        job = _RecurringJob(
+            self,
+            interval=interval,
+            jitter=jitter,
+            tag=tag,
+            name=name,
+            component=component,
+        )
+        self._jobs.append(job)
+        return job
+
+    @property
+    def jobs(self) -> list[_RecurringJob]:
+        return list(self._jobs)
 
     async def shutdown(self) -> None:
         for task in self._tasks:

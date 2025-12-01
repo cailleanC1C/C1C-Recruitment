@@ -83,6 +83,48 @@ def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
     return None
 
 
+def load_all() -> list[Dict[str, Any]]:
+    worksheet = _sheet()
+    rows = worksheet.get_all_values()
+    header = _validated_header(rows[0] if rows else [])
+    if header is None:
+        return []
+
+    header_map = _header_index_map(header)
+    sessions: list[Dict[str, Any]] = []
+
+    for row in rows[1:]:
+        record = _record_from_row(row, header)
+        raw_answers = record.get("answers_json") or "{}"
+        try:
+            answers = json.loads(raw_answers)
+        except Exception:
+            answers = {}
+
+        panel_id = _safe_int(record.get("panel_message_id"))
+        completed_token = str(record.get("completed", "")).strip().lower()
+        completed = completed_token in {"true", "1", "yes", "true"}
+        completed_at = record.get("completed_at") or None
+
+        sessions.append(
+            {
+                "user_id": _safe_int(_cell(row, header_map, "user_id")),
+                "thread_id": _safe_int(_cell(row, header_map, "thread_id")),
+                "panel_message_id": panel_id if panel_id not in (None, 0) else None,
+                "step_index": _safe_int(record.get("step_index"), default=0),
+                "completed": completed,
+                "completed_at": completed_at,
+                "updated_at": record.get("updated_at") or "",
+                "first_reminder_at": record.get("first_reminder_at") or "",
+                "warning_sent_at": record.get("warning_sent_at") or "",
+                "auto_closed_at": record.get("auto_closed_at") or "",
+                "answers": answers,
+            }
+        )
+
+    return sessions
+
+
 def save(payload: Dict[str, Any]) -> None:
     worksheet = _sheet()
     rows = worksheet.get_all_values()
