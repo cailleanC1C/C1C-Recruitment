@@ -73,6 +73,7 @@ Collaboration Contract and core infra conventions.
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
 * [`Housekeeping.md`](ops/Housekeeping.md) — cleanup and thread keepalive jobs with cadences, logging formats, and env keys.
+* [`housekeeping_mirralith_overview.md`](housekeeping_mirralith_overview.md) — Mirralith and cluster overview autoposter housekeeping job.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`Promo_Summary_Spec.md`](ops/Promo_Summary_Spec.md) — promo summary embeds readability spec and per-flow layout mapping.

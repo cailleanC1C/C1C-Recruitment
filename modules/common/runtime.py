@@ -10,6 +10,7 @@ import os
 import random
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Iterable, Optional, Sequence
 
@@ -464,6 +465,122 @@ async def resolve_configured_text_channel(
     return channel, None
 
 
+@dataclass(frozen=True)
+class CronSchedule:
+    minutes: set[int]
+    hours: set[int]
+    days: set[int]
+    months: set[int]
+    weekdays: set[int]
+    dom_any: bool
+    dow_any: bool
+
+
+def _parse_cron_field(field: str, minimum: int, maximum: int) -> set[int]:
+    allowed: set[int] = set()
+    parts = [part.strip() for part in field.split(",") if part.strip()]
+    if not parts:
+        return set(range(minimum, maximum + 1))
+
+    for part in parts:
+        step = 1
+        base = part
+        if "/" in part:
+            base, step_text = part.split("/", 1)
+            try:
+                step = max(1, int(step_text))
+            except (TypeError, ValueError):
+                continue
+        base = base.strip()
+        if base in {"*", ""}:
+            start, end = minimum, maximum
+        elif "-" in base:
+            start_text, end_text = base.split("-", 1)
+            try:
+                start, end = int(start_text), int(end_text)
+            except (TypeError, ValueError):
+                continue
+        else:
+            try:
+                value = int(base)
+            except (TypeError, ValueError):
+                continue
+            start = end = value
+
+        start = max(minimum, start)
+        end = min(maximum, end)
+        if start > end:
+            continue
+
+        for value in range(start, end + 1, step):
+            allowed.add(value)
+
+    return allowed if allowed else set(range(minimum, maximum + 1))
+
+
+def _parse_cron_expression(expression: str) -> CronSchedule:
+    fields = [field for field in expression.split() if field]
+    if len(fields) != 5:
+        raise ValueError("cron expression must have exactly 5 fields")
+
+    minutes = _parse_cron_field(fields[0], 0, 59)
+    hours = _parse_cron_field(fields[1], 0, 23)
+    days = _parse_cron_field(fields[2], 1, 31)
+    months = _parse_cron_field(fields[3], 1, 12)
+    weekdays = _parse_cron_field(fields[4], 0, 7)
+    dom_any = fields[2].strip() == "*"
+    dow_any = fields[4].strip() == "*"
+    if 7 in weekdays:
+        weekdays.add(0)
+        weekdays.discard(7)
+    return CronSchedule(
+        minutes=minutes,
+        hours=hours,
+        days=days,
+        months=months,
+        weekdays=weekdays,
+        dom_any=dom_any,
+        dow_any=dow_any,
+    )
+
+
+def _cron_matches(candidate: datetime, schedule: CronSchedule) -> bool:
+    weekday = (candidate.weekday() + 1) % 7
+    minute_match = candidate.minute in schedule.minutes
+    hour_match = candidate.hour in schedule.hours
+    month_match = candidate.month in schedule.months
+
+    dom_match = candidate.day in schedule.days
+    dow_match = weekday in schedule.weekdays
+
+    if schedule.dom_any and schedule.dow_any:
+        day_ok = True
+    elif schedule.dom_any and not schedule.dow_any:
+        day_ok = dow_match
+    elif schedule.dow_any and not schedule.dom_any:
+        day_ok = dom_match
+    else:
+        day_ok = dom_match or dow_match
+
+    return minute_match and hour_match and month_match and day_ok
+
+
+def _next_cron_run(
+    schedule: CronSchedule,
+    reference: datetime | None = None,
+) -> datetime:
+    cursor = (reference or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
+    cursor = cursor + timedelta(minutes=1)
+    deadline = cursor + timedelta(days=366)
+
+    while cursor <= deadline:
+        if _cron_matches(cursor, schedule):
+            return cursor
+        cursor += timedelta(minutes=1)
+
+    raise ValueError("unable to compute next cron run within 1 year")
+
+
 class _RecurringJob:
     def __init__(
         self,
@@ -544,6 +661,60 @@ class _RecurringJob:
         return self._scheduler.spawn(runner(), name=task_name)
 
 
+class _CronJob:
+    def __init__(
+        self,
+        scheduler: "Scheduler",
+        *,
+        expression: str,
+        tag: str | None = None,
+        name: str | None = None,
+    ) -> None:
+        self._scheduler = scheduler
+        self._fields = _parse_cron_expression(expression)
+        self.tag = tag
+        self.name = name
+        self.next_run: datetime | None = None
+
+    def _compute_next_run(self, reference: datetime | None = None) -> datetime:
+        return _next_cron_run(self._fields, reference)
+
+    async def _sleep_until_due(self) -> None:
+        if self.next_run is None:
+            self.next_run = self._compute_next_run()
+        while True:
+            assert self.next_run is not None
+            now = datetime.now(timezone.utc)
+            delay = (self.next_run - now).total_seconds()
+            if delay <= 0:
+                break
+            await asyncio.sleep(min(delay, 60.0))
+
+    def do(self, job: Callable[[], Awaitable[None]]) -> asyncio.Task:
+        self.next_run = self._compute_next_run()
+
+        async def runner() -> None:
+            while True:
+                await self._sleep_until_due()
+                try:
+                    await job()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception(
+                        "cron job error",
+                        extra={
+                            "job_name": self.name or getattr(job, "__name__", "job"),
+                            "tag": self.tag,
+                        },
+                    )
+                finally:
+                    self.next_run = self._compute_next_run(datetime.now(timezone.utc))
+
+        task_name = self.name or getattr(job, "__name__", "cron_job")
+        return self._scheduler.spawn(runner(), name=task_name)
+
+
 class Scheduler:
     """Very small asyncio task supervisor for background jobs."""
 
@@ -557,6 +728,11 @@ class Scheduler:
             task = asyncio.create_task(coro)
         self._tasks.append(task)
         return task
+
+    def cron(
+        self, expression: str, *, tag: str | None = None, name: str | None = None
+    ) -> _CronJob:
+        return _CronJob(self, expression=expression, tag=tag, name=name)
 
     def every(
         self,
@@ -788,6 +964,7 @@ class Runtime:
 
         from c1c_coreops import cog as coreops_cog
         from cogs import app_admin
+        from cogs import housekeeping_mirralith
         from modules.onboarding import ops_check as onboarding_ops_check
         from modules.onboarding import reaction_fallback as onboarding_reaction_fallback
         from modules.onboarding import watcher_welcome as onboarding_welcome
@@ -799,6 +976,7 @@ class Runtime:
 
         await coreops_cog.setup(self.bot)
         await app_admin.setup(self.bot)
+        await housekeeping_mirralith.setup(self.bot)
 
         from modules.common import feature_flags as features
 
@@ -1001,6 +1179,7 @@ class Runtime:
         )
         from modules.housekeeping import cleanup as housekeeping_cleanup
         from modules.housekeeping import keepalive as housekeeping_keepalive
+        from modules.housekeeping import mirralith_overview as housekeeping_mirralith
         from modules.ops import server_map as server_map_module
 
         ensure_cache_registration()
@@ -1053,6 +1232,38 @@ class Runtime:
 
         if cleanup_spec_entry is not None:
             successes.append(cleanup_spec_entry)
+
+        mirralith_spec_entry: tuple[Any, Any] | None = None
+        mirralith_cron = os.getenv("MIRRALITH_POST_CRON", "").strip()
+        if mirralith_cron:
+            try:
+                mirralith_job = self.scheduler.cron(
+                    mirralith_cron,
+                    tag="mirralith_overview",
+                    name="mirralith_overview",
+                )
+
+                async def mirralith_runner() -> None:
+                    await housekeeping_mirralith.run_mirralith_overview_job(
+                        self.bot, trigger="scheduled"
+                    )
+
+                mirralith_job.do(mirralith_runner)
+                mirralith_spec_entry = (
+                    SimpleNamespace(
+                        bucket="mirralith_overview", cadence_label=mirralith_cron
+                    ),
+                    mirralith_job,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception("failed to schedule mirralith overview job")
+                if failure is None:
+                    failure = ("mirralith_overview", exc)
+        else:
+            log.info("Mirralith overview job disabled; MIRRALITH_POST_CRON is not set.")
+
+        if mirralith_spec_entry is not None:
+            successes.append(mirralith_spec_entry)
 
         keepalive_spec_entry: tuple[Any, Any] | None = None
         try:

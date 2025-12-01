@@ -3,4 +3,5 @@
 __all__ = [
     "cleanup",
     "keepalive",
+    "mirralith_overview",
 ]
