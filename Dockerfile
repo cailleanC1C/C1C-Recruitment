@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # System deps kept minimal for Render free tier
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl tini \
+    poppler-utils \
  && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
