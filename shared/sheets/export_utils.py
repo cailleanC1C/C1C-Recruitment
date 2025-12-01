@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 import importlib.util
 import requests
-from PIL import Image  # noqa: F401 - provided for potential downstream usage
+from PIL import Image, ImageChops  # noqa: F401 - provided for potential downstream usage
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 
@@ -79,8 +79,15 @@ def _convert_pdf_to_png(pdf_bytes: bytes) -> bytes | None:
         if not images:
             log.error("export_pdf_as_png: pdf2image returned no pages")
             return None
+        image = images[0]
+
+        bg = Image.new(image.mode, image.size, (255, 255, 255))
+        diff = ImageChops.difference(image, bg)
+        bbox = diff.getbbox()
+        if bbox:
+            image = image.crop(bbox)
         buffer = io.BytesIO()
-        images[0].save(buffer, format="PNG")
+        image.save(buffer, format="PNG")
         return buffer.getvalue()
     except Exception as exc:
         log.exception(
