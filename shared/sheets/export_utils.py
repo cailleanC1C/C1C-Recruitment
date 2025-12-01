@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+import io
+import json
+import logging
+import os
+from typing import Any, Dict
+
+import importlib.util
+import requests
+from PIL import Image  # noqa: F401 - provided for potential downstream usage
+from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
+
+from shared.sheets import core as sheets_core
+
+log = logging.getLogger("c1c.sheets.export")
+
+convert_from_bytes = None
+_HAS_PDF2IMAGE = False
+_pdf2image_spec = importlib.util.find_spec("pdf2image")
+if _pdf2image_spec is not None:
+    import importlib
+
+    pdf2image = importlib.import_module("pdf2image")
+    convert_from_bytes = getattr(pdf2image, "convert_from_bytes", None)
+    _HAS_PDF2IMAGE = callable(convert_from_bytes)
+
+GOOGLE_EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export"
+
+
+def _service_account_info() -> Dict[str, Any]:
+    raw = (
+        os.getenv("GSPREAD_CREDENTIALS")
+        or os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+        or ""
+    )
+    if not raw:
+        raise RuntimeError("GSPREAD_CREDENTIALS/GOOGLE_SERVICE_ACCOUNT_JSON not set")
+    return json.loads(raw)
+
+
+def _get_service_account_headers() -> dict[str, str]:
+    info = _service_account_info()
+    creds = Credentials.from_service_account_info(info, scopes=sheets_core.SCOPES)
+    creds.refresh(Request())
+    if not creds.token:
+        raise RuntimeError("service account token unavailable")
+    return {"Authorization": f"Bearer {creds.token}"}
+
+
+def _log_error(reason: str, *, log_context: dict[str, Any]) -> None:
+    label = log_context.get("label", "")
+    tab = log_context.get("tab", "")
+    cell_range = log_context.get("range", "")
+    log.error(
+        "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
+        label,
+        tab,
+        cell_range,
+        reason,
+        extra={k: v for k, v in log_context.items() if k not in {"label", "tab", "range"}},
+    )
+
+
+def get_tab_gid(sheet_id: str, tab_name: str) -> str | None:
+    worksheet = sheets_core.get_worksheet(sheet_id, tab_name)
+    gid = getattr(worksheet, "id", None)
+    return str(gid) if gid is not None else None
+
+
+def _convert_pdf_to_png(pdf_bytes: bytes) -> bytes | None:
+    if not _HAS_PDF2IMAGE:
+        log.warning("export_pdf_as_png: pdf2image not installed; skipping PDF rasterization")
+        return None
+
+    try:
+        images = convert_from_bytes(pdf_bytes, fmt="png", single_file=True, dpi=150)
+        if not images:
+            log.error("export_pdf_as_png: pdf2image returned no pages")
+            return None
+        buffer = io.BytesIO()
+        images[0].save(buffer, format="PNG")
+        return buffer.getvalue()
+    except Exception:
+        log.exception("export_pdf_as_png: PDF rasterization failed")
+        return None
+
+
+def export_pdf_as_png(
+    sheet_id: str,
+    gid: str | int | None,
+    cell_range: str,
+    *,
+    log_context: dict[str, Any] | None = None,
+) -> bytes | None:
+    context = {"range": cell_range}
+    context.update(log_context or {})
+
+    try:
+        headers = _get_service_account_headers()
+    except Exception as exc:  # pragma: no cover - network/auth failure
+        _log_error(f"auth_failure:{exc}", log_context=context)
+        return None
+
+    if not gid and gid != 0:
+        _log_error("missing_gid", log_context=context)
+        return None
+
+    try:
+        response = requests.get(
+            GOOGLE_EXPORT_URL.format(sheet_id=sheet_id),
+            headers=headers,
+            params={
+                "format": "pdf",
+                "portrait": "false",
+                "fitw": "true",
+                "gid": gid,
+                "range": cell_range,
+            },
+            timeout=20,
+        )
+    except Exception as exc:  # pragma: no cover - network failure
+        _log_error(f"pdf_request_failed:{exc}", log_context=context)
+        return None
+
+    if response.status_code != 200:
+        _log_error(
+            f"pdf_export_status_{response.status_code}",
+            log_context={**context, "status": response.status_code},
+        )
+        return None
+
+    pdf_content = response.content or b""
+    if not pdf_content:
+        _log_error("empty_pdf_response", log_context=context)
+        return None
+
+    return _convert_pdf_to_png(pdf_content)

@@ -6,6 +6,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass
+from functools import partial
 from typing import Iterable, List
 
 import discord
@@ -13,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from shared.sheets import core as sheets_core
 from shared.sheets import recruitment
+from shared.sheets.export_utils import export_pdf_as_png, get_tab_gid
 
 log = logging.getLogger("c1c.housekeeping.mirralith")
 
@@ -280,19 +282,60 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
         )
 
         try:
+            gid = await loop.run_in_executor(
+                None, partial(get_tab_gid, spreadsheet_id, tab_name)
+            )
+        except Exception as exc:
+            log.error(
+                "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
+                spec.label,
+                tab_name,
+                range_value,
+                f"gid_lookup_failed:{exc}",
+                extra={"label": spec.label, "tab": tab_name, "range": range_value},
+            )
+            continue
+
+        if gid is None:
+            log.error(
+                "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
+                spec.label,
+                tab_name,
+                range_value,
+                "gid_missing",
+                extra={"label": spec.label, "tab": tab_name, "range": range_value},
+            )
+            continue
+
+        try:
             png_bytes = await loop.run_in_executor(
-                None, export_sheet_range_to_png, spreadsheet_id, tab_name, range_value
+                None,
+                partial(
+                    export_pdf_as_png,
+                    spreadsheet_id,
+                    gid,
+                    range_value,
+                    log_context={
+                        "label": spec.label,
+                        "tab": tab_name,
+                        "range": range_value,
+                    },
+                ),
             )
         except Exception:
             log.exception(
-                "failed to export Mirralith range",
+                "❌ error — mirralith_export • label=%s • tab=%s • range=%s • reason=%s",
+                spec.label,
+                tab_name,
+                range_value,
+                "export_exception",
                 extra={"label": spec.label, "tab": tab_name, "range": range_value},
             )
             continue
 
         if not png_bytes:
             log.warning(
-                "Mirralith export returned no data",
+                "failed to export Mirralith range (PDF renderer unavailable or failed)",
                 extra={"label": spec.label, "tab": tab_name, "range": range_value},
             )
             continue
