@@ -32,7 +32,10 @@ Each message includes its label token so the bot can find and update it on subse
 - Manual: administrators can trigger an immediate refresh with `!mirralith refresh` (5-minute cooldown). The command posts status messages in the invoking channel.
 - Fault tolerance: missing config or Sheets/Discord errors are logged and skipped per image; the bot and scheduler stay up.
 
-Doc last updated: 2025-11-30 (v0.9.8.1)
+## Troubleshooting
+- If logs show `Mirralith spec missing tab or range; skipping`, the bot could not read the Config tab for the listed key; ensure the KV rows exist and the deployment includes the latest config loader.
+
+Doc last updated: 2025-12-01 (v0.9.8.1)
 
 [meta]
 labels: codex, comp:housekeeping, docs, enhancement, P2

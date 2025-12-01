@@ -326,6 +326,16 @@ def _config_lookup_bool(key: str, default: bool = False) -> bool:
     return default
 
 
+def get_config_value(key: str, default: Optional[str] = None) -> Optional[str]:
+    """Return a trimmed Config-tab value keyed by ``key`` (case-insensitive)."""
+
+    value = _config_lookup(key, default)
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text or default
+
+
 def _clans_tab() -> str:
     return _config_lookup("clans_tab", os.getenv("WORKSHEET_NAME", "bot_info")) or "bot_info"
 

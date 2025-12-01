@@ -11,8 +11,8 @@ from typing import Iterable, List
 import discord
 from PIL import Image, ImageDraw, ImageFont
 
-from shared.config import cfg
 from shared.sheets import core as sheets_core
+from shared.sheets import recruitment
 
 log = logging.getLogger("c1c.housekeeping.mirralith")
 
@@ -250,22 +250,22 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
         log.warning("Recruitment sheet ID missing; skipping Mirralith overview job")
         return
 
-    tab_names = {
-        "MIRRALITH_TAB": str(cfg.get("MIRRALITH_TAB") or "").strip(),
-        "CLUSTER_STRUCTURE_TAB": str(cfg.get("CLUSTER_STRUCTURE_TAB") or "").strip(),
-    }
-
     loop = asyncio.get_running_loop()
 
     for spec in IMAGE_SPECS:
-        tab_name = tab_names.get(spec.tab_key, "")
-        range_value = str(cfg.get(spec.range_key) or "").strip()
+        tab_name = recruitment.get_config_value(spec.tab_key, "") or ""
+        range_value = recruitment.get_config_value(spec.range_key, "") or ""
         if not tab_name or not range_value:
             log.warning(
                 "Mirralith spec missing tab or range; skipping",
                 extra={"label": spec.label, "tab_key": spec.tab_key, "range_key": spec.range_key},
             )
             continue
+
+        log.info(
+            "Mirralith spec resolved",
+            extra={"label": spec.label, "tab": tab_name, "cell_range": range_value},
+        )
 
         try:
             png_bytes = await loop.run_in_executor(
