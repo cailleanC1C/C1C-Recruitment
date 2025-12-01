@@ -1,4 +1,15 @@
 # Changelog
+### v0.9.8.1 — 2025-11-30
+**Housekeeping**
+* Clarified `CLEANUP_AGE_HOURS` behavior and updated spec for v0.9.8.1.
+* Improved QLive keep-alive logs to include channel/thread names.
+* Fixed cron ENV var parsing issue (example: `0 18 21 * *`).
+*  **Mirralith Autoposter**
+* Finalized module context and config requirements.
+* Defined required ENV VARs and Sheets setup.
+* Added admin command to run autoposter manually.
+* Confirmed module placement under Housekeeping.
+* PR requested from Codex.
 
 ### v0.9.7 — 2025-11-29
 - Added a recruiter-only **Retry summary** button to the welcome fallback embed so stored answers can be reloaded and the summary rebuilt without leaving the thread; retry failures stay on the fallback with an ephemeral error.
