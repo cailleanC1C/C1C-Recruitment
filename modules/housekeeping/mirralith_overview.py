@@ -334,6 +334,10 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         if not png_bytes:
+            log.warning(
+                "failed to export Mirralith range (PDF renderer unavailable or failed)",
+                extra={"label": spec.label, "tab": tab_name, "range": range_value},
+            )
             continue
 
         file = discord.File(io.BytesIO(png_bytes), filename=spec.filename)

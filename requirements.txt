@@ -3,3 +3,4 @@ discord.py>=2.3,<3
 aiohttp>=3.13,<4
 gspread>=5,<6
 Pillow>=10,<11
+pdf2image>=1.17.0  # rasterize Google Sheets PDF exports for Mirralith images

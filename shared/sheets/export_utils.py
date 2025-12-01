@@ -8,13 +8,23 @@ from typing import Any, Dict
 
 import importlib.util
 import requests
-from PIL import Image
+from PIL import Image  # noqa: F401 - provided for potential downstream usage
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 
 from shared.sheets import core as sheets_core
 
 log = logging.getLogger("c1c.sheets.export")
+
+convert_from_bytes = None
+_HAS_PDF2IMAGE = False
+_pdf2image_spec = importlib.util.find_spec("pdf2image")
+if _pdf2image_spec is not None:
+    import importlib
+
+    pdf2image = importlib.import_module("pdf2image")
+    convert_from_bytes = getattr(pdf2image, "convert_from_bytes", None)
+    _HAS_PDF2IMAGE = callable(convert_from_bytes)
 
 GOOGLE_EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export"
 
@@ -60,20 +70,21 @@ def get_tab_gid(sheet_id: str, tab_name: str) -> str | None:
 
 
 def _convert_pdf_to_png(pdf_bytes: bytes) -> bytes | None:
-    spec = importlib.util.find_spec("pdf2image")
-    if spec is not None:
-        import pdf2image
+    if not _HAS_PDF2IMAGE:
+        log.warning("export_pdf_as_png: pdf2image not installed; skipping PDF rasterization")
+        return None
 
-        pages = pdf2image.convert_from_bytes(pdf_bytes, dpi=180)
-        if pages:
-            buffer = io.BytesIO()
-            pages[0].save(buffer, format="PNG")
-            return buffer.getvalue()
-
-    image = Image.open(io.BytesIO(pdf_bytes))
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
+    try:
+        images = convert_from_bytes(pdf_bytes, fmt="png", single_file=True, dpi=150)
+        if not images:
+            log.error("export_pdf_as_png: pdf2image returned no pages")
+            return None
+        buffer = io.BytesIO()
+        images[0].save(buffer, format="PNG")
+        return buffer.getvalue()
+    except Exception:
+        log.exception("export_pdf_as_png: PDF rasterization failed")
+        return None
 
 
 def export_pdf_as_png(
@@ -125,8 +136,4 @@ def export_pdf_as_png(
         _log_error("empty_pdf_response", log_context=context)
         return None
 
-    try:
-        return _convert_pdf_to_png(pdf_content)
-    except Exception as exc:  # pragma: no cover - conversion failure
-        _log_error(f"pdf_to_png_failed:{exc}", log_context=context)
-        return None
+    return _convert_pdf_to_png(pdf_content)
