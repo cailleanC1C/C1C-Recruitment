@@ -61,28 +61,28 @@ IMAGE_SPECS: List[ImageSpec] = [
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_LATE]",
-        description="Cluster Structure — Late Game Bracket",
+        description=" ",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_LATE_RANGE",
         filename="cluster_late.png",
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_MID]",
-        description="Cluster Structure — Mid Game Bracket",
+        description=" ",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_MID_RANGE",
         filename="cluster_mid.png",
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_EARLY]",
-        description="Cluster Structure — Early Game Bracket",
+        description=" ",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_EARLY_RANGE",
         filename="cluster_early.png",
     ),
     ImageSpec(
         label="[MIRRALITH_CLUSTER_BEGINNER]",
-        description="Cluster Structure — Beginner Bracket",
+        description=" ",
         tab_key="CLUSTER_STRUCTURE_TAB",
         range_key="CLUSTER_BEGINNER_RANGE",
         filename="cluster_beginner.png",
@@ -174,9 +174,8 @@ def export_sheet_range_to_png(spreadsheet_id: str, tab_name: str, cell_range: st
 def build_mirralith_message_content(label: str, description: str, updated_date: str) -> str:
     lines = [
         f" ",
-        f"# ✨ {description}",
-        f"-# *Last updated {updated_date}*",
-        f"-# ||{label}||",
+        f"# {description}",
+        f"-# *Last updated {updated_date}  ||{label}||*",
     ]
     return "\n".join(lines)
 
