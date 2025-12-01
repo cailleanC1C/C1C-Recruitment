@@ -253,8 +253,20 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
     loop = asyncio.get_running_loop()
 
     for spec in IMAGE_SPECS:
-        tab_name = recruitment.get_config_value(spec.tab_key, "") or ""
-        range_value = recruitment.get_config_value(spec.range_key, "") or ""
+        try:
+            tab_name = recruitment.get_config_value(spec.tab_key, "") or ""
+            range_value = recruitment.get_config_value(spec.range_key, "") or ""
+        except Exception as exc:
+            log.warning(
+                "Mirralith config lookup failed; skipping spec",
+                extra={
+                    "label": spec.label,
+                    "tab_key": spec.tab_key,
+                    "range_key": spec.range_key,
+                    "error": str(exc),
+                },
+            )
+            continue
         if not tab_name or not range_value:
             log.warning(
                 "Mirralith spec missing tab or range; skipping",
