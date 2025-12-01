@@ -82,8 +82,11 @@ def _convert_pdf_to_png(pdf_bytes: bytes) -> bytes | None:
         buffer = io.BytesIO()
         images[0].save(buffer, format="PNG")
         return buffer.getvalue()
-    except Exception:
-        log.exception("export_pdf_as_png: PDF rasterization failed")
+    except Exception as exc:
+        log.exception(
+            "export_pdf_as_png: PDF rasterization failed",
+            extra={"error": str(exc)},
+        )
         return None
 
 

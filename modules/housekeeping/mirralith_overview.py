@@ -281,6 +281,13 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             extra={"label": spec.label, "tab": tab_name, "cell_range": range_value},
         )
 
+        if ":" not in range_value:
+            log.error(
+                "mirralith_export: invalid range (missing colon)",
+                extra={"label": spec.label, "tab": tab_name, "range": range_value},
+            )
+            continue
+
         try:
             gid = await loop.run_in_executor(
                 None, partial(get_tab_gid, spreadsheet_id, tab_name)
