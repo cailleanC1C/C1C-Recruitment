@@ -1290,7 +1290,7 @@ class Runtime:
         try:
             keepalive_logger = logging.getLogger("c1c.housekeeping.keepalive")
             keepalive_job = self.scheduler.every(
-                hours=1.0,
+                hours=24.0,
                 tag="keepalive",
                 name="housekeeping_keepalive",
             )
@@ -1300,7 +1300,7 @@ class Runtime:
 
             keepalive_job.do(keepalive_runner)
             keepalive_spec_entry = (
-                SimpleNamespace(bucket="housekeeping_keepalive", cadence_label="1h"),
+                SimpleNamespace(bucket="housekeeping_keepalive", cadence_label="24h"),
                 keepalive_job,
             )
         except Exception as exc:  # pragma: no cover - defensive guard
