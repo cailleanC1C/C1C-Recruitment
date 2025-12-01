@@ -1,4 +1,11 @@
 # Changelog
+### v0.9.8.2 — 2025-12-01
+**Community**
+* Added the C1C Leagues autoposter with sheet-driven ranges, Monday/Wednesday reminders, and atomic weekly posts across Legendary, Rising Stars, and Stormforged threads plus announcements.
+
+**Docs**
+* Bumped the docs footer standard to v0.9.8.2 and documented new Leagues env keys and commands.
+
 ### v0.9.8.1 — 2025-11-30
 **Housekeeping**
 * Clarified `CLEANUP_AGE_HOURS` behavior and updated spec for v0.9.8.1.
@@ -377,4 +384,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-30 (v0.9.8.1)
+Doc last updated: 2025-12-01 (v0.9.8.2)
