@@ -4,6 +4,7 @@
 * Clarified `CLEANUP_AGE_HOURS` behavior and updated spec for v0.9.8.1.
 * Improved QLive keep-alive logs to include channel/thread names.
 * Fixed cron ENV var parsing issue (example: `0 18 21 * *`).
+
 **Mirralith Autoposter**
 * Finalized module context and config requirements.
 * Defined required ENV VARs and Sheets setup.
@@ -378,35 +379,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-11-28 (v0.9.7)
-
-Doc last updated: 2025-11-28 (v0.9.7)
-Testing & Validation
- Run the full test suite: pytest
-
- Add / update targeted tests for promo summary embed formatting.
-
- Manually test all three promo flows in a test environment:
-
-Create one ticket for each of promo.r, promo.m, promo.l with representative answers, including:
-
-Siege “no” and Siege “yes with detail”
-
-Different CvC priorities
-
-Power < 1k, ~50k, and > 1m
-
-Confirm:
-
-Sections appear in the right order.
-
-Inline pairs use •.
-
-Hide rules and numeric formatting match the spec.
-
-Siege participation always appears; Siege detail respects the participation answer.
-
-[meta]
-labels: codex, comp:shared, comp:modules, comp:ops, tests, docs, enhancement, P2
-milestone: Harmonize v1.0
-[/meta]
+Doc last updated: 2025-11-30 (v0.9.8.1)
