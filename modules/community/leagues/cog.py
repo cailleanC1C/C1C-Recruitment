@@ -5,7 +5,7 @@ import datetime as dt
 import io
 import logging
 import os
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import discord
 from discord.ext import commands
@@ -84,6 +84,11 @@ class LeaguesCog(commands.Cog):
         if not admin_ids:
             return ""
         return " ".join(f"<@{user_id}>" for user_id in admin_ids)
+
+    @staticmethod
+    def _league_title(bundle: LeagueBundle, now: dt.datetime) -> str:
+        today = now.date().isoformat()
+        return f"{bundle.display_name} – Weekly Update {today}"
 
     # === Event listeners ===
     @commands.Cog.listener()
@@ -284,54 +289,63 @@ class LeaguesCog(commands.Cog):
             return
 
         loop = asyncio.get_running_loop()
-        try:
-            exports = await self._export_all(loop, sheet_id, bundles)
-        except Exception as exc:
-            log.exception("leagues export failed")
-            await self._post_status(
-                status_channel,
-                f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: export failed: {exc}.",
-                trigger=trigger,
-            )
-            return
-
-        if isinstance(exports, str):
-            await self._post_status(
-                status_channel,
-                f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: {exports}.",
-                trigger=trigger,
-            )
-            return
-
         posted_messages: list[discord.Message] = []
-        today = dt.datetime.now(dt.timezone.utc).date().isoformat()
-        posting_order = [
-            ("legendary", "Legendary League", targets["legendary"], exports["legendary"]),
-            ("rising", "Rising Stars League", targets["rising"], exports["rising"]),
-            ("storm", "Stormforged League", targets["storm"], exports["storm"]),
-        ]
+        jump_links: dict[str, str] = {}
+        now = dt.datetime.now(dt.timezone.utc)
 
-        for slug, label, channel, files in posting_order:
-            try:
-                message = await channel.send(
-                    content=f"{label} – Weekly Update {today}", files=list(files)
-                )
-            except Exception as exc:
-                log.exception("failed to send league post", extra={"league": slug})
-                for prior in posted_messages:
-                    try:
-                        await prior.delete()
-                    except Exception:
-                        continue
+        for bundle in bundles:
+            channel = targets[bundle.slug]
+
+            header_file = await self._export_header_image(loop, sheet_id, bundle)
+            if isinstance(header_file, str):
                 await self._post_status(
                     status_channel,
-                    f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: sending {label} failed ({exc}).",
+                    f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: {header_file}.",
                     trigger=trigger,
                 )
                 return
-            posted_messages.append(message)
 
-        announcement_text = self._build_announcement(posted_messages)
+            title = self._league_title(bundle, now)
+            try:
+                header_msg = await channel.send(content=title, file=header_file)
+            except Exception as exc:
+                log.exception("failed to send league header", extra={"league": bundle.slug})
+                await self._cleanup_posts(posted_messages)
+                await self._post_status(
+                    status_channel,
+                    f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: sending {bundle.display_name} header failed ({exc}).",
+                    trigger=trigger,
+                )
+                return
+
+            posted_messages.append(header_msg)
+            jump_links[bundle.slug] = header_msg.jump_url
+
+            board_files = await self._export_board_images(loop, sheet_id, bundle)
+            if isinstance(board_files, str):
+                await self._cleanup_posts(posted_messages)
+                await self._post_status(
+                    status_channel,
+                    f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: {board_files}.",
+                    trigger=trigger,
+                )
+                return
+
+            for board_file in board_files:
+                try:
+                    message = await channel.send(file=board_file)
+                except Exception as exc:
+                    log.exception("failed to send league board", extra={"league": bundle.slug})
+                    await self._cleanup_posts(posted_messages)
+                    await self._post_status(
+                        status_channel,
+                        f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: sending {bundle.display_name} board failed ({exc}).",
+                        trigger=trigger,
+                    )
+                    return
+                posted_messages.append(message)
+
+        announcement_text = self._build_announcement(bundles, jump_links)
         try:
             await announcement_channel.send(announcement_text)
         except Exception as exc:
@@ -349,13 +363,21 @@ class LeaguesCog(commands.Cog):
                 [
                     "🧹 C1C Leagues job finished",
                     f"Trigger: {trigger}",
-                    "Leagues updated: 3 / 3",
+                    f"Leagues updated: {len(bundles)} / {len(bundles)}",
                     "Result: all posted successfully",
                     f"Timestamp: {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
                 ]
             ),
             trigger=trigger,
         )
+
+    @staticmethod
+    async def _cleanup_posts(messages: list[discord.Message]) -> None:
+        for message in messages:
+            try:
+                await message.delete()
+            except Exception:
+                continue
 
     async def _post_status(
         self, channel: discord.abc.Messageable | None, content: str, *, trigger: str
@@ -370,47 +392,49 @@ class LeaguesCog(commands.Cog):
 
     def _validate_bundles(self, bundles: Iterable[LeagueBundle]) -> str | None:
         for bundle in bundles:
-            if len(bundle.boards) != bundle.expected_boards:
-                prefix = bundle.header.key.rsplit("_HEADER", 1)[0]
-                return (
-                    f"{bundle.display_name}: expected {bundle.expected_boards} boards, "
-                    f"found {len(bundle.boards)}; check {prefix}_* rows in Leagues Config tab."
-                )
+            if bundle.header is None:
+                return f"{bundle.display_name}: header missing in Leagues Config tab"
+            if not bundle.boards:
+                return f"{bundle.display_name}: no boards configured in Leagues Config tab"
         return None
 
-    async def _export_all(
+    async def _export_header_image(
         self,
         loop: asyncio.AbstractEventLoop,
         sheet_id: str,
-        bundles: Iterable[LeagueBundle],
-    ) -> dict[str, list[discord.File]] | str:
-        results: dict[str, list[discord.File]] = {}
-        for bundle in bundles:
-            files: list[discord.File] = []
-            header_file = await self._export_spec(
+        bundle: LeagueBundle,
+    ) -> discord.File | str:
+        if bundle.header is None:
+            return f"{bundle.display_name}: header missing in Leagues Config tab"
+
+        return await self._export_spec(
+            loop,
+            sheet_id,
+            bundle.slug,
+            bundle.header,
+            filename=f"{bundle.slug}_header.png",
+        )
+
+    async def _export_board_images(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        sheet_id: str,
+        bundle: LeagueBundle,
+    ) -> list[discord.File] | str:
+        files: list[discord.File] = []
+        for spec in bundle.boards:
+            index = spec.index if spec.index is not None else len(files) + 1
+            file = await self._export_spec(
                 loop,
                 sheet_id,
                 bundle.slug,
-                bundle.header,
-                filename=f"{bundle.slug}_header.png",
+                spec,
+                filename=f"{bundle.slug}_{index}.png",
             )
-            if isinstance(header_file, str):
-                return header_file
-            files.append(header_file)
-
-            for index, spec in enumerate(bundle.boards, start=1):
-                file = await self._export_spec(
-                    loop,
-                    sheet_id,
-                    bundle.slug,
-                    spec,
-                    filename=f"{bundle.slug}_{index}.png",
-                )
-                if isinstance(file, str):
-                    return file
-                files.append(file)
-            results[bundle.slug] = files
-        return results
+            if isinstance(file, str):
+                return file
+            files.append(file)
+        return files
 
     async def _export_spec(
         self,
@@ -450,12 +474,10 @@ class LeaguesCog(commands.Cog):
 
         return discord.File(fp=io.BytesIO(png_bytes), filename=filename)
 
-    def _build_announcement(self, messages: list[discord.Message]) -> str:
-        jump_map = {
-            "legendary": messages[0].jump_url,
-            "rising": messages[1].jump_url,
-            "storm": messages[2].jump_url,
-        }
+    def _build_announcement(
+        self, bundles: Iterable[LeagueBundle], jump_links: Mapping[str, str]
+    ) -> str:
+        jump_map = {bundle.slug: jump_links[bundle.slug] for bundle in bundles}
         role_id = self._parse_int_env("C1C_LEAGUE_ROLE_ID")
         mention = f"<@&{role_id}>" if role_id else "@C1CLeague"
         return "\n".join(
