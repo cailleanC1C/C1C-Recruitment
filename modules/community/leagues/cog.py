@@ -257,9 +257,8 @@ class LeaguesCog(commands.Cog):
             )
             return
 
-        config_tab = os.getenv("LEAGUES_CONFIG_TAB", "Config")
         try:
-            bundles = load_league_bundles(sheet_id, config_tab=config_tab)
+            sheet_id, bundles = await load_league_bundles_from_config()
         except LeaguesConfigError as exc:
             await self._post_status(
                 status_channel,
