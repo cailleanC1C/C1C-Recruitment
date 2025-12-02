@@ -11,8 +11,12 @@ from typing import Iterable
 import discord
 from discord.ext import commands
 
-from modules.community.leagues.config import LeagueBundle, LeagueSpec, LeaguesConfigError
-from modules.community.leagues.service import load_league_bundles_from_config
+from modules.community.leagues.config import (
+    LeagueBundle,
+    LeagueSpec,
+    LeaguesConfigError,
+    load_league_bundles,
+)
 from shared.logfmt import channel_label, user_label
 from shared.sheets.export_utils import export_pdf_as_png, get_tab_gid
 
@@ -214,6 +218,15 @@ class LeaguesCog(commands.Cog):
         trigger: str,
         status_channel: discord.abc.Messageable | None,
     ) -> None:
+        sheet_id = os.getenv("LEAGUES_SHEET_ID", "").strip()
+        if not sheet_id:
+            await self._post_status(
+                status_channel,
+                f"❌ C1C Leagues job failed\nTrigger: {trigger}\nReason: LEAGUES_SHEET_ID is missing.",
+                trigger=trigger,
+            )
+            return
+
         channel_ids = {
             "legendary": self._parse_int_env("LEAGUES_LEGENDARY_THREAD_ID"),
             "rising": self._parse_int_env("LEAGUES_RISING_THREAD_ID"),

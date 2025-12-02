@@ -124,9 +124,8 @@ def _bundle_for_slug(specs: list[LeagueSpec], slug: str) -> LeagueBundle | None:
     )
 
 
-def load_league_bundles_from_rows(
-    rows: Iterable[Mapping[str, object]]
-) -> list[LeagueBundle]:
+def load_league_bundles(sheet_id: str, *, config_tab: str = "Config") -> list[LeagueBundle]:
+    rows = list(_iter_league_rows(sheet_id, config_tab))
     specs = list(_iter_league_specs(rows))
 
     bundles: list[LeagueBundle] = []
@@ -144,8 +143,3 @@ def load_league_bundles_from_rows(
         raise LeaguesConfigError(f"config missing headers for: {missing_labels}")
 
     return bundles
-
-
-def load_league_bundles(sheet_id: str, *, config_tab: str = "Config") -> list[LeagueBundle]:
-    rows = list(_iter_league_rows(sheet_id, config_tab))
-    return load_league_bundles_from_rows(rows)
