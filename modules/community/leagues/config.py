@@ -60,20 +60,52 @@ def _extract_field(row: Mapping[str, object], *candidates: str) -> str:
     return ""
 
 
-def _iter_league_specs(rows: Iterable[Mapping[str, object]]) -> Iterator[LeagueSpec]:
+def _build_tab_lookup(rows: Iterable[Mapping[str, object]]) -> dict[str, str]:
+    tabs: dict[str, str] = {}
     for row in rows:
-        spec_key = _extract_field(row, "spec_key", "key")
+        spec_key = _extract_field(row, "spec_key", "key", "name")
+        normalized_key = spec_key.strip().upper()
+        if not normalized_key.endswith("_TAB"):
+            continue
+
+        sheet_name = _extract_field(row, "sheet_name", "sheet", "tab", "value", "val")
+        if not sheet_name:
+            continue
+
+        tabs[normalized_key] = sheet_name
+    return tabs
+
+
+def _tab_lookup_key(spec_key: str) -> str:
+    upper_key = spec_key.upper()
+    for slug in _LEAGUE_MAP:
+        prefix = f"LEAGUE_{slug.upper()}_"
+        if upper_key.startswith(prefix):
+            return f"{prefix}TAB"
+    return ""
+
+
+def _iter_league_specs(rows: Iterable[Mapping[str, object]]) -> Iterator[LeagueSpec]:
+    tab_lookup = _build_tab_lookup(rows)
+
+    for row in rows:
+        spec_key = _extract_field(row, "spec_key", "key", "name")
         sheet_name = _extract_field(row, "sheet_name", "sheet", "tab")
-        cell_range = _extract_field(row, "range", "cell_range")
+        cell_range = _extract_field(row, "range", "cell_range", "value", "val")
         enabled = _parse_bool(_extract_field(row, "enabled", "active"))
 
         if not enabled:
             continue
         if not spec_key or not sheet_name or not cell_range:
-            continue
+            tab_key = _tab_lookup_key(spec_key)
+            sheet_name = sheet_name or tab_lookup.get(tab_key, "")
+            if not spec_key or not sheet_name or not cell_range:
+                continue
 
         normalized_key = spec_key.strip()
         if not normalized_key.upper().startswith("LEAGUE_"):
+            continue
+        if normalized_key.upper().endswith("_TAB"):
             continue
 
         yield LeagueSpec(
@@ -124,8 +156,7 @@ def _bundle_for_slug(specs: list[LeagueSpec], slug: str) -> LeagueBundle | None:
     )
 
 
-def load_league_bundles(sheet_id: str, *, config_tab: str = "Config") -> list[LeagueBundle]:
-    rows = list(_iter_league_rows(sheet_id, config_tab))
+def load_league_bundles_from_rows(rows: Iterable[Mapping[str, object]]) -> list[LeagueBundle]:
     specs = list(_iter_league_specs(rows))
 
     bundles: list[LeagueBundle] = []
@@ -143,3 +174,8 @@ def load_league_bundles(sheet_id: str, *, config_tab: str = "Config") -> list[Le
         raise LeaguesConfigError(f"config missing headers for: {missing_labels}")
 
     return bundles
+
+
+def load_league_bundles(sheet_id: str, *, config_tab: str = "Config") -> list[LeagueBundle]:
+    rows = list(_iter_league_rows(sheet_id, config_tab))
+    return load_league_bundles_from_rows(rows)
