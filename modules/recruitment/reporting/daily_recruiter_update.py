@@ -521,34 +521,48 @@ async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
     return True, "-"
 
 
-@tasks.loop(time=_scheduled_time())
-async def scheduler_daily_recruiter_update() -> None:
-    bot = _BOT_REFERENCE
-    if bot is None:
-        return
+async def run_full_recruiter_reports(
+    bot: discord.Client, *, actor: str, user_id: Optional[int] = None
+) -> Dict[str, Tuple[bool, str]]:
     ok, error = await post_daily_recruiter_update(bot)
     result = "ok" if ok else "fail"
-    await _log_event(bot=bot, actor="scheduled", result=result, error=error)
+    await _log_event(bot=bot, actor=actor, result=result, error=error, user_id=user_id)
 
     audit_ok, audit_error = await run_role_and_visitor_audit(bot)
     audit_result = "ok" if audit_ok else "fail"
     await _log_event(
         bot=bot,
-        actor="scheduled",
+        actor=actor,
         result=audit_result,
         error=audit_error,
         note="role-audit",
+        user_id=user_id,
     )
 
     tickets_ok, tickets_error = await send_currently_open_tickets_report(bot)
     tickets_result = "ok" if tickets_ok else "fail"
     await _log_event(
         bot=bot,
-        actor="scheduled",
+        actor=actor,
         result=tickets_result,
         error=tickets_error,
         note="open-tickets",
+        user_id=user_id,
     )
+
+    return {
+        "report": (ok, error),
+        "audit": (audit_ok, audit_error),
+        "open_tickets": (tickets_ok, tickets_error),
+    }
+
+
+@tasks.loop(time=_scheduled_time())
+async def scheduler_daily_recruiter_update() -> None:
+    bot = _BOT_REFERENCE
+    if bot is None:
+        return
+    await run_full_recruiter_reports(bot, actor="scheduled")
 
 
 async def ensure_scheduler_started(bot: discord.Client) -> None:
@@ -593,5 +607,6 @@ __all__ = [
     "log_manual_result",
     "OpenSpotsPager",
     "post_daily_recruiter_update",
+    "run_full_recruiter_reports",
     "scheduler_daily_recruiter_update",
 ]
