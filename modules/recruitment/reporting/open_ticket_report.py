@@ -53,37 +53,43 @@ def _chunk_lines(lines: Sequence[str], *, limit: int = 1024) -> list[str]:
     return chunks or ["\u200b"]
 
 
-def _add_section(
-    embed: discord.Embed, title: str, lines: Sequence[str]
-) -> None:
-    chunks = _chunk_lines(lines)
-    for idx, chunk in enumerate(chunks):
-        name = title if idx == 0 else f"{title} (cont.)"
-        embed.add_field(name=name, value=chunk or "\u200b", inline=False)
-
-        if len(embed) > 6000:
-            embed.remove_field(-1)
-            embed.add_field(
-                name=f"{title} (truncated)",
-                value="Additional tickets omitted due to length.",
-                inline=False,
-            )
-            break
-
-
-def _build_report_embed(
-    welcome: Sequence[TicketThread], move_requests: Sequence[TicketThread]
-) -> discord.Embed:
-    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    embed = discord.Embed(
+def _new_embed(now_text: str, page: int) -> discord.Embed:
+    page_suffix = "" if page == 1 else f" (page {page})"
+    return discord.Embed(
         title="Currently Open Tickets",
-        description=f"Last updated {now_text}",
+        description=f"Last updated {now_text}{page_suffix}",
     )
 
-    _add_section(embed, "Welcome", _format_lines(welcome))
-    _add_section(embed, "Move Requests", _format_lines(move_requests))
 
-    return embed
+def _build_report_embeds(
+    welcome: Sequence[TicketThread], move_requests: Sequence[TicketThread]
+) -> list[discord.Embed]:
+    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    embeds: list[discord.Embed] = []
+    page = 1
+
+    def _add_field(title: str, value: str) -> None:
+        nonlocal page
+        if not embeds:
+            embeds.append(_new_embed(now_text, page))
+
+        embeds[-1].add_field(name=title, value=value or "\u200b", inline=False)
+
+        if len(embeds[-1]) > 6000:
+            embeds[-1].remove_field(-1)
+            page += 1
+            embeds.append(_new_embed(now_text, page))
+            embeds[-1].add_field(name=title, value=value or "\u200b", inline=False)
+
+    for title, lines in (
+        ("Welcome", _format_lines(welcome)),
+        ("Move Requests", _format_lines(move_requests)),
+    ):
+        for idx, chunk in enumerate(_chunk_lines(lines)):
+            name = title if idx == 0 else f"{title} (cont.)"
+            _add_field(name, chunk)
+
+    return embeds or [_new_embed(now_text, page)]
 
 
 def _group_tickets(tickets: Iterable[TicketThread]) -> tuple[list[TicketThread], list[TicketThread]]:
@@ -111,10 +117,11 @@ async def send_currently_open_tickets_report(bot: discord.Client) -> tuple[bool,
         return False, f"fetch:{type(exc).__name__}"
 
     welcome, move_requests = _group_tickets(tickets)
-    embed = _build_report_embed(welcome, move_requests)
+    embeds = _build_report_embeds(welcome, move_requests)
 
     try:
-        await channel.send(embeds=[embed])
+        for embed in embeds:
+            await channel.send(embeds=[embed])
     except HTTPException as exc:
         log.warning(
             "failed to send open tickets report (status=%s text=%r)",
