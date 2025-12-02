@@ -258,7 +258,7 @@ class LeaguesCog(commands.Cog):
             return
 
         try:
-            bundles = await load_league_bundles(sheet_id, config_tab="Config")
+            bundles = load_league_bundles(sheet_id, config_tab="Config")
         except LeaguesConfigError as exc:
             await self._post_status(
                 status_channel,
