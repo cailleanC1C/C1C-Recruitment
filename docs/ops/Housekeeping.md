@@ -28,8 +28,23 @@ and long-lived threads active without manual nudges.
   WARN lines capture fetch, unarchive, or send failures without blocking later
   targets.
 
+## Role & Visitor audit
+- **Purpose.** Realigns members with the expected Raid/Clan/Wandering role
+  combinations and highlights Visitor records that have stalled.
+- **Inputs.** `RAID_ROLE_ID`, `WANDERING_SOULS_ROLE_ID`, `VISITOR_ROLE_ID`,
+  `CLAN_ROLE_IDS`, `ADMIN_AUDIT_DEST_ID`, and ticket channels
+  (`WELCOME_CHANNEL_ID`, `PROMO_CHANNEL_ID`).
+- **Auto-fixes.**
+  - Removes Raid and adds Wandering Souls when a member has no clan tags.
+  - Removes Raid from existing Wanderers that lost their clan tags.
+- **Reports only.**
+  - Wandering Souls that still carry clan tags.
+  - Visitors without tickets, with only closed tickets, or with extra roles.
+- **Delivery.** Posts one consolidated message per run to
+  `ADMIN_AUDIT_DEST_ID` with section headings for each bucket.
+
 ## Future additions
 AutoMod/Guardian Knight bridging will land in this module in a future phase to
 keep moderation actions aligned with housekeeping cadences.
 
-Doc last updated: 2025-11-30 (v0.9.8.1)
+Doc last updated: 2025-12-02 (v0.9.8.2)

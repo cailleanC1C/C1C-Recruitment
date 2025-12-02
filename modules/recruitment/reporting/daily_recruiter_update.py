@@ -19,6 +19,10 @@ from shared.sheets.recruitment import (
     afetch_reports_tab,
     get_reports_tab_name,
 )
+from modules.recruitment.reporting.open_ticket_report import (
+    send_currently_open_tickets_report,
+)
+from modules.housekeeping.role_audit import run_role_and_visitor_audit
 
 log = logging.getLogger("c1c.recruitment.reporting.daily")
 
@@ -535,6 +539,26 @@ async def scheduler_daily_recruiter_update() -> None:
     ok, error = await post_daily_recruiter_update(bot)
     result = "ok" if ok else "fail"
     await _log_event(bot=bot, actor="scheduled", result=result, error=error)
+
+    audit_ok, audit_error = await run_role_and_visitor_audit(bot)
+    audit_result = "ok" if audit_ok else "fail"
+    await _log_event(
+        bot=bot,
+        actor="scheduled",
+        result=audit_result,
+        error=audit_error,
+        note="role-audit",
+    )
+
+    tickets_ok, tickets_error = await send_currently_open_tickets_report(bot)
+    tickets_result = "ok" if tickets_ok else "fail"
+    await _log_event(
+        bot=bot,
+        actor="scheduled",
+        result=tickets_result,
+        error=tickets_error,
+        note="open-tickets",
+    )
 
 
 async def ensure_scheduler_started(bot: discord.Client) -> None:
