@@ -9,6 +9,7 @@ from modules.recruitment.reporting.daily_recruiter_update import (
     feature_enabled,
     log_manual_result,
     post_daily_recruiter_update,
+    run_full_recruiter_reports,
 )
 
 
@@ -31,8 +32,11 @@ class RecruitmentReporting(commands.Cog):
     )
     @admin_only()
     async def report_group(self, ctx: commands.Context, *args: str) -> None:
-        if len(args) != 1 or args[0].lower() != "recruiters":
-            await ctx.reply("Usage: !report recruiters", mention_author=False)
+        recruiters = len(args) >= 1 and args[0].lower() == "recruiters"
+        run_all = len(args) == 2 and args[1].lower() == "all" if recruiters else False
+
+        if not recruiters:
+            await ctx.reply("Usage: !report recruiters [all]", mention_author=False)
             return
 
         if not feature_enabled():
@@ -47,8 +51,15 @@ class RecruitmentReporting(commands.Cog):
 
         ok: bool
         error: str
+        manual_results = None
         try:
-            ok, error = await post_daily_recruiter_update(self.bot)
+            if run_all:
+                manual_results = await run_full_recruiter_reports(
+                    self.bot, actor="manual", user_id=getattr(ctx.author, "id", None)
+                )
+                ok, error = manual_results.get("report", (False, "missing"))
+            else:
+                ok, error = await post_daily_recruiter_update(self.bot)
         except Exception as exc:  # pragma: no cover - defensive guard
             ok = False
             error = f"{type(exc).__name__}:{exc}"
@@ -60,6 +71,18 @@ class RecruitmentReporting(commands.Cog):
             result=result,
             error=error,
         )
+
+        if run_all and manual_results:
+            report_ok, report_error = manual_results.get("report", (False, "missing"))
+            audit_ok, audit_error = manual_results.get("audit", (False, "missing"))
+            tickets_ok, tickets_error = manual_results.get("open_tickets", (False, "missing"))
+            summary_lines = [
+                f"Recruiter report: {'ok' if report_ok else 'fail'} ({report_error})",
+                f"Role/visitor audit: {'ok' if audit_ok else 'fail'} ({audit_error})",
+                f"Open tickets: {'ok' if tickets_ok else 'fail'} ({tickets_error})",
+            ]
+            await ctx.reply("\n".join(summary_lines), mention_author=False)
+            return
 
         if not ok:
             await ctx.reply("Failed to post report. Check log channel.", mention_author=False)

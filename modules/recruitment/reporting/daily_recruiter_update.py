@@ -19,6 +19,7 @@ from shared.sheets.recruitment import (
     afetch_reports_tab,
     get_reports_tab_name,
 )
+from modules.recruitment.reporting.destinations import get_report_destination_id
 from modules.recruitment.reporting.open_ticket_report import (
     send_currently_open_tickets_report,
 )
@@ -58,17 +59,6 @@ def _scheduled_time() -> time:
             "invalid REPORT_DAILY_POST_TIME %r; falling back to 09:30", raw, exc_info=True
         )
         return time(hour=9, minute=30, tzinfo=UTC)
-
-
-def _destination_channel_id() -> Optional[int]:
-    raw = os.getenv("REPORT_RECRUITERS_DEST_ID", "").strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        log.warning("invalid REPORT_RECRUITERS_DEST_ID=%r", raw)
-        return None
 
 
 def _role_mentions() -> Sequence[str]:
@@ -453,7 +443,7 @@ async def _log_event(
     user_id: Optional[int] = None,
     note: Optional[str] = None,
 ) -> None:
-    dest_id = _destination_channel_id() or 0
+    dest_id = get_report_destination_id() or 0
     guild_id: Optional[int] = None
     guild: Optional[discord.Guild] = None
     if dest_id:
@@ -490,7 +480,7 @@ async def _log_event(
 
 
 async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
-    dest_id = _destination_channel_id()
+    dest_id = get_report_destination_id()
     if not dest_id:
         return False, "dest-missing"
 
@@ -531,34 +521,48 @@ async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
     return True, "-"
 
 
-@tasks.loop(time=_scheduled_time())
-async def scheduler_daily_recruiter_update() -> None:
-    bot = _BOT_REFERENCE
-    if bot is None:
-        return
+async def run_full_recruiter_reports(
+    bot: discord.Client, *, actor: str, user_id: Optional[int] = None
+) -> Dict[str, Tuple[bool, str]]:
     ok, error = await post_daily_recruiter_update(bot)
     result = "ok" if ok else "fail"
-    await _log_event(bot=bot, actor="scheduled", result=result, error=error)
+    await _log_event(bot=bot, actor=actor, result=result, error=error, user_id=user_id)
 
     audit_ok, audit_error = await run_role_and_visitor_audit(bot)
     audit_result = "ok" if audit_ok else "fail"
     await _log_event(
         bot=bot,
-        actor="scheduled",
+        actor=actor,
         result=audit_result,
         error=audit_error,
         note="role-audit",
+        user_id=user_id,
     )
 
     tickets_ok, tickets_error = await send_currently_open_tickets_report(bot)
     tickets_result = "ok" if tickets_ok else "fail"
     await _log_event(
         bot=bot,
-        actor="scheduled",
+        actor=actor,
         result=tickets_result,
         error=tickets_error,
         note="open-tickets",
+        user_id=user_id,
     )
+
+    return {
+        "report": (ok, error),
+        "audit": (audit_ok, audit_error),
+        "open_tickets": (tickets_ok, tickets_error),
+    }
+
+
+@tasks.loop(time=_scheduled_time())
+async def scheduler_daily_recruiter_update() -> None:
+    bot = _BOT_REFERENCE
+    if bot is None:
+        return
+    await run_full_recruiter_reports(bot, actor="scheduled")
 
 
 async def ensure_scheduler_started(bot: discord.Client) -> None:
@@ -570,7 +574,7 @@ async def ensure_scheduler_started(bot: discord.Client) -> None:
             scheduler_daily_recruiter_update.cancel()
         return
 
-    if not _destination_channel_id():
+    if not get_report_destination_id():
         if scheduler_daily_recruiter_update.is_running():
             scheduler_daily_recruiter_update.cancel()
         return
@@ -603,5 +607,6 @@ __all__ = [
     "log_manual_result",
     "OpenSpotsPager",
     "post_daily_recruiter_update",
+    "run_full_recruiter_reports",
     "scheduler_daily_recruiter_update",
 ]
