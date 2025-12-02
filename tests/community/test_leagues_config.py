@@ -84,3 +84,24 @@ def test_load_league_bundles_missing_header(monkeypatch):
 
     with pytest.raises(leagues_config.LeaguesConfigError):
         leagues_config.load_league_bundles("dummy-sheet")
+
+
+def test_load_league_bundles_supports_tab_lookup():
+    rows = [
+        {"KEY": "LEAGUE_LEGENDARY_TAB", "VALUE": "Legendary"},
+        {"KEY": "LEAGUE_LEGENDARY_HEADER", "VALUE": "A1:B2"},
+        {"KEY": "LEAGUE_LEGENDARY_1", "VALUE": "A3"},
+        {"KEY": "LEAGUE_RISING_TAB", "VALUE": "Rising Stars"},
+        {"KEY": "LEAGUE_RISING_HEADER", "VALUE": "A1:B2"},
+        {"KEY": "LEAGUE_RISING_1", "VALUE": "A3"},
+        {"KEY": "LEAGUE_STORM_TAB", "VALUE": "Stormforged"},
+        {"KEY": "LEAGUE_STORM_HEADER", "VALUE": "A1:B2"},
+        {"KEY": "LEAGUE_STORM_1", "VALUE": "A3"},
+    ]
+
+    bundles = leagues_config.load_league_bundles_from_rows(rows)
+    assert {bundle.slug for bundle in bundles} == {"legendary", "rising", "storm"}
+
+    legendary = next(bundle for bundle in bundles if bundle.slug == "legendary")
+    assert legendary.header.sheet_name == "Legendary"
+    assert legendary.boards[0].cell_range == "A3"
