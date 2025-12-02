@@ -9,6 +9,7 @@ from typing import Iterable, Sequence
 import discord
 from discord import HTTPException
 
+from modules.common.embeds import get_embed_colour
 from modules.common.tickets import TicketThread, fetch_ticket_threads
 from modules.recruitment.reporting.destinations import resolve_report_destination
 
@@ -53,32 +54,33 @@ def _chunk_lines(lines: Sequence[str], *, limit: int = 1024) -> list[str]:
     return chunks or ["\u200b"]
 
 
-def _new_embed(now_text: str, page: int) -> discord.Embed:
+def _new_embed() -> discord.Embed:
+    return discord.Embed(title="Currently Open Tickets", colour=get_embed_colour("recruitment"))
+
+
+def _set_footer(embed: discord.Embed, now_text: str, page: int) -> None:
     page_suffix = "" if page == 1 else f" (page {page})"
-    return discord.Embed(
-        title="Currently Open Tickets",
-        description=f"Last updated {now_text}{page_suffix}",
-    )
+    embed.set_footer(text=f"Last updated {now_text}{page_suffix} UTC •")
 
 
 def _build_report_embeds(
     welcome: Sequence[TicketThread], move_requests: Sequence[TicketThread]
 ) -> list[discord.Embed]:
-    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     embeds: list[discord.Embed] = []
     page = 1
 
     def _add_field(title: str, value: str) -> None:
         nonlocal page
         if not embeds:
-            embeds.append(_new_embed(now_text, page))
+            embeds.append(_new_embed())
 
         embeds[-1].add_field(name=title, value=value or "\u200b", inline=False)
 
         if len(embeds[-1]) > 6000:
             embeds[-1].remove_field(-1)
             page += 1
-            embeds.append(_new_embed(now_text, page))
+            embeds.append(_new_embed())
             embeds[-1].add_field(name=title, value=value or "\u200b", inline=False)
 
     for title, lines in (
@@ -86,10 +88,18 @@ def _build_report_embeds(
         ("Move Requests", _format_lines(move_requests)),
     ):
         for idx, chunk in enumerate(_chunk_lines(lines)):
-            name = title if idx == 0 else f"{title} (cont.)"
+            if title == "Welcome" and idx > 0:
+                name = "\u200b"
+            else:
+                name = title if idx == 0 else f"{title} (cont.)"
             _add_field(name, chunk)
 
-    return embeds or [_new_embed(now_text, page)]
+    embeds = embeds or [_new_embed()]
+
+    for idx, embed in enumerate(embeds, start=1):
+        _set_footer(embed, now_text, idx)
+
+    return embeds
 
 
 def _group_tickets(tickets: Iterable[TicketThread]) -> tuple[list[TicketThread], list[TicketThread]]:

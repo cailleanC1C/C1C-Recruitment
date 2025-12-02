@@ -10,6 +10,7 @@ from typing import Iterable, Sequence
 import discord
 from discord.ext import commands
 
+from modules.common.embeds import get_embed_colour
 from modules.common.tickets import TicketThread, fetch_ticket_threads
 from shared.config import (
     get_admin_audit_dest_id,
@@ -220,9 +221,8 @@ async def _audit_guild(
 
 
 def _render_section(title: str, lines: Sequence[str]) -> list[str]:
-    if not lines:
-        return [title, "• None"]
-    return [title, *lines]
+    content = lines or ["• None"]
+    return [f"**{title}**", *content]
 
 
 def _render_report(
@@ -230,15 +230,10 @@ def _render_report(
     summary: AuditResult,
     raid_role_name: str,
     wanderer_role_name: str,
-) -> str:
+) -> discord.Embed:
     date_text = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    parts: list[str] = [
-        "🧹 Role & Visitor Audit",
-        f"Date: {date_text}",
-        f"Checked: {summary.checked} members",
-        "",
-    ]
+    parts: list[str] = []
 
     stray_lines = [
         f"• {_format_member(member)} – Removed `{raid_role_name}`, added `{wanderer_role_name}` (no clan tags)"
@@ -280,7 +275,14 @@ def _render_report(
     ]
     parts.extend(_render_section("5) Visitors with extra roles", visitor_extra_roles))
 
-    return "\n".join(parts).strip()
+    embed = discord.Embed(
+        title="🧹 Role & Visitor Audit",
+        description="\n".join(parts).strip(),
+        colour=get_embed_colour("admin"),
+    )
+    embed.set_footer(text=f"Date: {date_text} • Checked: {summary.checked} members")
+
+    return embed
 
 
 async def run_role_and_visitor_audit(bot: commands.Bot) -> tuple[bool, str]:
@@ -357,14 +359,14 @@ async def run_role_and_visitor_audit(bot: commands.Bot) -> tuple[bool, str]:
     if not isinstance(channel, (discord.TextChannel, discord.Thread)):
         return False, "dest-invalid"
 
-    message = _render_report(
+    embed = _render_report(
         summary=aggregated,
         raid_role_name=raid_role_name,
         wanderer_role_name=wanderer_role_name,
     )
 
     try:
-        await channel.send(content=message)
+        await channel.send(embed=embed)
     except Exception as exc:
         log.warning("failed to send role audit report", exc_info=True)
         return False, f"send:{type(exc).__name__}"
