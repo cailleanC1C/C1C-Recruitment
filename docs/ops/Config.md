@@ -93,6 +93,22 @@ sync modules remain available for non-async scripts and cache warmers.
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
 
+### C1C Leagues autoposter
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `C1C_LEAGUE_ROLE_ID` | snowflake | — | Discord role ID for **@C1CLeague**; granted automatically on first image submission and mentioned in announcements. |
+| `ANNOUNCEMENT_CHANNEL_ID` | snowflake | — | Channel receiving the weekly cross-league announcement (jump links + @C1CLeague). |
+| `LEAGUES_SHEET_ID` | string | — | Google Sheet ID for the `C1C_Leagues` workbook; Config tab declares ranges for each league. |
+| `LEAGUES_CONFIG_TAB` | string | `Config` | Optional override for the Leagues Config tab name. |
+| `LEAGUES_SUBMISSION_CHANNEL_ID` | snowflake | — | Channel watched for image uploads; grants the C1CLeague role on first qualifying attachment. |
+| `LEAGUES_LEGENDARY_THREAD_ID` | snowflake | — | Thread receiving the Legendary League header + 9 board PNGs. |
+| `LEAGUES_RISING_THREAD_ID` | snowflake | — | Thread receiving the Rising Stars League header + 7 board PNGs. |
+| `LEAGUES_STORMFORGED_THREAD_ID` | snowflake | — | Thread receiving the Stormforged League header + 4 board PNGs. |
+| `LEAGUES_REMINDER_THREAD_ID` | snowflake | — | Thread used for Monday and Wednesday reminders plus job-status/error summaries. |
+| `LEAGUE_ADMIN_IDS` | csv | — | Discord user IDs allowed to confirm Wednesday reminders via 👍 and to trigger manual posts. |
+| `LEAGUES_REMINDER_MONDAY_UTC` | HH:MM | `13:00` | UTC time for the Monday reminder asking admins to update the Leagues sheet. |
+| `LEAGUES_REMINDER_WEDNESDAY_UTC` | HH:MM | `13:00` | UTC time for the Wednesday reminder + reaction check that triggers posting. |
+
 ### Runtime flags
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
@@ -304,4 +320,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-11-30 (v0.9.8.1)
+Doc last updated: 2025-12-01 (v0.9.8.2)

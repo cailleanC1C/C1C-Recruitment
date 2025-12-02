@@ -1202,6 +1202,7 @@ class Runtime:
         from modules.housekeeping import keepalive as housekeeping_keepalive
         from modules.housekeeping import mirralith_overview as housekeeping_mirralith
         from modules.ops import server_map as server_map_module
+        from modules.community.leagues import schedule_leagues_jobs
 
         ensure_cache_registration()
         await preload_on_startup()
@@ -1319,6 +1320,10 @@ class Runtime:
             server_map_module.schedule_server_map_job(self)
         except Exception:  # pragma: no cover - defensive scheduler guard
             log.exception("failed to schedule server map refresh job")
+        try:
+            schedule_leagues_jobs(self)
+        except Exception:  # pragma: no cover - defensive scheduler guard
+            log.exception("failed to schedule leagues reminders")
         await self.bot.start(token)
 
     async def close(self) -> None:

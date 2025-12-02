@@ -63,7 +63,7 @@ Collaboration Contract and core infra conventions.
 * [`core_infra.md`](contracts/core_infra.md) — runtime, Sheets access, and cache relationships.
 * [`CollaborationContract.md`](contracts/CollaborationContract.md) — contributor standards, PR review flow, and Codex formatting instructions.
 
-## Operational Documentation `/docs/ops/` 
+## Operational Documentation `/docs/ops/`
 Collaboration Contract and core infra conventions.
 * [`CoreOps.md`](ops/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
 * [`Modules.md`](ops/Modules.md) — module inventory with entry points and links to each deep dive.
@@ -79,6 +79,9 @@ Collaboration Contract and core infra conventions.
 * [`Promo_Summary_Spec.md`](ops/Promo_Summary_Spec.md) — promo summary embeds readability spec and per-flow layout mapping.
 * [`.env.example`](../.env.example) — reference environment file for local/testing setups.
 * Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
+
+## Community features
+* C1C Leagues Autoposter – weekly boards & announcement for Legendary, Rising Stars, Stormforged.
 
 ## Module Deep Dives `/docs/modules/` 
 * [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
@@ -100,9 +103,9 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 * [`modules/PermissionsSync.md`](modules/PermissionsSync.md) - Permission sync module: ACL workflows, overwrite syncing. All commands referenced here **must** also be present in the CommandMatrix.
 
 ## 🔧 Maintenance Rules
-* Any PR touching documentation must update this index and all affected references.  
+* Any PR touching documentation must update this index and all affected references.
 * All docs must end with:
-  `Doc last updated: YYYY-MM-DD (v0.9.8.1)`
+  `Doc last updated: YYYY-MM-DD (v0.9.8.2)`
 * `.env.example` must stay in `docs/ops/`.  
 * No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.  
 * Module docs must exclusively live under `docs/modules/`.
@@ -110,9 +113,9 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-11-30 (v0.9.8.1)
+Doc last updated: 2025-12-01 (v0.9.8.2)
 
-Doc last updated: 2025-11-30 (v0.9.8.1)
+Doc last updated: 2025-12-01 (v0.9.8.2)
 Testing & Validation
  Run the full test suite: pytest
 

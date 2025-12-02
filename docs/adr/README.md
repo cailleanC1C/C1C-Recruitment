@@ -29,5 +29,6 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0020](ADR-0020-Availability-Derivation.md) | Availability Derivation (E → AF/AH/AI) & Cache Update Strategy | Accepted — 2025-11-13 |
 | [ADR-0021](ADR-0021-availability-recompute-helper.md) | Reservations Sheet Adapter & Availability Recompute Helper | Accepted — 2025-11-13 |
 | [ADR-0022](ADR-0022-Module-Boundaries.md) | Module Boundaries: Onboarding vs Welcome (and Update Discipline) | Accepted — 2025-11-17 |
+| [ADR-0023](ADR-0023-C1C-Leagues-Autoposter.md) | C1C Leagues Autoposter | Approved — 2025-12-01 |
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-12-01 (v0.9.8.2)
