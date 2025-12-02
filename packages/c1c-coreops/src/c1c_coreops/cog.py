@@ -2010,17 +2010,18 @@ class CoreOpsCog(commands.Cog):
             warning = f"⚠️ No tabs listed in '{config_tab_display}'"
             warnings.append(warning)
 
-        reports_config = discovery.tab_map.get("REPORTS_TAB")
-        reports_default = get_reports_tab_name("Statistics")
-        reports_tab = (reports_config or reports_default or "").strip()
-        if reports_tab:
-            normalized_reports = reports_tab.lower()
-            if not any((name or "").strip().lower() == normalized_reports for name in tab_names):
-                tab_names.append(reports_tab)
-                logger.info(
-                    "[checksheet] injecting reports tab '%s' for inspection",
-                    sanitize_text(reports_tab),
-                )
+        if target.sheet_id_key == "RECRUITMENT_SHEET_ID":
+            reports_config = discovery.tab_map.get("REPORTS_TAB")
+            reports_default = get_reports_tab_name("Statistics")
+            reports_tab = (reports_config or reports_default or "").strip()
+            if reports_tab:
+                normalized_reports = reports_tab.lower()
+                if not any((name or "").strip().lower() == normalized_reports for name in tab_names):
+                    tab_names.append(reports_tab)
+                    logger.info(
+                        "[checksheet] injecting reports tab '%s' for inspection",
+                        sanitize_text(reports_tab),
+                    )
 
         try:
             workbook = await aopen_by_key(sheet_id)
