@@ -19,6 +19,7 @@ from shared.sheets.recruitment import (
     afetch_reports_tab,
     get_reports_tab_name,
 )
+from modules.recruitment.reporting.destinations import get_report_destination_id
 from modules.recruitment.reporting.open_ticket_report import (
     send_currently_open_tickets_report,
 )
@@ -58,17 +59,6 @@ def _scheduled_time() -> time:
             "invalid REPORT_DAILY_POST_TIME %r; falling back to 09:30", raw, exc_info=True
         )
         return time(hour=9, minute=30, tzinfo=UTC)
-
-
-def _destination_channel_id() -> Optional[int]:
-    raw = os.getenv("REPORT_RECRUITERS_DEST_ID", "").strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        log.warning("invalid REPORT_RECRUITERS_DEST_ID=%r", raw)
-        return None
 
 
 def _role_mentions() -> Sequence[str]:
@@ -453,7 +443,7 @@ async def _log_event(
     user_id: Optional[int] = None,
     note: Optional[str] = None,
 ) -> None:
-    dest_id = _destination_channel_id() or 0
+    dest_id = get_report_destination_id() or 0
     guild_id: Optional[int] = None
     guild: Optional[discord.Guild] = None
     if dest_id:
@@ -490,7 +480,7 @@ async def _log_event(
 
 
 async def post_daily_recruiter_update(bot: discord.Client) -> Tuple[bool, str]:
-    dest_id = _destination_channel_id()
+    dest_id = get_report_destination_id()
     if not dest_id:
         return False, "dest-missing"
 
@@ -570,7 +560,7 @@ async def ensure_scheduler_started(bot: discord.Client) -> None:
             scheduler_daily_recruiter_update.cancel()
         return
 
-    if not _destination_channel_id():
+    if not get_report_destination_id():
         if scheduler_daily_recruiter_update.is_running():
             scheduler_daily_recruiter_update.cancel()
         return
