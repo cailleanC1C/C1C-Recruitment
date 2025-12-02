@@ -71,6 +71,7 @@ from shared.sheets.async_core import (
     afetch_records,
 )
 from shared.sheets.recruitment import get_reports_tab_name
+from modules.common.config_sheets import SHEET_TARGETS, SheetTarget
 
 from c1c_coreops.config import CoreOpsSettings, load_coreops_settings, normalize_command_text
 from c1c_coreops.prefix import detect_admin_bang_command
@@ -233,16 +234,20 @@ def _is_bang_eligible(cmd: commands.Command[Any, Any, Any]) -> bool:
 @dataclass(frozen=True)
 class _ChecksheetSheetTarget:
     label: str
+    context: str
     sheet_id_key: str
     config_tab_key: str
     sheet_id: str
     config_tab: str
 
 
-_CHECKSHEET_SHEET_CONFIGS: Tuple[Tuple[str, str, str], ...] = (
-    ("Recruitment", "RECRUITMENT_SHEET_ID", "RECRUITMENT_CONFIG_TAB"),
-    ("Onboarding", "ONBOARDING_SHEET_ID", "ONBOARDING_CONFIG_TAB"),
-)
+def _config_tab_key_for_target(target: SheetTarget) -> str:
+    suffix = "SHEET_ID"
+    if target.sheet_id_key.endswith(suffix):
+        return f"{target.sheet_id_key[:-len(suffix)]}CONFIG_TAB"
+    if target.context:
+        return f"{target.context.upper()}_CONFIG_TAB"
+    return "CONFIG_TAB"
 
 
 def resolve_ops_log_channel_id(
@@ -1994,6 +1999,7 @@ class CoreOpsCog(commands.Cog):
         config_headers_label = self._format_config_headers_label(discovery.header_names)
         tab_names = list(discovery.tabs)
 
+        allow_config_fallback = target.context not in {"recruitment", "onboarding", "milestones"}
         sanitized_tabs_for_log = [sanitize_text(name) for name in tab_names]
         joined = ", ".join(sanitized_tabs_for_log)
         if len(joined) > 120:
@@ -2009,6 +2015,9 @@ class CoreOpsCog(commands.Cog):
             logger.info("[checksheet] no *_TAB rows found in Config")
             warning = f"⚠️ No tabs listed in '{config_tab_display}'"
             warnings.append(warning)
+
+            if allow_config_fallback:
+                tab_names.append(config_tab_display)
 
         if target.sheet_id_key == "RECRUITMENT_SHEET_ID":
             reports_config = discovery.tab_map.get("REPORTS_TAB")
@@ -2101,7 +2110,9 @@ class CoreOpsCog(commands.Cog):
     def _build_checksheet_targets(self) -> Sequence[_ChecksheetSheetTarget]:
         snapshot = get_config_snapshot()
         targets: list[_ChecksheetSheetTarget] = []
-        for label, sheet_key, config_key in _CHECKSHEET_SHEET_CONFIGS:
+        for target in SHEET_TARGETS:
+            sheet_key = target.sheet_id_key
+            config_key = _config_tab_key_for_target(target)
             raw_id = snapshot.get(sheet_key)
             sheet_id = str(raw_id).strip() if isinstance(raw_id, str) else str(raw_id or "").strip()
             raw_config = snapshot.get(config_key)
@@ -2110,7 +2121,8 @@ class CoreOpsCog(commands.Cog):
             )
             targets.append(
                 _ChecksheetSheetTarget(
-                    label=label,
+                    label=target.label,
+                    context=target.context,
                     sheet_id_key=sheet_key,
                     config_tab_key=config_key,
                     sheet_id=sheet_id,
@@ -2563,8 +2575,11 @@ class CoreOpsCog(commands.Cog):
         else:
             meta = {}
 
-        def _sheet_entry(slug: str, *, key: str, label: str, fallback_index: int) -> Dict[str, object]:
-            raw_value = snapshot.get(key)
+        def _sheet_entry(target: SheetTarget, *, fallback_index: int) -> Dict[str, object]:
+            slug = target.context or target.label.lower()
+            label = target.label
+            key = target.sheet_id_key
+            raw_value = snapshot.get(key) if isinstance(snapshot, Mapping) else None
             if isinstance(raw_value, str):
                 sheet_id = raw_value.strip()
             elif raw_value is None:
@@ -2591,10 +2606,8 @@ class CoreOpsCog(commands.Cog):
             return entry
 
         sheet_entries = [
-            _sheet_entry("recruitment", key="RECRUITMENT_SHEET_ID", label="Recruitment Sheet", fallback_index=1),
-            _sheet_entry("onboarding", key="ONBOARDING_SHEET_ID", label="Onboarding Sheet", fallback_index=2),
-            _sheet_entry("milestones", key="MILESTONES_SHEET_ID", label="Milestones Sheet", fallback_index=3),
-            _sheet_entry("leagues", key="LEAGUES_SHEET_ID", label="Leagues Sheet", fallback_index=4),
+            _sheet_entry(target, fallback_index=index)
+            for index, target in enumerate(SHEET_TARGETS, start=1)
         ]
 
         snapshot_mapping: Mapping[str, object] | None
