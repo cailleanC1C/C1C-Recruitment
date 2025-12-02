@@ -7,7 +7,6 @@ import logging
 import math
 import os
 from dataclasses import dataclass
-from functools import partial
 from typing import Iterable, List
 
 import discord
@@ -302,9 +301,7 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         try:
-            gid = await loop.run_in_executor(
-                None, partial(get_tab_gid, spreadsheet_id, tab_name)
-            )
+            gid = await loop.run_in_executor(None, get_tab_gid, spreadsheet_id, tab_name)
         except Exception as exc:
             record_failure("gid lookup failed")
             log.error(
@@ -330,19 +327,15 @@ async def run_mirralith_overview_job(bot: discord.Client, trigger: str = "schedu
             continue
 
         try:
-            png_bytes = await loop.run_in_executor(
-                None,
-                partial(
-                    export_pdf_as_png,
-                    spreadsheet_id,
-                    gid,
-                    range_value,
-                    log_context={
-                        "label": spec.label,
-                        "tab": tab_name,
-                        "range": range_value,
-                    },
-                ),
+            png_bytes = await export_pdf_as_png(
+                spreadsheet_id,
+                gid,
+                range_value,
+                log_context={
+                    "label": spec.label,
+                    "tab": tab_name,
+                    "range": range_value,
+                },
             )
         except Exception:
             record_failure("export exception")

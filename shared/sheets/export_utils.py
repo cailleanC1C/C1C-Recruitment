@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -27,6 +28,42 @@ if _pdf2image_spec is not None:
     _HAS_PDF2IMAGE = callable(convert_from_bytes)
 
 GOOGLE_EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export"
+
+
+def _export_delay_seconds() -> float:
+    """
+    Read SHEETS_EXPORT_DELAY_MS from the environment and return the delay in seconds.
+
+    Empty / missing / invalid / <= 0 -> 0.0 (no delay)
+    """
+
+    raw = os.getenv("SHEETS_EXPORT_DELAY_MS", "").strip()
+    if not raw:
+        return 0.0
+    try:
+        ms = int(raw)
+    except ValueError:
+        return 0.0
+    if ms <= 0:
+        return 0.0
+    return ms / 1000.0
+
+
+_EXPORT_DELAY_SECONDS: float = _export_delay_seconds()
+
+
+async def _sleep_after_export(label: str | None) -> None:
+    """
+    Optional pacing hook for all exports.
+
+    This keeps Mirralith / Leagues export jobs from hammering the Google API when they
+    render many boards in sequence.
+    """
+
+    if _EXPORT_DELAY_SECONDS <= 0:
+        return
+
+    await asyncio.sleep(_EXPORT_DELAY_SECONDS)
 
 
 def _service_account_info() -> Dict[str, Any]:
@@ -97,7 +134,7 @@ def _convert_pdf_to_png(pdf_bytes: bytes) -> bytes | None:
         return None
 
 
-def export_pdf_as_png(
+def _export_pdf_as_png_sync(
     sheet_id: str,
     gid: str | int | None,
     cell_range: str,
@@ -147,3 +184,26 @@ def export_pdf_as_png(
         return None
 
     return _convert_pdf_to_png(pdf_content)
+
+
+async def export_pdf_as_png(
+    sheet_id: str,
+    gid: str | int | None,
+    cell_range: str,
+    *,
+    log_context: dict[str, Any] | None = None,
+) -> bytes | None:
+    label = ""
+    if log_context:
+        label = str(log_context.get("label", ""))
+
+    try:
+        return await asyncio.to_thread(
+            _export_pdf_as_png_sync,
+            sheet_id,
+            gid,
+            cell_range,
+            log_context=log_context,
+        )
+    finally:
+        await _sleep_after_export(label)
