@@ -12,6 +12,9 @@ Date: 2025-12-01
   - Reads league header/body specs from the `C1C_Leagues` sheet Config tab (`LEAGUES_SHEET_ID`/`LEAGUES_CONFIG_TAB`).
   - Sends Monday and Wednesday reminders via scheduled jobs; Wednesday stores the message ID for 👍 confirmation by `LEAGUE_ADMIN_IDS`.
   - Runs an atomic posting pipeline that exports all ranges to PNGs, posts to the three league threads, and then drops a single announcement into `ANNOUNCEMENT_CHANNEL_ID`.
+  - Treats all league board counts as config-driven: any `LEAGUE_<SLUG>_<N>` rows present in the Config tab are exported and posted in numeric order.
+  - Requires each configured league to have a header and at least one board; fixed per-league counts are no longer enforced in code.
+  - Uses the header posts as the anchor for announcement jump links; each board image is posted as its own message beneath the header.
 - Scheduler wiring uses `LEAGUES_REMINDER_MONDAY_UTC` and `LEAGUES_REMINDER_WEDNESDAY_UTC` (UTC) with the existing Runtime scheduler; failures log softly without blocking startup.
 - No new persistence layer is introduced; state remains in ENV and the Leagues Config tab.
 
@@ -22,4 +25,4 @@ Date: 2025-12-01
 
 Status: Approved
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-02 (v0.9.7)

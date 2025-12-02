@@ -13,6 +13,9 @@ class LeaguesConfigError(RuntimeError):
 @dataclass(frozen=True)
 class LeagueSpec:
     key: str
+    slug: str
+    kind: str
+    index: int | None
     sheet_name: str
     cell_range: str
 
@@ -21,15 +24,14 @@ class LeagueSpec:
 class LeagueBundle:
     slug: str
     display_name: str
-    expected_boards: int
-    header: LeagueSpec
+    header: LeagueSpec | None
     boards: list[LeagueSpec]
 
 
-_LEAGUE_MAP: dict[str, tuple[str, int]] = {
-    "legendary": ("Legendary League", 9),
-    "rising": ("Rising Stars League", 7),
-    "storm": ("Stormforged League", 4),
+_LEAGUE_MAP: dict[str, str] = {
+    "legendary": "Legendary League",
+    "rising": "Rising Stars League",
+    "storm": "Stormforged League",
 }
 
 
@@ -108,49 +110,61 @@ def _iter_league_specs(rows: Iterable[Mapping[str, object]]) -> Iterator[LeagueS
         if normalized_key.upper().endswith("_TAB"):
             continue
 
+        slug = ""
+        upper_key = normalized_key.upper()
+        for candidate in _LEAGUE_MAP:
+            prefix = f"LEAGUE_{candidate.upper()}_"
+            if upper_key.startswith(prefix):
+                slug = candidate
+                suffix = upper_key[len(prefix) :]
+                break
+        else:
+            suffix = ""
+
+        if not slug:
+            continue
+
+        if suffix == "HEADER":
+            kind = "header"
+            index: int | None = None
+        else:
+            kind = "board"
+            try:
+                index = int(suffix)
+            except (TypeError, ValueError):
+                continue
+
         yield LeagueSpec(
             key=normalized_key,
+            slug=slug,
+            kind=kind,
+            index=index,
             sheet_name=sheet_name,
             cell_range=cell_range,
         )
 
 
-def _split_suffix(key: str, prefix: str) -> int | None:
-    remainder = key[len(prefix) :]
-    try:
-        return int(remainder)
-    except (TypeError, ValueError):
-        return None
-
-
 def _bundle_for_slug(specs: list[LeagueSpec], slug: str) -> LeagueBundle | None:
-    display_name, expected = _LEAGUE_MAP[slug]
-    prefix = f"LEAGUE_{slug.upper()}_"
-    header_key = f"{prefix}HEADER"
-    header = next((spec for spec in specs if spec.key.upper() == header_key), None)
-
+    display_name = _LEAGUE_MAP[slug]
+    header: LeagueSpec | None = None
     boards: list[LeagueSpec] = []
+
     for spec in specs:
-        upper_key = spec.key.upper()
-        if not upper_key.startswith(prefix):
+        if spec.slug != slug:
             continue
-        suffix = upper_key[len(prefix) :]
-        if suffix == "HEADER":
-            continue
-        index = _split_suffix(upper_key, prefix)
-        if index is None:
-            continue
-        boards.append(spec)
+        if spec.kind == "header":
+            header = spec
+        elif spec.kind == "board":
+            boards.append(spec)
 
-    boards.sort(key=lambda item: _split_suffix(item.key.upper(), prefix) or 0)
-
-    if header is None:
+    if header is None and not boards:
         return None
+
+    boards.sort(key=lambda item: item.index or 0)
 
     return LeagueBundle(
         slug=slug,
         display_name=display_name,
-        expected_boards=expected,
         header=header,
         boards=boards,
     )
@@ -160,18 +174,30 @@ def load_league_bundles_from_rows(rows: Iterable[Mapping[str, object]]) -> list[
     specs = list(_iter_league_specs(rows))
 
     bundles: list[LeagueBundle] = []
-    missing: list[str] = []
+    missing_headers: list[str] = []
+    empty_boards: list[str] = []
 
     for slug in ("legendary", "rising", "storm"):
         bundle = _bundle_for_slug(specs, slug)
         if bundle is None:
-            missing.append(slug)
+            missing_headers.append(slug)
             continue
+
+        if bundle.header is None:
+            missing_headers.append(slug)
+        elif not bundle.boards:
+            empty_boards.append(slug)
+
         bundles.append(bundle)
 
-    if missing:
-        missing_labels = ", ".join(missing)
-        raise LeaguesConfigError(f"config missing headers for: {missing_labels}")
+    if missing_headers:
+        raise LeaguesConfigError(
+            f"config missing headers for: {', '.join(missing_headers)}"
+        )
+    if empty_boards:
+        raise LeaguesConfigError(
+            f"config has no boards for: {', '.join(empty_boards)}"
+        )
 
     return bundles
 
