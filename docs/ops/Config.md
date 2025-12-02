@@ -91,6 +91,11 @@ sync modules remain available for non-async scripts and cache warmers.
 | `WHO_WE_ARE_CHANNEL_ID` | snowflake | — | Discord channel ID used by the `!whoweare` role map command. |
 | `PANEL_THREAD_MODE` | enum | `same` | `same` posts panels in the invoking channel; `fixed` routes to a dedicated thread. |
 | `PANEL_FIXED_THREAD_ID` | snowflake | — | Thread used when `PANEL_THREAD_MODE=fixed`. |
+| `RAID_ROLE_ID` | snowflake | — | Raid role granted to active clan members. |
+| `WANDERING_SOULS_ROLE_ID` | snowflake | — | Role for members without clan tags. |
+| `VISITOR_ROLE_ID` | snowflake | — | Visitor role used during welcome ticketing. |
+| `CLAN_ROLE_IDS` | csv | — | Comma-separated list of all clan-tag role IDs. |
+| `ADMIN_AUDIT_DEST_ID` | snowflake | — | Channel or thread receiving the housekeeping role/visitor audit. |
 | `REPORT_RECRUITERS_DEST_ID` | snowflake | — | Channel or thread receiving the Daily Recruiter Update. |
 
 ### C1C Leagues autoposter
@@ -320,4 +325,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-02 (v0.9.8.2)

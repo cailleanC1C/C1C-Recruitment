@@ -29,11 +29,13 @@ __all__ = [
     "get_notify_ping_role_id",
     "get_recruiters_channel_id",
     "get_recruiters_thread_id",
+    "get_report_recruiters_dest_id",
     "get_welcome_general_channel_id",
     "get_welcome_channel_id",
     "get_promo_channel_id",
     "get_role_map_channel_id",
     "get_who_we_are_channel_id",
+    "get_admin_audit_dest_id",
     "get_refresh_times",
     "get_refresh_timezone",
     "get_gspread_credentials",
@@ -47,6 +49,10 @@ __all__ = [
     "get_admin_role_ids",
     "get_staff_role_ids",
     "get_recruiter_role_ids",
+    "get_clan_role_ids",
+    "get_raid_role_id",
+    "get_wandering_souls_role_id",
+    "get_visitor_role_id",
     "get_recruitment_coordinator_role_ids",
     "get_guardian_knight_role_ids",
     "get_lead_role_ids",
@@ -457,11 +463,17 @@ def _load_config() -> Dict[str, object]:
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
         "STAFF_ROLE_IDS": _int_set(os.getenv("STAFF_ROLE_IDS")),
         "RECRUITER_ROLE_IDS": _int_set(os.getenv("RECRUITER_ROLE_IDS")),
+        "CLAN_ROLE_IDS": _int_set(os.getenv("CLAN_ROLE_IDS")),
+        "RAID_ROLE_ID": _first_int(os.getenv("RAID_ROLE_ID")),
+        "WANDERING_SOULS_ROLE_ID": _first_int(os.getenv("WANDERING_SOULS_ROLE_ID")),
+        "VISITOR_ROLE_ID": _first_int(os.getenv("VISITOR_ROLE_ID")),
         "LEAD_ROLE_IDS": _int_set(os.getenv("LEAD_ROLE_IDS")),
         "CLAN_LEAD_IDS": _int_set(os.getenv("CLAN_LEAD_IDS")),
         "RECRUITERS_THREAD_ID": _first_int(os.getenv("RECRUITERS_THREAD_ID")),
         "RECRUITERS_CHANNEL_ID": _first_int(os.getenv("RECRUITERS_CHANNEL_ID")),
+        "REPORT_RECRUITERS_DEST_ID": _first_int(os.getenv("REPORT_RECRUITERS_DEST_ID")),
         "LOGGING_CHANNEL_ID": _first_int(os.getenv("LOGGING_CHANNEL_ID")),
+        "ADMIN_AUDIT_DEST_ID": _first_int(os.getenv("ADMIN_AUDIT_DEST_ID")),
         "RECRUITMENT_INTERACT_CHANNEL": _first_int(
             os.getenv("RECRUITMENT_INTERACT_CHANNEL")
         ),
@@ -716,12 +728,20 @@ def get_notify_ping_role_id() -> Optional[int]:
     return _optional_id("NOTIFY_PING_ROLE_ID")
 
 
+def get_admin_audit_dest_id() -> Optional[int]:
+    return _optional_id("ADMIN_AUDIT_DEST_ID")
+
+
 def get_recruiters_channel_id() -> Optional[int]:
     return _optional_id("RECRUITERS_CHANNEL_ID")
 
 
 def get_recruiters_thread_id() -> Optional[int]:
     return _optional_id("RECRUITERS_THREAD_ID")
+
+
+def get_report_recruiters_dest_id() -> Optional[int]:
+    return _optional_id("REPORT_RECRUITERS_DEST_ID")
 
 
 def get_recruitment_interact_channel_id() -> Optional[int]:
@@ -875,6 +895,22 @@ def get_staff_role_ids() -> Set[int]:
 
 def get_recruiter_role_ids() -> Set[int]:
     return _role_set("RECRUITER_ROLE_IDS")
+
+
+def get_clan_role_ids() -> Set[int]:
+    return _role_set("CLAN_ROLE_IDS")
+
+
+def get_raid_role_id() -> Optional[int]:
+    return _optional_id("RAID_ROLE_ID")
+
+
+def get_wandering_souls_role_id() -> Optional[int]:
+    return _optional_id("WANDERING_SOULS_ROLE_ID")
+
+
+def get_visitor_role_id() -> Optional[int]:
+    return _optional_id("VISITOR_ROLE_ID")
 
 
 def get_recruitment_coordinator_role_ids() -> Set[int]:

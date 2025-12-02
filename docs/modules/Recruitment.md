@@ -23,7 +23,10 @@ determine which surfaces boot.
 active holds, derive `AF/AH/AI` in `CLANS_TAB`, and feed the 🧭 placement log.
 - **Reporting.** Implements the Daily Recruiter Update scheduler and the
 `!report recruiters` command. Both read the `REPORTS_TAB` worksheet and log to
-`LOG_CHANNEL_ID` for every post.
+`LOG_CHANNEL_ID` for every post. A companion "Currently Open Tickets" digest
+posts alongside the recruiter update using the same destination thread, and the
+same scheduler triggers the housekeeping role/visitor audit for the admin
+summary channel.
 - **Thread tooling.** Supplies helpers used by Placement (`!reserve`) and
 Welcome (thread close handlers) so that seat math and recruiter embeds use the
 same adapters.
@@ -170,4 +173,4 @@ event loop.
 - [`docs/adr/ADR-0017-Reservations-Placement-Schema.md`](../adr/ADR-0017-Reservations-Placement-Schema.md)
 - [`docs/adr/ADR-0018_DailyRecruiterUpdate.md`](../adr/ADR-0018_DailyRecruiterUpdate.md)
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-12-02 (v0.9.8.2)

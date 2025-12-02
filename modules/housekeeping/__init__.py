@@ -4,4 +4,5 @@ __all__ = [
     "cleanup",
     "keepalive",
     "mirralith_overview",
+    "role_audit",
 ]
