@@ -5,7 +5,6 @@ import datetime as dt
 import io
 import logging
 import os
-from functools import partial
 from typing import Iterable
 
 import discord
@@ -432,19 +431,15 @@ class LeaguesCog(commands.Cog):
             return f"{slug.title()}: gid missing for {spec.sheet_name}"
 
         try:
-            png_bytes = await loop.run_in_executor(
-                None,
-                partial(
-                    export_pdf_as_png,
-                    sheet_id,
-                    gid,
-                    spec.cell_range,
-                    log_context={
-                        "label": spec.key,
-                        "tab": spec.sheet_name,
-                        "range": spec.cell_range,
-                    },
-                ),
+            png_bytes = await export_pdf_as_png(
+                sheet_id,
+                gid,
+                spec.cell_range,
+                log_context={
+                    "label": spec.key,
+                    "tab": spec.sheet_name,
+                    "range": spec.cell_range,
+                },
             )
         except Exception:
             log.exception("export failed", extra={"key": spec.key, "tab": spec.sheet_name})

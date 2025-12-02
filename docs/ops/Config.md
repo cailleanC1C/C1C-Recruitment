@@ -62,6 +62,7 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 | `GSHEETS_RETRY_FACTOR` | float | `2.0` | Multiplier for Sheets exponential backoff. |
 | `SHEETS_CACHE_TTL_SEC` | int | `900` | TTL for cached worksheet values. |
 | `SHEETS_CONFIG_CACHE_TTL_SEC` | int | matches `SHEETS_CACHE_TTL_SEC` | TTL for cached worksheet metadata; defaults to the value above. |
+| `SHEETS_EXPORT_DELAY_MS` | int | `0` | Optional throttle (milliseconds) applied after each Google Sheets/Drive export (PDF/PNG). |
 
 Async handlers must import Sheets helpers from `shared.sheets.async_facade`; the
 sync modules remain available for non-async scripts and cache warmers.
@@ -325,4 +326,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-02 (v0.9.8.2)
+Doc last updated: 2025-12-05 (v0.9.8.3)
