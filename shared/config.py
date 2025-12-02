@@ -451,6 +451,7 @@ def _load_config() -> Dict[str, object]:
         "RECRUITMENT_SHEET_ID": (os.getenv("RECRUITMENT_SHEET_ID") or "").strip(),
         "ONBOARDING_SHEET_ID": (os.getenv("ONBOARDING_SHEET_ID") or "").strip(),
         "MILESTONES_SHEET_ID": (os.getenv("MILESTONES_SHEET_ID") or "").strip(),
+        "LEAGUES_SHEET_ID": (os.getenv("LEAGUES_SHEET_ID") or "").strip(),
         "ONBOARDING_TAB": (os.getenv("ONBOARDING_TAB") or "").strip(),
         "ONBOARDING_SESSIONS_TAB": (os.getenv("ONBOARDING_SESSIONS_TAB") or "").strip(),
         "ADMIN_ROLE_IDS": _int_set(os.getenv("ADMIN_ROLE_IDS")),
