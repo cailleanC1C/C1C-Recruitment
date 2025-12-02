@@ -2593,6 +2593,7 @@ class CoreOpsCog(commands.Cog):
             _sheet_entry("recruitment", key="RECRUITMENT_SHEET_ID", label="Recruitment Sheet", fallback_index=1),
             _sheet_entry("onboarding", key="ONBOARDING_SHEET_ID", label="Onboarding Sheet", fallback_index=2),
             _sheet_entry("milestones", key="MILESTONES_SHEET_ID", label="Milestones Sheet", fallback_index=3),
+            _sheet_entry("leagues", key="LEAGUES_SHEET_ID", label="Leagues Sheet", fallback_index=4),
         ]
 
         snapshot_mapping: Mapping[str, object] | None
