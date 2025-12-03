@@ -5,7 +5,7 @@ import datetime as dt
 import io
 import logging
 import os
-from typing import Iterable, Mapping
+from typing import TYPE_CHECKING, Iterable, Mapping
 
 import discord
 from discord.ext import commands
@@ -18,6 +18,9 @@ from modules.community.leagues.config import (
 )
 from shared.logfmt import channel_label, user_label
 from shared.sheets.export_utils import export_pdf_as_png, get_tab_gid
+
+if TYPE_CHECKING:
+    from modules.community.reaction_roles import ReactionRolesCog
 
 log = logging.getLogger("c1c.community.leagues")
 
@@ -346,8 +349,17 @@ class LeaguesCog(commands.Cog):
                 posted_messages.append(message)
 
         announcement_text = self._build_announcement(bundles, jump_links)
+        announcement_embed = discord.Embed(description=announcement_text)
+        announcement_embed.set_footer(
+            text=(
+                "Want to keep up to date with our C1C League Leaderboards? Click the 🏆 emoji to subscribe. "
+                "To unsubscribe, remove your reaction."
+            )
+        )
+
+        reaction_roles_attached: int | None = None
         try:
-            await announcement_channel.send(announcement_text)
+            announcement_message = await announcement_channel.send(embed=announcement_embed)
         except Exception as exc:
             log.exception("leagues announcement failed")
             await self._post_status(
@@ -356,6 +368,25 @@ class LeaguesCog(commands.Cog):
                 trigger=trigger,
             )
             return
+        else:
+            try:
+                rr: ReactionRolesCog | None = self.bot.get_cog("ReactionRolesCog")  # type: ignore[name-defined]
+                if rr is not None:
+                    reaction_roles_attached = await rr.attach_to_message(
+                        announcement_message, key="leagues"
+                    )
+            except Exception:
+                reaction_roles_attached = None
+                log.exception("leagues reaction-roles wiring failed")
+
+        log.info(
+            "📣 leagues: announcement posted",
+            extra={
+                "images": len(posted_messages),
+                "announcement_id": getattr(announcement_message, "id", None),
+                "reaction_roles": {"key": "leagues", "attached": reaction_roles_attached},
+            },
+        )
 
         await self._post_status(
             status_channel,

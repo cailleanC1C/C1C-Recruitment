@@ -71,4 +71,4 @@ Each module doc explains what that subsystem does and how it fits into the bigge
   - `docs/contracts/CollaborationContract.md`
   - ADRs in `docs/adr/`
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-02 (v0.9.8.2)
