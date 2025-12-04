@@ -48,6 +48,7 @@ jobs:
             --summary guardrails-summary.md \
             --json guardrails-results.json \
             --base-ref "origin/${{ github.base_ref || 'main' }}" || exit_code=$?
+          git fetch origin main --depth=1 || exit_code=$?
           if [ -f "$status_file" ]; then
             echo "guardrails_status=$(cat "$status_file")" >> "$GITHUB_OUTPUT"
           else
