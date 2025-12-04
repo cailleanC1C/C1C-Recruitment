@@ -20,7 +20,7 @@ _Module note:_ CoreOps now resides in `packages/c1c-coreops` via `c1c_coreops.*`
 | `!config` | ✅ | Admin embed of the live registry with guild names and sheet linkage. | `!config` |
 | `!cfg [KEY]` | ✅ | Read-only snapshot of a merged config key with the source sheet tail (defaults to ONBOARDING_TAB). | `!cfg [KEY]` |
 | `!digest` | ✅ | Post the ops digest with cache age, next run, retries, and actor. | `!digest` |
-| `!env` | ✅ | Show masked environment snapshot for quick sanity checks. | `!env` |
+| `!env` | ✅ | Four-page env overview with Feature Toggles, warnings, and grouped Channels/Roles/Sheets+Config. | `!env` |
 | `!health` | ✅ | Inspect cache/watchdog telemetry pulled from the public API. | `!health` |
 | `!checksheet` | ✅ | Validate Sheets tabs, named ranges, and headers (`--debug` preview optional). | `!checksheet [--debug]` |
 | `!refresh [bucket]` | ✅ | Admin bang alias for single-bucket refresh with the same telemetry. | `!refresh [bucket]` |
@@ -67,4 +67,4 @@ Shard tracker buttons are owner-only, use shard-emoji tab selectors, and keep a 
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-03 (v0.9.7)

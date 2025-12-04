@@ -30,6 +30,16 @@ _GLOBAL_WARNINGS_SENT: set[str] = set()
 _INVALID_WARNINGS_SENT: set[str] = set()
 _MISSING_WARNINGS_SENT: set[str] = set()
 
+_DEFAULT_TRUE_FEATURES = {
+    "housekeeping_enabled",
+    "mirralith_overview_enabled",
+    "ops_permissions_enabled",
+    "ops_watchers_enabled",
+    "promo_watcher_enabled",
+    "resume_command_enabled",
+    "welcome_watcher_enabled",
+}
+
 _TRUE_VALUES = {"true", "1"}
 _FALSE_VALUES = {"false", "0"}
 
@@ -222,6 +232,9 @@ async def refresh() -> None:
                                 "Feature toggle worksheet returned no rows; treating all features as disabled."
                             )
                             await _warn_global_once("no-rows", failure_reason)
+
+        for key in _DEFAULT_TRUE_FEATURES:
+            feature_values.setdefault(key, True)
 
         _FEATURE_VALUES = feature_values
         _LOADED_AT = now

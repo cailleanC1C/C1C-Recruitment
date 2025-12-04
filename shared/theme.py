@@ -41,6 +41,10 @@ class _ThemeColors:
     def c1c_blue(self) -> discord.Colour:
         return self._resolve("c1c_blue", 0x1F8BFF)
 
+    @property
+    def admin(self) -> discord.Colour:
+        return self._resolve("admin", 0xF200E5)
+
 
 colors = _ThemeColors()
 

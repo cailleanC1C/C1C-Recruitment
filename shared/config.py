@@ -598,15 +598,40 @@ cfg = _ConfigFacade()
 
 
 class _ConfigFeatures:
-    __slots__ = ("shard_tracker_enabled",)
+    __slots__ = (
+        "housekeeping_enabled",
+        "mirralith_overview_enabled",
+        "ops_permissions_enabled",
+        "ops_watchers_enabled",
+        "promo_watcher_enabled",
+        "resume_command_enabled",
+        "shard_tracker_enabled",
+        "welcome_watcher_enabled",
+    )
 
     def __init__(self) -> None:
+        self.housekeeping_enabled = True
+        self.mirralith_overview_enabled = True
+        self.ops_permissions_enabled = True
+        self.ops_watchers_enabled = True
+        self.promo_watcher_enabled = True
+        self.resume_command_enabled = True
         self.shard_tracker_enabled = False
+        self.welcome_watcher_enabled = True
 
     def update(self, toggles: Mapping[str, bool] | None = None) -> None:
         values = toggles or {}
+        self.housekeeping_enabled = bool(values.get("housekeeping_enabled", True))
+        self.mirralith_overview_enabled = bool(
+            values.get("mirralith_overview_enabled", True)
+        )
+        self.ops_permissions_enabled = bool(values.get("ops_permissions_enabled", True))
+        self.ops_watchers_enabled = bool(values.get("ops_watchers_enabled", True))
+        self.promo_watcher_enabled = bool(values.get("promo_watcher_enabled", True))
+        self.resume_command_enabled = bool(values.get("resume_command_enabled", True))
         candidates = ("shardtracker", "shard_tracker", "shard_tracker_enabled")
         self.shard_tracker_enabled = any(bool(values.get(key)) for key in candidates)
+        self.welcome_watcher_enabled = bool(values.get("welcome_watcher_enabled", True))
 
 
 features = _ConfigFeatures()

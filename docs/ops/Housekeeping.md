@@ -3,6 +3,8 @@
 Housekeeping centralizes recurring maintenance tasks that keep panel threads clean
 and long-lived threads active without manual nudges.
 
+- Feature toggles: `housekeeping_enabled` gates cleanup/keepalive scheduling; `mirralith_overview_enabled` also guards Mirralith overview posting.
+
 ## Cleanup
 - **Scope.** Deletes every non-pinned message in configured threads so panels reset
   each run. Pinned messages are never removed.
@@ -47,4 +49,4 @@ and long-lived threads active without manual nudges.
 AutoMod/Guardian Knight bridging will land in this module in a future phase to
 keep moderation actions aligned with housekeeping cadences.
 
-Doc last updated: 2025-12-02 (v0.9.8.2)
+Doc last updated: 2025-12-03 (v0.9.7)

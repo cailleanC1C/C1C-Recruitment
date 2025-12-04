@@ -18,6 +18,12 @@ Meta: Cache age 42s · Next refresh 02:15 UTC · Actor startup
 - The meta overlay surfaces cache age, next refresh, and actor pulled from the public telemetry snapshot.
 - Date/time fields are removed entirely. Embed footers continue to show `Bot vX.Y.Z · CoreOps vA.B.C` with no timestamp block.
 
+## `!env` overview
+
+- The `!env` command now renders four pages in one reply (Overview, Channels, Roles, Sheets & Config) using the admin colour.
+- Page 1 surfaces Feature Toggles and a Warnings block when values are missing or Discord lookups fail (max 10 lines).
+- When warnings exist, a single `⚠ env:missing_config` log line captures the affected keys for quick investigation.
+
 ## Environment keys
 
 > The keys below are authoritative. `.env.example` mirrors this list; CI enforces parity.
@@ -264,6 +270,9 @@ Feature Toggles:
 - `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK` — control welcome watcher activation.
 - `PROMO_ENABLED`, `ENABLE_PROMO_HOOK` — control promo watcher activation (no dialogs yet).
 - `welcome_dialog`, `promo_dialog` — dialog/panel toggles; promo dialog is reserved for future onboarding steps.
+- `housekeeping_enabled`, `mirralith_overview_enabled` — gate cleanup/keepalive cadences and the Mirralith overview autoposter scheduler.
+- `ops_permissions_enabled`, `ops_watchers_enabled` — gate Permissions Sync registration and watcher telemetry commands.
+- `welcome_watcher_enabled`, `promo_watcher_enabled`, `resume_command_enabled` — gate onboarding watcher registration and `!onb resume`; these default to ON when rows are missing so existing deployments remain unchanged.
 
 ### Milestones sheet keys
 - `SHARD_MERCY_TAB` — worksheet name that stores the Shard & Mercy tracker rows
@@ -295,6 +304,13 @@ Feature Toggles:
   welcome_dialog,TRUE
   placement_target_select,TRUE
   placement_reservations,TRUE
+  housekeeping_enabled,TRUE
+  mirralith_overview_enabled,TRUE
+  ops_permissions_enabled,TRUE
+  ops_watchers_enabled,TRUE
+  welcome_watcher_enabled,TRUE
+  promo_watcher_enabled,TRUE
+  resume_command_enabled,TRUE
     SERVER_MAP,TRUE
     WELCOME_ENABLED,TRUE
     ENABLE_WELCOME_HOOK,TRUE
@@ -305,7 +321,7 @@ Feature Toggles:
 **Behavior**
 
 - Missing tab or header ⇒ all features disabled; emits one admin-ping warning in the runtime log channel.
-- Missing feature row ⇒ that feature disabled; logs one admin-ping warning the first time the key is evaluated.
+- Missing feature row ⇒ that feature disabled; logs one admin-ping warning the first time the key is evaluated. Housekeeping/ops/onboarding loader toggles (`housekeeping_enabled`, `mirralith_overview_enabled`, `ops_permissions_enabled`, `ops_watchers_enabled`, `welcome_watcher_enabled`, `promo_watcher_enabled`, `resume_command_enabled`) default to ON when absent so current deployments remain stable.
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
 - The `recruitment_reports` row powers the Daily Recruiter Update (scheduler + manual command). The `placement_*` rows still control stub modules that only log load state.
@@ -326,4 +342,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-05 (v0.9.8.3)
+Doc last updated: 2025-12-03 (v0.9.7)
