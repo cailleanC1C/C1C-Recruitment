@@ -81,6 +81,7 @@ Collaboration Contract and core infra conventions.
 * Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
 
 ## Community features
+* [`Community Reaction Roles`](community_reaction_roles.md) – sheet-driven reaction role wiring with optional channel/thread scoping.
 * C1C Leagues Autoposter – weekly boards & announcement for Legendary, Rising Stars, Stormforged.
 
 ## Module Deep Dives `/docs/modules/` 
@@ -113,33 +114,7 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
-
-Doc last updated: 2025-12-01 (v0.9.8.2)
-Testing & Validation
- Run the full test suite: pytest
-
- Add / update targeted tests for promo summary embed formatting.
-
- Manually test all three promo flows in a test environment:
-
-Create one ticket for each of promo.r, promo.m, promo.l with representative answers, including:
-
-Siege “no” and Siege “yes with detail”
-
-Different CvC priorities
-
-Power < 1k, ~50k, and > 1m
-
-Confirm:
-
-Sections appear in the right order.
-
-Inline pairs use •.
-
-Hide rules and numeric formatting match the spec.
-
-Siege participation always appears; Siege detail respects the participation answer.
+Doc last updated: 2025-12-02 (v0.9.8.2)
 
 [meta]
 labels: codex, comp:shared, comp:modules, comp:ops, tests, docs, enhancement, P2
