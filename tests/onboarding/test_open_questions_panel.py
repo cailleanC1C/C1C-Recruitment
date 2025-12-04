@@ -462,7 +462,7 @@ def test_launch_empty_cache_logs_failure(monkeypatch: pytest.MonkeyPatch) -> Non
         await button.callback(interaction)
 
         controller.get_or_load_questions.assert_awaited_once()
-        controller.prompt_retry.assert_awaited_once()
+        controller.prompt_retry.assert_not_awaited()
         assert response.deferred is True
         assert response.sent_messages == [view.ERROR_NOTICE]
         interaction.message.edit.assert_awaited_once()

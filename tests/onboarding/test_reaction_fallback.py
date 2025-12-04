@@ -250,8 +250,9 @@ def test_promo_parent_allows_dialog(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
-    join_mock.assert_not_called()
-    assert not caplog.records
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "no_trigger"
 
 
 def test_role_gate_rejected(monkeypatch, caplog):
@@ -301,9 +302,10 @@ def test_promo_trigger_starts_dialog(monkeypatch, caplog):
         )
     )
 
-    start_mock.assert_not_called()
-    join_mock.assert_not_called()
-    assert not caplog.records
+    start_mock.assert_awaited_once()
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "emoji_received"
 
 
 def test_promo_trigger_rejected_for_wrong_author(monkeypatch, caplog):
@@ -319,5 +321,6 @@ def test_promo_trigger_rejected_for_wrong_author(monkeypatch, caplog):
     )
 
     start_mock.assert_not_called()
-    join_mock.assert_not_called()
-    assert not caplog.records
+    join_mock.assert_awaited_once()
+    details = _find_log(caplog, "result")
+    assert details["result"] == "no_trigger"
