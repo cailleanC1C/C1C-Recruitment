@@ -1,4 +1,4 @@
-# **Repository Guardrails — Master Specification (UPDATED MINIMALLY)**
+# **Repository Guardrails — Master Specification**
 
 **Purpose:** Single source of truth for all constraints that govern this codebase.
 Every audit and CI check validates against this document.
@@ -6,8 +6,6 @@ Every audit and CI check validates against this document.
 ---
 
 ## **1) Repository Structure**
-
-*(All existing points S-01 to S-08 remain unchanged.)*
 
 - **S-01 Modules-First:** All features live under `modules/<domain>` (e.g., `modules/recruitment`, `modules/placement`, `modules/onboarding`). No top-level feature folders.
 - **S-02 Shared = Infra Only:** `shared/` contains cross-bot infrastructure (sheets, cache, telemetry, small pure helpers). No Discord commands, views, or RBAC logic in `shared/`.
@@ -17,18 +15,14 @@ Every audit and CI check validates against this document.
 - **S-06 Packages for Reuse:** Reusable feature-level code lives in `packages/<name>` with `pyproject.toml`. Bots import via that package, not `shared/`.
 - **S-07 Audits Live in AUDIT/:** Automated reports and scans go under `AUDIT/<YYYYMMDD>_*`. They must not modify runtime code.
 - **S-08 Init Hygiene:** Python packages must have `__init__.py`. No empty placeholder files beyond `__init__.py` and `.gitkeep`.
-
-### **S-09 AUDIT Isolation (NEW)**
-
-- CI must **ignore** all content inside `AUDIT/` (no linting, type checking, testing).
-- Runtime code must never import from `AUDIT/`.
-- Every audit under `AUDIT/<YYYYMMDD>_*` must add a pointer entry to `CHANGELOG.md`.
+- **S-09 AUDIT Isolation**
+  - CI must **ignore** all content inside `AUDIT/` (no linting, type checking, testing).
+  - Runtime code must never import from `AUDIT/`.
+  - Every audit under `AUDIT/<YYYYMMDD>_*` must add a pointer entry to `CHANGELOG.md`.
 
 ---
 
 ## **2) Coding & Behavior**
-
-*(All existing points C-01 to C-12 remain unchanged.)*
 
 - **C-01 Async I/O:** Event handlers must not block. External calls (Sheets, HTTP) are async.
 - **C-02 Logging:** Use structured logging helpers; no bare `print`. In addition to existing logging rules:
@@ -46,57 +40,29 @@ Every audit and CI check validates against this document.
 - **C-10 Config Access:** Runtime config is accessed via the common config accessor (not scattered utility readers).
 - **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
 - **C-12 No Order Targets:** Onboarding rules and evaluators must reference question IDs (no order-number or sheet-position logic).
-
-### **C-13 Render Free-Tier Constraints (NEW)**
-
-- No continuous background polling.
-- Scheduled Sheets refreshes must be limited to **≤ 3/day** unless ADR-approved.
-- Health pings must be minimal (5–10 minutes).
-- External API calls should be batched where feasible.
-
-### **C-14 Pagination Requirement (NEW)**
-
-Any message or embed that exceeds Discord limits **must paginate**. Silent truncation is not allowed.
-
-### **C-15 No Fallback Summaries (NEW)**
-
-Welcome and Promo flows must use their designed summary embeds. Fallback summaries are allowed only if explicitly ADR-approved and must never expose internal debug information.
-
-### **C-16 `!next` Behavior (NEW)**
-
-`!next` must list the next scheduled times for **all** registered modes/jobs. New scheduled jobs must automatically register with the unified scheduler so `!next` remains authoritative.
-
-### **C-17 Standard Embed Colors (NEW)**
-
-- Admin embeds: `#f200e5`
-- Recruitment embeds: `#1b8009`
-- Community embeds: `#3498db`
-  New categories/colors require ADR approval.
+- **C-13 Render Free-Tier Constraints**
+  - No continuous background polling.
+  - Scheduled Sheets refreshes must be limited to **≤ 3/day** unless ADR-approved.
+  - Health pings must be minimal (5–10 minutes).
+  - External API calls should be batched where feasible.
+- **C-14 Pagination Requirement** Any message or embed that exceeds Discord limits **must paginate**. Silent truncation is not allowed.
+- **C-15 No Fallback Summaries** Welcome and Promo flows must use their designed summary embeds. Fallback summaries are allowed only if explicitly ADR-approved and must never expose internal debug information.
+- **C-16 `!next` Behavior (NEW)** `!next` must list the next scheduled times for **all** registered modes/jobs. New scheduled jobs must automatically register with the unified scheduler so `!next` remains authoritative.
+- **C-17 Standard Embed Colors**
+  - Admin embeds: `#f200e5`
+  - Recruitment embeds: `#1b8009`
+  - Community embeds: `#3498db`
+    New categories/colors require ADR approval.
 
 ---
 
 ## **3) Feature Toggles & Config Policy**
 
-*(Existing F-01 to F-03 remain unchanged.)*
-
 - **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
 - **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
 - **F-03 Scope:** Toggles control runtime activation of recruitment modules and experiments. They do not alter infrastructure or cluster-wide settings.
-- **F-04 Current Toggles (UPDATED):**
-  The following toggles must be present in the FeatureToggles sheet and respected in code:
-
-  Existing:
-  `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`,
-  `placement_target_select`, `placement_reservations`, `clan_profile`,
-  `welcome_dialog`, `onboarding_rules_v2`, `WELCOME_ENABLED`,
-  `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`
-
-  Newly required toggles:
-  - `housekeeping_keepalive`
-  - `housekeeping_cleanup`
-  - `mirralith_autoposter`
+- **F-04 Current Toggles:** The following toggles must be present in the FeatureToggles sheet and respected in code: `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`, `placement_target_select`, `placement_reservations`, `clan_profile`, `welcome_dialog`, `onboarding_rules_v2`, `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`, `housekeeping_keepalive`, `housekeeping_cleanup`, `mirralith_autoposter`
   - Any newly introduced module must add its toggle at creation time.
-
 - **F-05 Additions:** New toggles must be added to the sheet and documented here with one-line purpose notes.
 - **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
 - **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
@@ -104,8 +70,6 @@ Welcome and Promo flows must use their designed summary embeds. Fallback summari
 ---
 
 ## **4) Documentation**
-
-*(All existing rules D-01 to D-10 remain unchanged.)*
 
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
 - **D-02 Footer Version (UPDATED):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.8.x)` (updated from the older v0.9.x footer standard).
@@ -148,8 +112,6 @@ Welcome and Promo flows must use their designed summary embeds. Fallback summari
 
 ## **5) Governance & Workflow**
 
-*(All existing points G-01 to G-09 remain unchanged.)*
-
 - **G-01 Version Control:** Versions (bot, footers, changelog) change only on explicit instruction from the owner.
 - **G-02 Codex Scope:** Codex performs only what the PR body instructs—no implicit deletions or moves.
 - **G-03 PR Metadata:** PR bodies include the `[meta]...[/meta]` block for labels and milestone.
@@ -173,6 +135,6 @@ Welcome and Promo flows must use their designed summary embeds. Fallback summari
 ---
 
 ### Verification
-Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
+Compliance script must check: structure (S), code (C), docs (D), governance (G), feature toggles (F) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
 Doc last updated: 2025-12-04 (v0.9.8.2)
