@@ -1,211 +1,190 @@
-"""Aggregate guardrails workflow runner."""
+"""Repository guardrails enforcement suite.
+
+This script implements automatable guardrails from ``docs/guardrails/RepositoryGuardrails.md``
+and produces both a human-readable audit report and a machine-readable summary that
+GitHub Actions can surface in PR comments.
+"""
 from __future__ import annotations
 
 import argparse
 import ast
 import json
 import os
-import sys
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple, Union
-from urllib import error, request
 import re
+import subprocess
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-ROOT = SCRIPT_DIR.parents[1]
-DOC_SPEC = ROOT / "docs" / "guardrails" / "RepositoryGuardrails.md"
 
-ALLOWED_PATHS_C09 = {
-    "scripts/ci/guardrails_suite.py",
-    "scripts/ci/guardrails_report.py",
-    "scripts/ci/guardrails_labels.py",
+ROOT = Path(__file__).resolve().parents[1]
+AUDIT_ROOT = ROOT / "AUDIT"
+DOCS_ROOT = ROOT / "docs"
+
+ALLOWED_EMBED_COLORS = {0xF200E5, 0x1B8009, 0x3498DB}
+DOCUMENTED_TOGGLES = {
+    "member_panel",
+    "recruiter_panel",
+    "recruitment_welcome",
+    "recruitment_reports",
+    "placement_target_select",
+    "placement_reservations",
+    "clan_profile",
+    "welcome_dialog",
+    "onboarding_rules_v2",
+    "WELCOME_ENABLED",
+    "ENABLE_WELCOME_HOOK",
+    "ENABLE_PROMO_WATCHER",
+    "housekeeping_keepalive",
+    "housekeeping_cleanup",
+    "mirralith_autoposter",
 }
 
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
 
-from utils.md_rules import parse_guardrail_rules  # type: ignore  # noqa: E402
-import guardrails_labels  # type: ignore  # noqa: E402
-import guardrails_report  # type: ignore  # noqa: E402
+@dataclass
+class Violation:
+    rule_id: str
+    severity: str  # "error" or "warning"
+    message: str
+    files: List[str] = field(default_factory=list)
 
 
-@dataclass(slots=True)
-class CheckResult:
-    area: str
-    rule: str
-    status: str
-    details: List[str]
-    gating: bool = True
+@dataclass
+class CategoryResult:
+    identifier: str
+    violations: List[Violation] = field(default_factory=list)
 
-    def is_failure(self) -> bool:
-        return self.status == "FAIL" and self.gating
+    @property
+    def status(self) -> str:
+        if any(v.severity == "error" for v in self.violations):
+            return "fail"
+        if self.violations:
+            return "warn"
+        return "pass"
 
-    def identifier(self) -> str:
-        if ":" in self.rule:
-            prefix, _ = self.rule.split(":", 1)
-            return prefix.strip()
-        return self.rule
+    def add(self, violation: Violation) -> None:
+        self.violations.append(violation)
 
 
 def _iter_python_files() -> Iterable[Path]:
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT)
-        if any(part == "AUDIT" for part in rel.parts):
+        if "AUDIT" in rel.parts:
             continue
         yield path
 
 
 def _iter_markdown_files() -> Iterable[Path]:
-    docs_dir = ROOT / "docs"
-    for path in docs_dir.rglob("*.md"):
-        if path.is_file() and "AUDIT" not in path.parts:
-            yield path
-
-
-def _scan_patterns(paths: Iterable[Path], patterns: Sequence[re.Pattern[str]], *, allow_prefixes: Sequence[str] = ()) -> List[str]:
-    violations: List[str] = []
-    for file_path in paths:
-        rel = file_path.relative_to(ROOT).as_posix()
-        if any(rel.startswith(prefix) for prefix in allow_prefixes):
+    for path in DOCS_ROOT.rglob("*.md"):
+        if "AUDIT" in path.parts:
             continue
+        yield path
+
+
+def _git_diff_names(base_ref: Optional[str]) -> List[str]:
+    if base_ref:
+        ref = base_ref
+    else:
+        ref = "HEAD^"
+    cmd = ["git", "diff", "--name-only", f"{ref}..HEAD"]
+    try:
+        output = subprocess.check_output(cmd, cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return []
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _git_diff_status(base_ref: Optional[str]) -> Dict[str, str]:
+    if base_ref:
+        ref = base_ref
+    else:
+        ref = "HEAD^"
+    cmd = ["git", "diff", "--name-status", f"{ref}..HEAD"]
+    try:
+        output = subprocess.check_output(cmd, cwd=ROOT, text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return {}
+    mapping: Dict[str, str] = {}
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        status, path = line.split("\t", 1)
+        mapping[path] = status
+    return mapping
+
+
+def _load_pr_body(event_path: Optional[str]) -> str:
+    if not event_path:
+        return ""
+    try:
+        data = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    return data.get("pull_request", {}).get("body", "") or ""
+
+
+def _match_paths(paths: Iterable[Path], pattern: re.Pattern[str]) -> List[str]:
+    hits: List[str] = []
+    for path in paths:
+        rel = path.relative_to(ROOT).as_posix()
         try:
-            lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
         except Exception:
             continue
         for idx, line in enumerate(lines, 1):
-            for pattern in patterns:
-                if pattern.search(line):
-                    violations.append(f"{rel}:{idx}")
-    return violations
+            if pattern.search(line):
+                hits.append(f"{rel}:{idx}")
+    return hits
 
 
-def _scan_shared_sheets_async_client_usage() -> List[str]:
-    """Flag direct client usage inside async defs in ``shared/sheets``."""
+def check_s01_s05(category: CategoryResult) -> None:
+    stray_domains = []
+    candidates = {"recruitment", "onboarding", "placement", "community", "ops"}
+    for candidate in candidates:
+        path = ROOT / candidate
+        if path.exists() and path.is_dir():
+            stray_domains.append(path.relative_to(ROOT).as_posix())
+    if stray_domains:
+        category.add(Violation("S-01/S-05", "error", "Feature domains must live under modules/", stray_domains))
 
-    base = ROOT / "shared" / "sheets"
-    if not base.exists():
-        return []
 
-    target_modules = {"gspread", "googleapiclient"}
-    offenders: List[str] = []
+def check_s02(category: CategoryResult) -> None:
+    pattern = re.compile(r"\bdiscord(\.ext\.commands)?")
+    shared_files = [p for p in _iter_python_files() if p.relative_to(ROOT).as_posix().startswith("shared/")]
+    hits = _match_paths(shared_files, pattern)
+    if hits:
+        category.add(Violation("S-02", "error", "Discord-specific imports not allowed in shared/", hits))
 
-    for file_path in base.rglob("*.py"):
-        rel = file_path.relative_to(ROOT).as_posix()
-        try:
-            source = file_path.read_text(encoding="utf-8")
-            tree = ast.parse(source)
-        except Exception:
+
+def check_s03(category: CategoryResult) -> None:
+    pattern = re.compile(r"@(commands\.|bot\.|tree\.|app_commands\.)command")
+    hits = _match_paths(_iter_python_files(), pattern)
+    filtered = [h for h in hits if not h.startswith("cogs/") and not h.startswith("tests/")]
+    if filtered:
+        category.add(Violation("S-03", "error", "Command decorators must live under cogs/", filtered))
+
+
+def check_s07_s09(category: CategoryResult, diff_status: Dict[str, str]) -> None:
+    bad_audits: List[str] = []
+    audit_re = re.compile(r"^AUDIT/\d{8}_.+")
+    for path, status in diff_status.items():
+        if not path.startswith("AUDIT/"):
             continue
+        if status.upper() == "A" and not audit_re.match(path):
+            bad_audits.append(path)
+    if bad_audits:
+        category.add(Violation("S-07", "error", "Audit artifacts must live under AUDIT/<YYYYMMDD>_*/", bad_audits))
 
-        imported_names: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    root = alias.name.split(".")[0]
-                    if root in target_modules:
-                        imported_names.add(alias.asname or root)
-            elif isinstance(node, ast.ImportFrom):
-                module = node.module or ""
-                root = module.split(".")[0]
-                if root in target_modules:
-                    for alias in node.names:
-                        imported_names.add(alias.asname or alias.name)
-
-        if not imported_names:
-            continue
-
-        class _AsyncClientVisitor(ast.NodeVisitor):
-            def __init__(self) -> None:
-                self.matches: List[int] = []
-
-            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:  # noqa: N802 - ast API
-                line = self._find_usage(node)
-                if line is not None:
-                    self.matches.append(line)
-                self.generic_visit(node)
-
-            def _find_usage(self, node: ast.AsyncFunctionDef) -> int | None:
-                class _BodyVisitor(ast.NodeVisitor):
-                    def __init__(self) -> None:
-                        self.line: int | None = None
-
-                    def visit_Name(self, inner: ast.Name) -> None:  # noqa: N802 - ast API
-                        if self.line is None and inner.id in imported_names:
-                            self.line = inner.lineno
-
-                    def visit_Attribute(self, inner: ast.Attribute) -> None:  # noqa: N802 - ast API
-                        if self.line is not None:
-                            return
-                        if isinstance(inner.value, ast.Name) and inner.value.id in imported_names:
-                            self.line = inner.lineno
-                            return
-                        self.generic_visit(inner)
-
-                    def visit_FunctionDef(self, inner: ast.FunctionDef) -> None:  # noqa: N802 - ast API
-                        return
-
-                    def visit_AsyncFunctionDef(self, inner: ast.AsyncFunctionDef) -> None:  # noqa: N802 - ast API
-                        return
-
-                visitor = _BodyVisitor()
-                for stmt in node.body:
-                    if visitor.line is not None:
-                        break
-                    visitor.visit(stmt)
-                return visitor.line
-
-        visitor = _AsyncClientVisitor()
-        visitor.visit(tree)
-        for line in visitor.matches:
-            offenders.append(f"{rel}:{line}")
-
-    return offenders
+    import_pattern = re.compile(r"from\s+AUDIT|import\s+AUDIT")
+    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    hits = _match_paths(runtime_files, import_pattern)
+    if hits:
+        category.add(Violation("S-09", "error", "Runtime code must not import AUDIT modules", hits))
 
 
-def scan_s01() -> Tuple[bool, List[str]]:
-    patterns = [
-        re.compile(r"(?<!modules\.)recruitment\.(?=[A-Za-z_])"),
-        re.compile(r"(?<!modules\.)onboarding\.(?=[A-Za-z_])"),
-        re.compile(r"(?<!modules\.)placement\.(?=[A-Za-z_])"),
-    ]
-    paths = [path for path in _iter_python_files() if not str(path.relative_to(ROOT)).startswith("modules/")]
-    violations = _scan_patterns(paths, patterns)
-    return (len(violations) == 0, violations)
-
-
-def scan_s02() -> Tuple[bool, List[str]]:
-    patterns = [
-        re.compile(r"@(?:commands\.|bot\.|tree\.|app_commands\.)command"),
-        re.compile(r"discord\.ext\.commands"),
-    ]
-    paths = [path for path in _iter_python_files() if str(path.relative_to(ROOT)).startswith("shared/")]
-    violations = _scan_patterns(paths, patterns)
-    return (len(violations) == 0, violations)
-
-
-def scan_s03() -> Tuple[bool, List[str]]:
-    patterns = [
-        re.compile(r"@(?:commands\.|bot\.|tree\.|app_commands\.)command"),
-    ]
-    allow = ("cogs/", "packages/c1c-coreops/", "tests/")
-    violations = _scan_patterns(_iter_python_files(), patterns, allow_prefixes=allow)
-    return (len(violations) == 0, violations)
-
-
-def scan_s05() -> Tuple[bool, List[str]]:
-    domains = {p.name for p in (ROOT / "modules").iterdir() if p.is_dir()}
-    conflicts: List[str] = []
-    for domain in domains:
-        for base in (ROOT / "shared", ROOT / "packages"):
-            candidate = base / domain
-            if candidate.exists():
-                conflicts.append(candidate.relative_to(ROOT).as_posix())
-    return (len(conflicts) == 0, conflicts)
-
-
-def scan_s08() -> Tuple[bool, List[str]]:
-    bases = [ROOT / "modules", ROOT / "shared", ROOT / "packages", ROOT / "cogs"]
+def check_s08(category: CategoryResult) -> None:
+    bases = [ROOT / "modules", ROOT / "shared", ROOT / "coreops"]
     missing: List[str] = []
     for base in bases:
         if not base.exists():
@@ -215,20 +194,129 @@ def scan_s08() -> Tuple[bool, List[str]]:
                 continue
             if any(part == "__pycache__" for part in directory.parts):
                 continue
-            try:
-                children = list(directory.iterdir())
-            except Exception:
+            if not any(child.suffix == ".py" for child in directory.iterdir() if child.is_file()):
                 continue
-            if not any(child.suffix == ".py" for child in children):
-                continue
-            if not (directory / "__init__.py").exists():
+            init_file = directory / "__init__.py"
+            if not init_file.exists():
                 missing.append(directory.relative_to(ROOT).as_posix())
-    return (len(missing) == 0, missing)
+    if missing:
+        category.add(Violation("S-08", "error", "Packages must include __init__.py", missing))
 
 
-def scan_d01() -> Tuple[bool, List[str]]:
-    violations: List[str] = []
+def check_c02(category: CategoryResult) -> None:
+    pattern = re.compile(r"\bprint\(")
+    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith(("scripts/", "tests/"))]
+    hits = _match_paths(runtime_files, pattern)
+    if hits:
+        category.add(Violation("C-02", "error", "Use logger instead of print()", hits))
+
+
+def check_c03(category: CategoryResult) -> None:
+    pattern = re.compile(r"from \.+")
+    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    hits = _match_paths(runtime_files, pattern)
+    if hits:
+        category.add(Violation("C-03", "error", "Parent-relative imports are forbidden", hits))
+
+
+def check_c09(category: CategoryResult) -> None:
+    patterns = [re.compile(r"shared\.utils\.coreops_"), re.compile(r"recruitment/"), re.compile(r"onboarding/")]
+    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    hits: List[str] = []
+    for path in runtime_files:
+        rel = path.relative_to(ROOT).as_posix()
+        try:
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+        for idx, line in enumerate(lines, 1):
+            if any(pat.search(line) for pat in patterns):
+                hits.append(f"{rel}:{idx}")
+    if hits:
+        category.add(Violation("C-09", "error", "Legacy paths must not be used", hits))
+
+
+def check_c10(category: CategoryResult) -> None:
+    pattern = re.compile(r"os\.getenv|os\.environ\[")
+    allowed_prefixes = ("shared/config", "scripts/", "tests/")
+    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith(allowed_prefixes)]
+    hits = _match_paths(runtime_files, pattern)
+    if hits:
+        category.add(Violation("C-10", "warning", "Use shared config accessor instead of ad-hoc env reads", hits))
+
+
+def check_c11(category: CategoryResult) -> None:
+    pattern = re.compile(r"get_port")
+    hits = _match_paths(_iter_python_files(), pattern)
+    hits = [h for h in hits if "check_forbidden_imports" not in h]
+    if hits:
+        category.add(Violation("C-11", "error", "Forbidden get_port import detected", hits))
+
+
+def _extract_embed_color_violations() -> List[str]:
+    offenders: List[str] = []
+    for path in _iter_python_files():
+        rel = path.relative_to(ROOT).as_posix()
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        class EmbedVisitor(ast.NodeVisitor):
+            def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "Embed":
+                    for kw in node.keywords:
+                        if kw.arg in {"color", "colour"}:
+                            if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, int):
+                                if kw.value.value not in ALLOWED_EMBED_COLORS:
+                                    offenders.append(f"{rel}:{kw.value.lineno}")
+                            elif isinstance(kw.value, ast.Name):
+                                name = kw.value.id
+                                if not re.match(r"[A-Z0-9_]*COLOR", name):
+                                    offenders.append(f"{rel}:{kw.value.lineno}")
+                self.generic_visit(node)
+        EmbedVisitor().visit(tree)
+    return offenders
+
+
+def check_c17(category: CategoryResult) -> None:
+    offenders = _extract_embed_color_violations()
+    if offenders:
+        category.add(Violation("C-17", "error", "Embed colours must use approved palette", offenders))
+
+
+def _extract_toggle_usage() -> Dict[str, List[str]]:
+    usage: Dict[str, List[str]] = {}
+    pattern = re.compile(r"FeatureToggles\.[^(]*\(\s*[\"']([A-Za-z0-9_]+)[\"']")
+    for path in _iter_python_files():
+        rel = path.relative_to(ROOT).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for match in pattern.finditer(text):
+            name = match.group(1)
+            line_no = text[: match.start()].count("\n") + 1
+            usage.setdefault(name, []).append(f"{rel}:{line_no}")
+    return usage
+
+
+def check_feature_toggles(category: CategoryResult) -> None:
+    usage = _extract_toggle_usage()
+    undocumented = [name for name in usage if name not in DOCUMENTED_TOGGLES]
+    if undocumented:
+        files: List[str] = []
+        for toggle in undocumented:
+            files.extend(usage.get(toggle, []))
+        category.add(Violation("F-01", "error", "Toggle used but not documented", files))
+
+    unused_documented = [name for name in DOCUMENTED_TOGGLES if name not in usage]
+    if unused_documented:
+        category.add(Violation("F-04", "warning", "Documented toggles not referenced in code", unused_documented))
+
+
+def check_d01(category: CategoryResult) -> None:
     header_re = re.compile(r"^# +(.+)$")
+    violations: List[str] = []
     for path in _iter_markdown_files():
         rel = path.relative_to(ROOT).as_posix()
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -238,11 +326,12 @@ def scan_d01() -> Tuple[bool, List[str]]:
                 if "phase" in match.group(1).lower():
                     violations.append(rel)
                 break
-    return (len(violations) == 0, violations)
+    if violations:
+        category.add(Violation("D-01", "error", "Doc titles must not include 'Phase'", violations))
 
 
-def scan_d02() -> Tuple[bool, List[str]]:
-    footer_re = re.compile(r"^Doc last updated: \d{4}-\d{2}-\d{2} \(v0\.9\.\d+\)$")
+def check_d02(category: CategoryResult) -> None:
+    footer_re = re.compile(r"^Doc last updated: \d{4}-\d{2}-\d{2} \(v0\.9\.8\.\d+\)$")
     violations: List[str] = []
     for path in _iter_markdown_files():
         rel = path.relative_to(ROOT).as_posix()
@@ -252,373 +341,268 @@ def scan_d02() -> Tuple[bool, List[str]]:
                 if not footer_re.match(line.strip()):
                     violations.append(rel)
                 break
-    return (len(violations) == 0, violations)
+    if violations:
+        category.add(Violation("D-02", "error", "Docs must end with standard footer", violations))
 
 
-def _env_keys_from_example(path: Path) -> List[str]:
-    keys: List[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            if key:
-                keys.append(key)
-    return keys
-
-
-def _env_keys_from_docs(path: Path) -> List[str]:
-    text = path.read_text(encoding="utf-8")
-    marker = "## Environment keys"
-    start = text.find(marker)
-    if start == -1:
-        return []
-    section = text[start + len(marker) :]
-    next_heading = section.find("\n## ")
-    if next_heading != -1:
-        section = section[:next_heading]
-    keys = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", section))
-    return sorted(keys)
-
-
-def scan_d03() -> Tuple[bool, List[str]]:
-    config_doc = ROOT / "docs" / "ops" / "Config.md"
-    env_example = ROOT / "docs" / "ops" / ".env.example"
-    if not config_doc.exists() or not env_example.exists():
-        return (False, ["Config.md or .env.example missing"])
-    doc_keys = set(_env_keys_from_docs(config_doc))
-    env_keys = set(_env_keys_from_example(env_example))
-    missing_in_env = sorted(doc_keys - env_keys)
-    missing_in_docs = sorted(env_keys - doc_keys)
-    details: List[str] = []
-    if missing_in_env:
-        details.append("Missing in .env.example: " + ", ".join(missing_in_env))
-    if missing_in_docs:
-        details.append("Undocumented keys: " + ", ".join(missing_in_docs))
-    return (not details, details)
-
-
-def scan_d04() -> Tuple[bool, List[str]]:
-    readme = ROOT / "docs" / "README.md"
+def check_d04_d08(category: CategoryResult) -> None:
+    readme = DOCS_ROOT / "README.md"
     if not readme.exists():
-        return (False, ["docs/README.md missing"])
+        category.add(Violation("D-04", "error", "docs/README.md missing", []))
+        return
     text = readme.read_text(encoding="utf-8")
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     linked: set[str] = set()
-    docs_root = ROOT / "docs"
     for match in link_re.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "mailto:", "tel:", "#")):
             continue
         resolved = (readme.parent / target).resolve()
         try:
-            rel = resolved.relative_to(docs_root).as_posix()
+            rel = resolved.relative_to(DOCS_ROOT).as_posix()
         except ValueError:
             continue
         linked.add(rel)
-    all_docs = {path.relative_to(docs_root).as_posix() for path in _iter_markdown_files()}
+
+    all_docs = {path.relative_to(DOCS_ROOT).as_posix() for path in _iter_markdown_files()}
     all_docs.discard("README.md")
     missing = sorted(all_docs - linked)
-    return (len(missing) == 0, ["Missing links: " + ", ".join(missing)] if missing else [])
+    if missing:
+        category.add(Violation("D-04/D-08", "error", "Docs must be linked from docs/README.md", missing))
 
 
-def run_secret_scan() -> List[str]:
-    offenders: List[str] = []
-    pattern = re.compile(r"[A-Za-z\d_-]{23,28}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27}")
-    for path in ROOT.rglob("*"):
-        if path.is_dir():
-            continue
-        rel = path.relative_to(ROOT)
-        if any(part == "AUDIT" for part in rel.parts):
-            continue
-        if any(part == ".git" for part in rel.parts):
-            continue
-        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".mp4", ".pdf", ".ico", ".svg", ".csv", ".tsv"}:
-            continue
-        try:
-            content = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        if pattern.search(content):
-            offenders.append(rel.as_posix())
-    return offenders
+def check_d05(category: CategoryResult) -> None:
+    adr_dir = DOCS_ROOT / "adr"
+    bad: List[str] = []
+    if adr_dir.exists():
+        for path in adr_dir.glob("*.md"):
+            if not re.match(r"ADR-\d{4}\.md", path.name):
+                bad.append(path.relative_to(ROOT).as_posix())
+    if bad:
+        category.add(Violation("D-05", "error", "ADR files must follow ADR-XXXX.md naming", bad))
 
 
-def scan_c01() -> Tuple[bool, List[str]]:
-    patterns = [re.compile(r"\btime\.sleep\("), re.compile(r"requests\.")]
-    paths = [
-        path
-        for path in _iter_python_files()
-        if not str(path.relative_to(ROOT)).startswith("tests/")
-    ]
-    violations = _scan_patterns(paths, patterns)
-    violations.extend(_scan_shared_sheets_async_client_usage())
-    violations = sorted(set(violations))
-    return (len(violations) == 0, violations)
+def check_d06(category: CategoryResult, diff_status: Dict[str, str]) -> None:
+    new_audits = [path for path, status in diff_status.items() if path.startswith("AUDIT/") and status.upper() == "A"]
+    if not new_audits:
+        return
+    changelog = ROOT / "CHANGELOG.md"
+    if not changelog.exists():
+        category.add(Violation("D-06", "error", "CHANGELOG.md missing for new audit entries", new_audits))
+        return
+    content = changelog.read_text(encoding="utf-8")
+    missing: List[str] = []
+    for audit_path in new_audits:
+        if audit_path not in content:
+            missing.append(audit_path)
+    if missing:
+        category.add(Violation("D-06", "error", "CHANGELOG must reference new AUDIT entries", missing))
 
 
-def scan_c02() -> Tuple[bool, List[str]]:
-    pattern = re.compile(r"\bprint\(")
-    paths = [
-        path
-        for path in _iter_python_files()
-        if not str(path.relative_to(ROOT)).startswith("tests/")
-    ]
-    violations = _scan_patterns(paths, [pattern], allow_prefixes=("scripts/",))
-    return (len(violations) == 0, violations)
+def _parse_block(body: str, label: str) -> Optional[str]:
+    pattern = re.compile(rf"{label}:\s*(.+)", re.IGNORECASE)
+    match = pattern.search(body)
+    if match:
+        return match.group(1).strip()
+    return None
 
 
-def scan_c03() -> Tuple[bool, List[str]]:
-    pattern = re.compile(r"from \.+")
-    paths = [
-        path
-        for path in _iter_python_files()
-        if not str(path.relative_to(ROOT)).startswith("tests/")
-    ]
-    violations = _scan_patterns(paths, [pattern])
-    return (len(violations) == 0, violations)
+def check_d09(category: CategoryResult, changed_files: List[str], pr_body: str) -> None:
+    runtime_touched = any(f.startswith(("modules/", "shared/", "coreops/")) for f in changed_files)
+    tests_touched = any(f.startswith("tests/") for f in changed_files)
+    if not runtime_touched:
+        return
+    tests_block = _parse_block(pr_body, "Tests") or ""
+    if tests_touched or tests_block:
+        return
+    category.add(Violation("D-09", "error", "Runtime changes require tests or Tests: declaration", changed_files))
 
 
-def scan_c09() -> Tuple[Union[bool, str], List[str]]:
-    patterns = [
-        re.compile(r"shared\.utils\.coreops_"),
-        re.compile(r"recruitment/"),
-        re.compile(r"onboarding/"),
-    ]
-    allowed_hits: List[str] = []
-    violations: List[str] = []
-
-    for file_path in _iter_python_files():
-        rel = file_path.relative_to(ROOT).as_posix()
-        try:
-            lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        except Exception:
-            continue
-
-        for idx, line in enumerate(lines, 1):
-            for pattern in patterns:
-                if pattern.search(line):
-                    entry = f"{rel}:{idx}"
-                    if rel in ALLOWED_PATHS_C09:
-                        allowed_hits.append(entry)
-                    else:
-                        violations.append(entry)
-
-    if violations:
-        return (False, violations)
-
-    if allowed_hits:
-        details = [
-            f"{hit} (allowed by policy - C-09 whitelist)" for hit in allowed_hits
-        ]
-        return ("NA", details)
-
-    return (True, [])
+def check_d10(category: CategoryResult, changed_files: List[str], pr_body: str) -> None:
+    user_flow_change = any(f.startswith("cogs/") or f.startswith("modules/") for f in changed_files)
+    docs_changed = any(f.startswith("docs/") for f in changed_files)
+    if not user_flow_change:
+        return
+    docs_block = _parse_block(pr_body, "Docs") or ""
+    if docs_changed or docs_block:
+        return
+    category.add(Violation("D-10", "error", "User-facing changes require docs or Docs: declaration", changed_files))
 
 
-ScannerResult = Tuple[Union[bool, str], List[str]]
+def check_g03(category: CategoryResult, pr_body: str) -> None:
+    meta_block = re.search(r"\[meta\](.*?)\[/meta\]", pr_body, re.DOTALL | re.IGNORECASE)
+    if not meta_block:
+        category.add(Violation("G-03", "error", "PR body missing [meta] block with labels and milestone", []))
+        return
+    block = meta_block.group(1)
+    if "labels:" not in block or "milestone:" not in block:
+        category.add(Violation("G-03", "error", "[meta] block must include labels and milestone", []))
 
 
-SCANNERS: Dict[str, Callable[[], ScannerResult]] = {
-    "S-01": scan_s01,
-    "S-02": scan_s02,
-    "S-03": scan_s03,
-    "S-05": scan_s05,
-    "S-08": scan_s08,
-    "C-01": scan_c01,
-    "C-02": scan_c02,
-    "C-03": scan_c03,
-    "C-09": scan_c09,
-    "D-01": scan_d01,
-    "D-02": scan_d02,
-    "D-03": scan_d03,
-    "D-04": scan_d04,
-}
+def check_g06(category: CategoryResult, diff_status: Dict[str, str]) -> None:
+    added_docs = [path for path, status in diff_status.items() if status.upper() == "A" and path.startswith("docs/")]
+    bad: List[str] = []
+    for doc in added_docs:
+        name = Path(doc).name
+        if " " in name or "Phase" in name:
+            bad.append(doc)
+        elif not re.match(r"[a-z0-9_]+\.md", name):
+            bad.append(doc)
+    if bad:
+        category.add(Violation("G-06", "error", "New docs must be lower_snake_case and avoid Phase", bad))
 
 
-def evaluate_guardrail_rules() -> List[CheckResult]:
-    rules = parse_guardrail_rules(DOC_SPEC)
-    results: Dict[str, CheckResult] = {}
-    for rule in rules:
-        results[rule.identifier] = CheckResult(
-            area="Guardrails Doc",
-            rule=f"{rule.identifier}: {rule.title}",
-            status="NA",
-            details=["scanner missing"],
-        )
+def check_g09(category: CategoryResult, pr_body: str) -> None:
+    tests_block = _parse_block(pr_body, "Tests")
+    docs_block = _parse_block(pr_body, "Docs")
+    if not tests_block or not docs_block:
+        category.add(Violation("G-09", "error", "PR body must declare Tests: and Docs: sections", []))
 
-    for identifier, scanner in SCANNERS.items():
-        if identifier not in results:
-            continue
-        status_or_passed, details = scanner()
-        if isinstance(status_or_passed, str):
-            status = status_or_passed
+
+def _ensure_audit_report_path() -> Path:
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    audit_dir = AUDIT_ROOT / f"{timestamp}_GUARDRAILS"
+    audit_dir.mkdir(parents=True, exist_ok=True)
+    return audit_dir / "report.md"
+
+
+def _write_markdown_report(categories: Dict[str, CategoryResult], report_path: Path, parity_status: Optional[str]) -> None:
+    lines: List[str] = ["# Repository Guardrails Report", ""]
+    if parity_status:
+        lines.append(f"ENV parity status: {parity_status}")
+        lines.append("")
+    for category in categories.values():
+        icon = {"pass": "✅", "warn": "⚠️", "fail": "❌"}[category.status]
+        lines.append(f"## {category.identifier} {icon}")
+        if not category.violations:
+            lines.append("No issues detected.")
         else:
-            status = "PASS" if status_or_passed else "FAIL"
-        results[identifier].status = status
-        results[identifier].details = details
-
-    ordered = [results[rule.identifier] for rule in rules]
-    return ordered
-
-
-def evaluate_docs_contract() -> CheckResult:
-    messages: List[str] = []
-
-    s01, details01 = scan_d01()
-    if not s01:
-        messages.extend(details01)
-
-    s02, details02 = scan_d02()
-    if not s02:
-        messages.extend(details02)
-
-    s04, details04 = scan_d04()
-    if not s04:
-        messages.extend(details04)
-
-    return CheckResult(
-        area="Docs",
-        rule="Documentation contract",
-        status="PASS" if not messages else "FAIL",
-        details=messages,
-    )
+            for violation in category.violations:
+                lines.append(f"- **{violation.rule_id}** ({violation.severity}): {violation.message}")
+                for file in violation.files:
+                    lines.append(f"  - {file}")
+        lines.append("")
+    report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def evaluate_config_and_secrets() -> Tuple[CheckResult, CheckResult]:
-    parity_passed, parity_details = scan_d03()
-    config_result = CheckResult(
-        area="Config",
-        rule="Docs ↔ .env.template parity",
-        status="PASS" if parity_passed else "FAIL",
-        details=parity_details,
-    )
-
-    offenders = run_secret_scan()
-    secrets_result = CheckResult(
-        area="Secrets",
-        rule="Discord token patterns",
-        status="PASS" if len(offenders) == 0 else "FAIL",
-        details=offenders,
-    )
-    return config_result, secrets_result
-
-
-def evaluate_labels(pr_number: int, repo: str, token: str | None) -> Tuple[CheckResult, bool]:
-    evaluation = guardrails_labels.evaluate_labels(
-        repo=repo,
-        number=pr_number,
-        token=token,
-    )
-
-    if evaluation.error:
-        result = CheckResult(
-            area="Labels",
-            rule="Approved label set",
-            status="FAIL",
-            details=[evaluation.error],
-        )
-        return result, False
-
-    status = "PASS" if evaluation.labels_ok else "FAIL"
-    result = CheckResult(
-        area="Labels",
-        rule="Approved label set",
-        status=status,
-        details=evaluation.details,
-    )
-    return result, evaluation.labels_ok
+def _write_summary_json(categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]) -> None:
+    payload = {
+        "overall_status": "fail" if any(cat.status == "fail" for cat in categories.values()) else "warn" if any(cat.status == "warn" for cat in categories.values()) else "pass",
+        "parity_status": parity_status,
+        "categories": [
+            {
+                "id": cat.identifier,
+                "status": cat.status,
+                "violations": [
+                    {
+                        "rule": v.rule_id,
+                        "severity": v.severity,
+                        "message": v.message,
+                        "files": v.files,
+                    }
+                    for v in cat.violations
+                ],
+            }
+            for cat in categories.values()
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def upsert_comment(*, repo: str, pr_number: int, body: str, token: str | None) -> None:
-    comments_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-    headers = {"Accept": "application/vnd.github+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    marker = "<!-- repository-guardrails -->"
-
-    req = request.Request(comments_url, headers=headers)
-    try:
-        with request.urlopen(req, timeout=20) as resp:
-            existing = json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        raise RuntimeError(f"Failed to list PR comments: {exc.code}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Unable to reach GitHub API: {exc.reason}") from exc
-
-    comment_id = None
-    for comment in existing:
-        if isinstance(comment, dict) and isinstance(comment.get("body"), str) and marker in comment["body"]:
-            comment_id = comment.get("id")
-            break
-
-    payload = json.dumps({"body": body}).encode("utf-8")
-    if comment_id:
-        url = f"{comments_url}/{comment_id}"
-        req = request.Request(url, data=payload, headers=headers, method="PATCH")
+def _append_summary_markdown(categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]) -> None:
+    lines: List[str] = ["Repository Guardrails summary", ""]
+    for cat in categories.values():
+        icon = {"pass": "✅", "warn": "⚠️", "fail": "❌"}[cat.status]
+        count = len(cat.violations)
+        noun = "issues" if count != 1 else "issue"
+        lines.append(f"{cat.identifier}: {icon} {count} {noun}")
+    lines.append("")
+    if parity_status:
+        lines.append(f"D-03 ENV parity: {parity_status}")
+        lines.append("")
+    if any(cat.violations for cat in categories.values()):
+        lines.append("Details:")
+        for cat in categories.values():
+            for violation in cat.violations:
+                detail_files = ", ".join(violation.files) if violation.files else ""
+                lines.append(f"- {violation.rule_id}: {violation.message}{' - ' + detail_files if detail_files else ''}")
     else:
-        req = request.Request(comments_url, data=payload, headers=headers, method="POST")
-
-    try:
-        with request.urlopen(req, timeout=20):
-            pass
-    except error.HTTPError as exc:
-        raise RuntimeError(f"Failed to post guardrails comment: {exc.code}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Unable to reach GitHub API: {exc.reason}") from exc
+        lines.append("No guardrail issues detected.")
+    lines.append("")
+    existing = ""
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+    path.write_text((existing + "\n" + "\n".join(lines)).strip() + "\n", encoding="utf-8")
 
 
-def run_suite(
-    pr_number: int,
-    repo: str,
-    token: str | None,
-    *,
-    status_path: Path | None = None,
-) -> int:
-    guardrail_results = evaluate_guardrail_rules()
-    docs_result = evaluate_docs_contract()
-    config_result, secrets_result = evaluate_config_and_secrets()
-    labels_result, _ = evaluate_labels(pr_number, repo, token)
+def run_checks(base_ref: Optional[str], pr_body: str, parity_status: Optional[str]) -> Dict[str, CategoryResult]:
+    categories = {
+        "Structure (S)": CategoryResult("Structure (S)"),
+        "Code (C)": CategoryResult("Code (C)"),
+        "Features (F)": CategoryResult("Features (F)"),
+        "Docs (D)": CategoryResult("Docs (D)"),
+        "Governance (G)": CategoryResult("Governance (G)"),
+    }
 
-    core_results = guardrail_results + [docs_result, config_result, secrets_result]
-    all_results = core_results + [labels_result]
-    job_failed = any(result.is_failure() for result in all_results)
+    diff_status = _git_diff_status(base_ref)
+    changed_files = _git_diff_names(base_ref)
 
-    comment_body = guardrails_report.render_report(
-        results=core_results,
-        label_result=labels_result,
-        job_failed=job_failed,
-    )
+    check_s01_s05(categories["Structure (S)"])
+    check_s02(categories["Structure (S)"])
+    check_s03(categories["Structure (S)"])
+    check_s07_s09(categories["Structure (S)"], diff_status)
+    check_s08(categories["Structure (S)"])
 
-    upsert_comment(repo=repo, pr_number=pr_number, body=comment_body, token=token)
+    check_c02(categories["Code (C)"])
+    check_c03(categories["Code (C)"])
+    check_c09(categories["Code (C)"])
+    check_c10(categories["Code (C)"])
+    check_c11(categories["Code (C)"])
+    check_c17(categories["Code (C)"])
 
-    status_value = "pass" if not job_failed else "fail"
-    if status_path is not None:
-        try:
-            status_path.write_text(status_value, encoding="utf-8")
-        except Exception:
-            pass
+    check_feature_toggles(categories["Features (F)"])
 
-    return 0 if status_value == "pass" else 1
+    check_d01(categories["Docs (D)"])
+    check_d02(categories["Docs (D)"])
+    check_d04_d08(categories["Docs (D)"])
+    check_d05(categories["Docs (D)"])
+    check_d06(categories["Docs (D)"], diff_status)
+    check_d09(categories["Docs (D)"], changed_files, pr_body)
+    check_d10(categories["Docs (D)"], changed_files, pr_body)
+
+    check_g03(categories["Governance (G)"], pr_body)
+    check_g06(categories["Governance (G)"], diff_status)
+    check_g09(categories["Governance (G)"], pr_body)
+
+    if parity_status and parity_status.lower() == "failure":
+        categories["Docs (D)"].add(Violation("D-03", "error", "ENV parity check failed", []))
+    return categories
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run guardrails suite and post aggregated results.")
-    parser.add_argument("--pr", type=int, required=True, help="Pull request number")
-    parser.add_argument("--status-file", type=Path, help="Optional path to write guardrails status", default=None)
-    args = parser.parse_args(argv)
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Run repository guardrails suite")
+    parser.add_argument("--pr", type=int, required=False, help="Pull request number if available")
+    parser.add_argument("--status-file", type=Path, default=None, help="Path to write overall status")
+    parser.add_argument("--summary", type=Path, default=None, help="Path to append human-readable summary")
+    parser.add_argument("--json", type=Path, default=Path("guardrails-results.json"), help="Where to write JSON summary")
+    parser.add_argument("--base-ref", type=str, default=None, help="Base ref for diff (e.g., origin/main)")
+    args = parser.parse_args(list(argv) if argv is not None else None)
 
-    repo = os.getenv("GITHUB_REPOSITORY")
-    if not repo:
-        print("GITHUB_REPOSITORY is not set", file=sys.stderr)
-        return 2
+    pr_body = _load_pr_body(os.getenv("GITHUB_EVENT_PATH"))
+    parity_status = os.getenv("ENV_PARITY_STATUS")
+    categories = run_checks(args.base_ref, pr_body, parity_status)
 
-    token = os.getenv("GITHUB_TOKEN")
+    report_path = _ensure_audit_report_path()
+    _write_markdown_report(categories, report_path, parity_status)
+    _write_summary_json(categories, args.json, parity_status)
+    if args.summary:
+        _append_summary_markdown(categories, args.summary, parity_status)
 
-    return run_suite(args.pr, repo, token, status_path=args.status_file)
+    overall_status = "fail" if any(cat.status == "fail" for cat in categories.values()) else "pass"
+    if args.status_file:
+        args.status_file.write_text(overall_status, encoding="utf-8")
+    return 0 if overall_status == "pass" else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
