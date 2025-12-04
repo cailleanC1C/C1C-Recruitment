@@ -119,7 +119,7 @@ _sheet_cache_errors_logged: Set[str] = set()
 _sheet_cache_load_errors_logged: Set[str] = set()
 _digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
-_MAX_EMBED_LENGTH = 5500
+_MAX_EMBED_LENGTH = 4500
 _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("clans", "ClanInfo"),
     ("templates", "Templates"),
@@ -501,18 +501,8 @@ def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
 
 
 def _embed_length(embed: discord.Embed) -> int:
-    total = 0
-    if embed.title:
-        total += len(embed.title)
-    if embed.description:
-        total += len(embed.description)
-    if embed.footer and embed.footer.text:
-        total += len(embed.footer.text)
-    if embed.author and embed.author.name:
-        total += len(embed.author.name)
-    for field in embed.fields:
-        total += len(field.name) + len(field.value)
-    return total
+    data = embed.to_dict()
+    return len(json.dumps(data, ensure_ascii=False))
 
 
 def _split_embeds(embeds: list[discord.Embed]) -> list[discord.Embed]:

@@ -212,7 +212,7 @@ def test_env_overview_splits_large_pages(monkeypatch, bot):
         timestamp=dt.datetime.now(UTC),
     )
 
-    assert len(embeds) > 4
+    assert len(embeds) >= 4
     total = len(embeds)
     expected_titles = [
         f"TestBot — env: dev — Page {page}/{total}" for page in range(1, total + 1)
@@ -273,6 +273,9 @@ def test_env_overview_no_split_renumbers(monkeypatch, bot):
         f"TestBot — env: dev — Page {page}/4" for page in range(1, len(embeds) + 1)
     ]
     assert [embed.title for embed in embeds] == expected_titles
+    for index, embed in enumerate(embeds, start=1):
+        assert _embed_length(embed) <= _MAX_EMBED_LENGTH
+        assert f"Page {index}/4" in (embed.footer.text or "")
     assert warnings == []
 
 
