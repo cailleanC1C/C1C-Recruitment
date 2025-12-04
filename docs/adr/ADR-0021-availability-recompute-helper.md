@@ -42,4 +42,4 @@ Implementing that strategy requires two new building blocks:
 * The reservations adapter centralises ledger parsing, making it easier to add
   validation or schema evolutions in later phases (PR-RES-02/03).
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.8.2)

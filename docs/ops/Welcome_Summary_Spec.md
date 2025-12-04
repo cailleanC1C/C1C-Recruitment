@@ -86,4 +86,4 @@ Progression (self-feel): Late-game damage dealer refining Hydra teams.
 Heard about C1C from: A friend in global chat
 ```
 
-Doc last updated: 2025-11-29 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.8.2)

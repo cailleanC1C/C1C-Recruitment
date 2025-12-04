@@ -130,4 +130,4 @@ this UX format.
 - [`docs/ops/CommandMatrix.md`](../ops/CommandMatrix.md) — runtime layout of the
   help system.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.8.2)

@@ -9,4 +9,4 @@
 - If `rename_thread_to_reserved` cannot parse the ticket from a thread name (for example, malformed prefixes like `W554-...`), the bot now raises a ❌ `welcome_reserve_rename_error` log at ERROR level.
 - A human-facing ❌ log is also sent to ping admin roles with the tag, thread name, and parse failure reason so the thread can be corrected manually.
 
-Doc last updated: 2025-11-29 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.8.2)

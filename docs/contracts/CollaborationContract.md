@@ -369,4 +369,4 @@ Rules:
 
 ---
 
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-04 (v0.9.8.2)

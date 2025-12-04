@@ -99,4 +99,4 @@ If a row is missing or the worksheet is unreachable:
 
 **Draft — pending implementation of `modules/common/feature_flags.py` and loader integration.**
 
-Doc last updated: 2025-10-30 (v0.9.7)
+Doc last updated: 2025-10-30 (v0.9.8.2)

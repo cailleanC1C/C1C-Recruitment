@@ -197,4 +197,4 @@ off in production until the panels ship._
 - Structured logs emit `[ops]`, `[cron]`, `[lifecycle]`, `[refresh]`, and `[command]` tags with context for quick filtering in Discord (transitioning from `[watcher|lifecycle]` to `[lifecycle]` during the dual-tag release).
 - Failures fall back to stale caches when safe and always raise a structured log to `LOG_CHANNEL_ID`.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.8.2)

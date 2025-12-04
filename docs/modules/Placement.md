@@ -55,4 +55,4 @@ Placement enforces the rules that determine where a recruit lands once a welcome
 - [`docs/adr/ADR-0019-Introduction-of-Clan-SeatReservations.md`](../adr/ADR-0019-Introduction-of-Clan-SeatReservations.md)
 - [`docs/adr/ADR-0021-availability-recompute-helper.md`](../adr/ADR-0021-availability-recompute-helper.md)
 
-Doc last updated: 2025-11-23 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.8.2)

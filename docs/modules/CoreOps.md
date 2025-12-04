@@ -55,4 +55,4 @@ notes, see [`docs/modules/CoreOps-Development.md`](CoreOps-Development.md).
 - Modules should record the invoking actor in telemetry when they trigger cache
   refreshes or reconciliations so `!ops digest` remains auditable.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.8.2)

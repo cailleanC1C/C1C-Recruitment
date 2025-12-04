@@ -87,4 +87,4 @@ We implemented a new **reporting pipeline** under `modules/recruitment/reporting
 ## Status
 Final. Shipped with **Phase 6 — Reporting v1**. Feature toggle `recruitment_reports` defaults ON (`TRUE`) and remains enabled across environments; disable it only when the Sheet or destination is misconfigured.
 
-Doc last updated: 2025-11-23 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.8.2)

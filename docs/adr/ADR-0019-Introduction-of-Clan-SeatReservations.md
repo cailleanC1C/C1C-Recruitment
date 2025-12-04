@@ -35,4 +35,4 @@ This provides a controlled, predictable, auditable workflow where reservations a
   * Logging to threads + staff-log channel
 * Future extensions (release/extend/list) can be added without breaking the model.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.8.2)

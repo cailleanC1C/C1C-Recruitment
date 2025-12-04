@@ -25,4 +25,4 @@ Date: 2025-12-01
 
 Status: Approved
 
-Doc last updated: 2025-12-02 (v0.9.7)
+Doc last updated: 2025-12-02 (v0.9.8.2)
