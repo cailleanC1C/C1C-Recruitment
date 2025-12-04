@@ -126,7 +126,7 @@ def test_post_daily_recruiter_update_sends_pager(monkeypatch):
     bot.wait_until_ready = AsyncMock()
 
     monkeypatch.setattr(dru, "_fetch_report_rows", fake_fetch)
-    monkeypatch.setattr(dru, "_destination_channel_id", lambda: 123)
+    monkeypatch.setattr(dru, "get_report_destination_id", lambda: 123)
     monkeypatch.setattr(dru, "_role_mentions", lambda: ())
     monkeypatch.setattr(dru.discord, "TextChannel", DummyChannel)
 

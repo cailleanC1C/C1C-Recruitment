@@ -55,12 +55,15 @@ def test_render_report_formats_all_sections():
         visitors_extra_roles=[(member, [clan_role], [ticket])],
     )
 
-    rendered = role_audit._render_report(
+    embed = role_audit._render_report(
         summary=summary, raid_role_name="Raid", wanderer_role_name="Wandering Souls"
     )
 
-    assert "Auto-fixed stray members" in rendered
-    assert "Manual review" in rendered
-    assert "Visitors without any ticket" in rendered
-    assert "Visitors with only closed tickets" in rendered
-    assert "Visitors with extra roles" in rendered
+    assert isinstance(embed, role_audit.discord.Embed)
+    description = embed.description or ""
+
+    assert "Auto-fixed stray members" in description
+    assert "Manual review" in description
+    assert "Visitors without any ticket" in description
+    assert "Visitors with only closed tickets" in description
+    assert "Visitors with extra roles" in description

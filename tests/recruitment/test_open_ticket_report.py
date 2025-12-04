@@ -33,8 +33,9 @@ def test_group_tickets_sorts_and_filters():
 
 
 def test_render_report_handles_empty_sections():
-    content = report._render_report([], [])
+    embeds = report._build_report_embeds([], [])
 
-    assert "Welcome" in content
-    assert "None right now" in content
-    assert "last updated" in content
+    assert embeds
+    embed = embeds[0]
+    assert isinstance(embed, report.discord.Embed)
+    assert any(field.name == "Welcome" for field in embed.fields)

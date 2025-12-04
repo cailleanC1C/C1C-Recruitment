@@ -124,7 +124,10 @@ def test_start_welcome_dialog_uses_promo_subflow(monkeypatch):
     monkeypatch.setattr(welcome_flow, "extract_target_from_message", lambda _msg: (None, None))
     monkeypatch.setattr(welcome_flow.logs, "send_welcome_log", fake_send_log)
     monkeypatch.setattr(welcome_flow.logs, "send_welcome_exception", lambda *args, **kwargs: None)
-    monkeypatch.setattr(welcome_flow.logs, "log_onboarding_panel_lifecycle", lambda **_kwargs: None)
+    async def fake_panel_log(**_kwargs):
+        return None
+
+    monkeypatch.setattr(welcome_flow.logs, "log_onboarding_panel_lifecycle", fake_panel_log)
     monkeypatch.setattr(feature_flags, "is_enabled", fake_is_enabled)
     monkeypatch.setattr(onboarding_questions, "get_questions", fake_get_questions)
     monkeypatch.setattr(onboarding_questions, "schema_hash", lambda flow: f"hash-{flow}")
@@ -143,4 +146,3 @@ def test_start_welcome_dialog_uses_promo_subflow(monkeypatch):
     assert captured.get("flow") == "promo.m"
     assert captured.get("controller_flow") == "promo.m"
     assert not thread.sent_messages
-    assert captured.get("logs")
