@@ -2493,6 +2493,45 @@ class CoreOpsCog(commands.Cog):
                 f"⚠ env:missing_config • env={env} • missing={missing}"
             )
 
+        for idx, embed in enumerate(embeds, start=1):
+            data = embed.to_dict()
+            json_len = len(json.dumps(data, ensure_ascii=False))
+            field_count = len(embed.fields)
+
+            logger.info(
+                "env:embed_debug • env=%s • idx=%s • total=%s • json_len=%s • fields=%s • title=%r",
+                env,
+                idx,
+                len(embeds),
+                json_len,
+                field_count,
+                embed.title,
+            )
+
+            if json_len > 6000:
+                for f_idx, field in enumerate(embed.fields):
+                    logger.warning(
+                        "env:embed_debug_fields • env=%s • page_idx=%s • field_idx=%s • name=%r • value_len=%s",
+                        env,
+                        idx,
+                        f_idx,
+                        field.name,
+                        len(field.value),
+                    )
+
+                logger.error(
+                    "env:embed_oversize • env=%s • idx=%s • json_len=%s",
+                    env,
+                    idx,
+                    json_len,
+                )
+                await ctx.reply(
+                    "⚠ `!env` is currently too large to render fully. "
+                    "Please check the logs for `env:embed_oversize` and `env:embed_debug_fields`.",
+                    mention_author=False,
+                )
+                return
+
         await ctx.reply(embeds=[sanitize_embed(embed) for embed in embeds])
 
     @tier("admin")
