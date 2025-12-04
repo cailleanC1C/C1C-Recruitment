@@ -535,7 +535,9 @@ def _append_summary_markdown(categories: Dict[str, CategoryResult], path: Path, 
     path.write_text((existing + "\n" + "\n".join(lines)).strip() + "\n", encoding="utf-8")
 
 
-def run_checks(base_ref: Optional[str], pr_body: str, parity_status: Optional[str]) -> Dict[str, CategoryResult]:
+def run_checks(
+    base_ref: Optional[str], pr_body: str, parity_status: Optional[str], pr_number: int
+) -> Dict[str, CategoryResult]:
     categories = {
         "Structure (S)": CategoryResult("Structure (S)"),
         "Code (C)": CategoryResult("Code (C)"),
@@ -567,12 +569,14 @@ def run_checks(base_ref: Optional[str], pr_body: str, parity_status: Optional[st
     check_d04_d08(categories["Docs (D)"])
     check_d05(categories["Docs (D)"])
     check_d06(categories["Docs (D)"], diff_status)
-    check_d09(categories["Docs (D)"], changed_files, pr_body)
-    check_d10(categories["Docs (D)"], changed_files, pr_body)
+    if pr_number > 0:
+        check_d09(categories["Docs (D)"], changed_files, pr_body)
+        check_d10(categories["Docs (D)"], changed_files, pr_body)
 
-    check_g03(categories["Governance (G)"], pr_body)
+    if pr_number > 0:
+        check_g03(categories["Governance (G)"], pr_body)
+        check_g09(categories["Governance (G)"], pr_body)
     check_g06(categories["Governance (G)"], diff_status)
-    check_g09(categories["Governance (G)"], pr_body)
 
     if parity_status and parity_status.lower() == "failure":
         categories["Docs (D)"].add(Violation("D-03", "error", "ENV parity check failed", []))
@@ -581,7 +585,9 @@ def run_checks(base_ref: Optional[str], pr_body: str, parity_status: Optional[st
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run repository guardrails suite")
-    parser.add_argument("--pr", type=int, required=False, help="Pull request number if available")
+    parser.add_argument(
+        "--pr", type=int, required=False, default=0, help="Pull request number if available"
+    )
     parser.add_argument("--status-file", type=Path, default=None, help="Path to write overall status")
     parser.add_argument("--summary", type=Path, default=None, help="Path to append human-readable summary")
     parser.add_argument("--json", type=Path, default=Path("guardrails-results.json"), help="Where to write JSON summary")
@@ -590,7 +596,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     pr_body = _load_pr_body(os.getenv("GITHUB_EVENT_PATH"))
     parity_status = os.getenv("ENV_PARITY_STATUS")
-    categories = run_checks(args.base_ref, pr_body, parity_status)
+    categories = run_checks(args.base_ref, pr_body, parity_status, args.pr)
 
     report_path = _ensure_audit_report_path()
     _write_markdown_report(categories, report_path, parity_status)

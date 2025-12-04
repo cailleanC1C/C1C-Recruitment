@@ -43,7 +43,7 @@ jobs:
           status_file=guardrails_status.txt
           exit_code=0
           python scripts/ci/guardrails_suite.py \
-            --pr "${{ github.event.pull_request.number }}" \
+            --pr "${{ github.event.pull_request.number || 0 }}" \
             --status-file "$status_file" \
             --summary guardrails-summary.md \
             --json guardrails-results.json \
