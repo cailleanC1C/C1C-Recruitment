@@ -119,7 +119,9 @@ _sheet_cache_errors_logged: Set[str] = set()
 _sheet_cache_load_errors_logged: Set[str] = set()
 _digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
+_FIELD_CHUNK_SOFT_LIMIT = 1500
 _MAX_EMBED_LENGTH = 4500
+_ZERO_WIDTH_SPACE = "\u200b"
 _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("clans", "ClanInfo"),
     ("templates", "Templates"),
@@ -498,6 +500,56 @@ def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks or ["—"]
+
+
+def _chunk_field_lines(
+    label: str,
+    lines: Iterable[str],
+    *,
+    code_block_lang: str = "ini",
+    soft_limit: int = _FIELD_CHUNK_SOFT_LIMIT,
+) -> List[tuple[str, str]]:
+    """Split a large list of lines into multiple field values.
+
+    - First chunk uses ``label`` as field name.
+    - Subsequent chunks use a zero-width space so they appear visually under the
+      same heading without repeated labels.
+    - Each chunk is wrapped in a fenced code block.
+    - The soft limit keeps chunks reasonably small so embed splitting can keep
+      each embed within Discord's limits.
+    """
+
+    chunks: List[tuple[str, str]] = []
+    current_lines: list[str] = []
+    current_len = 0
+
+    def flush_chunk(chunk_label: str) -> None:
+        nonlocal current_lines, current_len
+        if not current_lines:
+            return
+        body = "\n".join(current_lines)
+        value = f"```{code_block_lang}\n{body}\n```"
+        chunks.append((chunk_label, value))
+        current_lines = []
+        current_len = 0
+
+    for line in lines:
+        projected_len = current_len + len(line) + 1
+        if current_lines and projected_len > soft_limit:
+            chunk_label = label if not chunks else _ZERO_WIDTH_SPACE
+            flush_chunk(chunk_label)
+        current_lines.append(line)
+        current_len += len(line) + 1
+
+    if current_lines:
+        chunk_label = label if not chunks else _ZERO_WIDTH_SPACE
+        flush_chunk(chunk_label)
+
+    if not chunks:
+        value = f"```{code_block_lang}\n\n```"
+        chunks.append((label, value))
+
+    return chunks
 
 
 def _embed_length(embed: discord.Embed) -> int:
@@ -2599,7 +2651,11 @@ class CoreOpsCog(commands.Cog):
             used_keys.add(key)
 
         for name in ("CHANNELS", "THREADS", "OTHER"):
-            _add_field(channels_embed, name, channel_sections[name] or ["—"])
+            lines = channel_sections[name] or ["—"]
+            for field_name, field_value in _chunk_field_lines(name, lines):
+                channels_embed.add_field(
+                    name=field_name, value=field_value, inline=False
+                )
 
         channels_embed.set_footer(text=_footer(2))
         embeds.append(channels_embed)
@@ -2630,7 +2686,8 @@ class CoreOpsCog(commands.Cog):
                 self._format_entry_lines(key, entries.get(key), warnings, warning_keys)
             )
 
-        _add_field(roles_embed, "Roles", role_sections or ["—"])
+        for field_name, field_value in _chunk_field_lines("Roles", role_sections or ["—"]):
+            roles_embed.add_field(name=field_name, value=field_value, inline=False)
         roles_embed.set_footer(text=_footer(3))
         embeds.append(roles_embed)
 
@@ -2693,9 +2750,12 @@ class CoreOpsCog(commands.Cog):
         if last_error:
             config_lines.append(f"  last_error: {last_error}")
 
-        _add_field(sheets_embed, "SHEETS", sheets_lines or ["—"])
-        _add_field(sheets_embed, "TABS", tab_lines or ["—"])
-        _add_field(sheets_embed, "CONFIG", config_lines or ["—"])
+        for field_name, field_value in _chunk_field_lines("SHEETS", sheets_lines or ["—"]):
+            sheets_embed.add_field(name=field_name, value=field_value, inline=False)
+        for field_name, field_value in _chunk_field_lines("TABS", tab_lines or ["—"]):
+            sheets_embed.add_field(name=field_name, value=field_value, inline=False)
+        for field_name, field_value in _chunk_field_lines("CONFIG", config_lines or ["—"]):
+            sheets_embed.add_field(name=field_name, value=field_value, inline=False)
         _add_field(sheets_embed, "Secrets (masked)", self._format_secrets(entries))
 
         sheets_embed.set_footer(text=_footer(4))
