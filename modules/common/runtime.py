@@ -997,7 +997,6 @@ class Runtime:
 
         await coreops_cog.setup(self.bot)
         await app_admin.setup(self.bot)
-        await housekeeping_mirralith.setup(self.bot)
 
         from modules.common import feature_flags as features
 
@@ -1011,7 +1010,15 @@ class Runtime:
             except Exception:
                 log.exception("feature toggle snapshot update failed")
 
+        toggles = shared_config.features
+
         await onboarding_pkg.setup(self.bot)
+
+        if toggles.mirralith_overview_enabled:
+            await housekeeping_mirralith.setup(self.bot)
+            log.info("modules: mirralith_overview enabled")
+        else:
+            log.info("modules: mirralith_overview disabled")
 
         async def _load_feature_module(
             module_path: str, feature_keys: Sequence[str]
@@ -1131,13 +1138,38 @@ class Runtime:
         )
 
         await onboarding_ops_check.setup(self.bot)
-        await onboarding_reaction_fallback.setup(self.bot)
-        await onboarding_welcome.setup(self.bot)
-        await onboarding_promo.setup(self.bot)
-        await onboarding_cmd_resume.setup(self.bot)  # registers !onb resume
+        if toggles.welcome_watcher_enabled:
+            await onboarding_reaction_fallback.setup(self.bot)
+            await onboarding_welcome.setup(self.bot)
+            log.info("modules: onboarding_welcome enabled")
+        else:
+            log.info("modules: onboarding_welcome disabled")
+
+        if toggles.promo_watcher_enabled:
+            await onboarding_promo.setup(self.bot)
+            log.info("modules: onboarding_promo enabled")
+        else:
+            log.info("modules: onboarding_promo disabled")
+
+        if toggles.resume_command_enabled:
+            await onboarding_cmd_resume.setup(self.bot)  # registers !onb resume
+            log.info("modules: onboarding_resume enabled")
+        else:
+            log.info("modules: onboarding_resume disabled")
+
         await ops_cog.setup(self.bot)
-        await ops_permissions.setup(self.bot)
-        await ops_watchers.setup(self.bot)
+
+        if toggles.ops_permissions_enabled:
+            await ops_permissions.setup(self.bot)
+            log.info("modules: ops_permissions enabled")
+        else:
+            log.info("modules: ops_permissions disabled")
+
+        if toggles.ops_watchers_enabled:
+            await ops_watchers.setup(self.bot)
+            log.info("modules: ops_watchers enabled")
+        else:
+            log.info("modules: ops_watchers disabled")
 
         # === Always-on internal extensions (admin-gated debug/ops commands) ===
         ALWAYS_EXTENSIONS = ("modules.coreops.cmd_cfg",)
@@ -1186,6 +1218,7 @@ class Runtime:
         await self.load_extensions()
         rehydrate_tiers(self.bot)
         audit_tiers(self.bot, log)
+        toggles = shared_config.features
         try:
             merged = shared_config.merge_onboarding_config_early()
         except Exception as exc:  # pragma: no cover - defensive logging
@@ -1230,34 +1263,37 @@ class Runtime:
             successes.append((spec, job))
 
         cleanup_spec_entry: tuple[Any, Any] | None = None
-        try:
-            cleanup_interval = housekeeping_cleanup.get_cleanup_interval_hours()
-            cleanup_logger = logging.getLogger("c1c.housekeeping.cleanup")
-            cleanup_job = self.scheduler.every(
-                hours=float(cleanup_interval),
-                tag="cleanup",
-                name="cleanup_watcher",
-            )
+        if toggles.housekeeping_enabled:
+            try:
+                cleanup_interval = housekeeping_cleanup.get_cleanup_interval_hours()
+                cleanup_logger = logging.getLogger("c1c.housekeeping.cleanup")
+                cleanup_job = self.scheduler.every(
+                    hours=float(cleanup_interval),
+                    tag="cleanup",
+                    name="cleanup_watcher",
+                )
 
-            async def cleanup_runner() -> None:
-                await housekeeping_cleanup.run_cleanup(self.bot, cleanup_logger)
+                async def cleanup_runner() -> None:
+                    await housekeeping_cleanup.run_cleanup(self.bot, cleanup_logger)
 
-            cleanup_job.do(cleanup_runner)
-            cleanup_spec_entry = (
-                SimpleNamespace(bucket="cleanup", cadence_label=f"{cleanup_interval}h"),
-                cleanup_job,
-            )
-        except Exception as exc:  # pragma: no cover - defensive guard
-            log.exception("failed to schedule cleanup watcher")
-            if failure is None:
-                failure = ("cleanup", exc)
+                cleanup_job.do(cleanup_runner)
+                cleanup_spec_entry = (
+                    SimpleNamespace(bucket="cleanup", cadence_label=f"{cleanup_interval}h"),
+                    cleanup_job,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception("failed to schedule cleanup watcher")
+                if failure is None:
+                    failure = ("cleanup", exc)
+        else:
+            log.info("housekeeping cleanup disabled via feature toggle")
 
         if cleanup_spec_entry is not None:
             successes.append(cleanup_spec_entry)
 
         mirralith_spec_entry: tuple[Any, Any] | None = None
         mirralith_cron = os.getenv("MIRRALITH_POST_CRON", "").strip()
-        if mirralith_cron:
+        if mirralith_cron and toggles.mirralith_overview_enabled:
             try:
                 mirralith_job = self.scheduler.cron(
                     mirralith_cron,
@@ -1281,6 +1317,8 @@ class Runtime:
                 log.exception("failed to schedule mirralith overview job")
                 if failure is None:
                     failure = ("mirralith_overview", exc)
+        elif mirralith_cron:
+            log.info("Mirralith overview disabled via feature toggle; skipping schedule")
         else:
             log.info("Mirralith overview job disabled; MIRRALITH_POST_CRON is not set.")
 
@@ -1288,26 +1326,31 @@ class Runtime:
             successes.append(mirralith_spec_entry)
 
         keepalive_spec_entry: tuple[Any, Any] | None = None
-        try:
-            keepalive_logger = logging.getLogger("c1c.housekeeping.keepalive")
-            keepalive_job = self.scheduler.every(
-                hours=24.0,
-                tag="keepalive",
-                name="housekeeping_keepalive",
-            )
+        if toggles.housekeeping_enabled:
+            try:
+                keepalive_logger = logging.getLogger("c1c.housekeeping.keepalive")
+                keepalive_job = self.scheduler.every(
+                    hours=24.0,
+                    tag="keepalive",
+                    name="housekeeping_keepalive",
+                )
 
-            async def keepalive_runner() -> None:
-                await housekeeping_keepalive.run_keepalive(self.bot, keepalive_logger)
+                async def keepalive_runner() -> None:
+                    await housekeeping_keepalive.run_keepalive(
+                        self.bot, keepalive_logger
+                    )
 
-            keepalive_job.do(keepalive_runner)
-            keepalive_spec_entry = (
-                SimpleNamespace(bucket="housekeeping_keepalive", cadence_label="24h"),
-                keepalive_job,
-            )
-        except Exception as exc:  # pragma: no cover - defensive guard
-            log.exception("failed to schedule keepalive job")
-            if failure is None:
-                failure = ("keepalive", exc)
+                keepalive_job.do(keepalive_runner)
+                keepalive_spec_entry = (
+                    SimpleNamespace(bucket="housekeeping_keepalive", cadence_label="24h"),
+                    keepalive_job,
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                log.exception("failed to schedule keepalive job")
+                if failure is None:
+                    failure = ("keepalive", exc)
+        else:
+            log.info("housekeeping keepalive disabled via feature toggle")
 
         if keepalive_spec_entry is not None:
             successes.append(keepalive_spec_entry)

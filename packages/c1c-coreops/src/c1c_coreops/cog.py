@@ -57,6 +57,7 @@ from c1c_coreops.help import (
     build_help_overview_embeds,
 )
 from c1c_coreops.helpers import help_metadata, tier
+from shared.theme import colors
 from shared.redaction import sanitize_embed, sanitize_log, sanitize_text
 from shared.obs.events import (
     format_refresh_message,
@@ -496,6 +497,18 @@ def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks or ["—"]
+
+
+def _missing_value_text(entry: Optional[_EnvEntry]) -> str | None:
+    if entry is None:
+        return "—"
+    text = str(entry.display or "").strip()
+    if text in {"", "—"}:
+        return "—"
+    normalized = entry.normalized
+    if normalized in (None, ""):
+        return text or "—"
+    return None
 
 
 def _is_secret_key(key: str) -> bool:
@@ -2349,37 +2362,31 @@ class CoreOpsCog(commands.Cog):
         env = get_env_name()
         version = os.getenv("BOT_VERSION", "dev")
         guild_name = getattr(getattr(ctx, "guild", None), "name", "unknown")
-
-        embed = discord.Embed(
-            title=f"{bot_name} · env: {env} · Guild: {guild_name}",
-            colour=discord.Colour.dark_teal(),
-        )
-
         entries = self._collect_env_entries()
         sheet_sections = self._collect_sheet_sections()
-
-        groups = [
-            ("Core Identity", self._format_core_identity(entries)),
-            ("Guild / Channels", self._format_guild_channels(entries)),
-            ("Roles", self._format_roles(entries)),
-            ("Sheets / Config Keys", self._format_sheet_keys(entries, sheet_sections)),
-            ("Features / Flags", self._format_features(entries)),
-            ("Cache / Refresh", self._format_cache_refresh(entries)),
-            ("Watchdog / Runtime", self._format_watchdog(entries)),
-            ("Render / Infra", self._format_render(entries)),
-            ("Secrets (masked)", self._format_secrets(entries)),
-        ]
-
-        for name, lines in groups:
-            self._add_embed_group(embed, name, lines)
-
-        embed.timestamp = dt.datetime.now(UTC)
+        now = dt.datetime.now(UTC)
         footer_text = build_coreops_footer(
             bot_version=version, notes=" • source: ENV + Sheet Config"
         )
-        embed.set_footer(text=footer_text)
 
-        await ctx.reply(embed=sanitize_embed(embed))
+        embeds, warnings, warning_keys = self._build_env_embeds(
+            bot_name=bot_name,
+            env=env,
+            version=version,
+            guild_name=guild_name,
+            entries=entries,
+            sheet_sections=sheet_sections,
+            footer_text=footer_text,
+            timestamp=now,
+        )
+
+        if warnings:
+            missing = ",".join(sorted(warning_keys))
+            logger.warning(
+                f"⚠ env:missing_config • env={env} • missing={missing}"
+            )
+
+        await ctx.reply(embeds=[sanitize_embed(embed) for embed in embeds])
 
     @tier("admin")
     @help_metadata(function_group="operational", section="config_health", access_tier="admin")
@@ -2405,6 +2412,252 @@ class CoreOpsCog(commands.Cog):
     @admin_only()
     async def env(self, ctx: commands.Context) -> None:
         await self._env_impl(ctx)
+
+    def _build_env_embeds(
+        self,
+        *,
+        bot_name: str,
+        env: str,
+        version: str,
+        guild_name: str,
+        entries: Dict[str, _EnvEntry],
+        sheet_sections: List[Tuple[str, List[Tuple[str, str, str]]]],
+        footer_text: str,
+        timestamp: dt.datetime,
+    ) -> tuple[list[discord.Embed], list[str], set[str]]:
+        warnings: list[str] = []
+        warning_keys: set[str] = set()
+        used_keys: set[str] = set()
+        total_pages = 4
+
+        def _title(page: int) -> str:
+            return f"{bot_name} — env: {env} — Page {page}/{total_pages}"
+
+        def _footer(page: int) -> str:
+            base = f"Page {page}/{total_pages} · env: {env} · Guild: {guild_name}"
+            return f"{base}\n{footer_text}" if footer_text else base
+
+        def _add_field(embed: discord.Embed, name: str, lines: Sequence[str]) -> None:
+            text_lines = list(lines) or ["—"]
+            if all(not line for line in text_lines):
+                text_lines = ["—"]
+            for chunk in _chunk_lines(text_lines, _FIELD_CHAR_LIMIT):
+                embed.add_field(name=name, value=f"```{chunk}```", inline=False)
+
+        def _format_group(
+            keys: Sequence[str], *, treat_ids: bool = True
+        ) -> List[str]:
+            lines: List[str] = []
+            for key in keys:
+                used_keys.add(key)
+                entry = entries.get(key)
+                lines.extend(
+                    self._format_entry_lines(
+                        key, entry, warnings, warning_keys, treat_ids=treat_ids
+                    )
+                )
+            return lines
+
+        embeds: list[discord.Embed] = []
+
+        embed = discord.Embed(title=_title(1), colour=colors.admin)
+        embed.timestamp = timestamp
+        _add_field(
+            embed,
+            "Core Identity",
+            _format_group(("BOT_NAME", "BOT_VERSION", "ENV_NAME"), treat_ids=False),
+        )
+
+        toggles = get_feature_toggles()
+        toggle_lines: list[str] = []
+        if toggles:
+            for name in sorted(toggles):
+                value = "ON" if toggles[name] else "OFF"
+                toggle_lines.append(f"{name} = {value}")
+        else:
+            toggle_lines.append("(none)")
+        _add_field(embed, "Feature Toggles", toggle_lines)
+        embed.set_footer(text=_footer(1))
+        embeds.append(embed)
+
+        channels_embed = discord.Embed(title=_title(2), colour=colors.admin)
+        channels_embed.timestamp = timestamp
+        channel_sections = {"CHANNELS": [], "THREADS": [], "OTHER": []}
+
+        def _channel_bucket(key: str) -> str:
+            if key == "PANEL_THREAD_MODE":
+                return "OTHER"
+            if "THREAD" in key:
+                return "THREADS"
+            if "CHANNEL" in key or key == "GUILD_IDS":
+                return "CHANNELS"
+            return "OTHER"
+
+        ordered_channels = [
+            "GUILD_IDS",
+            "LOG_CHANNEL_ID",
+            "WELCOME_CHANNEL_ID",
+            "WELCOME_GENERAL_CHANNEL_ID",
+            "NOTIFY_CHANNEL_ID",
+            "PROMO_CHANNEL_ID",
+            "RECRUITERS_CHANNEL_ID",
+            "RECRUITERS_THREAD_ID",
+            "REPORT_RECRUITERS_DEST_ID",
+            "PANEL_FIXED_THREAD_ID",
+            "PANEL_THREAD_MODE",
+            "ROLEMAP_CHANNEL_ID",
+            "SERVER_MAP_CHANNEL_ID",
+        ]
+        seen_channels: set[str] = set()
+        for key in ordered_channels:
+            seen_channels.add(key)
+            bucket = _channel_bucket(key)
+            channel_sections[bucket].extend(
+                self._format_entry_lines(
+                    key,
+                    entries.get(key),
+                    warnings,
+                    warning_keys,
+                    treat_ids=key != "PANEL_THREAD_MODE",
+                )
+            )
+            used_keys.add(key)
+
+        dynamic_channels = [
+            key
+            for key in entries.keys()
+            if key not in seen_channels
+            and not _is_secret_key(key)
+            and any(token in key for token in ("CHANNEL", "THREAD", "GUILD"))
+        ]
+        for key in sorted(dynamic_channels):
+            bucket = _channel_bucket(key)
+            channel_sections[bucket].extend(
+                self._format_entry_lines(
+                    key,
+                    entries.get(key),
+                    warnings,
+                    warning_keys,
+                    treat_ids=key != "PANEL_THREAD_MODE",
+                )
+            )
+            used_keys.add(key)
+
+        for name in ("CHANNELS", "THREADS", "OTHER"):
+            _add_field(channels_embed, name, channel_sections[name] or ["—"])
+
+        channels_embed.set_footer(text=_footer(2))
+        embeds.append(channels_embed)
+
+        roles_embed = discord.Embed(title=_title(3), colour=colors.admin)
+        roles_embed.timestamp = timestamp
+        role_sections: list[str] = []
+        ordered_roles = [
+            "ADMIN_ROLE_IDS",
+            "STAFF_ROLE_IDS",
+            "LEAD_ROLE_IDS",
+            "RECRUITER_ROLE_IDS",
+            "NOTIFY_PING_ROLE_ID",
+        ]
+        role_sections.extend(_format_group(ordered_roles))
+
+        dynamic_roles = [
+            key
+            for key in entries.keys()
+            if "ROLE" in key
+            and key not in used_keys
+            and not _is_secret_key(key)
+            and not key.endswith("_TAB")
+        ]
+        for key in sorted(dynamic_roles):
+            used_keys.add(key)
+            role_sections.extend(
+                self._format_entry_lines(key, entries.get(key), warnings, warning_keys)
+            )
+
+        _add_field(roles_embed, "Roles", role_sections or ["—"])
+        roles_embed.set_footer(text=_footer(3))
+        embeds.append(roles_embed)
+
+        sheets_embed = discord.Embed(title=_title(4), colour=colors.admin)
+        sheets_embed.timestamp = timestamp
+        sheets_lines: list[str] = []
+        tab_lines: list[str] = []
+        config_lines: list[str] = []
+
+        for key, entry in entries.items():
+            if key in used_keys or _is_secret_key(key):
+                continue
+            if key.endswith("_SHEET_ID"):
+                sheets_lines.extend(
+                    self._format_entry_lines(
+                        key, entry, warnings, warning_keys, treat_ids=False
+                    )
+                )
+                used_keys.add(key)
+            elif key.endswith("_TAB"):
+                tab_lines.extend(
+                    self._format_entry_lines(
+                        key, entry, warnings, warning_keys, treat_ids=False
+                    )
+                )
+                used_keys.add(key)
+            else:
+                config_lines.extend(
+                    self._format_entry_lines(
+                        key, entry, warnings, warning_keys, treat_ids=False
+                    )
+                )
+                used_keys.add(key)
+
+        if sheet_sections:
+            if config_lines:
+                config_lines.append("")
+            for label, rows in sheet_sections:
+                config_lines.append(f"{label} overrides:")
+                for row_key, value, resolved in rows:
+                    text = f"  {row_key} = {value}"
+                    if resolved and resolved != "—":
+                        text += f" ({resolved})"
+                    config_lines.append(text)
+                if rows:
+                    config_lines.append("")
+            while config_lines and not config_lines[-1].strip():
+                config_lines.pop()
+
+        meta = _config_meta_from_app()
+        source = str(meta.get("source", "runtime"))
+        status = str(meta.get("status", "ok"))
+        if config_lines:
+            config_lines.append("")
+        config_lines.append(f"Loader: {source} · {status}")
+        loaded_at = meta.get("loaded_at")
+        if loaded_at:
+            config_lines.append(f"  loaded_at: {loaded_at}")
+        last_error = meta.get("last_error")
+        if last_error:
+            config_lines.append(f"  last_error: {last_error}")
+
+        _add_field(sheets_embed, "SHEETS", sheets_lines or ["—"])
+        _add_field(sheets_embed, "TABS", tab_lines or ["—"])
+        _add_field(sheets_embed, "CONFIG", config_lines or ["—"])
+        _add_field(sheets_embed, "Secrets (masked)", self._format_secrets(entries))
+
+        sheets_embed.set_footer(text=_footer(4))
+        embeds.append(sheets_embed)
+
+        if warnings:
+            warning_lines = warnings[:10]
+            remaining = len(warnings) - len(warning_lines)
+            if remaining > 0:
+                warning_lines.append(
+                    f"… and {remaining} more missing / not-found entries."
+                )
+            embeds[0].add_field(
+                name="Warnings", value="\n".join(warning_lines), inline=False
+            )
+
+        return embeds, warnings, warning_keys
 
     @tier("user")
     @ops.command(
@@ -3730,6 +3983,35 @@ class CoreOpsCog(commands.Cog):
         value = entry.display if entry else "—"
         return f"{key} = {value}"
 
+    def _format_entry_lines(
+        self,
+        key: str,
+        entry: Optional[_EnvEntry],
+        warnings: List[str],
+        warning_keys: Set[str],
+        *,
+        treat_ids: bool = True,
+    ) -> List[str]:
+        missing = _missing_value_text(entry)
+        if missing is not None:
+            warnings.append(f"⚠ {key} has no configured value (\"{missing}\")")
+            warning_keys.add(key)
+            return [self._format_simple_line(key, entry)]
+
+        if treat_ids and entry is not None:
+            ids = self._extract_visible_ids(key, entry.normalized)
+            if ids:
+                lines, not_found = self._format_id_lines_with_missing(key, ids)
+                if not_found:
+                    warnings.append(
+                        "⚠ "
+                        f"{key} contains an ID that does not exist in this guild (not found)"
+                    )
+                    warning_keys.add(key)
+                return lines
+
+        return [self._format_simple_line(key, entry)]
+
     def _format_core_identity(self, entries: Dict[str, _EnvEntry]) -> List[str]:
         keys = ("BOT_NAME", "BOT_VERSION", "ENV_NAME")
         return [self._format_simple_line(key, entries.get(key)) for key in keys]
@@ -3984,6 +4266,13 @@ class CoreOpsCog(commands.Cog):
             prefix = label if index == 0 else indent
             lines.append(f"{prefix} {snowflake} → {resolved}")
         return lines
+
+    def _format_id_lines_with_missing(
+        self, key: str, ids: Sequence[int]
+    ) -> tuple[List[str], bool]:
+        lines = self._format_id_lines(key, ids)
+        not_found = any("(not found)" in line for line in lines)
+        return lines, not_found
 
     def _extract_visible_ids(self, key: str, value: object) -> List[int]:
         ids = _extract_ids(key, value)

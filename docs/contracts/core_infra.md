@@ -45,6 +45,7 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
 ## Command Routing & Prefix
 - Supported: `!ops`, `!ops␣`, `ops`, `ops␣`, `@mention`.
 - Admin bang shortcuts: `!env`, `!reload`, `!health`, `!digest`, `!checksheet`, `!config`, `!help`, `!ping`, `!refresh all` (Admin role only).
+- `!env` returns a four-page admin overview (Overview, Channels, Roles, Sheets & Config) and surfaces warnings for missing/not-found config on Page 1.
 - No bare-word shortcuts.
 
 ## CoreOps v1.5 contract
@@ -94,4 +95,4 @@ See [`docs/ops/Config.md`](../ops/Config.md#environment-keys) for full key defin
 - Embed footer standardized: `Bot vX.Y.Z · CoreOps vA.B.C` (Discord timestamp replaces
   inline timezone text).
 
-Doc last updated: 2025-10-26 (v0.9.6)
+Doc last updated: 2025-12-03 (v0.9.7)
