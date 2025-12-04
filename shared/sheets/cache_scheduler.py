@@ -37,6 +37,7 @@ STARTUP_BUCKETS: tuple[str, ...] = (
     "clan_tags",
     "templates",
     "onboarding_questions",
+    "reaction_roles",
 )
 
 

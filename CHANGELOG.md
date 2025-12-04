@@ -1,10 +1,12 @@
 # Changelog
-### v0.9.8.2 — 2025-12-01
+### v0.9.8.2 — 2025-12-02
 **Community**
-* Added the C1C Leagues autoposter with sheet-driven ranges, Monday/Wednesday reminders, and atomic weekly posts across Legendary, Rising Stars, and Stormforged threads plus announcements.
+* Added a sheet-driven reaction roles module with admin `!reactrole <key>`, cached config loader, and grant/revoke handlers for emoji reacts.
+* Wired the weekly leagues announcement to auto-attach the 🏆 subscription emoji with a footer explaining how to subscribe/unsubscribe.
+* Kept the leagues autoposter flow intact while surfacing reaction-role wiring in logs.
 
 **Docs**
-* Bumped the docs footer standard to v0.9.8.2 and documented new Leagues env keys and commands.
+* Documented the reaction roles workflow and updated the docs index for the new community feature.
 
 ### v0.9.8.1 — 2025-11-30
 **Housekeeping**
@@ -384,4 +386,4 @@
 - Sheet tab names moved out of env into each Sheet's **Config** tab.
 
 ---
-Doc last updated: 2025-12-01 (v0.9.8.2)
+Doc last updated: 2025-12-02 (v0.9.8.2)

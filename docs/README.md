@@ -81,6 +81,7 @@ Collaboration Contract and core infra conventions.
 * Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
 
 ## Community features
+* [`Community Reaction Roles`](community_reaction_roles.md) – sheet-driven reaction role wiring with optional channel/thread scoping.
 * C1C Leagues Autoposter – weekly boards & announcement for Legendary, Rising Stars, Stormforged.
 
 ## Module Deep Dives `/docs/modules/` 
