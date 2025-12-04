@@ -1,9 +1,14 @@
-# Repository Guardrails — Master Specification
+# **Repository Guardrails — Master Specification (UPDATED MINIMALLY)**
 
-**Purpose:** Single source of truth for all constraints that govern this codebase.  
+**Purpose:** Single source of truth for all constraints that govern this codebase.
 Every audit and CI check validates against this document.
 
-## 1) Repository Structure
+---
+
+## **1) Repository Structure**
+
+*(All existing points S-01 to S-08 remain unchanged.)*
+
 - **S-01 Modules-First:** All features live under `modules/<domain>` (e.g., `modules/recruitment`, `modules/placement`, `modules/onboarding`). No top-level feature folders.
 - **S-02 Shared = Infra Only:** `shared/` contains cross-bot infrastructure (sheets, cache, telemetry, small pure helpers). No Discord commands, views, or RBAC logic in `shared/`.
 - **S-03 Cogs-Only Registration:** All commands register under `cogs/`. No `@commands.command`, `@bot.command`, or `@tree.command` outside `cogs/`.
@@ -13,9 +18,24 @@ Every audit and CI check validates against this document.
 - **S-07 Audits Live in AUDIT/:** Automated reports and scans go under `AUDIT/<YYYYMMDD>_*`. They must not modify runtime code.
 - **S-08 Init Hygiene:** Python packages must have `__init__.py`. No empty placeholder files beyond `__init__.py` and `.gitkeep`.
 
-## 2) Coding & Behavior
+### **S-09 AUDIT Isolation (NEW)**
+
+- CI must **ignore** all content inside `AUDIT/` (no linting, type checking, testing).
+- Runtime code must never import from `AUDIT/`.
+- Every audit under `AUDIT/<YYYYMMDD>_*` must add a pointer entry to `CHANGELOG.md`.
+
+---
+
+## **2) Coding & Behavior**
+
+*(All existing points C-01 to C-12 remain unchanged.)*
+
 - **C-01 Async I/O:** Event handlers must not block. External calls (Sheets, HTTP) are async.
-- **C-02 Logging:** Use structured logging helpers; no bare `print`.
+- **C-02 Logging:** Use structured logging helpers; no bare `print`. In addition to existing logging rules:
+  - Logs must follow the humanized format used across Woadkeeper: `<emoji> <event> — <scope> • k=v • k=v [• details=…]`.
+  - Names over IDs (IDs resolved only via cache).
+  - Logging must never trigger external fetches.
+  - Only log `reason=` on non-OK outcomes.
 - **C-03 Imports:** Prefer absolute imports; no parent (`..`) imports.
 - **C-04 Feature Flags:** Sourced from the **Features** sheet as `TRUE`/`FALSE` (case-insensitive normalization).
 - **C-05 ENV Surface:** ENV is reserved for tokens, IDs, and infrastructure knobs. Feature flags **must not** live in ENV and are sourced exclusively from the FeatureToggles sheet.
@@ -27,21 +47,68 @@ Every audit and CI check validates against this document.
 - **C-11 Forbidden Ports Import:** Import the runtime port helper from `shared.ports`. Using the old `shared.config` import for `get_port` fails guardrails (`scripts/ci/check_forbidden_imports.sh`, workflow `11-guardrails-suite`).
 - **C-12 No Order Targets:** Onboarding rules and evaluators must reference question IDs (no order-number or sheet-position logic).
 
-## 3) Feature Toggles and Config Policy
-* **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
-* **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
-* **F-03 Scope:** Toggles control runtime activation of recruitment modules and experiments. They do not alter infrastructure or cluster-wide settings.
-* **F-04 Current Toggles:**
-  `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`,
-  `placement_target_select`, `placement_reservations`, `clan_profile`, `welcome_dialog`,
-  `onboarding_rules_v2`, `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`.
-* **F-05 Additions:** New toggles must be added to the sheet and documented here with one-line purpose notes.
-* **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
-* **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
+### **C-13 Render Free-Tier Constraints (NEW)**
 
-## 4) Documentation
+- No continuous background polling.
+- Scheduled Sheets refreshes must be limited to **≤ 3/day** unless ADR-approved.
+- Health pings must be minimal (5–10 minutes).
+- External API calls should be batched where feasible.
+
+### **C-14 Pagination Requirement (NEW)**
+
+Any message or embed that exceeds Discord limits **must paginate**. Silent truncation is not allowed.
+
+### **C-15 No Fallback Summaries (NEW)**
+
+Welcome and Promo flows must use their designed summary embeds. Fallback summaries are allowed only if explicitly ADR-approved and must never expose internal debug information.
+
+### **C-16 `!next` Behavior (NEW)**
+
+`!next` must list the next scheduled times for **all** registered modes/jobs. New scheduled jobs must automatically register with the unified scheduler so `!next` remains authoritative.
+
+### **C-17 Standard Embed Colors (NEW)**
+
+- Admin embeds: `#f200e5`
+- Recruitment embeds: `#1b8009`
+- Community embeds: `#3498db`
+  New categories/colors require ADR approval.
+
+---
+
+## **3) Feature Toggles & Config Policy**
+
+*(Existing F-01 to F-03 remain unchanged.)*
+
+- **F-01 Sheet Source:** All feature toggles load from the `RECRUITMENT_SHEET › FeatureToggles` tab. No hard-coded flags or ENV overrides.
+- **F-02 Defaults:** Each toggle has an explicit `TRUE` or `FALSE` default stored in the sheet. Missing entries are treated as `FALSE`.
+- **F-03 Scope:** Toggles control runtime activation of recruitment modules and experiments. They do not alter infrastructure or cluster-wide settings.
+- **F-04 Current Toggles (UPDATED):**
+  The following toggles must be present in the FeatureToggles sheet and respected in code:
+
+  Existing:
+  `member_panel`, `recruiter_panel`, `recruitment_welcome`, `recruitment_reports`,
+  `placement_target_select`, `placement_reservations`, `clan_profile`,
+  `welcome_dialog`, `onboarding_rules_v2`, `WELCOME_ENABLED`,
+  `ENABLE_WELCOME_HOOK`, `ENABLE_PROMO_WATCHER`
+
+  Newly required toggles:
+  - `housekeeping_keepalive`
+  - `housekeeping_cleanup`
+  - `mirralith_autoposter`
+  - Any newly introduced module must add its toggle at creation time.
+
+- **F-05 Additions:** New toggles must be added to the sheet and documented here with one-line purpose notes.
+- **F-06 Runtime Behavior:** Toggles are evaluated dynamically at startup; no redeploy required solely for configuration updates.
+- **F-07 Governance:** Repurposing or retiring a toggle requires ADR approval and removal in the next minor version.
+
+---
+
+## **4) Documentation**
+
+*(All existing rules D-01 to D-10 remain unchanged.)*
+
 - **D-01 Stable Titles:** No “Phase …” in any doc titles.
-- **D-02 Footer (exact):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.x)`
+- **D-02 Footer Version (UPDATED):** Last line of every doc: `Doc last updated: YYYY-MM-DD (v0.9.8.x)` (updated from the older v0.9.x footer standard).
 - **D-03 ENV SSoT parity:**
   - The **Environment variables** section in `docs/ops/Config.md` is the single source of truth for all environment variable keys.
   - `.env.example` **must** contain matching placeholders for every key listed in that ENV section so new deployments know which variables to set.
@@ -52,33 +119,37 @@ Every audit and CI check validates against this document.
 - **D-06 Audit Discoverability:** Each audit adds files under `AUDIT/*` and a pointer in `CHANGELOG.md`.
 - **D-07 Contract Priority:** CollaborationContract.md governs process and must link to this guardrails spec.
 - **D-08 No Orphan Docs:** Every doc must be linked from `docs/README.md`.
-- **D-09 Behaviour-Linked Tests:**  
-  Any PR that modifies functional behaviour in `modules/**`, `coreops/**`, or `shared/**`  
+- **D-09 Behaviour-Linked Tests:**
+  Any PR that modifies functional behaviour in `modules/**`, `coreops/**`, or `shared/**`
   **must also update or add tests** in the matching test folder:
 
-    • `tests/onboarding/**`  
-    • `tests/welcome/**`  
-    • `tests/recruitment/**`  
-    • `tests/placement/**`  
-    • `tests/coreops/**` or `tests/shared/**`  
-    • `tests/integration/**` (cross-module flows)  
+    • `tests/onboarding/**`
+    • `tests/welcome/**`
+    • `tests/recruitment/**`
+    • `tests/placement/**`
+    • `tests/coreops/**` or `tests/shared/**`
+    • `tests/integration/**` (cross-module flows)
     • `tests/config/**` (config-loading behaviour)
 
-  Exceptions are allowed only for docs-only, CI-only, or comment/typo fixes, and must be  
-  explicitly justified in the PR body. Silent omissions fail guardrails.
-- **D-10 User-Facing Behaviour = Mandatory Doc Updates:**  
-  If a PR changes commands, help text, onboarding questions, summary formatting, watcher  
-  schedules, feature toggles, or any user-visible flow, the PR **must** update the relevant  
+  Exceptions are allowed only for docs-only, CI-only, or comment/typo fixes, and must be explicitly justified in the PR body. Silent omissions fail guardrails.
+- **D-10 User-Facing Behaviour = Mandatory Doc Updates:**
+  If a PR changes commands, help text, onboarding questions, summary formatting, watcher
+  schedules, feature toggles, or any user-visible flow, the PR **must** update the relevant
   SSoT docs:
-    • `docs/ops/CommandMatrix.md`  
+    • `docs/ops/CommandMatrix.md`
     • `docs/modules/<Module>.md`
-    • `docs/ops/Config.md`  
-    • `docs/_meta/DocStyle.md` (if formatting changed)  
+    • `docs/ops/Config.md`
+    • `docs/_meta/DocStyle.md` (if formatting changed)
     • `docs/Architecture.md` (if data flows changed)
     • `CHANGELOG.md`
   No new docs may be created unless an ADR authorises it.
 
-## 5) Governance & Workflow
+---
+
+## **5) Governance & Workflow**
+
+*(All existing points G-01 to G-09 remain unchanged.)*
+
 - **G-01 Version Control:** Versions (bot, footers, changelog) change only on explicit instruction from the owner.
 - **G-02 Codex Scope:** Codex performs only what the PR body instructs—no implicit deletions or moves.
 - **G-03 PR Metadata:** PR bodies include the `[meta]...[/meta]` block for labels and milestone.
@@ -87,7 +158,7 @@ Every audit and CI check validates against this document.
 - **G-06 Naming:** Filenames are `lower_snake_case.md` (no spaces, no “Phase”).
 - **G-07 CI Required:** Guardrail checks must be required status checks on PRs.
 - **G-08 Secrets:** No secrets in repo or `.env.example`; use deployment envs.
-- **G-09 PR Requirements — Tests/Docs Declaration** Every PR body must contain a section explicitly stating whether tests and docs were updated. 
+- **G-09 PR Requirements — Tests/Docs Declaration** Every PR body must contain a section explicitly stating whether tests and docs were updated.
     One of the following formats is required:
     Tests:
     Updated: <file-path>
@@ -104,4 +175,4 @@ Every audit and CI check validates against this document.
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-11-17 (v0.9.8.2)
+Doc last updated: 2025-12-04 (v0.9.8.2)
