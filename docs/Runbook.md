@@ -51,7 +51,7 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
 ## Feature toggles & config
 - **Source of truth.** Feature toggles, admin/staff role IDs, sheet IDs, and
   module gates live in the Config worksheet tabs documented in
-  [`docs/ops/Config.md`](Config.md). Do **not** edit environment variables to
+  [`docs/ops/Config.md`](ops/Config.md). Do **not** edit environment variables to
   flip a feature unless the Config doc explicitly calls it out.
 - **Toggling workflow.** Update the FeatureToggles tab, run `!ops reload`, then
   confirm via `!cfg feature_name` or by watching the module boot logs. Missing
@@ -93,7 +93,7 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
    vars are unset (`SHARD_PANEL_OVERVIEW_EMOJI`, `SHARD_EMOJI_*`).
 
 ### Watchers & keepalive
-- [`Watchers.md`](Watchers.md) is the canonical source for watcher gating,
+- [`Watchers.md`](ops/Watchers.md) is the canonical source for watcher gating,
   scheduler cadences, watchdog thresholds, and keepalive expectations.
 - Promo/welcome watchers are gated by sheet toggles (`promo_enabled`,
   `enable_promo_hook`, `enable_welcome_hook`). Disable the toggle first during incidents, then follow
@@ -122,6 +122,6 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   schedulers, logging, and cache adapters.
 - [`docs/Troubleshooting.md`](Troubleshooting.md) — deep-dive error lookup and
   mitigation tips.
-- [`docs/ops/Watchers.md`](Watchers.md) — watcher gating and scheduler details.
+- [`docs/ops/Watchers.md`](ops/Watchers.md) — watcher gating and scheduler details.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.7)

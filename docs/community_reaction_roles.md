@@ -28,9 +28,4 @@ Members can react to the attached emoji(s) to gain the configured role and remov
 
 The weekly leagues announcement now includes a 🏆 footer explaining how to subscribe. The bot automatically attaches the 🏆 reaction via the `ReactionRoles` tab entry keyed to `leagues`. Members who react receive the "C1C League" role; removing the reaction removes the role.
 
-Doc last updated: 2025-12-03 (v0.9.8.2)
-
-[meta]
-labels: codex, docs, comp:community, enhancement, P2
-milestone: Harmonize v1.0
-[/meta]
+Doc last updated: 2025-12-04 (v0.9.7)

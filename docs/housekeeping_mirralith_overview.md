@@ -35,9 +35,4 @@ Each message includes its label token so the bot can find and update it on subse
 ## Troubleshooting
 - If logs show `Mirralith spec missing tab or range; skipping`, the bot could not read the Config tab for the listed key; ensure the KV rows exist and the deployment includes the latest config loader.
 
-Doc last updated: 2025-12-01 (v0.9.8.1)
-
-[meta]
-labels: codex, comp:housekeeping, docs, enhancement, P2
-milestone: Harmonize v1.0
-[/meta]
+Doc last updated: 2025-12-04 (v0.9.7)

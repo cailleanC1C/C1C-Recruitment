@@ -88,7 +88,7 @@ availability recompute for the affected clan row.
     a guard-rail error and stay in the invoking channel.
   - `CREST_URL`, `PING_USER`, `ACTIVE`, `CLAN`, `CLANLEAD`, `DEPUTIES`,
     `GENERAL_NOTICE`, `NOTES` — fields mirrored directly into the message body.
-- The troubleshooting guidance in [`Troubleshooting.md`](Troubleshooting.md)
+- The troubleshooting guidance in [`Troubleshooting.md`](../Troubleshooting.md)
 assumes `ACTIVE = Y` for live templates; inactive rows prompt an actionable
 error in Discord.
 
@@ -173,4 +173,4 @@ event loop.
 - [`docs/adr/ADR-0017-Reservations-Placement-Schema.md`](../adr/ADR-0017-Reservations-Placement-Schema.md)
 - [`docs/adr/ADR-0018_DailyRecruiterUpdate.md`](../adr/ADR-0018_DailyRecruiterUpdate.md)
 
-Doc last updated: 2025-12-02 (v0.9.8.2)
+Doc last updated: 2025-12-04 (v0.9.7)

@@ -55,6 +55,7 @@ Missing any **Required** key causes the bot to exit with an error at startup. If
 ### Google Sheets access
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
+| `GSPREAD_CREDENTIALS` | secret | — | Primary service account JSON used for Sheets access (preferred over legacy alias). |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | secret | — | Legacy alias for `GSPREAD_CREDENTIALS`. |
 | `RECRUITMENT_SHEET_ID` | string | — | Google Sheet ID for recruitment data. |
 | `ONBOARDING_SHEET_ID` | string | — | Google Sheet ID for onboarding trackers. |
@@ -342,4 +343,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-03 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.7)

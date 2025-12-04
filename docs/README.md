@@ -37,6 +37,8 @@ Historical decisions and contracts.
 * [`ADR-0020 — Availability Derivation`](adr/ADR-0020-Availability-Derivation.md) — derivation of availability states from reservation data.
 * [`ADR-0021 — Availability Recompute Helper`](adr/ADR-0021-availability-recompute-helper.md) — reservations sheet adapter and recompute helper.
 * [`ADR-0022 — Module Boundaries`](adr/ADR-0022-Module-Boundaries.md) — onboarding vs welcome module boundaries and update discipline.
+* [`ADR-0023 — C1C Leagues Autoposter`](adr/ADR-0023-C1C-Leagues-Autoposter.md) — autoposter scope, ranges, and announcement wiring.
+* [`ADR-0024 — Housekeeping audit and recruiter ticket report`](adr/ADR-0024-housekeeping-audit-and-recruiter-ticket-report.md) — housekeeping report structure and recruiter ticket pipeline updates.
 
 ## Feature Epics `/docs/epic/`
 High-level design documents.
@@ -65,24 +67,28 @@ Collaboration Contract and core infra conventions.
 
 ## Operational Documentation `/docs/ops/`
 Collaboration Contract and core infra conventions.
-* [`CoreOps.md`](ops/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
-* [`Modules.md`](ops/Modules.md) — module inventory with entry points and links to each deep dive.
-* [`Runbook.md`](ops/Runbook.md) — canonical operator procedures (deploy, health, refresh, and maintenance cadences).
 * [`CommandMatrix.md`](ops/CommandMatrix.md) — user/admin command catalogue with permissions, feature gates, and descriptions.
 * [`Config.md`](ops/Config.md) — environment variables, Config tab mapping, and Sheets schema (including `FEATURE_TOGGLES_TAB`).
 * [`Logging.md`](ops/Logging.md) — logging templates, dedupe policy, and configuration toggles.
 * [`Watchers.md`](ops/Watchers.md) — canonical source for watchers, schedulers, watchdog thresholds, and keepalive behaviour.
 * [`Housekeeping.md`](ops/Housekeeping.md) — cleanup and thread keepalive jobs with cadences, logging formats, and env keys.
+* [`OnboardingFlows.md`](ops/OnboardingFlows.md) — onboarding flow catalogue, routing rules, and ticket state transitions.
+* [`PromoTickets.md`](ops/PromoTickets.md) — promo ticket creation flow, gating rules, and state lifecycle.
+* [`Welcome_Summary_Spec.md`](ops/Welcome_Summary_Spec.md) — welcome summary embed specification and handoff rules.
 * [`housekeeping_mirralith_overview.md`](housekeeping_mirralith_overview.md) — Mirralith and cluster overview autoposter housekeeping job.
 * [`PermCommandQuickstart.md`](ops/PermCommandQuickstart.md) — quickstart for the `!perm bot` command surface.
 * [`modules/ShardTracker.md`](ops/modules/ShardTracker.md) — shard & mercy tracker runbook, channel/thread routing, and mercy math reference.
 * [`Promo_Summary_Spec.md`](ops/Promo_Summary_Spec.md) — promo summary embeds readability spec and per-flow layout mapping.
-* [`.env.example`](../.env.example) — reference environment file for local/testing setups.
+* [`.env.example`](ops/.env.example) — reference environment file for local/testing setups.
 * Automated server map posts keep `#server-map` in sync with live categories. Configuration (`SERVER_MAP_*`) lives in [`ops/Config.md`](ops/Config.md); log formats are in [`ops/Logging.md`](ops/Logging.md). The rendered post now starts with an `🧭 Server Map` intro that lists uncategorized channels up top, and staff-only sections can be hidden via the Config blacklists.
 
 ## Community features
 * [`Community Reaction Roles`](community_reaction_roles.md) – sheet-driven reaction role wiring with optional channel/thread scoping.
 * C1C Leagues Autoposter – weekly boards & announcement for Legendary, Rising Stars, Stormforged.
+
+## Audit & flow reports
+* [`housekeeping.md`](housekeeping.md) – role/visitor housekeeping audit emitted with the Daily Recruiter Update cadence.
+* [`welcome_ticket_flow_audit.md`](welcome_ticket_flow_audit.md) – behavioural audit for welcome ticket flow closure and placement logic.
 
 ## Module Deep Dives `/docs/modules/` 
 * [`CoreOps.md`](modules/CoreOps.md) — CoreOps responsibilities, scheduler contracts, and cache façade expectations.
@@ -114,4 +120,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-12-03 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.7)
