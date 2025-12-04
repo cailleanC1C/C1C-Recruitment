@@ -104,4 +104,4 @@ Every audit and CI check validates against this document.
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.8.2)

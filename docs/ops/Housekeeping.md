@@ -49,4 +49,4 @@ and long-lived threads active without manual nudges.
 AutoMod/Guardian Knight bridging will land in this module in a future phase to
 keep moderation actions aligned with housekeeping cadences.
 
-Doc last updated: 2025-12-03 (v0.9.7)
+Doc last updated: 2025-12-03 (v0.9.8.2)

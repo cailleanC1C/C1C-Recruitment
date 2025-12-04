@@ -78,4 +78,4 @@ New docs may only be created with explicit ADR approval.
 - PRs must explicitly justify missing tests or docs.  
 - Future expansions of onboarding flows become safer and cleaner.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.8.2)

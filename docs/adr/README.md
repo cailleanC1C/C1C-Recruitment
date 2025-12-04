@@ -32,4 +32,4 @@ This directory contains the architectural decision records (ADRs) that document 
 | [ADR-0023](ADR-0023-C1C-Leagues-Autoposter.md) | C1C Leagues Autoposter | Approved — 2025-12-01 |
 | [ADR-0024](ADR-0024-housekeeping-audit-and-recruiter-ticket-report.md) | Housekeeping audit and recruiter ticket report | Approved — 2025-12-02 |
 
-Doc last updated: 2025-12-04 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.8.2)

@@ -69,4 +69,4 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 - [`docs/modules/Placement.md`](Placement.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-29 (v0.9.7)
+Doc last updated: 2025-11-29 (v0.9.8.2)

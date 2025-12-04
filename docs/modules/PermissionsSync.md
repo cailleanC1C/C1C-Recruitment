@@ -114,4 +114,4 @@ failed updates are logged for ops visibility.
 Keep this document handy when onboarding new operators or auditing the bot’s
 permissions footprint.
 
-Doc last updated: 2025-11-17 (v0.9.7)
+Doc last updated: 2025-11-17 (v0.9.8.2)

@@ -215,4 +215,4 @@ All success/failure lines go to `LOG_CHANNEL_ID` (and stdout). No extra debug sp
 ## 20) Future Work (Next Steps)
 None planned. TXT export/logging extras are out of scope.
 
-Doc last updated: 2025-11-23 (v0.9.7)
+Doc last updated: 2025-11-23 (v0.9.8.2)

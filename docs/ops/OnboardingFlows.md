@@ -34,4 +34,4 @@ same Open Questions panel as welcome tickets:
   (`promo.r`, `promo.m`, `promo.l`) and loads the corresponding question set
   from `ONBOARDING_TAB`.
 
-Doc last updated: 2025-11-24 (v0.9.7)
+Doc last updated: 2025-11-24 (v0.9.8.2)

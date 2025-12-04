@@ -62,4 +62,4 @@
 ## Suggested fixes
 - Ensure new commands and aliases include `help_metadata(...)` coverage so the help surface stays descriptive.
 
-Doc last updated: 2025-11-18 (v0.9.7)
+Doc last updated: 2025-11-18 (v0.9.8.2)

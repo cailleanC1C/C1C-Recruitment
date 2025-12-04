@@ -235,4 +235,4 @@ This EPIC introduces:
 * Full consistency with all existing panels via local cache updates
 * Clean separation of human SSoT (E) and bot-maintained fields (AF/AH/AI)
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.8.2)

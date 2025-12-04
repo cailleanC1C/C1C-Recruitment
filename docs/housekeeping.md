@@ -24,4 +24,4 @@ flows.
 Each run posts a single message to `ADMIN_AUDIT_DEST_ID` with numbered sections
 for auto-fixes and Visitor buckets. Sections with no entries show `None`.
 
-Doc last updated: 2025-12-04 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.8.2)

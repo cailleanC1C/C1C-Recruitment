@@ -126,4 +126,4 @@ Automated tests cover:
 - Thread routing unit tests verifying channel restrictions and reusing an
   existing thread before creating a new one.
 
-Doc last updated: 2025-11-20 (v0.9.7)
+Doc last updated: 2025-11-20 (v0.9.8.2)

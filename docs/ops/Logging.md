@@ -55,4 +55,4 @@ hidden, and refresh summaries always use the concise inline layout.
 - `📘 Server map — skipped • reason=feature_disabled` — emitted when the `SERVER_MAP` FeatureToggle disables both the scheduler and manual `!servermap refresh` command.
 - `❌ Server map — error • reason=missing_channel_id` — configuration or Discord failures; inspect runtime logs for details before retrying the manual command.
 
-Doc last updated: 2025-11-19 (v0.9.7)
+Doc last updated: 2025-11-19 (v0.9.8.2)

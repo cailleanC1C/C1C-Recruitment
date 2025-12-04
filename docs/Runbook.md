@@ -124,4 +124,4 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   mitigation tips.
 - [`docs/ops/Watchers.md`](ops/Watchers.md) — watcher gating and scheduler details.
 
-Doc last updated: 2025-12-04 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.8.2)

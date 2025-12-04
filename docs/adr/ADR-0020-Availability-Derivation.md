@@ -41,4 +41,4 @@ This yields:
 * Bot logic must centralize clan-row updates to ensure cache mutation is consistent.
 * Future commands that modify seats/reservations will reuse this strategy.
 
-Doc last updated: 2025-11-13 (v0.9.7)
+Doc last updated: 2025-11-13 (v0.9.8.2)

@@ -1,4 +1,4 @@
-# C1C Recruitment Bot Documentation Overview (v0.9.7)
+# C1C Recruitment Bot Documentation Overview (v0.9.8.2)
 
 ## Purpose
 This index explains the intent and ownership of every file in the documentation tree.
@@ -112,7 +112,7 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## 🔧 Maintenance Rules
 * Any PR touching documentation must update this index and all affected references.
 * All docs must end with:
-  `Doc last updated: YYYY-MM-DD (v0.9.7)`
+  `Doc last updated: YYYY-MM-DD (v0.9.8.2)`
 * `.env.example` must stay in `docs/ops/`.
 * No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.
 * Module docs must exclusively live under `docs/modules/`.
@@ -120,4 +120,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-12-04 (v0.9.7)
+Doc last updated: 2025-12-04 (v0.9.8.2)

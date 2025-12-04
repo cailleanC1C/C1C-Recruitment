@@ -67,4 +67,4 @@ Shard tracker buttons are owner-only, use shard-emoji tab selectors, and keep a 
 
 > Feature toggle note — `recruitment_reports` powers the Daily Recruiter Update (manual + scheduled). `feature_reservations` gates the `!reserve` command. `placement_target_select` remains a stub module that only logs when enabled. `onboarding_rules_v2` enables the deterministic onboarding rules DSL (visibility + navigation); disable to fall back to the legacy string parser.
 
-Doc last updated: 2025-12-03 (v0.9.7)
+Doc last updated: 2025-12-03 (v0.9.8.2)
