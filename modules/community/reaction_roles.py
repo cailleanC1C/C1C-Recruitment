@@ -191,6 +191,18 @@ class ReactionRolesCog(commands.Cog):
                     return
         else:
             member = guild.get_member(payload.user_id)
+            if member is None:
+                # Raw reaction remove events usually don't include a member object,
+                # so we need to fetch it explicitly to allow unsubscribe to work.
+                try:
+                    member = await guild.fetch_member(payload.user_id)
+                except discord.NotFound:
+                    # User left the guild; nothing to revoke.
+                    return
+                except discord.HTTPException:
+                    # Soft-fail on API issues; don't block other handlers.
+                    return
+
         if member is None or member.bot:
             return
 
