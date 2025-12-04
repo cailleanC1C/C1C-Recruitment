@@ -119,6 +119,7 @@ _sheet_cache_errors_logged: Set[str] = set()
 _sheet_cache_load_errors_logged: Set[str] = set()
 _digest_section_errors_logged: Set[str] = set()
 _FIELD_CHAR_LIMIT = 900
+_MAX_EMBED_LENGTH = 5500
 _DIGEST_SHEET_BUCKETS: Tuple[Tuple[str, str], ...] = (
     ("clans", "ClanInfo"),
     ("templates", "Templates"),
@@ -497,6 +498,70 @@ def _chunk_lines(lines: Sequence[str], limit: int) -> List[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks or ["—"]
+
+
+def _embed_length(embed: discord.Embed) -> int:
+    total = 0
+    if embed.title:
+        total += len(embed.title)
+    if embed.description:
+        total += len(embed.description)
+    if embed.footer and embed.footer.text:
+        total += len(embed.footer.text)
+    if embed.author and embed.author.name:
+        total += len(embed.author.name)
+    for field in embed.fields:
+        total += len(field.name) + len(field.value)
+    return total
+
+
+def _split_embeds(embeds: list[discord.Embed]) -> list[discord.Embed]:
+    """Ensure embeds stay within Discord limits by splitting fields as needed."""
+
+    result: list[discord.Embed] = []
+    for embed in embeds:
+        if _embed_length(embed) <= _MAX_EMBED_LENGTH:
+            result.append(embed)
+            continue
+
+        base_kwargs: dict[str, Any] = {
+            "colour": embed.colour,
+            "title": embed.title,
+            "description": embed.description,
+        }
+        current = discord.Embed(**base_kwargs)
+        current.timestamp = embed.timestamp
+        if embed.footer and embed.footer.text:
+            current.set_footer(text=embed.footer.text)
+        if embed.author and embed.author.name:
+            current.set_author(
+                name=embed.author.name,
+                icon_url=getattr(embed.author, "icon_url", discord.Embed.Empty),
+            )
+
+        for field in embed.fields:
+            current.add_field(name=field.name, value=field.value, inline=field.inline)
+            if _embed_length(current) > _MAX_EMBED_LENGTH:
+                current.remove_field(len(current.fields) - 1)
+                result.append(current)
+
+                current = discord.Embed(**base_kwargs)
+                current.timestamp = embed.timestamp
+                if embed.footer and embed.footer.text:
+                    current.set_footer(text=embed.footer.text)
+                if embed.author and embed.author.name:
+                    current.set_author(
+                        name=embed.author.name,
+                        icon_url=getattr(embed.author, "icon_url", discord.Embed.Empty),
+                    )
+                current.add_field(
+                    name=field.name, value=field.value, inline=field.inline
+                )
+
+        if current.fields:
+            result.append(current)
+
+    return result
 
 
 def _missing_value_text(entry: Optional[_EnvEntry]) -> str | None:
@@ -2655,6 +2720,16 @@ class CoreOpsCog(commands.Cog):
                 )
             embeds[0].add_field(
                 name="Warnings", value="\n".join(warning_lines), inline=False
+            )
+
+        embeds = _split_embeds(embeds)
+
+        total_pages = len(embeds)
+        for page, embed in enumerate(embeds, start=1):
+            embed.title = f"{bot_name} — env: {env} — Page {page}/{total_pages}"
+            footer_base = f"Page {page}/{total_pages} · env: {env} · Guild: {guild_name}"
+            embed.set_footer(
+                text=f"{footer_base}\n{footer_text}" if footer_text else footer_base
             )
 
         return embeds, warnings, warning_keys
