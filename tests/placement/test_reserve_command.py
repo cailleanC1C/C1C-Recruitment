@@ -1107,7 +1107,7 @@ def test_reserve_release_global_success(monkeypatch):
     assert any("source=global" in entry and "result=ok" in entry for entry in logs)
 
 
-def test_reserve_release_redirects_to_control(monkeypatch):
+def test_reserve_release_allowed_outside_control(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_permissions(monkeypatch, recruiter=True)
     _setup_control_channels(monkeypatch, recruiters_thread=3333)
@@ -1117,14 +1117,70 @@ def test_reserve_release_redirects_to_control(monkeypatch):
     thread = FakeThread(thread_id=8000, parent_id=600, name="W0001-Test", owner_id=recruit.id)
     author = FakeMember(941)
 
+    row = _reservation_row(
+        18,
+        clan_tag="C1CE",
+        reserved_until=dt.date(2025, 11, 24),
+        thread_id=thread.id,
+        ticket_user_id=recruit.id,
+        recruiter_id=author.id,
+        username_snapshot="Release User",
+    )
+
+    async def fake_lookup(*_, **__):
+        return [row]
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    updated: list[tuple[int, str]] = []
+
+    async def fake_status(row_number: int, status: str):
+        updated.append((row_number, status))
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "update_reservation_status",
+        fake_status,
+    )
+
+    adjustments: list[tuple[str, int]] = []
+
+    async def fake_adjust(tag: str, delta: int):
+        adjustments.append((tag, delta))
+
+    monkeypatch.setattr(reserve_module.availability, "adjust_manual_open_spots", fake_adjust)
+
+    recomputed: list[str] = []
+
+    async def fake_recompute(tag: str, *, guild=None):
+        recomputed.append(tag)
+
+    monkeypatch.setattr(reserve_module.availability, "recompute_clan_availability", fake_recompute)
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
     bot = FakeBot([])
     ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
 
     cog = _make_cog(bot)
     asyncio.run(cog.reserve.callback(cog, ctx, "release", f"<@{recruit.id}>", "C1CE"))
 
-    assert ctx.replies, "expected redirect"
-    assert "Reservation changes must be done" in ctx.replies[-1].content
+    assert updated == [(18, "released")]
+    assert adjustments == [("C1CE", 1)]
+    assert recomputed == ["C1CE"]
+    assert thread.sent and "Released the reserved seat" in thread.sent[-1].content
+    assert any("source=global" in entry and "result=ok" in entry for entry in logs)
 
 
 def test_reserve_release_global_not_found(monkeypatch):
@@ -1231,7 +1287,7 @@ def test_reserve_release_global_multiple_rows(monkeypatch):
     assert any("reason=multiple_rows" in entry for entry in logs)
 
 
-def test_reserve_extend_redirects_to_control(monkeypatch):
+def test_reserve_extend_allowed_outside_control(monkeypatch):
     _enable_feature(monkeypatch, enabled=True)
     _setup_permissions(monkeypatch, recruiter=True)
     _setup_control_channels(monkeypatch, recruiters_thread=3333)
@@ -1241,14 +1297,54 @@ def test_reserve_extend_redirects_to_control(monkeypatch):
     thread = FakeThread(thread_id=9000, parent_id=600, name="W0002-Test", owner_id=recruit.id)
     author = FakeMember(961)
 
+    row = _reservation_row(
+        19,
+        clan_tag="C1CE",
+        reserved_until=dt.date(2025, 11, 25),
+        thread_id=thread.id,
+        ticket_user_id=recruit.id,
+        recruiter_id=author.id,
+        username_snapshot="Extend User",
+    )
+
+    async def fake_lookup(*_, **__):
+        return [row]
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "find_active_reservations_for_recruit",
+        fake_lookup,
+    )
+
+    updated: list[tuple[int, dt.date]] = []
+
+    async def fake_extend(row_number: int, new_date: dt.date):
+        updated.append((row_number, new_date))
+
+    monkeypatch.setattr(
+        reserve_module.reservations,
+        "update_reservation_expiry",
+        fake_extend,
+    )
+
+    monkeypatch.setattr(reserve_module.recruitment, "find_clan_row", lambda tag: (9, ["", "", tag, ""]))
+
+    logs: list[str] = []
+
+    def fake_log(level: str, message: str, **_):
+        logs.append(message)
+
+    monkeypatch.setattr(reserve_module.human_log, "human", fake_log)
+
     bot = FakeBot([])
     ctx = FakeContext(bot, guild=guild, channel=thread, author=author)
 
     cog = _make_cog(bot)
     asyncio.run(cog.reserve.callback(cog, ctx, "extend", f"<@{recruit.id}>", "C1CE", "2999-01-01"))
 
-    assert ctx.replies, "expected extend redirect"
-    assert "Reservation changes must be done" in ctx.replies[-1].content
+    assert updated == [(19, dt.date(2999, 1, 1))]
+    assert thread.sent and "Extended the reservation" in thread.sent[-1].content
+    assert any("source=global" in entry and "result=ok" in entry for entry in logs)
 
 
 def test_reserve_extend_global_success(monkeypatch):
