@@ -510,17 +510,6 @@ def _interact_channel_hint() -> str:
     return "the recruitment interact channel"
 
 
-def _control_redirect_message(action: str) -> str:
-    hint = _control_thread_hint()
-    if action == "extend":
-        usage = "`!reserve extend @user <clan_tag> <YYYY-MM-DD>`"
-    elif action == "release":
-        usage = "`!reserve release @user <clan_tag>`"
-    else:
-        usage = "`!reserve`"
-    return f"Reservation changes must be done in {hint}. Please run {usage} there."
-
-
 def _is_clan_lead_user(user: object) -> bool:
     user_id = getattr(user, "id", None)
     if user_id is None:
@@ -931,18 +920,12 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        control_thread_id = get_recruiters_thread_id()
-        channel_id = getattr(ctx.channel, "id", None)
-        if control_thread_id and control_thread_id == channel_id:
-            await self._handle_global_release(ctx, args)
-            return
-
-        await ctx.reply(_control_redirect_message("release"), mention_author=False)
+        await self._handle_global_release(ctx, args)
 
     async def _handle_global_release(self, ctx: commands.Context, args: list[str]) -> None:
         if len(args) < 2:
             await ctx.reply(
-                "Usage: `!reserve release @user <clan_tag>` (run in the recruiter control thread).",
+                "Usage: `!reserve release @user <clan_tag>`.",
                 mention_author=False,
             )
             return
@@ -985,7 +968,12 @@ class ReservationCog(commands.Cog):
         except Exception:
             log.exception(
                 "failed to load reservations for global release",
-                extra={"clan_tag": normalized_tag, "member": member_id},
+                extra={
+                    "clan_tag": normalized_tag,
+                    "member": member_id,
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
+                },
             )
             await ctx.reply(
                 "Something went wrong while looking up reservations for that recruit. Please try again later.",
@@ -1017,6 +1005,8 @@ class ReservationCog(commands.Cog):
                     "member": member_id,
                     "clan_tag": normalized_tag,
                     "rows": [row.row_number for row in filtered],
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
                 },
             )
             await ctx.reply(
@@ -1040,7 +1030,12 @@ class ReservationCog(commands.Cog):
         except Exception:
             log.exception(
                 "failed to release reservation globally",
-                extra={"row": target.row_number, "clan_tag": normalized_tag},
+                extra={
+                    "row": target.row_number,
+                    "clan_tag": normalized_tag,
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
+                },
             )
             await ctx.reply(
                 "I couldn't mark the reservation as released. Please try again later or contact an admin.",
@@ -1054,14 +1049,22 @@ class ReservationCog(commands.Cog):
             except Exception:
                 log.exception(
                     "failed to adjust manual open spots after global release",
-                    extra={"clan_tag": normalized_tag},
+                    extra={
+                        "clan_tag": normalized_tag,
+                        "channel": _thread_name(ctx.channel),
+                        "channel_id": getattr(ctx.channel, "id", None),
+                    },
                 )
             try:
                 await availability.recompute_clan_availability(sheet_tag, guild=ctx.guild)
             except Exception:
                 log.exception(
                     "failed to recompute availability after global release",
-                    extra={"clan_tag": normalized_tag},
+                    extra={
+                        "clan_tag": normalized_tag,
+                        "channel": _thread_name(ctx.channel),
+                        "channel_id": getattr(ctx.channel, "id", None),
+                    },
                 )
 
         await ctx.send(
@@ -1094,18 +1097,12 @@ class ReservationCog(commands.Cog):
             )
             return
 
-        control_thread_id = get_recruiters_thread_id()
-        channel_id = getattr(ctx.channel, "id", None)
-        if control_thread_id and control_thread_id == channel_id:
-            await self._handle_global_extend(ctx, args)
-            return
-
-        await ctx.reply(_control_redirect_message("extend"), mention_author=False)
+        await self._handle_global_extend(ctx, args)
 
     async def _handle_global_extend(self, ctx: commands.Context, args: list[str]) -> None:
         if len(args) < 3:
             await ctx.reply(
-                "Usage: `!reserve extend @user <clan_tag> <YYYY-MM-DD>` (run in the recruiter control thread).",
+                "Usage: `!reserve extend @user <clan_tag> <YYYY-MM-DD>`.",
                 mention_author=False,
             )
             return
@@ -1170,7 +1167,12 @@ class ReservationCog(commands.Cog):
         except Exception:
             log.exception(
                 "failed to load reservations for global extend",
-                extra={"clan_tag": normalized_tag, "member": member_id},
+                extra={
+                    "clan_tag": normalized_tag,
+                    "member": member_id,
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
+                },
             )
             await ctx.reply(
                 "Something went wrong while looking up reservations for that recruit. Please try again later.",
@@ -1202,6 +1204,8 @@ class ReservationCog(commands.Cog):
                     "member": member_id,
                     "clan_tag": normalized_tag,
                     "rows": [row.row_number for row in filtered],
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
                 },
             )
             await ctx.reply(
@@ -1225,7 +1229,12 @@ class ReservationCog(commands.Cog):
         except Exception:
             log.exception(
                 "failed to update reservation expiry globally",
-                extra={"row": target.row_number, "clan_tag": normalized_tag},
+                extra={
+                    "row": target.row_number,
+                    "clan_tag": normalized_tag,
+                    "channel": _thread_name(ctx.channel),
+                    "channel_id": getattr(ctx.channel, "id", None),
+                },
             )
             await ctx.reply(
                 "Something went wrong while extending the reservation. Please try again later.",

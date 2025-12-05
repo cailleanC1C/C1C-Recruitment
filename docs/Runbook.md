@@ -74,6 +74,9 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
    changes and watch for `[refresh] trigger=manual` logs.
 2. Reservations use `!reserve`, `!reservations`, and the recruiter control
    thread documented in [`docs/modules/Placement.md`](modules/Placement.md).
+   - Recruiters can run `!reserve extend …` / `!reserve release …` from any
+     channel they can access (including reminder threads); role gates remain
+     in place.
    - Check the FeatureToggles keys `placement_reservations` and
      `placement_target_select` before enabling.
    - Use `!ops digest` to inspect availability columns (`AF/AH/AI`) and retries,
@@ -124,4 +127,4 @@ when onboarding, welcome, recruitment, or placement flows misbehave.
   mitigation tips.
 - [`docs/ops/Watchers.md`](ops/Watchers.md) — watcher gating and scheduler details.
 
-Doc last updated: 2025-12-04 (v0.9.8.2)
+Doc last updated: 2025-12-05 (v0.9.8.2)

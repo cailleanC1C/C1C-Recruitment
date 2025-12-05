@@ -3,12 +3,23 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+from types import ModuleType
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
-
-from modules.common import runtime as rt
 
 UTC = dt.timezone.utc
 log = logging.getLogger(__name__)
+
+_runtime_module: ModuleType | None = None
+
+
+def _get_runtime_module() -> ModuleType:
+    global _runtime_module
+    if _runtime_module is None:
+        # Lazy import to avoid circular import at module load time.
+        from modules.common import runtime as _rt
+
+        _runtime_module = _rt
+    return _runtime_module
 
 _ONBOARDING_QUESTIONS_TTL_SEC = 7 * 24 * 60 * 60
 
@@ -131,6 +142,7 @@ class CacheService:
 
     async def _refresh(self, name: str, *, trigger: str, actor: Optional[str]) -> None:
         b = self._buckets[name]
+        rt = _get_runtime_module()
         t0 = rt.monotonic_ms()
         result = "ok"
         err_text: Optional[str] = None
