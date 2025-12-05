@@ -93,6 +93,7 @@ sync modules remain available for non-async scripts and cache warmers.
 | `NOTIFY_CHANNEL_ID` | snowflake | — | Fallback alert channel ID. |
 | `NOTIFY_PING_ROLE_ID` | snowflake | — | Role pinged for urgent alerts. |
 | `LOGGING_CHANNEL_ID` | snowflake | — | Logging/audit channel receiving structured reservation auto-release entries. |
+| `ONBOARDING_LOG_CHANNEL_ID` | snowflake | — | Optional channel receiving onboarding inactivity warnings and auto-close breadcrumbs. |
 | `SERVER_MAP_CHANNEL_ID` | snowflake | — | Discord channel hosting the server map embed when the SERVER_MAP toggle is enabled. |
 | `SERVER_MAP_CATEGORY_BLACKLIST` | csv | — | Comma-separated Discord category IDs hidden from the rendered server map. |
 | `SERVER_MAP_CHANNEL_BLACKLIST` | csv | — | Comma-separated Discord channel IDs hidden from the server map, even when their parent category is visible. |
@@ -343,4 +344,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-04 (v0.9.8.2)
+Doc last updated: 2025-12-05 (v0.9.8.2)
