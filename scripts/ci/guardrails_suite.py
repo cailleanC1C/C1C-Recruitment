@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import importlib.util
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,16 @@ DOCUMENTED_TOGGLES = {
     "housekeeping_cleanup",
     "mirralith_autoposter",
 }
+
+
+def _load_env_parity_module():
+    module_path = ROOT / "scripts" / "ci" / "check_env_parity.py"
+    spec = importlib.util.spec_from_file_location("check_env_parity", module_path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @dataclass
