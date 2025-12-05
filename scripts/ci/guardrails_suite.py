@@ -509,30 +509,104 @@ def _write_summary_json(categories: Dict[str, CategoryResult], path: Path, parit
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _append_summary_markdown(categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]) -> None:
-    lines: List[str] = ["Repository Guardrails summary", ""]
+def _append_summary_markdown(
+    categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]
+) -> None:
+    def _format_health_line(label: str, status: Optional[str], ok_text: str, fail_text: str) -> str:
+        if not status:
+            return f"⚪ {label}: status unavailable"
+        trimmed = status.strip()
+        if trimmed.startswith(("✅", "❌", "⚠️", "⚪")):
+            return trimmed
+        normalized = trimmed.lower()
+        if normalized in {"ok", "pass", "passed", "success", "aligned"}:
+            return f"✅ {label}: {ok_text}"
+        if normalized in {"fail", "failed", "failure", "error"}:
+            return f"❌ {label}: {fail_text}"
+        return f"⚠️ {label}: {trimmed}"
+
+    def _group_file_references(file_entries: List[str]) -> List[str]:
+        grouped: Dict[str, List[str]] = {}
+        for entry in file_entries:
+            if ":" in entry:
+                path_part, line_part = entry.split(":", 1)
+                grouped.setdefault(path_part, []).append(line_part)
+            else:
+                grouped.setdefault(entry, [])
+        formatted: List[str] = []
+        for path_part, line_parts in grouped.items():
+            if line_parts:
+                formatted.append(f"{path_part}:{', '.join(line_parts)}")
+            else:
+                formatted.append(path_part)
+        return formatted
+
+    config_parity_status = os.getenv("CONFIG_PARITY_STATUS")
+    secret_scan_status = os.getenv("SECRET_SCAN_STATUS")
+
+    lines: List[str] = ["# Guardrails Summary", ""]
+    lines.append("Top-level checks:")
+    lines.append("")
+    lines.append(
+        _format_health_line(
+            "Config parity",
+            config_parity_status,
+            "docs and .env template aligned",
+            "mismatch detected",
+        )
+    )
+    lines.append(
+        _format_health_line(
+            "Secret scan",
+            secret_scan_status,
+            "no Discord token patterns detected",
+            "potential token pattern detected",
+        )
+    )
+    lines.append(
+        _format_health_line(
+            "ENV parity",
+            parity_status,
+            "success",
+            "failure",
+        )
+    )
+    lines.append("")
+    lines.append("## Summary by category")
+    lines.append("")
+    lines.append("| Category       | Status |")
+    lines.append("|----------------|--------|")
     for cat in categories.values():
         icon = {"pass": "✅", "warn": "⚠️", "fail": "❌"}[cat.status]
         count = len(cat.violations)
-        noun = "issues" if count != 1 else "issue"
-        lines.append(f"{cat.identifier}: {icon} {count} {noun}")
+        lines.append(f"| {cat.identifier} | {icon} {count} |")
     lines.append("")
-    if parity_status:
-        lines.append(f"D-03 ENV parity: {parity_status}")
-        lines.append("")
-    if any(cat.violations for cat in categories.values()):
-        lines.append("Details:")
-        for cat in categories.values():
-            for violation in cat.violations:
-                detail_files = ", ".join(violation.files) if violation.files else ""
-                lines.append(f"- {violation.rule_id}: {violation.message}{' - ' + detail_files if detail_files else ''}")
-    else:
+
+    all_violations = [v for cat in categories.values() for v in cat.violations]
+    if not all_violations:
         lines.append("No guardrail issues detected.")
-    lines.append("")
-    existing = ""
-    if path.exists():
-        existing = path.read_text(encoding="utf-8")
-    path.write_text((existing + "\n" + "\n".join(lines)).strip() + "\n", encoding="utf-8")
+    else:
+        lines.append("## Violations")
+        lines.append("")
+        for violation in all_violations:
+            lines.append(f"### {violation.rule_id} — {violation.message}")
+            if violation.rule_id == "F-04":
+                if violation.files:
+                    lines.append(
+                        "The following toggles are documented but currently reported as unused:"
+                    )
+                    lines.append("")
+                    for toggle in violation.files:
+                        lines.append(f"- {toggle}")
+                else:
+                    lines.append("No documented toggles are marked as unused.")
+            else:
+                grouped_files = _group_file_references(violation.files)
+                for file_entry in grouped_files:
+                    lines.append(f"- {file_entry}")
+            lines.append("")
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def run_checks(
