@@ -132,9 +132,16 @@ Every audit and CI check validates against this document.
     Docs:
     Not required (reason: non-user-facing change)
 
+### Guardrails CI automation
+
+- The Repository Guardrails suite always runs to completion and writes both `guardrails_status` (`ok` / `fail`) and a markdown summary file.
+- A follow-up CI step posts the summary comment to the PR using the generated markdown.
+- A final CI step reads `guardrails_status` and fails the workflow only when it equals `fail`.
+- This ordering guarantees the full report is published even when the workflow ends in failure.
+
 ---
 
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G), feature toggles (F) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-12-04 (v0.9.8.2)
+Doc last updated: 2025-12-05 (v0.9.8.2)
