@@ -544,7 +544,7 @@ def _append_summary_markdown(
     config_parity_status = os.getenv("CONFIG_PARITY_STATUS")
     secret_scan_status = os.getenv("SECRET_SCAN_STATUS")
 
-    lines: List[str] = ["# Repository Guardrails summary", ""]
+    lines: List[str] = ["# Guardrails Summary", ""]
     lines.append("Top-level checks:")
     lines.append("")
     lines.append(
@@ -606,10 +606,7 @@ def _append_summary_markdown(
                     lines.append(f"- {file_entry}")
             lines.append("")
 
-    existing = ""
-    if path.exists():
-        existing = path.read_text(encoding="utf-8")
-    path.write_text((existing + "\n" + "\n".join(lines)).strip() + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def run_checks(
