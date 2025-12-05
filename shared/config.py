@@ -25,6 +25,7 @@ __all__ = [
     "get_allowed_guild_ids",
     "is_guild_allowed",
     "get_log_channel_id",
+    "get_onboarding_log_channel_id",
     "get_notify_channel_id",
     "get_notify_ping_role_id",
     "get_recruiters_channel_id",
@@ -483,6 +484,7 @@ def _load_config() -> Dict[str, object]:
         "ROLEMAP_CHANNEL_ID": _first_int(os.getenv("ROLEMAP_CHANNEL_ID")),
         "WHO_WE_ARE_CHANNEL_ID": _first_int(os.getenv("WHO_WE_ARE_CHANNEL_ID")),
         "LOG_CHANNEL_ID": log_channel,
+        "ONBOARDING_LOG_CHANNEL_ID": _first_int(os.getenv("ONBOARDING_LOG_CHANNEL_ID")),
         "NOTIFY_CHANNEL_ID": _first_int(os.getenv("NOTIFY_CHANNEL_ID")),
         "NOTIFY_PING_ROLE_ID": _first_int(os.getenv("NOTIFY_PING_ROLE_ID")),
         "STRICT_PROBE": _env_bool("STRICT_PROBE", False),
@@ -739,6 +741,10 @@ def _optional_id(key: str) -> Optional[int]:
 
 def get_log_channel_id() -> Optional[int]:
     return _optional_id("LOG_CHANNEL_ID")
+
+
+def get_onboarding_log_channel_id() -> Optional[int]:
+    return _optional_id("ONBOARDING_LOG_CHANNEL_ID")
 
 
 def get_logging_channel_id() -> Optional[int]:
