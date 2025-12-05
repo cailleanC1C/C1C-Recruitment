@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import importlib.util
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,16 @@ DOCUMENTED_TOGGLES = {
     "housekeeping_cleanup",
     "mirralith_autoposter",
 }
+
+
+def _load_env_parity_module():
+    module_path = ROOT / "scripts" / "ci" / "check_env_parity.py"
+    spec = importlib.util.spec_from_file_location("check_env_parity", module_path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @dataclass
@@ -510,7 +521,57 @@ def _write_summary_json(categories: Dict[str, CategoryResult], path: Path, parit
 
 
 def _append_summary_markdown(categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]) -> None:
+    parity_module = _load_env_parity_module()
+
     lines: List[str] = ["Repository Guardrails summary", ""]
+
+    top_level: List[str] = ["Top-level checks:"]
+
+    config_line = "⚠️ Config parity: status unknown"
+    secret_line = "⚠️ Secret scan: status unknown"
+
+    if parity_module:
+        try:
+            example_keys = set(parity_module.env_keys_from_example(parity_module.ENV_EXAMPLE))
+            doc_keys = set(parity_module.env_keys_from_docs(parity_module.CONFIG_MD))
+
+            missing_in_docs = sorted(example_keys - doc_keys)
+            missing_in_example = sorted(doc_keys - example_keys)
+
+            if missing_in_docs:
+                joined = ", ".join(missing_in_docs)
+                config_line = f"❌ Config parity: keys missing in docs → `{joined}`"
+            elif missing_in_example:
+                joined = ", ".join(missing_in_example)
+                config_line = f"❌ Config parity: keys missing in .env.example → `{joined}`"
+            else:
+                config_line = "✅ Config parity: docs and .env template aligned"
+
+            offenders = parity_module.check_discord_token_leak(parity_module.ROOT)
+            if offenders:
+                secret_line = "❌ Secret scan: potential Discord tokens detected"
+            else:
+                secret_line = "✅ Secret scan: no Discord token patterns detected"
+        except Exception:
+            pass
+
+    top_level.extend(["", config_line, secret_line])
+
+    env_status = parity_status.lower() if parity_status else None
+    if env_status == "success":
+        env_line = "✅ ENV parity: success"
+    elif env_status == "failure":
+        env_line = "❌ ENV parity: failure"
+    elif env_status == "cancelled":
+        env_line = "⚠️ ENV parity: cancelled"
+    elif env_status == "skipped":
+        env_line = "⚠️ ENV parity: skipped"
+    else:
+        env_line = "⚠️ ENV parity: status unknown"
+
+    top_level.append(env_line)
+    lines.extend(top_level)
+    lines.append("")
     for cat in categories.values():
         icon = {"pass": "✅", "warn": "⚠️", "fail": "❌"}[cat.status]
         count = len(cat.violations)
