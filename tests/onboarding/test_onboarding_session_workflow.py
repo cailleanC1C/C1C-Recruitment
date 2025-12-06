@@ -17,11 +17,9 @@ class _DummyUser:
 
 
 class _DummyMessage:
-    def __init__(self, user_id: int, *, mentions: bool = True, is_bot: bool = False):
+    def __init__(self, user_id: int):
         self.id = 555
-        self.mentions = [_DummyUser(user_id)] if mentions else []
-        self.author = _DummyUser(user_id)
-        self.author.bot = is_bot
+        self.mentions = [_DummyUser(user_id)]
 
 
 class _DummyThread:
@@ -57,13 +55,12 @@ def _clear_target_cache(monkeypatch):
     watcher_welcome._TARGET_CACHE.clear()
 
 
-def _install_message_fixtures(monkeypatch, module, user_id: int = 42, message=None):
-    dummy_message = message or _DummyMessage(user_id)
+def _install_message_fixtures(monkeypatch, module, user_id: int = 42):
+    dummy_message = _DummyMessage(user_id)
     async def _locate(_thread):
         return dummy_message
 
     monkeypatch.setattr(module, "locate_welcome_message", _locate)
-    return dummy_message
 
 
 def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
