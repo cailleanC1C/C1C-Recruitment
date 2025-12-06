@@ -1156,6 +1156,14 @@ def extract_target_from_message(
             continue
         break
 
+    if target_id is None:
+        author = getattr(message, "author", None)
+        if author is not None and not getattr(author, "bot", False):
+            try:
+                target_id = int(getattr(author, "id", None))
+            except (TypeError, ValueError):
+                target_id = None
+
     return target_id, message_id
 
 

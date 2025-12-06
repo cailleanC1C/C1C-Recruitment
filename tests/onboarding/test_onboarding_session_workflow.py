@@ -96,6 +96,40 @@ def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
     assert payload.get("updated_at") == created_at.isoformat()
 
 
+def test_welcome_ticket_open_falls_back_to_author_when_no_mentions(memory_sheet, monkeypatch):
+    created_at = datetime(2025, 2, 2, 12, 0, tzinfo=timezone.utc)
+    thread = _DummyThread(505, "W5678-user", created_at)
+    context = TicketContext(thread_id=thread.id, ticket_number="W5678", username="user")
+
+    dummy_message = _DummyMessage(99, mentions=False)
+    _install_message_fixtures(
+        monkeypatch,
+        __import__("modules.onboarding.watcher_welcome", fromlist=["locate_welcome_message"]),
+        message=dummy_message,
+    )
+    monkeypatch.setattr(
+        "shared.sheets.onboarding.upsert_welcome",
+        lambda row, headers: "inserted",
+    )
+    monkeypatch.setattr(
+        "shared.sheets.onboarding.find_welcome_row",
+        lambda ticket: None,
+    )
+    monkeypatch.setattr(
+        "modules.common.feature_flags.is_enabled",
+        lambda flag: True,
+    )
+
+    watcher = WelcomeTicketWatcher(bot=_DummyBot())
+    asyncio.run(watcher._handle_ticket_open(thread, context))
+
+    assert (99, 505) in memory_sheet
+    payload = memory_sheet[(99, 505)]
+    assert payload.get("completed") is False
+    assert payload.get("answers") == {}
+    assert payload.get("updated_at") == created_at.isoformat()
+
+
 def test_promo_thread_open_creates_session(memory_sheet, monkeypatch):
     created_at = datetime(2025, 1, 3, 9, 30, tzinfo=timezone.utc)
     thread = _DummyThread(202, "R1234-player", created_at)
