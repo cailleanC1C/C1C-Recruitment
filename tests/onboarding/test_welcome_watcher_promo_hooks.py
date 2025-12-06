@@ -51,7 +51,7 @@ def promo_watcher(monkeypatch, promo_context):
 def test_promo_greeting_posts_panel(monkeypatch, promo_watcher):
     recorded: list[dict] = []
 
-    async def fake_post_panel(bot, thread, *, actor, flow, ticket_code=None):
+    async def fake_post_panel(bot, thread, *, actor, flow, ticket_code=None, trigger_message=None):
         recorded.append({"flow": flow, "actor": actor, "thread": thread})
         return PanelOutcome("panel_created", None, "R0001", getattr(thread, "name", None), 5)
 
@@ -79,7 +79,7 @@ def test_promo_greeting_posts_panel(monkeypatch, promo_watcher):
 def test_promo_panel_dedup(monkeypatch, promo_watcher):
     events: list[dict] = []
 
-    async def fake_post_panel(bot, thread, *, actor, flow, ticket_code=None):
+    async def fake_post_panel(bot, thread, *, actor, flow, ticket_code=None, trigger_message=None):
         return PanelOutcome("skipped", "panel_exists", "R0001", getattr(thread, "name", None), 7)
 
     def capture_log_lifecycle(_logger, scope, event, **fields):  # pragma: no cover - test stub

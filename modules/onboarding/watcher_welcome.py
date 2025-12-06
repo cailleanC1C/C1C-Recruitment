@@ -191,6 +191,19 @@ def _get_subject_user_from_welcome_message(
     return None
 
 
+def _extract_subject_user_id(message: discord.Message) -> int | None:
+    # Prefer Discord's parsed mentions; fallback to a simple <@...> regex only if needed.
+    if message.mentions:
+        return message.mentions[0].id
+    match = re.search(r"<@!?(?P<user_id>\d+)>", message.content or "")
+    if match:
+        try:
+            return int(match.group("user_id"))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def build_reserved_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
     tag = (clan_tag or "").strip().upper()
     return f"Res-{ticket_code}-{username}-{tag}".strip("-")
@@ -1026,6 +1039,7 @@ class PanelOutcome:
     ticket_code: str | None
     thread_name: str | None
     elapsed_ms: int
+    panel_message_id: int | None = None
 
 
 @dataclass(slots=True)
@@ -1357,6 +1371,7 @@ async def post_open_questions_panel(
     actor: discord.abc.User | None,
     flow: str = "welcome",
     ticket_code: str | None = None,
+    trigger_message: discord.Message | None = None,
 ) -> PanelOutcome:
     start = monotonic()
 
@@ -1440,8 +1455,9 @@ async def post_open_questions_panel(
 
     view = panels.OpenQuestionsPanelView()
     content = "Ready when you are — tap below to open the onboarding questions."
+    panel_message: discord.Message | None = None
     try:
-        await thread.send(content, view=view)
+        panel_message = await thread.send(content, view=view)
     except Exception:
         log.exception("failed to post onboarding panel message")
         await _emit(result="error", reason="panel_send_failed")
@@ -1449,7 +1465,38 @@ async def post_open_questions_panel(
 
     if ticket_code:
         await _emit(result="panel_created")
-        return PanelOutcome("panel_created", None, ticket_code, thread_name, _elapsed())
+
+        panel_message_id = getattr(panel_message, "id", None)
+        if trigger_message is not None:
+            subject_user_id = _extract_subject_user_id(trigger_message)
+            flow_suffix = f" • flow={normalized_flow}" if normalized_flow.startswith("promo") else ""
+            if subject_user_id is None:
+                log.warning(
+                    "onboarding_session_save_skipped • reason=no_subject_user%s • thread_id=%s",
+                    flow_suffix,
+                    thread.id,
+                )
+            else:
+                onboarding_sessions.save(
+                    {
+                        "thread_name": thread.name,
+                        "thread_id": thread.id,
+                        "user_id": subject_user_id,
+                        "panel_message_id": panel_message_id,
+                        "step_index": 0,
+                        "completed": False,
+                        "answers": {},
+                    }
+                )
+
+        return PanelOutcome(
+            "panel_created",
+            None,
+            ticket_code,
+            thread_name,
+            _elapsed(),
+            panel_message_id,
+        )
 
     await _emit(result="skipped", reason="ticket_not_parsed")
     return PanelOutcome("skipped", "ticket_not_parsed", ticket_code, thread_name, _elapsed())
@@ -1846,6 +1893,7 @@ class WelcomeWatcher(commands.Cog):
         source: str,
         flow: str = "welcome",
         ticket_code: str | None = None,
+        trigger_message: discord.Message | None = None,
     ) -> None:
         outcome = await post_open_questions_panel(
             self.bot,
@@ -1853,6 +1901,7 @@ class WelcomeWatcher(commands.Cog):
             actor=actor,
             flow=flow,
             ticket_code=ticket_code,
+            trigger_message=trigger_message,
         )
         self._log_panel_outcome(actor, thread, outcome, flow=flow)
 
@@ -1900,7 +1949,12 @@ class WelcomeWatcher(commands.Cog):
         except Exception:  # pragma: no cover - best effort
             log.debug("failed to add welcome auto-reaction", exc_info=True)
 
-        await self._post_panel(thread, actor=message.author, source="phrase")
+        await self._post_panel(
+            thread,
+            actor=message.author,
+            source="phrase",
+            trigger_message=message,
+        )
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: RawReactionActionEvent) -> None:

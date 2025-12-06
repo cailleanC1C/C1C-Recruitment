@@ -666,6 +666,7 @@ class PromoTicketWatcher(commands.Cog):
                 thread,
                 actor=message.author,
                 flow=flow_key,
+                trigger_message=message,
             )
             self._log_panel_outcome(
                 message.author,
@@ -730,6 +731,7 @@ class PromoTicketWatcher(commands.Cog):
             thread,
             actor=message.author,
             flow=flow_key,
+            trigger_message=message,
         )
         self._log_panel_outcome(
             message.author,
