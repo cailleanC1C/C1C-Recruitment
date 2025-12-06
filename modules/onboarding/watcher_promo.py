@@ -23,6 +23,7 @@ from modules.onboarding.controllers.welcome_controller import (
 from modules.onboarding.sessions import ensure_session_for_thread
 from modules.onboarding.watcher_welcome import (
     _channel_readable_label,
+    _get_subject_user_from_welcome_message,
     PanelOutcome,
     parse_promo_thread_name,
     post_open_questions_panel,
@@ -31,6 +32,7 @@ from modules.onboarding.ui import panels
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
 from shared.logs import log_lifecycle
 from shared.sheets import onboarding as onboarding_sheets
+from shared.sheets import onboarding_sessions
 from shared.sheets.onboarding import PROMO_HEADERS
 
 UTC = dt.timezone.utc
@@ -502,6 +504,7 @@ class PromoTicketWatcher(commands.Cog):
 
         created_at = getattr(thread, "created_at", None) or dt.datetime.now(UTC)
 
+        starter: discord.Message | None = None
         try:
             starter = await locate_welcome_message(thread)
             applicant_id, _ = extract_target_from_message(starter)
@@ -509,6 +512,27 @@ class PromoTicketWatcher(commands.Cog):
             applicant_id = None
             log.debug(
                 "promo watcher: failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
+            )
+
+        subject_member = _get_subject_user_from_welcome_message(starter)
+        subject_user_id = str(getattr(subject_member, "id", "") or "")
+
+        try:
+            onboarding_sessions.save(
+                {
+                    "thread_id": str(getattr(thread, "id", "")),
+                    "thread_name": getattr(thread, "name", ""),
+                    "user_id": subject_user_id,
+                    "step_index": 0,
+                    "completed": False,
+                    "answers": {},
+                    "updated_at": created_at,
+                }
+            )
+        except Exception:
+            log.exception(
+                "promo watcher: failed to persist onboarding session on ticket open",
+                extra={"thread_id": getattr(thread, "id", None)},
             )
 
         if applicant_id is not None:
@@ -540,6 +564,7 @@ class PromoTicketWatcher(commands.Cog):
                     int(applicant_id),
                     int(getattr(thread, "id", 0)),
                     updated_at=created_at,
+                    thread_name=getattr(thread, "name", ""),
                 )
             except Exception:
                 log.exception(

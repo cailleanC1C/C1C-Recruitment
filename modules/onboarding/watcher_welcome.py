@@ -40,6 +40,7 @@ from shared.logfmt import channel_label
 from shared.logs import log_lifecycle
 from modules.recruitment import availability
 from shared.sheets import onboarding as onboarding_sheets
+from shared.sheets import onboarding_sessions
 from shared.sheets import reservations as reservations_sheets
 from shared.sheets import recruitment as recruitment_sheets
 from shared.sheets.cache_service import cache as sheets_cache
@@ -177,6 +178,17 @@ def parse_promo_thread_name(name: str | None) -> Optional["PromoThreadNameParts"
 
 def build_open_thread_name(ticket_code: str, username: str) -> str:
     return f"{ticket_code}-{username}".strip("-")
+
+
+def _get_subject_user_from_welcome_message(
+    msg: discord.Message | None,
+) -> discord.Member | None:
+    if msg is None:
+        return None
+    mentions = getattr(msg, "mentions", None) or []
+    if mentions:
+        return mentions[0]
+    return None
 
 
 def build_reserved_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
@@ -444,7 +456,12 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
     session: Session | None = None
     if applicant_id is not None:
         try:
-            session = await ensure_session_for_thread(applicant_id, int(getattr(thread, "id", 0)), updated_at=created_at)
+            session = await ensure_session_for_thread(
+                applicant_id,
+                int(getattr(thread, "id", 0)),
+                updated_at=created_at,
+                thread_name=getattr(thread, "name", ""),
+            )
         except Exception:
             log.exception(
                 "failed to ensure welcome session", extra={"thread_id": getattr(thread, "id", None)}
@@ -465,7 +482,11 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
     if session is None:
-        session = Session(thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id))
+        session = Session(
+            thread_id=int(getattr(thread, "id", 0)),
+            applicant_id=int(applicant_id),
+            thread_name=getattr(thread, "name", ""),
+        )
 
     if action == "reminder_empty":
         content = (
@@ -672,7 +693,12 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
     session: Session | None = None
     if applicant_id is not None:
         try:
-            session = await ensure_session_for_thread(applicant_id, int(getattr(thread, "id", 0)), updated_at=created_at)
+            session = await ensure_session_for_thread(
+                applicant_id,
+                int(getattr(thread, "id", 0)),
+                updated_at=created_at,
+                thread_name=getattr(thread, "name", ""),
+            )
         except Exception:
             log.exception(
                 "failed to ensure promo session", extra={"thread_id": getattr(thread, "id", None)}
@@ -693,7 +719,11 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
     if session is None:
-        session = Session(thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id))
+        session = Session(
+            thread_id=int(getattr(thread, "id", 0)),
+            applicant_id=int(applicant_id),
+            thread_name=getattr(thread, "name", ""),
+        )
 
     if action == "reminder_empty":
         content = (
@@ -2106,6 +2136,7 @@ class WelcomeTicketWatcher(commands.Cog):
         row = [context.ticket_number, context.username, clan_value, closed_value]
         created_at = _normalize_dt(getattr(thread, "created_at", None))
 
+        starter: discord.Message | None = None
         try:
             starter = await locate_welcome_message(thread)
             applicant_id, _ = extract_target_from_message(starter)
@@ -2114,6 +2145,27 @@ class WelcomeTicketWatcher(commands.Cog):
             log.debug(
                 "failed to resolve applicant on ticket open",
                 exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        subject_member = _get_subject_user_from_welcome_message(starter)
+        subject_user_id = str(getattr(subject_member, "id", "") or "")
+
+        try:
+            onboarding_sessions.save(
+                {
+                    "thread_id": str(getattr(thread, "id", "")),
+                    "thread_name": getattr(thread, "name", ""),
+                    "user_id": subject_user_id,
+                    "step_index": 0,
+                    "completed": False,
+                    "answers": {},
+                    "updated_at": created_at,
+                }
+            )
+        except Exception:
+            log.exception(
+                "failed to persist onboarding session on ticket open",
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
@@ -2168,6 +2220,7 @@ class WelcomeTicketWatcher(commands.Cog):
                     int(applicant_id),
                     int(getattr(thread, "id", 0)),
                     updated_at=created_at,
+                    thread_name=getattr(thread, "name", ""),
                 )
             except Exception:
                 log.exception(

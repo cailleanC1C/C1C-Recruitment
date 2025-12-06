@@ -22,6 +22,7 @@ def utc_now() -> datetime:
 class Session:
     thread_id: int
     applicant_id: int
+    thread_name: str = ""
     panel_message_id: int | None = None
     step_index: int = 0
     answers: Dict[str, object] = field(default_factory=dict)
@@ -94,8 +95,9 @@ class Session:
 
     def save_to_sheet(self) -> None:
         payload = {
-            "user_id": int(self.applicant_id),
-            "thread_id": int(self.thread_id),
+            "user_id": str(self.applicant_id),
+            "thread_id": str(self.thread_id),
+            "thread_name": self.thread_name or "",
             "panel_message_id": int(self.panel_message_id or 0),
             "step_index": int(self.step_index),
             "answers": self.answers,
@@ -118,7 +120,12 @@ class Session:
         if not row:
             return None
         panel_id = row.get("panel_message_id") or None
-        session = cls(thread_id=int(thread_id), applicant_id=int(applicant_id), panel_message_id=panel_id)
+        session = cls(
+            thread_id=int(thread_id),
+            applicant_id=int(applicant_id),
+            panel_message_id=panel_id,
+            thread_name=str(row.get("thread_name") or ""),
+        )
         session.step_index = int(row.get("step_index", 0) or 0)
         answers = row.get("answers") or {}
         if isinstance(answers, dict):
@@ -197,7 +204,11 @@ store = SessionStore()
 
 
 async def ensure_session_for_thread(
-    user_id: int, thread_id: int, *, updated_at: datetime | None = None
+    user_id: int,
+    thread_id: int,
+    *,
+    updated_at: datetime | None = None,
+    thread_name: str | None = None,
 ) -> Session:
     """Load or create a session row for the given ``user_id`` and ``thread_id``.
 
@@ -222,11 +233,17 @@ async def ensure_session_for_thread(
         existing = None
 
     if existing is not None:
+        updated = False
+        if thread_name and not existing.thread_name:
+            existing.thread_name = thread_name
+            updated = True
         if normalized_updated and (
             existing.updated_at is None
             or normalized_updated < _normalize_ts(existing.updated_at)
         ):
             existing.updated_at = normalized_updated
+            updated = True
+        if updated:
             try:
                 existing.save_to_sheet()
             except Exception:
@@ -239,6 +256,7 @@ async def ensure_session_for_thread(
     session = Session(
         thread_id=int(thread_id),
         applicant_id=int(user_id),
+        thread_name=thread_name or "",
         updated_at=normalized_updated or utc_now(),
     )
     try:

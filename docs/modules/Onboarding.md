@@ -24,10 +24,13 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - **Rules:** `visibility_rules` and `nav_rules` reference other `qid` values; parser rejects unknown IDs so skip logic does not drift.
 
 ### Session Persistence (`OnboardingSessions` tab)
-- **Columns (order enforced):** `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `answers_json`, `updated_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at`.
+- **Columns (minimum required):** `thread_name`, `user_id`, `thread_id`, `panel_message_id`, `step_index`, `completed`, `completed_at`, `answers_json`, `updated_at`, `first_reminder_at`, `warning_sent_at`, `auto_closed_at` (extra columns are tolerated so long as the required ones exist).
+- **ID handling:** `thread_id` and `user_id` are written as text to avoid Google Sheets’ 15-digit truncation; format these cells as *plain text* (not numbers/scientific notation) if rows look mangled.
+- **Creation timing:** Welcome/promo thread creation writes the first row immediately with `thread_name` set to the Discord thread name, `user_id` derived from the first mention in the starter message, `step_index=0`, `completed=False`, empty `answers`, and `updated_at` set to the thread creation timestamp.
+- **Upserts, not duplicates:** Persistence keys on `thread_id` only. Reminder/idle scans and wizard saves update the existing row; repeated scans must not increase the row count for a given thread.
 - **`answers_json`:** compact JSON storing the latest answers keyed by `qid` (`{"w_ign": "Caillean", "w_hydra_diff": ["Hard", "Brutal"]}`, etc.).
 - **Reminder timestamps:** `first_reminder_at`/`warning_sent_at`/`auto_closed_at` prevent repeated pings and track the welcome-thread lifecycle (5h nudge → 24h warning → 36h auto-close+rename to `Closed-…-NONE`).
-- **Usage:** restored whenever the wizard restarts; stale panel IDs trigger a fresh panel bind but keep answers, visibility, and reminder history.
+- **Ops sanity checks:** If data looks wrong, confirm the header includes `thread_id`/`thread_name`/`updated_at`, verify IDs render as text (not rounded), and spot-check that `thread_name` matches the Discord thread for the ticket.
 
 ### Idle watcher + scheduler visibility
 - **Idle reminders:** the onboarding idle watcher polls `OnboardingSessions` as source of truth. It pings the player after 5h of inactivity, pings the recruitment coordinators + player at 24h, and auto-closes after 36h (rename to `Closed-…-NONE`, lock/archive, release any linked reservation). Welcome auto-close messages ask coordinators to remove the user; promo closes skip the removal note.
@@ -65,4 +68,4 @@ The onboarding module is the generic questionnaire engine that powers welcome an
 - [`docs/Runbook.md`](../Runbook.md)
 - [`docs/adr/ADR-0022-Module-Boundaries.md`](../adr/ADR-0022-Module-Boundaries.md)
 
-Doc last updated: 2025-11-30 (v0.9.8.2)
+Doc last updated: 2025-12-06 (v0.9.8.2)
