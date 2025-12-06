@@ -293,33 +293,33 @@ class PromoTicketWatcher(commands.Cog):
         return context
 
     async def _log_ticket_open(self, thread: discord.Thread, context: PromoTicketContext) -> None:
-        row = [
-            context.ticket_number,
-            context.username,
-            context.clan_tag,
-            "",
-            context.promo_type,
-            context.thread_created,
-            context.year,
-            context.month,
-            context.join_month,
-            context.clan_name,
-            context.progression,
-        ]
         try:
-            result = await asyncio.to_thread(onboarding_sheets.upsert_promo, row, PROMO_HEADERS)
-        except Exception:
-            log.exception(
-                "failed to log promo ticket open",
-                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            result = await asyncio.to_thread(
+                onboarding_sheets.append_promo_ticket_row,
+                context.ticket_number,
+                context.username,
+                context.clan_tag,
+                context.promo_type,
+                context.thread_created,
+                context.year,
+                context.month,
+                context.join_month,
+                context.clan_name,
+                context.progression,
             )
-            return
-        log.info(
-            "promo_ticket_open — ticket=%s • user=%s • result=row_%s",
-            context.ticket_number,
-            context.username,
-            result,
-        )
+            log.info(
+                "promo_ticket_open — ticket=%s • user=%s • result=row_%s",
+                context.ticket_number,
+                context.username,
+                result,
+            )
+        except Exception as exc:
+            log.error(
+                "promo_ticket_open — ticket=%s • user=%s • result=error • reason=%s",
+                context.ticket_number,
+                context.username,
+                exc,
+            )
 
     async def _ensure_row_initialized(self, thread: discord.Thread, context: PromoTicketContext) -> None:
         try:
@@ -500,6 +500,8 @@ class PromoTicketWatcher(commands.Cog):
             return
         await self._log_ticket_open(thread, context)
 
+        created_at = getattr(thread, "created_at", None) or dt.datetime.now(UTC)
+
         try:
             starter = await locate_welcome_message(thread)
             applicant_id, _ = extract_target_from_message(starter)
@@ -511,10 +513,33 @@ class PromoTicketWatcher(commands.Cog):
 
         if applicant_id is not None:
             try:
+                session_result = await asyncio.to_thread(
+                    onboarding_sheets.append_onboarding_session_row,
+                    ticket=context.ticket_number,
+                    thread_id=int(getattr(thread, "id", 0)),
+                    user_id=int(applicant_id),
+                    flow="promo",
+                    status="open",
+                    created_at=created_at,
+                )
+                log.info(
+                    "promo_session_row — ticket=%s • user=%s • result=row_%s",
+                    context.ticket_number,
+                    context.username,
+                    session_result,
+                )
+            except Exception as exc:
+                log.error(
+                    "promo_session_row — ticket=%s • user=%s • result=error • reason=%s",
+                    context.ticket_number,
+                    context.username,
+                    exc,
+                )
+            try:
                 await ensure_session_for_thread(
                     int(applicant_id),
                     int(getattr(thread, "id", 0)),
-                    updated_at=getattr(thread, "created_at", None),
+                    updated_at=created_at,
                 )
             except Exception:
                 log.exception(
