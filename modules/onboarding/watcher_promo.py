@@ -16,6 +16,11 @@ from modules.common import runtime as rt
 from modules.onboarding.constants import CLAN_TAG_PROMPT_HELPER
 from modules.onboarding import logs as onboarding_logs
 from modules.onboarding import thread_scopes
+from modules.onboarding.controllers.welcome_controller import (
+    extract_target_from_message,
+    locate_welcome_message,
+)
+from modules.onboarding.sessions import ensure_session_for_thread
 from modules.onboarding.watcher_welcome import (
     _channel_readable_label,
     PanelOutcome,
@@ -494,6 +499,28 @@ class PromoTicketWatcher(commands.Cog):
         if context is None:
             return
         await self._log_ticket_open(thread, context)
+
+        try:
+            starter = await locate_welcome_message(thread)
+            applicant_id, _ = extract_target_from_message(starter)
+        except Exception:
+            applicant_id = None
+            log.debug(
+                "promo watcher: failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
+            )
+
+        if applicant_id is not None:
+            try:
+                await ensure_session_for_thread(
+                    int(applicant_id),
+                    int(getattr(thread, "id", 0)),
+                    updated_at=getattr(thread, "created_at", None),
+                )
+            except Exception:
+                log.exception(
+                    "promo watcher: failed to ensure onboarding session",
+                    extra={"thread_id": getattr(thread, "id", None), "applicant_id": applicant_id},
+                )
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:

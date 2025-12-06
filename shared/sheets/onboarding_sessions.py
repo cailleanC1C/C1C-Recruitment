@@ -211,6 +211,11 @@ def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     reminder_at = payload.get("first_reminder_at") or payload.get("empty_first_reminder_at") or ""
     warning_at = payload.get("warning_sent_at") or payload.get("empty_warning_sent_at") or ""
     auto_closed_at = payload.get("auto_closed_at") or ""
+    updated_at = payload.get("updated_at") or _now_iso()
+    if isinstance(updated_at, datetime):
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        updated_at = updated_at.isoformat()
 
     return {
         "user_id": int(payload["user_id"]),
@@ -220,7 +225,7 @@ def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "completed": bool(payload.get("completed", False)),
         "completed_at": payload.get("completed_at") or "",
         "answers_json": answers_json,
-        "updated_at": _now_iso(),
+        "updated_at": updated_at,
         "first_reminder_at": reminder_at,
         "warning_sent_at": warning_at,
         "auto_closed_at": auto_closed_at,
