@@ -216,6 +216,10 @@ def test_handle_ticket_open_preserves_existing_values(monkeypatch) -> None:
         "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
         fake_upsert,
     )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sessions.save",
+        lambda payload: recorded.setdefault("session", []).append(payload),
+    )
 
     async def runner() -> None:
         bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())

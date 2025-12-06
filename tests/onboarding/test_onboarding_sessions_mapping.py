@@ -146,6 +146,6 @@ def test_onboarding_sessions_load_all(monkeypatch, headers):
     rows = sheet_module.load_all()
 
     assert len(rows) == 1
-    assert rows[0]["user_id"] == payload["user_id"]
-    assert rows[0]["thread_id"] == payload["thread_id"]
+    assert rows[0]["user_id"] == str(payload["user_id"])
+    assert rows[0]["thread_id"] == str(payload["thread_id"])
     assert rows[0]["answers"].get("key") == "value"

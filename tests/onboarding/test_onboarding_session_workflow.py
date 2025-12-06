@@ -17,9 +17,15 @@ class _DummyUser:
 
 
 class _DummyMessage:
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int, mentions: bool | list[_DummyUser] = True):
         self.id = 555
-        self.mentions = [_DummyUser(user_id)]
+        self.author = _DummyUser(user_id)
+        if mentions is False:
+            self.mentions: list[_DummyUser] = []
+        elif isinstance(mentions, list):
+            self.mentions = mentions
+        else:
+            self.mentions = [_DummyUser(user_id)]
 
 
 class _DummyThread:
@@ -36,15 +42,35 @@ class _DummyBot:
 @pytest.fixture()
 def memory_sheet(monkeypatch):
     rows: dict[tuple[int, int], dict] = {}
+    onboarding_rows: dict[str, dict] = {}
 
     def fake_load(user_id: int, thread_id: int):
-        return rows.get((int(user_id), int(thread_id)))
+        key = (int(user_id), int(thread_id))
+        return rows.get(key)
 
     def fake_save(payload: dict):
-        rows[(int(payload["user_id"]), int(payload["thread_id"]))] = payload
+        try:
+            key = (int(payload.get("user_id") or 0), int(payload.get("thread_id") or 0))
+        except Exception:
+            key = (payload.get("user_id"), payload.get("thread_id"))
+        rows[key] = payload
 
-    monkeypatch.setattr(sessions.sess_sheet, "load", fake_load)
-    monkeypatch.setattr(sessions.sess_sheet, "save", fake_save)
+    fake_sheet_module = type("_FakeSheet", (), {"load": staticmethod(fake_load), "save": staticmethod(fake_save)})
+    monkeypatch.setattr(sessions, "sess_sheet", fake_sheet_module)
+    monkeypatch.setattr(
+        "shared.sheets.onboarding_sessions.save",
+        lambda payload: onboarding_rows.setdefault(str(payload.get("thread_id", "")), payload),
+    )
+    monkeypatch.setattr("shared.sheets.onboarding_sessions.load", lambda *_: None)
+    monkeypatch.setattr("shared.sheets.onboarding_sessions.load_all", lambda: list(onboarding_rows.values()))
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_onboarding_session_row",
+        lambda **_: "inserted",
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_promo.onboarding_sheets.append_onboarding_session_row",
+        lambda **_: "inserted",
+    )
     return rows
 
 
@@ -55,12 +81,20 @@ def _clear_target_cache(monkeypatch):
     watcher_welcome._TARGET_CACHE.clear()
 
 
-def _install_message_fixtures(monkeypatch, module, user_id: int = 42):
-    dummy_message = _DummyMessage(user_id)
+def _install_message_fixtures(
+    monkeypatch, module, user_id: int = 42, message: _DummyMessage | None = None
+):
+    dummy_message = message or _DummyMessage(user_id)
+
     async def _locate(_thread):
         return dummy_message
 
     monkeypatch.setattr(module, "locate_welcome_message", _locate)
+
+
+def _extract_target(message):
+    target = message.mentions[0] if getattr(message, "mentions", None) else getattr(message, "author", None)
+    return (target.id if target else None, getattr(message, "id", None))
 
 
 def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
@@ -71,7 +105,7 @@ def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
     _install_message_fixtures(monkeypatch, __import__("modules.onboarding.watcher_welcome", fromlist=["locate_welcome_message"]))
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.extract_target_from_message",
-        lambda message: (message.mentions[0].id, message.id),
+        _extract_target,
     )
     monkeypatch.setattr(
         "shared.sheets.onboarding.upsert_welcome",
@@ -108,6 +142,10 @@ def test_welcome_ticket_open_falls_back_to_author_when_no_mentions(memory_sheet,
         message=dummy_message,
     )
     monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.extract_target_from_message",
+        _extract_target,
+    )
+    monkeypatch.setattr(
         "shared.sheets.onboarding.upsert_welcome",
         lambda row, headers: "inserted",
     )
@@ -137,7 +175,7 @@ def test_promo_thread_open_creates_session(memory_sheet, monkeypatch):
     _install_message_fixtures(monkeypatch, __import__("modules.onboarding.watcher_promo", fromlist=["locate_welcome_message"]))
     monkeypatch.setattr(
         "modules.onboarding.watcher_promo.extract_target_from_message",
-        lambda message: (message.mentions[0].id, message.id),
+        _extract_target,
     )
     monkeypatch.setattr(
         "shared.sheets.onboarding.upsert_promo",
@@ -196,7 +234,7 @@ def test_inactivity_scan_creates_session_row(memory_sheet, monkeypatch):
     _install_message_fixtures(monkeypatch, __import__("modules.onboarding.watcher_welcome", fromlist=["locate_welcome_message"]))
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.extract_target_from_message",
-        lambda message: (message.mentions[0].id, message.id),
+        _extract_target,
     )
 
     asyncio.run(_process_incomplete_thread(bot=_DummyBot(), thread=thread, now=now))

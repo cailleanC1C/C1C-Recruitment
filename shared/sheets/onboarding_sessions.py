@@ -70,8 +70,8 @@ def load(user_id: int | None, thread_id: int) -> Optional[Dict[str, Any]]:
     completed_at = record.get("completed_at") or None
     return {
         "thread_name": record.get("thread_name") or "",
-        "user_id": _safe_int(record.get("user_id")),
-        "thread_id": _safe_int(record.get("thread_id")),
+        "user_id": str(record.get("user_id") or ""),
+        "thread_id": str(record.get("thread_id") or ""),
         "panel_message_id": panel_id if panel_id not in (None, 0) else None,
         "step_index": _safe_int(record.get("step_index"), default=0),
         "completed": completed,
@@ -110,8 +110,8 @@ def load_all() -> list[Dict[str, Any]]:
         sessions.append(
             {
                 "thread_name": record.get("thread_name") or "",
-                "user_id": _safe_int(record.get("user_id")),
-                "thread_id": _safe_int(record.get("thread_id")),
+                "user_id": str(record.get("user_id") or ""),
+                "thread_id": str(record.get("thread_id") or ""),
                 "panel_message_id": panel_id if panel_id not in (None, 0) else None,
                 "step_index": _safe_int(record.get("step_index"), default=0),
                 "completed": completed,
@@ -218,8 +218,8 @@ def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "thread_name": str(payload.get("thread_name") or ""),
-        "user_id": _safe_int(payload.get("user_id")) or "",
-        "thread_id": _safe_int(payload.get("thread_id")) or "",
+        "user_id": str(payload.get("user_id") or ""),
+        "thread_id": str(payload.get("thread_id") or ""),
         "panel_message_id": _safe_int(payload.get("panel_message_id"), default="") or "",
         "step_index": _safe_int(payload.get("step_index"), default=0) or 0,
         "completed": bool(completed_value),
@@ -278,12 +278,19 @@ def _cell(row: Sequence[Any], header_map: Dict[str, int], key: str) -> Any:
         return ""
 
 
-def _get_row_index_by_thread_id(rows: Sequence[Sequence[Any]], header_map: Dict[str, int], thread_id: int | str | None) -> Optional[int]:
+def _get_row_index_by_thread_id(
+    rows: Sequence[Sequence[Any]], header_map: Dict[str, int], thread_id: int | str | None
+) -> Optional[int]:
     if thread_id is None:
         return None
+    target_thread = str(thread_id).strip()
+    if not target_thread:
+        return None
     for idx, row in enumerate(rows, start=1):
-        row_thread = _safe_int(_cell(row, header_map, "thread_id"))
-        if row_thread == _safe_int(thread_id):
+        row_thread = str(_cell(row, header_map, "thread_id") or "").strip()
+        if not row_thread:
+            continue
+        if row_thread == target_thread:
             return idx
     return None
 
