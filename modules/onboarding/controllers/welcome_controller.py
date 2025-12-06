@@ -19,7 +19,7 @@ from modules.onboarding.schema import (
     load_welcome_questions,
     parse_values_list,
 )
-from modules.onboarding.sessions import Session, utc_now
+from modules.onboarding.sessions import Session, ensure_session_for_thread, utc_now
 from modules.onboarding.session_store import SessionData, store
 from modules.onboarding.ui.card import RollingCard
 from modules.onboarding.ui.panel_message_manager import PanelMessageManager
@@ -1271,17 +1271,6 @@ class BaseWelcomeController:
                 return None
         return None
 
-    @staticmethod
-    def _load_or_create_sheet_session(thread_id: int, applicant_id: int) -> Session:
-        existing = None
-        try:
-            existing = Session.load_from_sheet(applicant_id, thread_id)
-        except Exception:
-            existing = None
-        if existing is not None:
-            return existing
-        return Session(thread_id=thread_id, applicant_id=applicant_id)
-
     def _final_step_index(self, thread_id: int, session: SessionData | None) -> int:
         visible_indices = self._visible_indices(thread_id)
         if visible_indices:
@@ -1298,19 +1287,24 @@ class BaseWelcomeController:
             pass
         return 0
 
-    def _persist_session_start(
+    async def _persist_session_start(
         self,
         thread_id: int,
         *,
         panel_message_id: int | None,
         session_data: SessionData | None = None,
+        panel_created_at: datetime | None = None,
     ) -> None:
         applicant_id = self._resolve_applicant_id(thread_id, session_data)
         if applicant_id is None:
             return
 
         try:
-            sheet_session = self._load_or_create_sheet_session(thread_id, applicant_id)
+            sheet_session = await ensure_session_for_thread(
+                applicant_id,
+                thread_id,
+                updated_at=panel_created_at,
+            )
         except Exception:
             log.warning("welcome:persist_start_failed", exc_info=True)
             return
@@ -1319,14 +1313,14 @@ class BaseWelcomeController:
             sheet_session.panel_message_id = panel_message_id
         sheet_session.completed = False
         sheet_session.step_index = 0
-        sheet_session.last_updated = utc_now()
+        sheet_session._touch(timestamp=panel_created_at or utc_now())
 
         try:
             sheet_session.save_to_sheet()
         except Exception:
             log.warning("welcome:sheet_start_save_failed", exc_info=True)
 
-    def _persist_session_completion(
+    async def _persist_session_completion(
         self,
         thread_id: int,
         *,
@@ -1339,7 +1333,7 @@ class BaseWelcomeController:
             return
 
         try:
-            sheet_session = self._load_or_create_sheet_session(thread_id, applicant_id)
+            sheet_session = await ensure_session_for_thread(applicant_id, thread_id)
         except Exception:
             log.warning("welcome:persist_complete_failed", exc_info=True)
             return
@@ -1349,7 +1343,7 @@ class BaseWelcomeController:
         sheet_session.step_index = self._final_step_index(thread_id, session_data)
         sheet_session.answers = dict(answers)
         sheet_session.mark_completed()
-        sheet_session.last_updated = utc_now()
+        sheet_session._touch()
 
         try:
             sheet_session.save_to_sheet()
@@ -1966,7 +1960,7 @@ class BaseWelcomeController:
                 answers=dict(answers),
             )
 
-            self._persist_session_completion(
+            await self._persist_session_completion(
                 thread_id,
                 session_data=session,
                 answers=dict(answers),
@@ -2222,10 +2216,11 @@ class BaseWelcomeController:
                 ambiguous_target=target_user_id is None,
             )
 
-        self._persist_session_start(
+        await self._persist_session_start(
             thread_id,
             panel_message_id=int(getattr(message, "id", 0)) if message else None,
             session_data=session,
+            panel_created_at=getattr(message, "created_at", None),
         )
 
     async def _start_select_step(self, thread: discord.Thread, session: SessionData) -> None:
@@ -3505,7 +3500,7 @@ class BaseWelcomeController:
                 answers=dict(session.answers),
             )
 
-            self._persist_session_completion(
+            await self._persist_session_completion(
                 thread_id,
                 session_data=session,
                 answers=dict(session.answers),

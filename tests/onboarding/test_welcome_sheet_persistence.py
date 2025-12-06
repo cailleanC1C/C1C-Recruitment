@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from modules.onboarding.controllers import welcome_controller
@@ -18,26 +21,28 @@ def _reset_store(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_persist_session_start_records_sheet_row(monkeypatch: pytest.MonkeyPatch) -> None:
     saved: dict[str, SessionData] = {}
 
-    monkeypatch.setattr(
-        welcome_controller.Session,
-        "load_from_sheet",
-        classmethod(lambda _cls, _applicant_id, _thread_id: None),
-    )
+    async def _ensure(applicant_id: int, thread_id: int, **_kwargs):
+        session = welcome_controller.Session(thread_id=thread_id, applicant_id=applicant_id)
 
-    def _save(session: welcome_controller.Session) -> None:
-        saved["session"] = session
+        def _save() -> None:
+            saved["session"] = session
 
-    monkeypatch.setattr(welcome_controller.Session, "save_to_sheet", _save)
+        session.save_to_sheet = _save
+        return session
+
+    monkeypatch.setattr(welcome_controller, "ensure_session_for_thread", _ensure)
 
     controller = WelcomeController(SimpleNamespace())
     thread_id = 101
     controller._target_users[thread_id] = 202
     session = store.ensure(thread_id, flow=controller.flow, schema_hash="hash")
 
-    controller._persist_session_start(
-        thread_id,
-        panel_message_id=303,
-        session_data=session,
+    asyncio.run(
+        controller._persist_session_start(
+            thread_id,
+            panel_message_id=303,
+            session_data=session,
+        )
     )
 
     persisted = saved.get("session")
@@ -53,16 +58,13 @@ def test_persist_session_completion_updates_answers(monkeypatch: pytest.MonkeyPa
     saved: dict[str, welcome_controller.Session] = {}
     existing = welcome_controller.Session(thread_id=505, applicant_id=606)
 
-    def _load(_cls, applicant_id: int, thread_id: int):
+    async def _ensure(applicant_id: int, thread_id: int, **_kwargs):
         assert applicant_id == 606
         assert thread_id == 505
+        existing.save_to_sheet = lambda: saved.setdefault("session", existing)
         return existing
 
-    def _save(session: welcome_controller.Session) -> None:
-        saved["session"] = session
-
-    monkeypatch.setattr(welcome_controller.Session, "load_from_sheet", classmethod(_load))
-    monkeypatch.setattr(welcome_controller.Session, "save_to_sheet", _save)
+    monkeypatch.setattr(welcome_controller, "ensure_session_for_thread", _ensure)
 
     controller = WelcomeController(SimpleNamespace())
     thread_id = 505
@@ -74,11 +76,13 @@ def test_persist_session_completion_updates_answers(monkeypatch: pytest.MonkeyPa
 
     answers = {"q1": "yes"}
 
-    controller._persist_session_completion(
-        thread_id,
-        session_data=session,
-        answers=answers,
-        panel_message_id=controller._panel_messages.get(thread_id),
+    asyncio.run(
+        controller._persist_session_completion(
+            thread_id,
+            session_data=session,
+            answers=answers,
+            panel_message_id=controller._panel_messages.get(thread_id),
+        )
     )
 
     persisted = saved.get("session")
