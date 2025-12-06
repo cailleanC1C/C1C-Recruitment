@@ -11,6 +11,7 @@ from shared.sheets import core
 log = logging.getLogger(__name__)
 
 CANONICAL_COLUMNS: list[str] = [
+    "thread_name",
     "user_id",
     "thread_id",
     "panel_message_id",
@@ -25,6 +26,8 @@ CANONICAL_COLUMNS: list[str] = [
 ]
 
 _HEADER_MISMATCH_LOGGED = False
+_MISSING_COLUMN_LOGGED = False
+_REQUIRED_COLUMNS = {"thread_id", "thread_name", "updated_at"}
 
 
 def _now_iso() -> str:
@@ -41,7 +44,7 @@ def _sheet():
     return core.get_worksheet(sheet_id, tab_name)
 
 
-def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
+def load(user_id: int | None, thread_id: int) -> Optional[Dict[str, Any]]:
     worksheet = _sheet()
     rows = worksheet.get_all_values()
     header = _validated_header(rows[0] if rows else [])
@@ -49,38 +52,36 @@ def load(user_id: int, thread_id: int) -> Optional[Dict[str, Any]]:
         return None
 
     header_map = _header_index_map(header)
+    target_row = _get_row_index_by_thread_id(rows[1:], header_map, thread_id)
+    if target_row is None:
+        return None
 
-    for row in rows[1:]:
-        row_user = _safe_int(_cell(row, header_map, "user_id"))
-        row_thread = _safe_int(_cell(row, header_map, "thread_id"))
-        if row_user != int(user_id) or row_thread != int(thread_id):
-            continue
+    row = rows[target_row]
+    record = _record_from_row(row, header, header_map)
+    raw_answers = record.get("answers_json") or "{}"
+    try:
+        answers = json.loads(raw_answers)
+    except Exception:
+        answers = {}
 
-        record = _record_from_row(row, header)
-        raw_answers = record.get("answers_json") or "{}"
-        try:
-            answers = json.loads(raw_answers)
-        except Exception:
-            answers = {}
-
-        panel_id = _safe_int(record.get("panel_message_id"))
-        completed_token = str(record.get("completed", "")).strip().lower()
-        completed = completed_token in {"true", "1", "yes", "true"}
-        completed_at = record.get("completed_at") or None
-        return {
-            "user_id": row_user,
-            "thread_id": row_thread,
-            "panel_message_id": panel_id if panel_id not in (None, 0) else None,
-            "step_index": _safe_int(record.get("step_index"), default=0),
-            "completed": completed,
-            "completed_at": completed_at,
-            "updated_at": record.get("updated_at") or "",
-            "first_reminder_at": record.get("first_reminder_at") or "",
-            "warning_sent_at": record.get("warning_sent_at") or "",
-            "auto_closed_at": record.get("auto_closed_at") or "",
-            "answers": answers,
-        }
-    return None
+    panel_id = _safe_int(record.get("panel_message_id"))
+    completed_token = str(record.get("completed", "")).strip().lower()
+    completed = completed_token in {"true", "1", "yes", "true"}
+    completed_at = record.get("completed_at") or None
+    return {
+        "thread_name": record.get("thread_name") or "",
+        "user_id": _safe_int(record.get("user_id")),
+        "thread_id": _safe_int(record.get("thread_id")),
+        "panel_message_id": panel_id if panel_id not in (None, 0) else None,
+        "step_index": _safe_int(record.get("step_index"), default=0),
+        "completed": completed,
+        "completed_at": completed_at,
+        "updated_at": record.get("updated_at") or "",
+        "first_reminder_at": record.get("first_reminder_at") or "",
+        "warning_sent_at": record.get("warning_sent_at") or "",
+        "auto_closed_at": record.get("auto_closed_at") or "",
+        "answers": answers,
+    }
 
 
 def load_all() -> list[Dict[str, Any]]:
@@ -94,7 +95,7 @@ def load_all() -> list[Dict[str, Any]]:
     sessions: list[Dict[str, Any]] = []
 
     for row in rows[1:]:
-        record = _record_from_row(row, header)
+        record = _record_from_row(row, header, header_map)
         raw_answers = record.get("answers_json") or "{}"
         try:
             answers = json.loads(raw_answers)
@@ -108,8 +109,9 @@ def load_all() -> list[Dict[str, Any]]:
 
         sessions.append(
             {
-                "user_id": _safe_int(_cell(row, header_map, "user_id")),
-                "thread_id": _safe_int(_cell(row, header_map, "thread_id")),
+                "thread_name": record.get("thread_name") or "",
+                "user_id": _safe_int(record.get("user_id")),
+                "thread_id": _safe_int(record.get("thread_id")),
                 "panel_message_id": panel_id if panel_id not in (None, 0) else None,
                 "step_index": _safe_int(record.get("step_index"), default=0),
                 "completed": completed,
@@ -133,33 +135,25 @@ def save(payload: Dict[str, Any]) -> None:
         return
 
     header_map = _header_index_map(header)
+    target_row = _get_row_index_by_thread_id(rows[1:], header_map, payload.get("thread_id"))
 
-    target_row: Optional[int] = None
-    for idx, row in enumerate(rows[1:], start=2):
-        row_user = _safe_int(_cell(row, header_map, "user_id"))
-        row_thread = _safe_int(_cell(row, header_map, "thread_id"))
-        if row_user == int(payload["user_id"]) and row_thread == int(payload["thread_id"]):
-            target_row = idx
-            break
+    existing: Dict[str, Any] = {}
+    if target_row is not None:
+        existing = _record_from_row(rows[target_row], header, header_map)
 
-    values = build_row(payload, headers=header)
+    record = _merge_record(existing, payload)
+    values = build_row(record, headers=header)
 
-    if target_row:
-        worksheet.update(_range_for_row(target_row, header), [values])
-        log.info(
-            "🧾 onboarding session saved • thread_id=%s answers=%s",
-            payload.get("thread_id"),
-            "yes" if payload.get("answers") else "no",
-        )
-        return
+    if target_row is not None:
+        worksheet.update(_range_for_row(target_row + 1, header), [values])
+    else:
+        worksheet.append_row(values)
 
-    if not rows:
-        worksheet.update(_range_for_row(1, header), [_normalize_header(header)])
-    worksheet.append_row(values)
     log.info(
-        "🧾 onboarding session saved • thread_id=%s answers=%s",
-        payload.get("thread_id"),
-        "yes" if payload.get("answers") else "no",
+        "🧾 onboarding session saved • thread_id=%s • thread_name=%s • answers=%s",
+        record.get("thread_id"),
+        record.get("thread_name") or "",
+        "yes" if record.get("answers") else "no",
     )
 
 
@@ -171,34 +165,26 @@ def build_row(payload: Dict[str, Any], *, headers: Sequence[str] | None = None) 
 
 def _validate_header(header: Iterable[str]) -> Optional[list[str]]:
     normalized = _normalize_header(header)
-    if _header_matches(normalized):
-        return normalized
-
-    _log_header_mismatch(normalized)
-    return None
-
-
-def _header_matches(header: Sequence[str]) -> bool:
-    normalized = [col.strip().lower() for col in header]
-    canonical = [col.lower() for col in CANONICAL_COLUMNS]
-    return normalized == canonical
+    header_map = _header_index_map(normalized)
+    missing = sorted(col for col in _REQUIRED_COLUMNS if col not in header_map)
+    if missing:
+        _log_missing_columns(missing)
+        return None
+    return normalized
 
 
 def _validated_header(header: Iterable[str]) -> Optional[list[str]]:
     return _validate_header(header)
 
 
-def _log_header_mismatch(header: Sequence[str]) -> None:
-    global _HEADER_MISMATCH_LOGGED
-    if _HEADER_MISMATCH_LOGGED:
+def _log_missing_columns(missing: Sequence[str]) -> None:
+    global _MISSING_COLUMN_LOGGED
+    if _MISSING_COLUMN_LOGGED:
         return
-    _HEADER_MISMATCH_LOGGED = True
-    observed = ", ".join(_normalize_header(header)) or "<empty>"
-    expected = ", ".join(CANONICAL_COLUMNS)
-    log.error(
-        "❌ OnboardingSessions header mismatch; expected [%s] but found [%s]. Skipping persistence.",
-        expected,
-        observed,
+    _MISSING_COLUMN_LOGGED = True
+    log.warning(
+        "onboarding_sessions_misconfigured • missing_columns=%s",
+        ",".join(sorted(missing)),
     )
 
 
@@ -207,7 +193,16 @@ def _normalize_header(header: Iterable[str]) -> list[str]:
 
 
 def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    answers_json = json.dumps(payload.get("answers", {}), separators=(",", ":"))
+    answers = payload.get("answers")
+    if answers is None and payload.get("answers_json"):
+        try:
+            answers = json.loads(payload.get("answers_json", "{}"))
+        except Exception:
+            answers = {}
+    answers_json = payload.get("answers_json")
+    if answers_json is None:
+        answers_json = json.dumps(answers or {}, separators=(",", ":"))
+
     reminder_at = payload.get("first_reminder_at") or payload.get("empty_first_reminder_at") or ""
     warning_at = payload.get("warning_sent_at") or payload.get("empty_warning_sent_at") or ""
     auto_closed_at = payload.get("auto_closed_at") or ""
@@ -217,14 +212,20 @@ def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             updated_at = updated_at.replace(tzinfo=timezone.utc)
         updated_at = updated_at.isoformat()
 
+    completed_value = payload.get("completed", False)
+    if isinstance(completed_value, str):
+        completed_value = completed_value.strip().lower() in {"true", "1", "yes"}
+
     return {
-        "user_id": int(payload["user_id"]),
-        "thread_id": int(payload["thread_id"]),
-        "panel_message_id": int(payload.get("panel_message_id") or 0),
-        "step_index": int(payload.get("step_index", 0) or 0),
-        "completed": bool(payload.get("completed", False)),
+        "thread_name": str(payload.get("thread_name") or ""),
+        "user_id": _safe_int(payload.get("user_id")) or "",
+        "thread_id": _safe_int(payload.get("thread_id")) or "",
+        "panel_message_id": _safe_int(payload.get("panel_message_id"), default="") or "",
+        "step_index": _safe_int(payload.get("step_index"), default=0) or 0,
+        "completed": bool(completed_value),
         "completed_at": payload.get("completed_at") or "",
         "answers_json": answers_json,
+        "answers": answers or {},
         "updated_at": updated_at,
         "first_reminder_at": reminder_at,
         "warning_sent_at": warning_at,
@@ -232,9 +233,35 @@ def _record_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _record_from_row(row: Sequence[Any], header: Sequence[str]) -> Dict[str, Any]:
-    header_map = _header_index_map(header)
-    return {name: _cell(row, header_map, name) for name in CANONICAL_COLUMNS}
+def _record_from_row(row: Sequence[Any], header: Sequence[str], header_map: Dict[str, int]) -> Dict[str, Any]:
+    record: Dict[str, Any] = {}
+    for name in CANONICAL_COLUMNS:
+        record[name] = _cell(row, header_map, name)
+    return record
+
+
+def _merge_record(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    existing_answers = existing.get("answers_json") or existing.get("answers") or "{}"
+    try:
+        existing_answers = json.loads(existing_answers)
+    except Exception:
+        existing_answers = {}
+
+    merged_payload: Dict[str, Any] = {
+        "thread_name": payload.get("thread_name") or existing.get("thread_name") or "",
+        "thread_id": payload.get("thread_id") or existing.get("thread_id") or "",
+        "user_id": payload.get("user_id") or existing.get("user_id") or "",
+        "panel_message_id": payload.get("panel_message_id") or existing.get("panel_message_id") or "",
+        "step_index": payload.get("step_index", existing.get("step_index", 0)),
+        "completed": payload.get("completed", existing.get("completed", False)),
+        "completed_at": payload.get("completed_at") or existing.get("completed_at") or "",
+        "answers": payload.get("answers", existing_answers),
+        "updated_at": payload.get("updated_at") or existing.get("updated_at") or _now_iso(),
+        "first_reminder_at": payload.get("first_reminder_at") or existing.get("first_reminder_at") or "",
+        "warning_sent_at": payload.get("warning_sent_at") or existing.get("warning_sent_at") or "",
+        "auto_closed_at": payload.get("auto_closed_at") or existing.get("auto_closed_at") or "",
+    }
+    return _record_from_payload(merged_payload)
 
 
 def _header_index_map(header: Sequence[str]) -> Dict[str, int]:
@@ -249,6 +276,16 @@ def _cell(row: Sequence[Any], header_map: Dict[str, int], key: str) -> Any:
         return row[idx]
     except Exception:
         return ""
+
+
+def _get_row_index_by_thread_id(rows: Sequence[Sequence[Any]], header_map: Dict[str, int], thread_id: int | str | None) -> Optional[int]:
+    if thread_id is None:
+        return None
+    for idx, row in enumerate(rows, start=1):
+        row_thread = _safe_int(_cell(row, header_map, "thread_id"))
+        if row_thread == _safe_int(thread_id):
+            return idx
+    return None
 
 
 def _safe_int(value: Any, *, default: int | None = None) -> int | None:
