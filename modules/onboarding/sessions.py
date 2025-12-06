@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from shared.sheets import onboarding_sessions as sess_sheet
+
+log = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -22,8 +25,6 @@ class Session:
     panel_message_id: int | None = None
     step_index: int = 0
     answers: Dict[str, object] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=utc_now)
-    last_updated: datetime = field(init=False)
     completed: bool = False
     completed_at: datetime | None = None
     empty_first_reminder_at: datetime | None = None
@@ -31,21 +32,28 @@ class Session:
     first_reminder_at: datetime | None = None
     warning_sent_at: datetime | None = None
     auto_closed_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    last_updated: datetime = field(init=False)
 
     def __post_init__(self) -> None:
-        self.last_updated = self.created_at
+        if self.updated_at is None:
+            self.updated_at = self.created_at
+        if self.updated_at.tzinfo is None:
+            self.updated_at = self.updated_at.replace(tzinfo=timezone.utc)
+        self.last_updated = self.updated_at
 
     def reset(self) -> None:
         """Reset the wizard state for the session."""
 
         self.step_index = 0
         self.answers.clear()
-        self.last_updated = utc_now()
+        self._touch()
 
     # PR-B: answer helpers
     def set_answer(self, gid: str, value) -> None:
         self.answers[gid] = value
-        self.last_updated = utc_now()
+        self._touch()
 
     def has_answer(self, gid: str) -> bool:
         return gid in self.answers and self.answers[gid] not in (None, "", "—", [])
@@ -56,6 +64,14 @@ class Session:
     def mark_completed(self) -> None:
         self.completed = True
         self.completed_at = utc_now()
+        self._touch()
+
+    def _touch(self, *, timestamp: datetime | None = None) -> None:
+        candidate = timestamp or utc_now()
+        if candidate.tzinfo is None:
+            candidate = candidate.replace(tzinfo=timezone.utc)
+        self.updated_at = candidate
+        self.last_updated = candidate
 
     # === Sheet persistence helpers ===
     def to_dict(self) -> dict[str, Any]:
@@ -85,6 +101,7 @@ class Session:
             "answers": self.answers,
             "completed": bool(self.completed),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "updated_at": _serialize_dt(self.updated_at),
             "first_reminder_at": (self.first_reminder_at or self.empty_first_reminder_at).isoformat()
             if (self.first_reminder_at or self.empty_first_reminder_at)
             else None,
@@ -129,7 +146,9 @@ class Session:
         auto_closed = row.get("auto_closed_at")
         if auto_closed:
             session.auto_closed_at = _parse_iso(auto_closed)
-        session.last_updated = utc_now()
+        updated_at = row.get("updated_at")
+        session.updated_at = _parse_iso(updated_at) or utc_now()
+        session.last_updated = session.updated_at
         return session
 
 
@@ -142,6 +161,15 @@ def _parse_iso(value: Any) -> datetime | None:
         return parsed
     except Exception:
         return None
+
+
+def _serialize_dt(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=timezone.utc)
+    return normalized.isoformat()
 
 
 class SessionStore:
@@ -167,5 +195,60 @@ class SessionStore:
 
 store = SessionStore()
 
-__all__ = ["Session", "SessionStore", "store", "utc_now"]
+
+async def ensure_session_for_thread(
+    user_id: int, thread_id: int, *, updated_at: datetime | None = None
+) -> Session:
+    """Load or create a session row for the given ``user_id`` and ``thread_id``.
+
+    The helper preserves the earliest known ``updated_at`` timestamp when provided,
+    while guaranteeing a single row per ``(user_id, thread_id)`` key.
+    """
+
+    def _normalize_ts(candidate: datetime | None) -> datetime | None:
+        if candidate is None:
+            return None
+        if candidate.tzinfo is None:
+            return candidate.replace(tzinfo=timezone.utc)
+        return candidate.astimezone(timezone.utc)
+
+    normalized_updated = _normalize_ts(updated_at)
+    try:
+        existing = Session.load_from_sheet(int(user_id), int(thread_id))
+    except Exception:
+        log.exception(
+            "failed to load onboarding session", extra={"thread_id": thread_id, "user_id": user_id}
+        )
+        existing = None
+
+    if existing is not None:
+        if normalized_updated and (
+            existing.updated_at is None
+            or normalized_updated < _normalize_ts(existing.updated_at)
+        ):
+            existing.updated_at = normalized_updated
+            try:
+                existing.save_to_sheet()
+            except Exception:
+                log.exception(
+                    "failed to persist onboarding session timestamp",
+                    extra={"thread_id": thread_id, "user_id": user_id},
+                )
+        return existing
+
+    session = Session(
+        thread_id=int(thread_id),
+        applicant_id=int(user_id),
+        updated_at=normalized_updated or utc_now(),
+    )
+    try:
+        session.save_to_sheet()
+    except Exception:
+        log.exception(
+            "failed to create onboarding session", extra={"thread_id": thread_id, "user_id": user_id}
+        )
+    return session
+
+
+__all__ = ["Session", "SessionStore", "store", "utc_now", "ensure_session_for_thread"]
 

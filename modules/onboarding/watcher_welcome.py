@@ -25,7 +25,7 @@ from modules.onboarding.controllers.welcome_controller import (
     extract_target_from_message,
     locate_welcome_message,
 )
-from modules.onboarding.sessions import Session
+from modules.onboarding.sessions import Session, ensure_session_for_thread
 from shared.config import (
     get_admin_role_ids,
     get_guardian_knight_role_ids,
@@ -337,19 +337,6 @@ async def _resolve_target_user(thread: discord.Thread, parts: ThreadNameParts) -
     return target_id, parts.username
 
 
-def _load_session(applicant_id: int | None, thread_id: int) -> Session | None:
-    if applicant_id is None:
-        return None
-    try:
-        return Session.load_from_sheet(applicant_id, thread_id)
-    except Exception:
-        log.exception(
-            "failed to load onboarding session for reminders",
-            extra={"thread_id": thread_id, "applicant_id": applicant_id},
-        )
-    return None
-
-
 def _persist_reminder_state(session: Session | None, *, action: str, timestamp: datetime) -> None:
     if session is None:
         return
@@ -367,6 +354,7 @@ def _persist_reminder_state(session: Session | None, *, action: str, timestamp: 
     elif action.startswith("close"):
         session.auto_closed_at = timestamp
 
+    session._touch(timestamp=timestamp)
     try:
         session.save_to_sheet()
     except Exception:
@@ -453,7 +441,15 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
     created_at = _normalize_dt(getattr(thread, "created_at", None))
     applicant_id, _username = await _resolve_target_user(thread, parsed)
 
-    session = _load_session(applicant_id, int(getattr(thread, "id", 0)))
+    session: Session | None = None
+    if applicant_id is not None:
+        try:
+            session = await ensure_session_for_thread(applicant_id, int(getattr(thread, "id", 0)), updated_at=created_at)
+        except Exception:
+            log.exception(
+                "failed to ensure welcome session", extra={"thread_id": getattr(thread, "id", None)}
+            )
+
     has_answers = _session_has_answers(session)
     action = _determine_reminder_action(now, created_at, session, has_answers=has_answers)
     if action is None:
@@ -468,9 +464,8 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
 
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
-    session = session or Session(
-        thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id)
-    )
+    if session is None:
+        session = Session(thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id))
 
     if action == "reminder_empty":
         content = (
@@ -674,7 +669,14 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
 
     created_at = _normalize_dt(getattr(thread, "created_at", None))
     applicant_id, _username = await _resolve_target_user(thread, parsed)
-    session = _load_session(applicant_id, int(getattr(thread, "id", 0)))
+    session: Session | None = None
+    if applicant_id is not None:
+        try:
+            session = await ensure_session_for_thread(applicant_id, int(getattr(thread, "id", 0)), updated_at=created_at)
+        except Exception:
+            log.exception(
+                "failed to ensure promo session", extra={"thread_id": getattr(thread, "id", None)}
+            )
     has_answers = _session_has_answers(session)
     action = _determine_reminder_action(now, created_at, session, has_answers=has_answers)
 
@@ -690,9 +692,8 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
 
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
-    session = session or Session(
-        thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id)
-    )
+    if session is None:
+        session = Session(thread_id=int(getattr(thread, "id", 0)), applicant_id=int(applicant_id))
 
     if action == "reminder_empty":
         content = (
@@ -2118,6 +2119,28 @@ class WelcomeTicketWatcher(commands.Cog):
             context.username,
             result,
         )
+
+        try:
+            starter = await locate_welcome_message(thread)
+            applicant_id, _ = extract_target_from_message(starter)
+        except Exception:
+            applicant_id = None
+            log.debug(
+                "failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
+            )
+
+        if applicant_id is not None:
+            try:
+                await ensure_session_for_thread(
+                    int(applicant_id),
+                    int(getattr(thread, "id", 0)),
+                    updated_at=_normalize_dt(getattr(thread, "created_at", None)),
+                )
+            except Exception:
+                log.exception(
+                    "failed to ensure onboarding session on ticket open",
+                    extra={"thread_id": getattr(thread, "id", None), "applicant_id": applicant_id},
+                )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:
