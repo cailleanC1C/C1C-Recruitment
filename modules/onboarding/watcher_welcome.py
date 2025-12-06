@@ -2104,21 +2104,7 @@ class WelcomeTicketWatcher(commands.Cog):
                 closed_value = existing_row[closed_idx] or ""
 
         row = [context.ticket_number, context.username, clan_value, closed_value]
-        try:
-            result = await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
-        except Exception:
-            log.exception(
-                "failed to log welcome ticket open",
-                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
-            )
-            return
-
-        log.info(
-            "✅ welcome_ticket_open — ticket=%s • user=%s • result=row_%s",
-            context.ticket_number,
-            context.username,
-            result,
-        )
+        created_at = _normalize_dt(getattr(thread, "created_at", None))
 
         try:
             starter = await locate_welcome_message(thread)
@@ -2126,15 +2112,62 @@ class WelcomeTicketWatcher(commands.Cog):
         except Exception:
             applicant_id = None
             log.debug(
-                "failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
+                "failed to resolve applicant on ticket open",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        try:
+            result = await asyncio.to_thread(
+                onboarding_sheets.append_welcome_ticket_row,
+                context.ticket_number,
+                context.username,
+                clan_value,
+                closed_value,
+            )
+            log.info(
+                "✅ welcome_ticket_open — ticket=%s • user=%s • result=row_%s",
+                context.ticket_number,
+                context.username,
+                result,
+            )
+        except Exception as exc:
+            log.error(
+                "❌ welcome_ticket_open — ticket=%s • user=%s • result=error • reason=%s",
+                context.ticket_number,
+                context.username,
+                exc,
             )
 
         if applicant_id is not None:
             try:
+                session_result = await asyncio.to_thread(
+                    onboarding_sheets.append_onboarding_session_row,
+                    ticket=context.ticket_number,
+                    thread_id=int(getattr(thread, "id", 0)),
+                    user_id=int(applicant_id),
+                    flow="welcome",
+                    status="open",
+                    created_at=created_at,
+                )
+                log.info(
+                    "✅ welcome_session_row — ticket=%s • user=%s • result=row_%s",
+                    context.ticket_number,
+                    context.username,
+                    session_result,
+                )
+            except Exception as exc:
+                log.error(
+                    "❌ welcome_session_row — ticket=%s • user=%s • result=error • reason=%s",
+                    context.ticket_number,
+                    context.username,
+                    exc,
+                )
+            try:
                 await ensure_session_for_thread(
                     int(applicant_id),
                     int(getattr(thread, "id", 0)),
-                    updated_at=_normalize_dt(getattr(thread, "created_at", None)),
+                    updated_at=created_at,
                 )
             except Exception:
                 log.exception(

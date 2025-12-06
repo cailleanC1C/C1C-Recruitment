@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from shared.sheets import core
@@ -156,6 +157,17 @@ def _resolve_onboarding_and_promo_tab() -> Tuple[str, str]:
     return sheet_id, str(tab)
 
 
+def _resolve_onboarding_and_sessions_tab() -> Tuple[str, str]:
+    """Return the onboarding sheet id and configured sessions tab name."""
+
+    sheet_id = _resolve_onboarding_sheet_id()
+    cfg = _read_onboarding_config(sheet_id)
+    tab = cfg.get("ONBOARDING_SESSIONS_TAB")
+    if not tab:
+        raise RuntimeError("Onboarding Config missing ONBOARDING_SESSIONS_TAB")
+    return sheet_id, str(tab)
+
+
 def _welcome_tab() -> str:
     return (
         _config_lookup("welcome_tickets_tab", "WelcomeTickets")
@@ -229,6 +241,10 @@ def _fmt_ticket(ticket: str | None) -> str:
     return text.upper()
 
 
+def _normalize_header_name(name: str) -> str:
+    return "".join(ch for ch in str(name or "").lower() if ch.isalnum())
+
+
 def _match_row(
     headers: Sequence[str],
     row: Sequence[str],
@@ -279,6 +295,11 @@ def upsert_welcome(row_values: Sequence[str], headers: Sequence[str]) -> str:
     return _upsert(ws, keys, row_values, headers)
 
 
+def append_welcome_ticket_row(ticket: str, username: str, clan_tag: str, date_closed: str) -> str:
+    row = [ticket, username, clan_tag, date_closed]
+    return upsert_welcome(row, WELCOME_HEADERS)
+
+
 def find_welcome_row(ticket: str | None) -> Optional[Tuple[int, List[str]]]:
     """Return the (1-indexed) row number and values for ``ticket`` if present."""
 
@@ -307,6 +328,89 @@ def upsert_promo(
     ws = _worksheet(_promo_tab())
     keys = [("ticket number", _fmt_ticket)]
     return _upsert(ws, keys, row_values, headers)
+
+
+def append_promo_ticket_row(
+    ticket: str,
+    username: str,
+    clan_tag: str,
+    promo_type: str,
+    thread_created: str,
+    year: str,
+    month: str,
+    join_month: str,
+    clan_name: str,
+    progression: str,
+) -> str:
+    row = [
+        ticket,
+        username,
+        clan_tag,
+        "",
+        promo_type,
+        thread_created,
+        year,
+        month,
+        join_month,
+        clan_name,
+        progression,
+    ]
+    return upsert_promo(row, PROMO_HEADERS)
+
+
+def append_onboarding_session_row(
+    *,
+    ticket: str,
+    thread_id: int,
+    user_id: int,
+    flow: str,
+    status: str,
+    created_at: datetime | None = None,
+) -> str:
+    """Append or update an onboarding session row keyed by ticket/thread."""
+
+    sheet_id, tab = _resolve_onboarding_and_sessions_tab()
+    ws = core.get_worksheet(sheet_id, tab)
+    header = core.call_with_backoff(ws.row_values, 1)
+    if not header:
+        raise RuntimeError("Onboarding sessions header missing; refusing to write")
+
+    normalized_header = [_normalize_header_name(col) for col in header]
+
+    ticket_value = _fmt_ticket(ticket)
+    created = created_at or datetime.now(timezone.utc)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    created_iso = created.isoformat()
+
+    value_map: Dict[str, str] = {
+        "ticket": ticket_value,
+        "ticketnumber": ticket_value,
+        "ticketid": ticket_value,
+        "thread": str(thread_id),
+        "threadid": str(thread_id),
+        "userid": str(user_id),
+        "user": str(user_id),
+        "flow": str(flow or "").strip(),
+        "status": str(status or "").strip(),
+        "createdat": created_iso,
+        "updatedat": created_iso,
+    }
+
+    row_values = [value_map.get(name, "") for name in normalized_header]
+
+    def _ticket_formatter(value: str | None) -> str:
+        return _fmt_ticket(value)
+
+    key_columns: list[tuple[str, Callable[[str | None], str]]] = []
+    for column, normalized in zip(header, normalized_header):
+        if normalized in {"ticket", "ticketnumber", "ticketid"}:
+            key_columns.append((column, _ticket_formatter))
+            break
+    if not key_columns:
+        raise RuntimeError("Onboarding sessions tab missing ticket identifier column")
+
+    return _upsert(ws, key_columns, row_values, header)
 
 
 def find_promo_row(ticket: str | None) -> Optional[Tuple[int, Dict[str, str]]]:
