@@ -490,6 +490,13 @@ class PromoTicketWatcher(commands.Cog):
             context.username,
             result,
         )
+        try:
+            onboarding_sessions.mark_completed(getattr(thread, "id", 0))
+        except Exception:
+            log.exception(
+                "promo watcher: failed to mark onboarding session complete",
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
@@ -518,16 +525,12 @@ class PromoTicketWatcher(commands.Cog):
         subject_user_id = str(getattr(subject_member, "id", "") or "")
 
         try:
-            onboarding_sessions.save(
-                {
-                    "thread_id": str(getattr(thread, "id", "")),
-                    "thread_name": getattr(thread, "name", ""),
-                    "user_id": subject_user_id,
-                    "step_index": 0,
-                    "completed": False,
-                    "answers": {},
-                    "updated_at": created_at,
-                }
+            onboarding_sessions.upsert_session(
+                thread_id=int(getattr(thread, "id", 0)),
+                thread_name=getattr(thread, "name", ""),
+                user_id=subject_user_id,
+                panel_message_id=None,
+                updated_at=created_at,
             )
         except Exception:
             log.exception(
@@ -582,6 +585,9 @@ class PromoTicketWatcher(commands.Cog):
         if context is None:
             return
         if context.state in {"awaiting_clan", "awaiting_details", "closed"}:
+            return
+        session_row = onboarding_sessions.get_by_thread_id(getattr(after, "id", None))
+        if session_row and session_row.get("auto_closed_at"):
             return
         if not _transitioned_to_closed(before, after):
             return

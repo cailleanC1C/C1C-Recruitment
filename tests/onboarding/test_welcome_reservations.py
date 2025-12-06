@@ -217,8 +217,8 @@ def test_handle_ticket_open_preserves_existing_values(monkeypatch) -> None:
         fake_upsert,
     )
     monkeypatch.setattr(
-        "modules.onboarding.watcher_welcome.onboarding_sessions.save",
-        lambda payload: recorded.setdefault("session", []).append(payload),
+        "modules.onboarding.watcher_welcome.onboarding_sessions.upsert_session",
+        lambda **payload: recorded.setdefault("session", []).append(payload),
     )
 
     async def runner() -> None:

@@ -474,6 +474,7 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
                 int(getattr(thread, "id", 0)),
                 updated_at=created_at,
                 thread_name=getattr(thread, "name", ""),
+                create_if_missing=False,
             )
         except Exception:
             log.exception(
@@ -492,15 +493,15 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
         )
         return
 
+    if session is None:
+        log.debug(
+            "welcome reminder skipped (no session)",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
-    if session is None:
-        session = Session(
-            thread_id=int(getattr(thread, "id", 0)),
-            applicant_id=int(applicant_id),
-            thread_name=getattr(thread, "name", ""),
-        )
-
     if action == "reminder_empty":
         content = (
             f"Hey {mention}, your welcome ticket is open but we haven't seen any answers yet. "
@@ -711,6 +712,7 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
                 int(getattr(thread, "id", 0)),
                 updated_at=created_at,
                 thread_name=getattr(thread, "name", ""),
+                create_if_missing=False,
             )
         except Exception:
             log.exception(
@@ -729,15 +731,15 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
         )
         return
 
+    if session is None:
+        log.debug(
+            "promo inactivity reminder skipped (no session)",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+        )
+        return
+
     mention = f"<@{applicant_id}>"
     recruiter_ping = _recruiter_ping()
-    if session is None:
-        session = Session(
-            thread_id=int(getattr(thread, "id", 0)),
-            applicant_id=int(applicant_id),
-            thread_name=getattr(thread, "name", ""),
-        )
-
     if action == "reminder_empty":
         content = (
             f"Hey {mention}, your move request ticket is open but we haven't seen any details yet. "
@@ -1372,6 +1374,7 @@ async def post_open_questions_panel(
     flow: str = "welcome",
     ticket_code: str | None = None,
     trigger_message: discord.Message | None = None,
+    subject_user_id: int | None = None,
 ) -> PanelOutcome:
     start = monotonic()
 
@@ -1467,27 +1470,24 @@ async def post_open_questions_panel(
         await _emit(result="panel_created")
 
         panel_message_id = getattr(panel_message, "id", None)
-        if trigger_message is not None:
+        if subject_user_id is None and trigger_message is not None:
             subject_user_id = _extract_subject_user_id(trigger_message)
-            flow_suffix = f" • flow={normalized_flow}" if normalized_flow.startswith("promo") else ""
-            if subject_user_id is None:
-                log.warning(
-                    "onboarding_session_save_skipped • reason=no_subject_user%s • thread_id=%s",
-                    flow_suffix,
-                    thread.id,
-                )
-            else:
-                onboarding_sessions.save(
-                    {
-                        "thread_name": thread.name,
-                        "thread_id": thread.id,
-                        "user_id": subject_user_id,
-                        "panel_message_id": panel_message_id,
-                        "step_index": 0,
-                        "completed": False,
-                        "answers": {},
-                    }
-                )
+
+        flow_suffix = f" • flow={normalized_flow}" if normalized_flow.startswith("promo") else ""
+        if subject_user_id is None:
+            log.warning(
+                "onboarding_session_save_skipped • reason=no_subject_user%s • thread_id=%s",
+                flow_suffix,
+                thread.id,
+            )
+        else:
+            onboarding_sessions.upsert_session(
+                thread_id=thread.id,
+                thread_name=thread.name,
+                user_id=subject_user_id,
+                panel_message_id=panel_message_id,
+                updated_at=datetime.now(timezone.utc),
+            )
 
         return PanelOutcome(
             "panel_created",
@@ -1895,6 +1895,15 @@ class WelcomeWatcher(commands.Cog):
         ticket_code: str | None = None,
         trigger_message: discord.Message | None = None,
     ) -> None:
+        context_user_id: int | None = None
+        try:
+            context = await self._ensure_context(thread)
+        except Exception:
+            context = None
+            log.exception("failed to resolve ticket context for panel post", extra={"thread_id": getattr(thread, "id", None)})
+        if context is not None:
+            context_user_id = getattr(context, "recruit_id", None)
+
         outcome = await post_open_questions_panel(
             self.bot,
             thread,
@@ -1902,6 +1911,7 @@ class WelcomeWatcher(commands.Cog):
             flow=flow,
             ticket_code=ticket_code,
             trigger_message=trigger_message,
+            subject_user_id=context_user_id,
         )
         self._log_panel_outcome(actor, thread, outcome, flow=flow)
 
@@ -2205,17 +2215,19 @@ class WelcomeTicketWatcher(commands.Cog):
         subject_member = _get_subject_user_from_welcome_message(starter)
         subject_user_id = str(getattr(subject_member, "id", "") or "")
 
+        if applicant_id is not None:
+            try:
+                context.recruit_id = int(applicant_id)
+            except (TypeError, ValueError):
+                context.recruit_id = None
+
         try:
-            onboarding_sessions.save(
-                {
-                    "thread_id": str(getattr(thread, "id", "")),
-                    "thread_name": getattr(thread, "name", ""),
-                    "user_id": subject_user_id,
-                    "step_index": 0,
-                    "completed": False,
-                    "answers": {},
-                    "updated_at": created_at,
-                }
+            onboarding_sessions.upsert_session(
+                thread_id=int(getattr(thread, "id", 0)),
+                thread_name=getattr(thread, "name", ""),
+                user_id=subject_user_id,
+                panel_message_id=None,
+                updated_at=created_at,
             )
         except Exception:
             log.exception(

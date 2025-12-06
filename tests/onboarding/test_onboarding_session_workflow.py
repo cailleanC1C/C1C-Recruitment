@@ -48,18 +48,19 @@ def memory_sheet(monkeypatch):
         key = (int(user_id), int(thread_id))
         return rows.get(key)
 
-    def fake_save(payload: dict):
+    def fake_save(payload: dict, allow_create: bool = True):
         try:
             key = (int(payload.get("user_id") or 0), int(payload.get("thread_id") or 0))
         except Exception:
             key = (payload.get("user_id"), payload.get("thread_id"))
         rows[key] = payload
+        return True
 
     fake_sheet_module = type("_FakeSheet", (), {"load": staticmethod(fake_load), "save": staticmethod(fake_save)})
     monkeypatch.setattr(sessions, "sess_sheet", fake_sheet_module)
     monkeypatch.setattr(
-        "shared.sheets.onboarding_sessions.save",
-        lambda payload: onboarding_rows.setdefault(str(payload.get("thread_id", "")), payload),
+        "shared.sheets.onboarding_sessions.upsert_session",
+        lambda **payload: onboarding_rows.setdefault(str(payload.get("thread_id", "")), payload),
     )
     monkeypatch.setattr("shared.sheets.onboarding_sessions.load", lambda *_: None)
     monkeypatch.setattr("shared.sheets.onboarding_sessions.load_all", lambda: list(onboarding_rows.values()))

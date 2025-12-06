@@ -127,12 +127,12 @@ def load_all() -> list[Dict[str, Any]]:
     return sessions
 
 
-def save(payload: Dict[str, Any]) -> None:
+def save(payload: Dict[str, Any], *, allow_create: bool = True) -> bool:
     worksheet = _sheet()
     rows = worksheet.get_all_values()
     header = _validated_header(rows[0] if rows else [])
     if header is None:
-        return
+        return False
 
     header_map = _header_index_map(header)
     target_row = _get_row_index_by_thread_id(rows[1:], header_map, payload.get("thread_id"))
@@ -146,14 +146,74 @@ def save(payload: Dict[str, Any]) -> None:
 
     if target_row is not None:
         worksheet.update(_range_for_row(target_row + 1, header), [values])
-    else:
+    elif allow_create:
         worksheet.append_row(values)
+    else:
+        log.info(
+            "🧾 onboarding session skipped • thread_id=%s • reason=missing_row",
+            record.get("thread_id"),
+        )
+        return False
 
     log.info(
         "🧾 onboarding session saved • thread_id=%s • thread_name=%s • answers=%s",
         record.get("thread_id"),
         record.get("thread_name") or "",
         "yes" if record.get("answers") else "no",
+    )
+    return True
+
+
+def get_by_thread_id(thread_id: int | str | None) -> Optional[Dict[str, Any]]:
+    return load(user_id=None, thread_id=int(thread_id)) if thread_id is not None else None
+
+
+def upsert_session(
+    *,
+    thread_id: int,
+    thread_name: str,
+    user_id: int | str,
+    panel_message_id: int | None = None,
+    updated_at: datetime | None = None,
+) -> bool:
+    payload: Dict[str, Any] = {
+        "thread_id": str(thread_id),
+        "thread_name": thread_name,
+        "user_id": str(user_id),
+        "panel_message_id": panel_message_id,
+        "step_index": 0,
+        "completed": False,
+        "completed_at": None,
+        "answers": {},
+        "first_reminder_at": "",
+        "warning_sent_at": "",
+        "auto_closed_at": "",
+        "updated_at": updated_at or _now_iso(),
+    }
+    return save(payload)
+
+
+def update_existing(thread_id: int | str, payload: Dict[str, Any]) -> bool:
+    payload = dict(payload)
+    payload.setdefault("thread_id", str(thread_id))
+    return save(payload, allow_create=False)
+
+
+def mark_completed(
+    thread_id: int | str,
+    *,
+    completed_at: datetime | str | None = None,
+    answers: Dict[str, Any] | None = None,
+) -> bool:
+    timestamp = completed_at or _now_iso()
+    return update_existing(
+        thread_id,
+        {
+            "completed": True,
+            "completed_at": timestamp,
+            "answers": answers or {},
+            "updated_at": timestamp,
+        },
     )
 
 

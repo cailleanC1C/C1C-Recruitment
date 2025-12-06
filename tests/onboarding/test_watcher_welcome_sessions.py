@@ -39,7 +39,14 @@ def _patch_panel_dependencies(monkeypatch):
 
 def test_welcome_trigger_creates_session(monkeypatch):
     saved: list[dict] = []
-    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "save", lambda payload: saved.append(payload))
+    def _record(**payload):
+        payload.setdefault("step_index", 0)
+        payload.setdefault("completed", False)
+        payload.setdefault("answers", {})
+        saved.append(payload)
+        return True
+
+    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "upsert_session", _record)
 
     thread = DummyThread("W0603-smurf")
     trigger_message = SimpleNamespace(
@@ -71,7 +78,14 @@ def test_welcome_trigger_creates_session(monkeypatch):
 
 def test_promo_trigger_creates_session(monkeypatch):
     saved: list[dict] = []
-    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "save", lambda payload: saved.append(payload))
+    def _record(**payload):
+        payload.setdefault("step_index", 0)
+        payload.setdefault("completed", False)
+        payload.setdefault("answers", {})
+        saved.append(payload)
+        return True
+
+    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "upsert_session", _record)
 
     thread = DummyThread("R1234-smurf")
     trigger_message = SimpleNamespace(
@@ -103,7 +117,7 @@ def test_promo_trigger_creates_session(monkeypatch):
 
 def test_missing_subject_user_logs_warning(monkeypatch, caplog):
     saved: list[dict] = []
-    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "save", lambda payload: saved.append(payload))
+    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "upsert_session", lambda **payload: saved.append(payload))
 
     thread = DummyThread("W1234-smurf")
     trigger_message = SimpleNamespace(mentions=[], content="🔥 Welcome to C1C")
@@ -125,3 +139,35 @@ def test_missing_subject_user_logs_warning(monkeypatch, caplog):
         "onboarding_session_save_skipped" in record.message and "no_subject_user" in record.message
         for record in caplog.records
     )
+
+
+def test_explicit_subject_user_id_used_when_present(monkeypatch):
+    saved: list[dict] = []
+
+    def _record(**payload):
+        saved.append(payload)
+        return True
+
+    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "upsert_session", _record)
+
+    thread = DummyThread("W0603-smurf")
+    trigger_message = SimpleNamespace(
+        mentions=[SimpleNamespace(id=12345)],
+        content="🔥 Welcome to C1C <@12345>",
+    )
+
+    outcome = asyncio.run(
+        watcher_welcome.post_open_questions_panel(
+            SimpleNamespace(user=SimpleNamespace(id=1)),
+            thread,
+            actor=SimpleNamespace(id=999),
+            flow="welcome",
+            trigger_message=trigger_message,
+            subject_user_id=77777,
+        )
+    )
+
+    assert outcome.panel_message_id == 9999
+    assert saved
+    payload = saved[0]
+    assert payload["user_id"] == 77777
