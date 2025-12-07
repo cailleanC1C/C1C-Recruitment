@@ -1645,6 +1645,16 @@ async def post_open_questions_panel(
                 panel_message_id=panel_message_id,
                 append_session_row=False,
             )
+            if normalized_flow == "welcome":
+                try:
+                    ticket_number, username = (getattr(thread, "name", "") or "").split("-", 1)
+                    ticket_number = ticket_number.strip()
+                    username = username.strip()
+                    await welcome_tickets.save(ticket_number=ticket_number, username=username)
+                except Exception:
+                    log.exception(
+                        "failed to persist welcome ticket log", extra={"thread_id": getattr(thread, "id", None)}
+                    )
 
         return PanelOutcome(
             "panel_created",
@@ -2360,9 +2370,19 @@ class WelcomeTicketWatcher(commands.Cog):
         starter: discord.Message | None = None
         try:
             starter = await locate_welcome_message(thread)
-            applicant_id = _extract_subject_user_id(
-                starter, bot_user_id=bot_user_id, log_on_fallback=True
-            )
+            mentioned_user = None
+            if starter is not None:
+                mentioned_user = starter.mentions[0] if starter.mentions else starter.author
+            applicant_id = None
+            if mentioned_user is not None:
+                try:
+                    applicant_id = int(getattr(mentioned_user, "id", None))
+                except (TypeError, ValueError):
+                    applicant_id = None
+            if applicant_id is None:
+                applicant_id = _extract_subject_user_id(
+                    starter, bot_user_id=bot_user_id, log_on_fallback=True
+                )
         except Exception:
             applicant_id = None
             log.debug(
@@ -2371,9 +2391,9 @@ class WelcomeTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
-        subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
-        if subject_resolved is None and applicant_id is not None:
-            subject_resolved = applicant_id
+        subject_resolved = applicant_id
+        if subject_resolved is None:
+            subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
 
         if applicant_id is not None:
             try:
