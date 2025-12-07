@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -12,6 +14,9 @@ from typing import Any, Iterable, Mapping
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PANELS_PATH = Path("modules") / "onboarding" / "ui" / "panels.py"
 WELCOME_CONTROLLER_PATH = Path("modules") / "onboarding" / "controllers" / "welcome_controller.py"
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -316,12 +321,14 @@ def main() -> None:
     parser.add_argument("--output", help="Optional file to write the comment body")
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
     events = load_events(Path(args.log))
     comment = build_comment(events)
     if args.output:
         Path(args.output).write_text(comment, encoding="utf-8")
     else:
-        print(comment)
+        log.info(comment)
 
 
 if __name__ == "__main__":
