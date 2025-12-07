@@ -19,7 +19,8 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
     context = TicketContext(thread_id=111, ticket_number="W0600", username="smurf")
 
     monkeypatch.setattr(watcher_welcome.onboarding_sheets, "find_welcome_row", lambda ticket: None)
-    monkeypatch.setattr(watcher_welcome, "locate_welcome_message", AsyncMock(return_value=object()))
+    starter = SimpleNamespace(mentions=[SimpleNamespace(id=222)], content="<@222>")
+    monkeypatch.setattr(watcher_welcome, "locate_welcome_message", AsyncMock(return_value=starter))
     monkeypatch.setattr(watcher_welcome, "extract_target_from_message", lambda _: (222, None))
     monkeypatch.setattr(watcher_welcome, "ensure_session_for_thread", AsyncMock())
 
@@ -37,7 +38,11 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
 
     monkeypatch.setattr(watcher_welcome.onboarding_sheets, "append_welcome_ticket_row", fake_append_welcome)
     monkeypatch.setattr(watcher_welcome.onboarding_sheets, "append_onboarding_session_row", fake_append_session)
-    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "save", lambda payload: session_sheet_rows.append(payload))
+    monkeypatch.setattr(
+        watcher_welcome.onboarding_sessions,
+        "upsert_session",
+        lambda **payload: session_sheet_rows.append(payload),
+    )
 
     asyncio.run(watcher._handle_ticket_open(thread, context))
 
@@ -53,7 +58,7 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
         }
     ]
     assert session_calls[0]["created_at"] == thread.created_at
-    assert session_sheet_rows[0]["thread_id"] == str(thread.id)
+    assert session_sheet_rows[0]["thread_id"] == thread.id
     assert session_sheet_rows[0]["thread_name"] == thread.name
 
 
@@ -91,7 +96,11 @@ def test_promo_ticket_logs_sheets(monkeypatch):
 
     monkeypatch.setattr(watcher_promo.onboarding_sheets, "append_promo_ticket_row", fake_append_promo)
     monkeypatch.setattr(watcher_promo.onboarding_sheets, "append_onboarding_session_row", fake_append_session)
-    monkeypatch.setattr(watcher_promo.onboarding_sessions, "save", lambda payload: session_sheet_rows.append(payload))
+    monkeypatch.setattr(
+        watcher_promo.onboarding_sessions,
+        "upsert_session",
+        lambda **payload: session_sheet_rows.append(payload),
+    )
 
     asyncio.run(watcher.on_thread_create(thread))
 
@@ -139,4 +148,4 @@ def test_promo_ticket_open_logs_error_on_failure(monkeypatch, caplog):
     with caplog.at_level("ERROR"):
         asyncio.run(watcher._log_ticket_open(thread, context))
 
-    assert any("result=error" in record.message for record in caplog.records)
+    assert any("result=error" in record.getMessage() for record in caplog.records)

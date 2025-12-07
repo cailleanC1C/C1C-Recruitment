@@ -23,10 +23,10 @@ from modules.onboarding.controllers.welcome_controller import (
 from modules.onboarding.sessions import ensure_session_for_thread
 from modules.onboarding.watcher_welcome import (
     _channel_readable_label,
-    _get_subject_user_from_welcome_message,
     PanelOutcome,
     parse_promo_thread_name,
     post_open_questions_panel,
+    resolve_subject_user_id,
 )
 from modules.onboarding.ui import panels
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
@@ -490,6 +490,13 @@ class PromoTicketWatcher(commands.Cog):
             context.username,
             result,
         )
+        try:
+            onboarding_sessions.mark_completed(getattr(thread, "id", 0))
+        except Exception:
+            log.exception(
+                "promo watcher: failed to mark onboarding session complete",
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
@@ -514,20 +521,18 @@ class PromoTicketWatcher(commands.Cog):
                 "promo watcher: failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
             )
 
-        subject_member = _get_subject_user_from_welcome_message(starter)
-        subject_user_id = str(getattr(subject_member, "id", "") or "")
+        subject_resolved = await resolve_subject_user_id(thread)
+        if subject_resolved is None and applicant_id is not None:
+            subject_resolved = applicant_id
+        subject_user_id = str(subject_resolved or "")
 
         try:
-            onboarding_sessions.save(
-                {
-                    "thread_id": str(getattr(thread, "id", "")),
-                    "thread_name": getattr(thread, "name", ""),
-                    "user_id": subject_user_id,
-                    "step_index": 0,
-                    "completed": False,
-                    "answers": {},
-                    "updated_at": created_at,
-                }
+            onboarding_sessions.upsert_session(
+                thread_id=int(getattr(thread, "id", 0)),
+                thread_name=getattr(thread, "name", ""),
+                user_id=subject_user_id,
+                panel_message_id=None,
+                updated_at=created_at,
             )
         except Exception:
             log.exception(
@@ -582,6 +587,9 @@ class PromoTicketWatcher(commands.Cog):
         if context is None:
             return
         if context.state in {"awaiting_clan", "awaiting_details", "closed"}:
+            return
+        session_row = onboarding_sessions.get_by_thread_id(getattr(after, "id", None))
+        if session_row and session_row.get("auto_closed_at"):
             return
         if not _transitioned_to_closed(before, after):
             return

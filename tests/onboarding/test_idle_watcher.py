@@ -78,8 +78,12 @@ def test_idle_watcher_posts_first_reminder(monkeypatch):
         return thread
 
     monkeypatch.setattr(idle_watcher, "_resolve_thread", _resolve)
-    monkeypatch.setattr(idle_watcher.onboarding_sessions, "load_all", lambda: [_row(5.1)])
-    monkeypatch.setattr(idle_watcher.onboarding_sessions, "save", lambda payload: saves.append(payload))
+    monkeypatch.setattr(idle_watcher.onboarding_sessions, "load_all", lambda: [_row(3.1)])
+    monkeypatch.setattr(
+        idle_watcher.onboarding_sessions,
+        "update_existing",
+        lambda thread_id, payload: saves.append(payload),
+    )
     monkeypatch.setattr(welcome_flow, "resolve_onboarding_flow", lambda t: welcome_flow.FlowResolution("welcome"))
     monkeypatch.setattr(idle_watcher.reservation_jobs, "release_reservations_for_thread", lambda *_, **__: None)
     monkeypatch.setattr(idle_watcher, "get_recruitment_coordinator_role_ids", lambda: set())
@@ -109,7 +113,11 @@ def test_idle_watcher_posts_warning(monkeypatch):
 
     monkeypatch.setattr(idle_watcher, "_resolve_thread", _resolve)
     monkeypatch.setattr(idle_watcher.onboarding_sessions, "load_all", lambda: [_row(24.5)])
-    monkeypatch.setattr(idle_watcher.onboarding_sessions, "save", lambda payload: saves.append(payload))
+    monkeypatch.setattr(
+        idle_watcher.onboarding_sessions,
+        "update_existing",
+        lambda thread_id, payload: saves.append(payload),
+    )
     monkeypatch.setattr(welcome_flow, "resolve_onboarding_flow", lambda t: welcome_flow.FlowResolution("welcome"))
     monkeypatch.setattr(idle_watcher.reservation_jobs, "release_reservations_for_thread", lambda *_, **__: None)
     monkeypatch.setattr(idle_watcher, "get_recruitment_coordinator_role_ids", lambda: {42})
@@ -140,7 +148,11 @@ def test_idle_watcher_autoclose_welcome(monkeypatch):
 
     monkeypatch.setattr(idle_watcher, "_resolve_thread", _resolve)
     monkeypatch.setattr(idle_watcher.onboarding_sessions, "load_all", lambda: [_row(36.5)])
-    monkeypatch.setattr(idle_watcher.onboarding_sessions, "save", lambda payload: saves.append(payload))
+    monkeypatch.setattr(
+        idle_watcher.onboarding_sessions,
+        "update_existing",
+        lambda thread_id, payload: saves.append(payload),
+    )
     monkeypatch.setattr(welcome_flow, "resolve_onboarding_flow", lambda t: welcome_flow.FlowResolution("welcome"))
     monkeypatch.setattr(idle_watcher.reservation_jobs, "release_reservations_for_thread", lambda thread_id, **_: releases.append(thread_id))
     monkeypatch.setattr(idle_watcher, "get_recruitment_coordinator_role_ids", lambda: {7})
@@ -172,7 +184,11 @@ def test_idle_watcher_autoclose_promo(monkeypatch):
 
     monkeypatch.setattr(idle_watcher, "_resolve_thread", _resolve)
     monkeypatch.setattr(idle_watcher.onboarding_sessions, "load_all", lambda: [_row(36.5, thread_id=888)])
-    monkeypatch.setattr(idle_watcher.onboarding_sessions, "save", lambda payload: saves.append(payload))
+    monkeypatch.setattr(
+        idle_watcher.onboarding_sessions,
+        "update_existing",
+        lambda thread_id, payload: saves.append(payload),
+    )
     monkeypatch.setattr(welcome_flow, "resolve_onboarding_flow", lambda t: welcome_flow.FlowResolution("promo.r"))
     monkeypatch.setattr(idle_watcher.reservation_jobs, "release_reservations_for_thread", lambda *_, **__: None)
     monkeypatch.setattr(idle_watcher, "get_recruitment_coordinator_role_ids", lambda: {9})

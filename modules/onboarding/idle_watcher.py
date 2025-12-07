@@ -17,10 +17,10 @@ from modules.placement import reservation_jobs
 
 log = logging.getLogger("c1c.onboarding.idle_watcher")
 
-FIRST_REMINDER_AFTER = timedelta(hours=5)
+FIRST_REMINDER_AFTER = timedelta(hours=3)
 WARNING_AFTER = timedelta(hours=24)
 AUTO_CLOSE_AFTER = timedelta(hours=36)
-WATCHER_INTERVAL_SECONDS = 300
+WATCHER_INTERVAL_SECONDS = int(FIRST_REMINDER_AFTER.total_seconds())
 WATCHER_JOB_NAME = "onboarding_idle_watcher"
 WATCHER_COMPONENT = "recruitment"
 NO_PLACEMENT_TAG = "NONE"
@@ -160,7 +160,16 @@ async def _handle_row(
     age = now - updated_at
     thread = await _resolve_thread(bot, int(thread_id))
     if thread is None:
-        onboarding_sessions.save({**row, "auto_closed_at": now.isoformat()})
+        onboarding_sessions.update_existing(
+            thread_id,
+            {
+                **row,
+                "auto_closed_at": now.isoformat(),
+                "completed": True,
+                "completed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
         return
 
     from modules.onboarding import welcome_flow
@@ -176,7 +185,16 @@ async def _handle_row(
         return
 
     if age >= AUTO_CLOSE_AFTER:
-        onboarding_sessions.save({**row, "auto_closed_at": now.isoformat()})
+        onboarding_sessions.update_existing(
+            thread_id,
+            {
+                **row,
+                "auto_closed_at": now.isoformat(),
+                "completed": True,
+                "completed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            },
+        )
         await _close_thread(thread, bot=bot, flow=flow, user_id=user_id, auto_close_at=now)
         return
 
@@ -192,7 +210,14 @@ async def _handle_row(
         except Exception:
             log.warning("failed to post onboarding warning", exc_info=True)
         else:
-            onboarding_sessions.save({**row, "warning_sent_at": now.isoformat()})
+            onboarding_sessions.update_existing(
+                thread_id,
+                {
+                    **row,
+                    "warning_sent_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                },
+            )
         return
 
     if age >= FIRST_REMINDER_AFTER and first_reminder_at is None:
@@ -205,7 +230,14 @@ async def _handle_row(
         except Exception:
             log.warning("failed to post onboarding reminder", exc_info=True)
         else:
-            onboarding_sessions.save({**row, "first_reminder_at": now.isoformat()})
+            onboarding_sessions.update_existing(
+                thread_id,
+                {
+                    **row,
+                    "first_reminder_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                },
+            )
 
 
 async def run_idle_scan(bot: commands.Bot, *, now: datetime | None = None) -> None:

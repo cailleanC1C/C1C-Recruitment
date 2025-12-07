@@ -209,7 +209,8 @@ async def ensure_session_for_thread(
     *,
     updated_at: datetime | None = None,
     thread_name: str | None = None,
-) -> Session:
+    create_if_missing: bool = True,
+) -> Session | None:
     """Load or create a session row for the given ``user_id`` and ``thread_id``.
 
     The helper preserves the earliest known ``updated_at`` timestamp when provided,
@@ -252,6 +253,9 @@ async def ensure_session_for_thread(
                     extra={"thread_id": thread_id, "user_id": user_id},
                 )
         return existing
+
+    if not create_if_missing:
+        return None
 
     session = Session(
         thread_id=int(thread_id),
