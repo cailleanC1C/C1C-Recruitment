@@ -1110,11 +1110,41 @@ def _write_summary_json(
     elif any(cat.status == "warn" for cat in suite.categories.values()):
         overall_status = "warn"
 
+    def _serialize_violation(violation: Violation) -> Dict[str, object]:
+        return {
+            "rule": violation.rule_id,
+            "severity": violation.severity,
+            "message": violation.message,
+            "files": violation.files,
+        }
+
+    serialized_results = [
+        {
+            "code": check.code,
+            "description": check.description,
+            "status": check.status,
+            "violations": [_serialize_violation(v) for v in check.violations],
+            "reason": check.reason,
+        }
+        for check in suite.check_results
+    ]
+
+    legacy_checks = {
+        entry["code"]: {
+            "status": entry["status"],
+            "violations": len(entry["violations"]),
+            "reason": entry.get("reason"),
+            "description": entry.get("description"),
+        }
+        for entry in serialized_results
+    }
+
     payload = {
         "overall_status": overall_status,
         "parity_status": parity_status,
         "config_parity_status": config_parity_status,
         "secret_scan_status": secret_scan_status,
+        "results": serialized_results,
         "categories": [
             {
                 "id": cat.identifier,
@@ -1131,47 +1161,11 @@ def _write_summary_json(
             }
             for cat in suite.categories.values()
         ],
-        "checks": [
-            {
-                "code": check.code,
-                "description": check.description,
-                "status": check.status,
-                "violations": [
-                    {
-                        "rule": v.rule_id,
-                        "severity": v.severity,
-                        "message": v.message,
-                        "files": v.files,
-                    }
-                    for v in check.violations
-                ],
-                "reason": check.reason,
-            }
-            for check in suite.check_results
-        ],
+        "checks": legacy_checks,
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-def _append_summary_markdown(
-    suite: SuiteResult,
-    path: Path,
-    parity_status: Optional[str],
-    config_parity_status: Optional[str],
-    secret_scan_status: Optional[str],
-) -> None:
-    def _format_health_line(label: str, status: Optional[str], ok_text: str, fail_text: str) -> str:
-        if not status:
-            return f"⚪ {label}: status unavailable"
-        trimmed = status.strip()
-        if trimmed.startswith(("✅", "❌", "⚠️", "⚪")):
-            return trimmed
-        normalized = trimmed.lower()
-        if normalized in {"ok", "pass", "passed", "success", "aligned"}:
-            return f"✅ {label}: {ok_text}"
-        if normalized in {"fail", "failed", "failure", "error"}:
-            return f"❌ {label}: {fail_text}"
-        return f"⚠️ {label}: {trimmed}"
-
+def _append_summary_markdown(suite: SuiteResult, path: Path) -> None:
     def _group_file_references(file_entries: List[str]) -> List[str]:
         grouped: Dict[str, List[str]] = {}
         for entry in file_entries:
@@ -1191,33 +1185,6 @@ def _append_summary_markdown(
     lines: List[str] = ["# Guardrails Summary", ""]
     has_failures = any(result.status == "fail" for result in suite.check_results)
     lines.append("❌ Guardrail violations found" if has_failures else "✅ All guardrail checks passed")
-    lines.append("")
-    lines.append("Top-level checks:")
-    lines.append("")
-    lines.append(
-        _format_health_line(
-            "Config parity",
-            config_parity_status,
-            "docs and .env template aligned",
-            "mismatch detected",
-        )
-    )
-    lines.append(
-        _format_health_line(
-            "Secret scan",
-            secret_scan_status,
-            "no Discord token patterns detected",
-            "potential token pattern detected",
-        )
-    )
-    lines.append(
-        _format_health_line(
-            "ENV parity",
-            parity_status,
-            "success",
-            "failure",
-        )
-    )
     lines.append("")
     lines.append("## Automated guardrail checks")
     lines.append("")
@@ -1338,13 +1305,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         secret_scan_status,
     )
     if args.summary:
-        _append_summary_markdown(
-            suite,
-            args.summary,
-            parity_status,
-            config_parity_status,
-            secret_scan_status,
-        )
+        _append_summary_markdown(suite, args.summary)
 
     overall_status = "fail" if any(res.status == "fail" for res in suite.check_results) else "pass"
     if args.status_file:

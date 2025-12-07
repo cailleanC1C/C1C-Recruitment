@@ -57,6 +57,12 @@ jobs:
           fi
           # Always succeed here; the final step decides whether the job fails.
           exit 0
+      - name: Render guardrails summary comment
+        if: github.event_name == 'pull_request'
+        run: |
+          python scripts/ci/render_guardrails_comment.py \
+            --results guardrails-results.json \
+            --output guardrails-comment.md
       - name: Post guardrails summary comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -66,7 +72,7 @@ jobs:
             const marker = '<!-- guardrails-summary -->';
             let body = 'Repository Guardrails summary\n\n' + marker + '\n';
             try {
-              body += fs.readFileSync('guardrails-summary.md', 'utf8').trim() + '\n';
+              body += fs.readFileSync('guardrails-comment.md', 'utf8').trim() + '\n';
             } catch (error) {
               body += 'Guardrails summary unavailable.\n';
             }
