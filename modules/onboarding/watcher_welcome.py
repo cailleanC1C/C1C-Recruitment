@@ -2370,19 +2370,14 @@ class WelcomeTicketWatcher(commands.Cog):
         starter: discord.Message | None = None
         try:
             starter = await locate_welcome_message(thread)
-            mentioned_user = None
-            if starter is not None:
-                mentioned_user = starter.mentions[0] if starter.mentions else starter.author
-            applicant_id = None
-            if mentioned_user is not None:
+            # Only use the first mentioned user in the welcome message.
+            # If there is no mention, we don't guess or fall back.
+            applicant_id: int | None = None
+            if starter is not None and starter.mentions:
                 try:
-                    applicant_id = int(getattr(mentioned_user, "id", None))
+                    applicant_id = int(getattr(starter.mentions[0], "id", None))
                 except (TypeError, ValueError):
                     applicant_id = None
-            if applicant_id is None:
-                applicant_id = _extract_subject_user_id(
-                    starter, bot_user_id=bot_user_id, log_on_fallback=True
-                )
         except Exception:
             applicant_id = None
             log.debug(
@@ -2391,6 +2386,7 @@ class WelcomeTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
+        # Prefer the explicitly mentioned user; otherwise try resolver.
         subject_resolved = applicant_id
         if subject_resolved is None:
             subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
