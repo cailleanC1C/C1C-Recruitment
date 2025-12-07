@@ -181,30 +181,72 @@ def build_open_thread_name(ticket_code: str, username: str) -> str:
 
 
 def _get_subject_user_from_welcome_message(
-    msg: discord.Message | None,
+    msg: discord.Message | None, *, bot_user_id: int | None = None
 ) -> discord.Member | None:
     if msg is None:
         return None
     mentions = getattr(msg, "mentions", None) or []
-    if mentions:
-        return mentions[0]
+    for candidate in mentions:
+        if getattr(candidate, "bot", False):
+            continue
+        if bot_user_id is not None and getattr(candidate, "id", None) == bot_user_id:
+            continue
+        return candidate
     return None
 
 
-def _extract_subject_user_id(message: discord.Message) -> int | None:
+def _extract_subject_user_id(
+    message: discord.Message,
+    *,
+    bot_user_id: int | None = None,
+    log_on_fallback: bool = False,
+) -> int | None:
     # Prefer Discord's parsed mentions; fallback to a simple <@...> regex only if needed.
     if message.mentions:
-        return message.mentions[0].id
+        for mention in message.mentions:
+            if getattr(mention, "bot", False):
+                continue
+            if bot_user_id is not None and getattr(mention, "id", None) == bot_user_id:
+                continue
+            try:
+                return int(getattr(mention, "id", None))
+            except (TypeError, ValueError):
+                continue
+
     match = re.search(r"<@!?(?P<user_id>\d+)>", message.content or "")
     if match:
         try:
-            return int(match.group("user_id"))
+            candidate = int(match.group("user_id"))
         except (TypeError, ValueError):
-            return None
+            candidate = None
+        if candidate is not None and candidate != bot_user_id:
+            return candidate
+
+    author = getattr(message, "author", None)
+    if author is not None and not getattr(author, "bot", False):
+        try:
+            author_id = int(getattr(author, "id", None))
+        except (TypeError, ValueError):
+            author_id = None
+        if author_id is not None and author_id != bot_user_id:
+            if log_on_fallback:
+                log.warning(
+                    "welcome_trigger_missing_recruit_mention",
+                    extra={"message_id": getattr(message, "id", None)},
+                )
+            return author_id
+
+    if log_on_fallback:
+        log.warning(
+            "welcome_trigger_missing_recruit_mention",
+            extra={"message_id": getattr(message, "id", None), "reason": "no_target"},
+        )
     return None
 
 
-async def resolve_subject_user_id(thread: discord.Thread) -> int | None:
+async def resolve_subject_user_id(
+    thread: discord.Thread, *, bot_user_id: int | None = None
+) -> int | None:
     starter: discord.Message | None = None
     try:
         starter = await locate_welcome_message(thread)
@@ -216,12 +258,19 @@ async def resolve_subject_user_id(thread: discord.Thread) -> int | None:
         )
 
     candidate: int | None = None
+    if bot_user_id is None:
+        bot_candidate = getattr(getattr(thread, "guild", None), "me", None)
+        try:
+            bot_user_id = int(getattr(bot_candidate, "id", None)) if bot_candidate else None
+        except (TypeError, ValueError):
+            bot_user_id = None
+
     if starter is not None:
-        member = _get_subject_user_from_welcome_message(starter)
+        member = _get_subject_user_from_welcome_message(starter, bot_user_id=bot_user_id)
         if member is not None:
             candidate = getattr(member, "id", None)
         if candidate is None:
-            candidate = _extract_subject_user_id(starter)
+            candidate = _extract_subject_user_id(starter, bot_user_id=bot_user_id)
 
     if candidate is None:
         try:
@@ -249,6 +298,91 @@ def _normalize_dt(value: datetime | None) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+async def persist_session_for_thread(
+    *,
+    flow: str,
+    ticket_number: str | None,
+    thread: discord.Thread,
+    user_id: int | str | None,
+    username: str | None,
+    created_at: datetime,
+    panel_message_id: int | None = None,
+    append_session_row: bool = True,
+) -> None:
+    thread_id = int(getattr(thread, "id", 0))
+    thread_name = getattr(thread, "name", "")
+    created = _normalize_dt(created_at)
+
+    try:
+        onboarding_sessions.upsert_session(
+            thread_id=thread_id,
+            thread_name=thread_name,
+            user_id=user_id if user_id is not None else "",
+            panel_message_id=panel_message_id,
+            updated_at=created,
+        )
+    except Exception:
+        log.exception(
+            "failed to persist onboarding session", extra={"thread_id": thread_id, "user_id": user_id}
+        )
+
+    numeric_user_id: int | None = None
+    try:
+        numeric_user_id = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        numeric_user_id = None
+
+    if ticket_number and numeric_user_id is not None and append_session_row:
+        log_prefix = f"{flow}_session_row" if flow else "session_row"
+        try:
+            session_result = await asyncio.to_thread(
+                onboarding_sheets.append_onboarding_session_row,
+                ticket=ticket_number,
+                thread_id=thread_id,
+                user_id=numeric_user_id,
+                flow=flow,
+                status="open",
+                created_at=created,
+            )
+            log.info(
+                "✅ %s — ticket=%s • user=%s • result=row_%s",
+                log_prefix,
+                ticket_number,
+                username or numeric_user_id,
+                session_result,
+            )
+        except Exception as exc:
+            log.error(
+                "❌ %s — ticket=%s • user=%s • result=error • reason=%s",
+                log_prefix,
+                ticket_number,
+                username or numeric_user_id,
+                exc,
+            )
+
+    if numeric_user_id is not None:
+        try:
+            session = await ensure_session_for_thread(
+                numeric_user_id,
+                thread_id,
+                updated_at=created,
+                thread_name=thread_name,
+            )
+            if session is not None and panel_message_id is not None:
+                session.panel_message_id = panel_message_id
+                try:
+                    session.save_to_sheet()
+                except Exception:
+                    log.exception(
+                        "failed to persist onboarding session panel id",
+                        extra={"thread_id": thread_id, "user_id": numeric_user_id},
+                    )
+        except Exception:
+            log.exception(
+                "failed to ensure onboarding session", extra={"thread_id": thread_id, "user_id": numeric_user_id}
+            )
 
 
 def _session_has_answers(session: Session | None) -> bool:
@@ -1500,9 +1634,11 @@ async def post_open_questions_panel(
 
         panel_message_id = getattr(panel_message, "id", None)
         if subject_user_id is None:
-            subject_user_id = await resolve_subject_user_id(thread)
+            subject_user_id = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
         if subject_user_id is None and trigger_message is not None:
-            subject_user_id = _extract_subject_user_id(trigger_message)
+            subject_user_id = _extract_subject_user_id(
+                trigger_message, bot_user_id=bot_user_id, log_on_fallback=True
+            )
 
         flow_suffix = f" • flow={normalized_flow}" if normalized_flow.startswith("promo") else ""
         if subject_user_id is None:
@@ -1512,12 +1648,15 @@ async def post_open_questions_panel(
                 thread.id,
             )
         else:
-            onboarding_sessions.upsert_session(
-                thread_id=thread.id,
-                thread_name=thread.name,
+            await persist_session_for_thread(
+                flow=normalized_flow,
+                ticket_number=ticket_code,
+                thread=thread,
                 user_id=subject_user_id,
+                username=None,
+                created_at=datetime.now(timezone.utc),
                 panel_message_id=panel_message_id,
-                updated_at=datetime.now(timezone.utc),
+                append_session_row=False,
             )
 
         return PanelOutcome(
@@ -2228,13 +2367,15 @@ class WelcomeTicketWatcher(commands.Cog):
             if closed_idx < len(existing_row):
                 closed_value = existing_row[closed_idx] or ""
 
-        row = [context.ticket_number, context.username, clan_value, closed_value]
         created_at = _normalize_dt(getattr(thread, "created_at", None))
+        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
 
         starter: discord.Message | None = None
         try:
             starter = await locate_welcome_message(thread)
-            applicant_id, _ = extract_target_from_message(starter)
+            applicant_id = _extract_subject_user_id(
+                starter, bot_user_id=bot_user_id, log_on_fallback=True
+            )
         except Exception:
             applicant_id = None
             log.debug(
@@ -2243,10 +2384,9 @@ class WelcomeTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
-        subject_resolved = await resolve_subject_user_id(thread)
+        subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
         if subject_resolved is None and applicant_id is not None:
             subject_resolved = applicant_id
-        subject_user_id = str(subject_resolved or "")
 
         if applicant_id is not None:
             try:
@@ -2259,19 +2399,7 @@ class WelcomeTicketWatcher(commands.Cog):
             except (TypeError, ValueError):
                 context.recruit_id = None
 
-        try:
-            onboarding_sessions.upsert_session(
-                thread_id=int(getattr(thread, "id", 0)),
-                thread_name=getattr(thread, "name", ""),
-                user_id=subject_user_id,
-                panel_message_id=None,
-                updated_at=created_at,
-            )
-        except Exception:
-            log.exception(
-                "failed to persist onboarding session on ticket open",
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
+        ticket_user = context.recruit_id if context.recruit_id is not None else subject_resolved
 
         try:
             result = await asyncio.to_thread(
@@ -2280,6 +2408,12 @@ class WelcomeTicketWatcher(commands.Cog):
                 context.username,
                 clan_value,
                 closed_value,
+                thread_name=getattr(thread, "name", ""),
+                user_id=ticket_user,
+                thread_id=int(getattr(thread, "id", 0)),
+                panel_message_id=None,
+                status="open",
+                created_at=created_at,
             )
             log.info(
                 "✅ welcome_ticket_open — ticket=%s • user=%s • result=row_%s",
@@ -2295,42 +2429,15 @@ class WelcomeTicketWatcher(commands.Cog):
                 exc,
             )
 
-        if applicant_id is not None:
-            try:
-                session_result = await asyncio.to_thread(
-                    onboarding_sheets.append_onboarding_session_row,
-                    ticket=context.ticket_number,
-                    thread_id=int(getattr(thread, "id", 0)),
-                    user_id=int(applicant_id),
-                    flow="welcome",
-                    status="open",
-                    created_at=created_at,
-                )
-                log.info(
-                    "✅ welcome_session_row — ticket=%s • user=%s • result=row_%s",
-                    context.ticket_number,
-                    context.username,
-                    session_result,
-                )
-            except Exception as exc:
-                log.error(
-                    "❌ welcome_session_row — ticket=%s • user=%s • result=error • reason=%s",
-                    context.ticket_number,
-                    context.username,
-                    exc,
-                )
-            try:
-                await ensure_session_for_thread(
-                    int(applicant_id),
-                    int(getattr(thread, "id", 0)),
-                    updated_at=created_at,
-                    thread_name=getattr(thread, "name", ""),
-                )
-            except Exception:
-                log.exception(
-                    "failed to ensure onboarding session on ticket open",
-                    extra={"thread_id": getattr(thread, "id", None), "applicant_id": applicant_id},
-                )
+        if ticket_user is not None:
+            await persist_session_for_thread(
+                flow="welcome",
+                ticket_number=context.ticket_number,
+                thread=thread,
+                user_id=ticket_user,
+                username=context.username,
+                created_at=created_at,
+            )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:

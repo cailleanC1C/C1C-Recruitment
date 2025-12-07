@@ -11,6 +11,7 @@ from modules.onboarding.watcher_welcome import TicketContext, WelcomeTicketWatch
 
 def test_welcome_ticket_logs_sheets(monkeypatch):
     watcher = WelcomeTicketWatcher(bot=MagicMock())
+    watcher.bot.user = SimpleNamespace(id=999, bot=True)
     thread = SimpleNamespace(
         id=111,
         created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
@@ -19,17 +20,20 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
     context = TicketContext(thread_id=111, ticket_number="W0600", username="smurf")
 
     monkeypatch.setattr(watcher_welcome.onboarding_sheets, "find_welcome_row", lambda ticket: None)
-    starter = SimpleNamespace(mentions=[SimpleNamespace(id=222)], content="<@222>")
+    starter = SimpleNamespace(
+        mentions=[SimpleNamespace(id=222, bot=False)],
+        content="<@222>",
+        author=SimpleNamespace(id=watcher.bot.user.id, bot=True),
+    )
     monkeypatch.setattr(watcher_welcome, "locate_welcome_message", AsyncMock(return_value=starter))
-    monkeypatch.setattr(watcher_welcome, "extract_target_from_message", lambda _: (222, None))
     monkeypatch.setattr(watcher_welcome, "ensure_session_for_thread", AsyncMock())
 
     welcome_calls = []
     session_calls = []
     session_sheet_rows = []
 
-    def fake_append_welcome(ticket, username, clan_tag, date_closed):
-        welcome_calls.append((ticket, username, clan_tag, date_closed))
+    def fake_append_welcome(ticket, username, clan_tag, date_closed, **kwargs):
+        welcome_calls.append((ticket, username, clan_tag, date_closed, kwargs))
         return "inserted"
 
     def fake_append_session(**kwargs):
@@ -46,7 +50,10 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
 
     asyncio.run(watcher._handle_ticket_open(thread, context))
 
-    assert welcome_calls == [("W0600", "smurf", "", "")]
+    assert welcome_calls[0][:4] == ("W0600", "smurf", "", "")
+    assert welcome_calls[0][4]["user_id"] == 222
+    assert welcome_calls[0][4]["thread_id"] == thread.id
+    assert welcome_calls[0][4]["created_at"] == thread.created_at
     assert session_calls == [
         {
             "ticket": "W0600",
@@ -83,48 +90,38 @@ def test_promo_ticket_logs_sheets(monkeypatch):
     monkeypatch.setattr(watcher_promo, "ensure_session_for_thread", AsyncMock())
 
     promo_calls = []
-    session_calls = []
-    session_sheet_rows = []
 
     def fake_append_promo(*args, **kwargs):
-        promo_calls.append(args)
-        return "inserted"
-
-    def fake_append_session(**kwargs):
-        session_calls.append(kwargs)
+        promo_calls.append((args, kwargs))
         return "inserted"
 
     monkeypatch.setattr(watcher_promo.onboarding_sheets, "append_promo_ticket_row", fake_append_promo)
-    monkeypatch.setattr(watcher_promo.onboarding_sheets, "append_onboarding_session_row", fake_append_session)
-    monkeypatch.setattr(
-        watcher_promo.onboarding_sessions,
-        "upsert_session",
-        lambda **payload: session_sheet_rows.append(payload),
-    )
+    monkeypatch.setattr(watcher_promo.onboarding_sheets, "append_onboarding_session_row", AsyncMock())
 
     asyncio.run(watcher.on_thread_create(thread))
 
-    assert promo_calls == [
-        (
-            "M0011",
-            "user",
-            "",
-            "player move request",
-            "2025-02-02 00:00:00",
-            "2025",
-            "February",
-            "",
-            "",
-            "",
-        )
-    ]
-    assert session_calls[0]["flow"] == "promo"
-    assert session_calls[0]["status"] == "open"
-    assert session_calls[0]["ticket"] == "M0011"
-    assert session_calls[0]["thread_id"] == 222
-    assert session_calls[0]["user_id"] == 333
-    assert session_calls[0]["created_at"] == thread.created_at
-    assert session_sheet_rows[0]["thread_name"] == thread.name
+    # Closing the ticket should not append another ticket row.
+    asyncio.run(watcher._ensure_row_initialized(thread, context))
+
+    args, kwargs = promo_calls[0]
+    assert args == (
+        "M0011",
+        "user",
+        "",
+        "player move request",
+        "2025-02-02 00:00:00",
+        "2025",
+        "February",
+        "",
+        "",
+        "",
+    )
+    assert kwargs["user_id"] == 333
+    assert kwargs["thread_id"] == thread.id
+    assert kwargs["created_at"] == thread.created_at
+    assert len(promo_calls) == 1
+    # No onboarding session rows are created until the promo panel is posted.
+    assert watcher_promo.onboarding_sheets.append_onboarding_session_row.await_count == 0
 
 
 def test_promo_ticket_open_logs_error_on_failure(monkeypatch, caplog):
@@ -148,4 +145,4 @@ def test_promo_ticket_open_logs_error_on_failure(monkeypatch, caplog):
     with caplog.at_level("ERROR"):
         asyncio.run(watcher._log_ticket_open(thread, context))
 
-    assert any("result=error" in record.getMessage() for record in caplog.records)
+    assert any("result=error" in str(record.msg) for record in caplog.records)

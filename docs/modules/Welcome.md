@@ -10,7 +10,8 @@ The welcome module owns the Discord-facing experience that surrounds the onboard
 - **Wizard UX** — host the single-message onboarding wizard (buttons, dropdowns, resume/restart actions). All edits happen in place per the lifecycle policy in [`docs/modules/Onboarding.md`](Onboarding.md).
 - **Embeds & panels** — format the summary embed per the layout and hide rules documented in this file, ping recruiter roles (e.g., `<@&RecruitmentCoordinator>`), and show inline status (waiting, saved, error) so staff can see what state the recruit is in.
 - **Notifications** — mention recruiter/clan roles when submissions complete, highlight gate denials in logs, and post 🧭 placement logs when tickets close and clan math runs.
-- **Ticket metadata** — call onboarding sheet helpers to upsert rows in `WelcomeTickets`/`PromoTickets`, capture `clantag` selections, and rename threads when staff pick a placement.
+- **Ticket metadata** — call onboarding sheet helpers to upsert rows in `WelcomeTickets`/`PromoTickets`, capture `clantag` selections, and rename threads when staff pick a placement. Ticket rows are written at creation with `thread_id`, `thread_name`, `user_id`, `panel_message_id`, and timestamps, and subsequent updates reuse the same row keyed by ticket/thread id.
+- **Session state** — `OnboardingSessions` stores per-thread wizard progress keyed by `(thread_id, user_id)`; panel creation updates the stored `panel_message_id` for both welcome and promo flows.
 
 ## Non-Goals
 - No question authoring, validation, or rule parsing — the module delegates to the onboarding engine and surfaces whatever it returns.
