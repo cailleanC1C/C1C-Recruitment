@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -39,6 +40,7 @@ class _DummyThread:
     async def send(self, content: str | None = None, **kwargs):
         message = _DummyMessage(0)
         message.content = content or ""
+        message.created_at = datetime.now(timezone.utc)
         self.sent.append(message)
         return message
 
@@ -214,11 +216,26 @@ def test_promo_thread_open_creates_session(memory_sheet, monkeypatch):
     watcher = PromoTicketWatcher(bot=_DummyBot())
     asyncio.run(watcher.on_thread_create(thread))
 
+    # No onboarding session row should be written until the panel appears.
+    assert memory_sheet == {}
+
+    context = watcher._tickets[thread.id]
+    context.user_id = 42
+
+    monkeypatch.setattr(
+        "shared.sheets.onboarding.find_promo_row",
+        lambda ticket: (0, {}),
+    )
+    monkeypatch.setattr(watcher, "_load_clan_tags", AsyncMock(return_value=["C1CE", "C1CW"]))
+
+    asyncio.run(watcher._begin_clan_prompt(thread, context))
+
+    message = thread.sent[-1]
     assert (42, 202) in memory_sheet
     payload = memory_sheet[(42, 202)]
     assert payload.get("completed") is False
-    assert payload.get("panel_message_id") == 0
-    assert payload.get("updated_at") == created_at.isoformat()
+    assert payload.get("panel_message_id") == 555
+    assert payload.get("updated_at") == message.created_at.isoformat()
 
 
 def test_panel_start_updates_existing_session(memory_sheet, monkeypatch):

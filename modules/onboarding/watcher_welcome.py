@@ -364,12 +364,21 @@ async def persist_session_for_thread(
 
     if numeric_user_id is not None:
         try:
-            await ensure_session_for_thread(
+            session = await ensure_session_for_thread(
                 numeric_user_id,
                 thread_id,
                 updated_at=created,
                 thread_name=thread_name,
             )
+            if session is not None and panel_message_id is not None:
+                session.panel_message_id = panel_message_id
+                try:
+                    session.save_to_sheet()
+                except Exception:
+                    log.exception(
+                        "failed to persist onboarding session panel id",
+                        extra={"thread_id": thread_id, "user_id": numeric_user_id},
+                    )
         except Exception:
             log.exception(
                 "failed to ensure onboarding session", extra={"thread_id": thread_id, "user_id": numeric_user_id}

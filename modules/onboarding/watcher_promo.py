@@ -69,6 +69,7 @@ class PromoTicketContext:
     state: str = "open"
     prompt_message_id: Optional[int] = None
     close_detected: bool = False
+    user_id: Optional[int] = None
 
 
 class PromoClanSelect(discord.ui.Select):
@@ -359,7 +360,10 @@ class PromoTicketWatcher(commands.Cog):
             context.join_month = values.get("join_month", "") or context.join_month
             return
 
-        await self._log_ticket_open(thread, context)
+        log.warning(
+            "promo watcher could not locate ticket row for closure; skipping append",
+            extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+        )
 
     async def _send_invalid_tag_notice(self, thread: discord.Thread, actor: discord.abc.User | None, candidate: str) -> None:
         notice = (
@@ -399,6 +403,30 @@ class PromoTicketWatcher(commands.Cog):
             return
         view.message = message
         context.prompt_message_id = message.id
+
+        if context.user_id is None:
+            log.warning(
+                "promo watcher: skipping session persist; no resolved user id",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
+            return
+
+        created_at = getattr(message, "created_at", None) or dt.datetime.now(UTC)
+        try:
+            await persist_session_for_thread(
+                flow="promo",
+                ticket_number=context.ticket_number,
+                thread=thread,
+                user_id=context.user_id,
+                username=context.username,
+                created_at=created_at,
+                panel_message_id=message.id,
+            )
+        except Exception:
+            log.exception(
+                "promo watcher: failed to persist onboarding session at panel creation",
+                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+            )
 
     async def finalize_from_interaction(
         self,
@@ -542,22 +570,15 @@ class PromoTicketWatcher(commands.Cog):
 
         ticket_user = applicant_id if applicant_id is not None else subject_resolved
 
+        # Persist the resolved subject so panel creation can write the onboarding session row later.
+        context.user_id = ticket_user
+
         await self._log_ticket_open(
             thread,
             context,
             user_id=ticket_user,
             created_at=created_at,
         )
-
-        if ticket_user is not None:
-            await persist_session_for_thread(
-                flow="promo",
-                ticket_number=context.ticket_number,
-                thread=thread,
-                user_id=ticket_user,
-                username=context.username,
-                created_at=created_at,
-            )
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
