@@ -139,6 +139,11 @@ Every audit and CI check validates against this document.
 - A follow-up CI step posts the summary comment to the PR using the generated markdown.
 - A final CI step reads `guardrails_status` and fails the workflow only when it equals `fail`.
 - This ordering guarantees the full report is published even when the workflow ends in failure.
+- The PR "Guardrails Summary" comment surfaces **every automated guardrail code** with an explicit status:
+  - ✅ passed (no violations)
+  - ❌ failed (one or more violations)
+  - ⚪ skipped/not applicable (with a short reason)
+  - Each code always appears, even when it passes or is skipped, to prevent silent drops.
 
 ---
 
