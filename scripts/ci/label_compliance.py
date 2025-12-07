@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 from urllib import error, request
+
+from scripts.ci.utils.env import get_env
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -70,11 +74,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--allowed", type=Path, default=Path(".github/labels/labels.json"))
     args = parser.parse_args(argv)
 
-    token = os.getenv("GITHUB_TOKEN")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    token = get_env("GITHUB_TOKEN")
     result = evaluate_labels(repo=args.repo, number=args.pr, allowed_path=args.allowed, token=token)
 
     if result.error:
-        print(result.error, file=sys.stderr)
+        log.error(result.error)
         return 2
 
     messages: List[str] = []
@@ -84,7 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         messages.append("Unknown labels: " + ", ".join(result.unknown))
 
     if messages:
-        print("; ".join(messages), file=sys.stderr)
+        log.error("; ".join(messages))
         return 1
 
     return 0

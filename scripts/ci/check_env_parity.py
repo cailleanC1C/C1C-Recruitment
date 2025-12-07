@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import pathlib
 import re
 import sys
@@ -11,6 +12,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 ENV_EXAMPLE = ROOT / "docs" / "ops" / ".env.example"
 CONFIG_MD = ROOT / "docs" / "ops" / "Config.md"
+
+
+log = logging.getLogger(__name__)
 
 
 def env_keys_from_example(path: pathlib.Path) -> list[str]:
@@ -121,6 +125,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--summary", type=pathlib.Path, help="Path to write summary markdown")
     args = parser.parse_args(argv)
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     example_keys = env_keys_from_example(ENV_EXAMPLE)
     doc_keys = env_keys_from_docs(CONFIG_MD)
 
@@ -133,24 +139,24 @@ def main(argv: list[str] | None = None) -> None:
     exit_code = 0
 
     if missing_in_docs:
-        print(
-            "ERROR: Keys present in .env.example but missing in Config.md:",
+        log.error(
+            "ERROR: Keys present in .env.example but missing in Config.md: %s",
             ", ".join(missing_in_docs),
         )
         exit_code = 1
 
     if missing_in_example:
-        print(
-            "ERROR: Keys documented in Config.md but missing in .env.example:",
+        log.error(
+            "ERROR: Keys documented in Config.md but missing in .env.example: %s",
             ", ".join(missing_in_example),
         )
         exit_code = 1
 
     offenders = check_discord_token_leak(ROOT)
     if offenders:
-        print("ERROR: Potential Discord token pattern detected in files:")
+        log.error("ERROR: Potential Discord token pattern detected in files:")
         for offender in offenders:
-            print(" -", offender)
+            log.error(" - %s", offender)
         exit_code = 1
 
     if args.summary:

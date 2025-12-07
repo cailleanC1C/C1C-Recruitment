@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
-import os
+import logging
 import pathlib
 import re
 import sys
 from typing import Iterable
+
+from scripts.ci.utils.env import get_env_path
+
+log = logging.getLogger(__name__)
 
 DOCS_PATTERNS: list[re.Pattern[str]] = [
     # e.g. "docs/README.md: footer missing or malformed."
@@ -33,12 +37,12 @@ def emit_error(file_path: str, line: str | int | None, title: str, message: str)
         line_no = int(line) if line is not None else 1
     except (TypeError, ValueError):
         line_no = 1
-    print(f"::error file={file_path},line={line_no},title={title}::{message}")
+    log.error("::error file=%s,line=%s,title=%s::%s", file_path, line_no, title, message)
 
 
 def append_summary(entries: Iterable[str]) -> None:
     """Append a short summary to the GitHub step summary if available."""
-    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    summary_path = get_env_path("GITHUB_STEP_SUMMARY")
     if not summary_path:
         return
     with open(summary_path, "a", encoding="utf-8") as handle:
@@ -100,10 +104,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", type=pathlib.Path, required=True)
     args = parser.parse_args(argv)
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
     try:
         text = args.input.read_text(encoding="utf-8", errors="ignore")
     except FileNotFoundError:
-        print(f"error: input file not found: {args.input}", file=sys.stderr)
+        log.error("error: input file not found: %s", args.input)
         return 2
 
     findings = parse(args.kind, text)

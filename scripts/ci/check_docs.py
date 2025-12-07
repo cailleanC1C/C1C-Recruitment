@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 from pathlib import Path
@@ -16,6 +17,9 @@ FOOTER_RE = re.compile(r"^Doc last updated: \d{4}-\d{2}-\d{2} \(v0\.9\.\d+(?:\.\
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 HEADER_RE = re.compile(r"^# +(.+)$")
 EXTERNAL_PREFIXES = ("http://", "https://", "mailto:", "tel:")
+
+
+log = logging.getLogger(__name__)
 
 
 def iter_markdown_files() -> list[Path]:
@@ -162,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     errors: list[str] = []
     for path in iter_markdown_files():
         check_titles_and_footers(path, errors)
@@ -175,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if errors:
         for err in errors:
-            print(err, file=sys.stderr)
+            log.error(err)
         return 1
     return 0
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import logging
 import pathlib
 import re
 import sys
@@ -12,6 +13,8 @@ AUDIT_DIR = ROOT / f"AUDIT/{time.strftime('%Y%m%d')}_GUARDRAILS"
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT = AUDIT_DIR / "report.md"
 
+log = logging.getLogger(__name__)
+
 def _echo_violation(rule_id, message, file_path=None, line_no=None):
     """
     Standardized single-line output that our workflow parser can read.
@@ -23,7 +26,7 @@ def _echo_violation(rule_id, message, file_path=None, line_no=None):
         parts.append(f"file: {file_path}")
     if line_no:
         parts.append(f"line: {line_no}")
-    print(" ".join(parts))
+    log.info(" ".join(parts))
 
 def is_under_audit(path: pathlib.Path) -> bool:
     try:
@@ -226,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+
     errors, notes = run_checks()
 
     out = ["# Guardrails Compliance Report", "", f"- Findings: {len(errors)} error(s)"]
@@ -237,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     out.extend([f"- {e}" for e in errors] or ["- None"])
 
     REPORT.write_text("\n".join(out) + "\n", encoding="utf-8")
-    print(f"Wrote {REPORT}")
+    log.info("Wrote %s", REPORT)
 
     if args.summary:
         summary_lines = build_summary(errors, notes)

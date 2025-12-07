@@ -8,15 +8,17 @@ from __future__ import annotations
 
 import argparse
 import ast
+import asyncio
 import json
-import os
+import logging
 import re
 import subprocess
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+
+from scripts.ci.utils.env import get_env, get_env_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +26,9 @@ AUDIT_ROOT = ROOT / "AUDIT"
 DOCS_ROOT = ROOT / "docs"
 
 ALLOWED_EMBED_COLORS = {0xF200E5, 0x1B8009, 0x3498DB}
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -281,7 +286,7 @@ def check_s07_s09(category: CategoryResult, diff_status: Dict[str, str]) -> None
         category.add(Violation("S-07", "error", "Audit artifacts must live under AUDIT/<YYYYMMDD>_*/", bad_audits))
 
     import_pattern = re.compile(r"from\s+AUDIT|import\s+AUDIT")
-    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    runtime_files = list(_iter_runtime_python_files())
     hits = _match_paths(runtime_files, import_pattern)
     if hits:
         category.add(Violation("S-09", "error", "Runtime code must not import AUDIT modules", hits))
@@ -317,7 +322,7 @@ def check_c02(category: CategoryResult) -> None:
 
 def check_c03(category: CategoryResult) -> None:
     pattern = re.compile(r"from \.+")
-    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    runtime_files = list(_iter_runtime_python_files())
     hits = _match_paths(runtime_files, pattern)
     if hits:
         category.add(Violation("C-03", "error", "Parent-relative imports are forbidden", hits))
@@ -325,7 +330,7 @@ def check_c03(category: CategoryResult) -> None:
 
 def check_c09(category: CategoryResult) -> None:
     patterns = [re.compile(r"shared\.utils\.coreops_"), re.compile(r"recruitment/"), re.compile(r"onboarding/")]
-    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith("tests/")]
+    runtime_files = list(_iter_runtime_python_files())
     hits: List[str] = []
     for path in runtime_files:
         rel = path.relative_to(ROOT).as_posix()
@@ -343,7 +348,11 @@ def check_c09(category: CategoryResult) -> None:
 def check_c10(category: CategoryResult) -> None:
     pattern = re.compile(r"os\.getenv|os\.environ\[")
     allowed_prefixes = ("shared/config", "scripts/", "tests/")
-    runtime_files = [p for p in _iter_python_files() if not p.relative_to(ROOT).as_posix().startswith(allowed_prefixes)]
+    runtime_files = [
+        p
+        for p in _iter_runtime_python_files()
+        if not p.relative_to(ROOT).as_posix().startswith(allowed_prefixes)
+    ]
     hits = _match_paths(runtime_files, pattern)
     if hits:
         category.add(Violation("C-10", "warning", "Use shared config accessor instead of ad-hoc env reads", hits))
@@ -351,7 +360,7 @@ def check_c10(category: CategoryResult) -> None:
 
 def check_c11(category: CategoryResult) -> None:
     pattern = re.compile(r"get_port")
-    hits = _match_paths(_iter_python_files(), pattern)
+    hits = _match_paths(_iter_runtime_python_files(), pattern)
     hits = [h for h in hits if "check_forbidden_imports" not in h]
     if hits:
         category.add(Violation("C-11", "error", "Forbidden get_port import detected", hits))
@@ -434,18 +443,18 @@ def _load_feature_toggle_names() -> set[str]:
     try:
         import modules.common.feature_flags as features
     except Exception as exc:  # pragma: no cover - import errors vary by env
-        print(f"⚠️ Unable to import feature_flags for F-04: {exc}")
+        log.warning("⚠️ Unable to import feature_flags for F-04: %s", exc)
         return set()
 
     try:
         asyncio.run(features.refresh())
     except Exception as exc:  # pragma: no cover - runtime fetch failures are environment-dependent
-        print(f"⚠️ Feature toggle refresh failed: {exc}")
+        log.warning("⚠️ Feature toggle refresh failed: %s", exc)
 
     try:
         values = features.values()
     except Exception as exc:  # pragma: no cover - defensive guard
-        print(f"⚠️ Unable to read feature toggle values: {exc}")
+        log.warning("⚠️ Unable to read feature toggle values: %s", exc)
         return set()
 
     toggles: set[str] = set()
@@ -459,7 +468,7 @@ def _load_feature_toggle_names() -> set[str]:
 def check_feature_toggles(category: CategoryResult) -> None:
     documented = _load_feature_toggle_names()
     if not documented:
-        print("⚠️ Feature toggle registry empty; skipping F-01/F-04 guardrails.")
+        log.warning("⚠️ Feature toggle registry empty; skipping F-01/F-04 guardrails.")
         return
 
     usage = _extract_toggle_usage()
@@ -845,9 +854,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--base-ref", type=str, default=None, help="Base ref for diff (e.g., origin/main)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    pr_body = _load_pr_body(os.getenv("GITHUB_EVENT_PATH"))
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    event_path = get_env_path("GITHUB_EVENT_PATH")
+    pr_body = _load_pr_body(str(event_path) if event_path else None)
     config_parity_status, secret_scan_status, parity_status = _compute_guardrail_health()
-    parity_status = parity_status or os.getenv("ENV_PARITY_STATUS")
+    parity_status = parity_status or get_env("ENV_PARITY_STATUS")
     categories = run_checks(args.base_ref, pr_body, parity_status, args.pr)
 
     report_path = _ensure_audit_report_path()
