@@ -204,6 +204,35 @@ def _extract_subject_user_id(message: discord.Message) -> int | None:
     return None
 
 
+async def resolve_subject_user_id(thread: discord.Thread) -> int | None:
+    starter: discord.Message | None = None
+    try:
+        starter = await locate_welcome_message(thread)
+    except Exception:
+        log.debug(
+            "failed to locate welcome message while resolving subject user",
+            exc_info=True,
+            extra={"thread_id": getattr(thread, "id", None)},
+        )
+
+    candidate: int | None = None
+    if starter is not None:
+        member = _get_subject_user_from_welcome_message(starter)
+        if member is not None:
+            candidate = getattr(member, "id", None)
+        if candidate is None:
+            candidate = _extract_subject_user_id(starter)
+
+    if candidate is None:
+        try:
+            owner_id = getattr(thread, "owner_id", None)
+            candidate = int(owner_id) if owner_id is not None else None
+        except (TypeError, ValueError):
+            candidate = None
+
+    return candidate
+
+
 def build_reserved_thread_name(ticket_code: str, username: str, clan_tag: str) -> str:
     tag = (clan_tag or "").strip().upper()
     return f"Res-{ticket_code}-{username}-{tag}".strip("-")
@@ -474,7 +503,7 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
                 int(getattr(thread, "id", 0)),
                 updated_at=created_at,
                 thread_name=getattr(thread, "name", ""),
-                create_if_missing=False,
+                create_if_missing=True,
             )
         except Exception:
             log.exception(
@@ -1470,6 +1499,8 @@ async def post_open_questions_panel(
         await _emit(result="panel_created")
 
         panel_message_id = getattr(panel_message, "id", None)
+        if subject_user_id is None:
+            subject_user_id = await resolve_subject_user_id(thread)
         if subject_user_id is None and trigger_message is not None:
             subject_user_id = _extract_subject_user_id(trigger_message)
 
@@ -2212,12 +2243,19 @@ class WelcomeTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
-        subject_member = _get_subject_user_from_welcome_message(starter)
-        subject_user_id = str(getattr(subject_member, "id", "") or "")
+        subject_resolved = await resolve_subject_user_id(thread)
+        if subject_resolved is None and applicant_id is not None:
+            subject_resolved = applicant_id
+        subject_user_id = str(subject_resolved or "")
 
         if applicant_id is not None:
             try:
                 context.recruit_id = int(applicant_id)
+            except (TypeError, ValueError):
+                context.recruit_id = None
+        if context.recruit_id is None and subject_resolved is not None:
+            try:
+                context.recruit_id = int(subject_resolved)
             except (TypeError, ValueError):
                 context.recruit_id = None
 

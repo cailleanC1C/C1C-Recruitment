@@ -23,10 +23,10 @@ from modules.onboarding.controllers.welcome_controller import (
 from modules.onboarding.sessions import ensure_session_for_thread
 from modules.onboarding.watcher_welcome import (
     _channel_readable_label,
-    _get_subject_user_from_welcome_message,
     PanelOutcome,
     parse_promo_thread_name,
     post_open_questions_panel,
+    resolve_subject_user_id,
 )
 from modules.onboarding.ui import panels
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
@@ -521,8 +521,10 @@ class PromoTicketWatcher(commands.Cog):
                 "promo watcher: failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
             )
 
-        subject_member = _get_subject_user_from_welcome_message(starter)
-        subject_user_id = str(getattr(subject_member, "id", "") or "")
+        subject_resolved = await resolve_subject_user_id(thread)
+        if subject_resolved is None and applicant_id is not None:
+            subject_resolved = applicant_id
+        subject_user_id = str(subject_resolved or "")
 
         try:
             onboarding_sessions.upsert_session(

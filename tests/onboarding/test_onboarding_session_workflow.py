@@ -20,6 +20,7 @@ class _DummyMessage:
     def __init__(self, user_id: int, mentions: bool | list[_DummyUser] = True):
         self.id = 555
         self.author = _DummyUser(user_id)
+        self.content = ""
         if mentions is False:
             self.mentions: list[_DummyUser] = []
         elif isinstance(mentions, list):
@@ -33,6 +34,13 @@ class _DummyThread:
         self.id = thread_id
         self.name = name
         self.created_at = created_at
+        self.sent: list[_DummyMessage] = []
+
+    async def send(self, content: str | None = None, **kwargs):
+        message = _DummyMessage(0)
+        message.content = content or ""
+        self.sent.append(message)
+        return message
 
 
 class _DummyBot:
@@ -227,9 +235,8 @@ def test_panel_start_updates_existing_session(memory_sheet, monkeypatch):
     assert payload.get("step_index") == 0
 
 
-def test_inactivity_scan_creates_session_row(memory_sheet, monkeypatch):
-    now = datetime(2025, 1, 5, 10, 0, tzinfo=timezone.utc)
-    created_at = now
+def test_inactivity_scan_creates_and_updates_single_session_row(memory_sheet, monkeypatch):
+    created_at = datetime(2025, 1, 5, 10, 0, tzinfo=timezone.utc)
     thread = _DummyThread(404, "W1234-empty", created_at)
 
     _install_message_fixtures(monkeypatch, __import__("modules.onboarding.watcher_welcome", fromlist=["locate_welcome_message"]))
@@ -238,9 +245,19 @@ def test_inactivity_scan_creates_session_row(memory_sheet, monkeypatch):
         _extract_target,
     )
 
-    asyncio.run(_process_incomplete_thread(bot=_DummyBot(), thread=thread, now=now))
+    reminder_time = created_at + timedelta(hours=3, minutes=1)
+    warning_time = created_at + timedelta(hours=24, minutes=5)
+    close_time = created_at + timedelta(hours=36, minutes=5)
 
+    asyncio.run(_process_incomplete_thread(bot=_DummyBot(), thread=thread, now=reminder_time))
+    asyncio.run(_process_incomplete_thread(bot=_DummyBot(), thread=thread, now=warning_time))
+    asyncio.run(_process_incomplete_thread(bot=_DummyBot(), thread=thread, now=close_time))
+
+    assert len(memory_sheet) == 1
     assert (42, 404) in memory_sheet
     payload = memory_sheet[(42, 404)]
+    assert payload.get("user_id") in {"42", 42}
     assert payload.get("completed") is False
-    assert payload.get("updated_at") == created_at.isoformat()
+    assert payload.get("first_reminder_at") is not None
+    assert payload.get("warning_sent_at") is not None
+    assert payload.get("auto_closed_at") is not None

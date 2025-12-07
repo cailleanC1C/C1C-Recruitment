@@ -136,7 +136,8 @@ def test_missing_subject_user_logs_warning(monkeypatch, caplog):
     assert outcome.panel_message_id == 9999
     assert saved == []
     assert any(
-        "onboarding_session_save_skipped" in record.message and "no_subject_user" in record.message
+        "onboarding_session_save_skipped" in record.getMessage()
+        and "no_subject_user" in record.getMessage()
         for record in caplog.records
     )
 
@@ -171,3 +172,33 @@ def test_explicit_subject_user_id_used_when_present(monkeypatch):
     assert saved
     payload = saved[0]
     assert payload["user_id"] == 77777
+
+
+def test_welcome_session_saves_subject_not_actor(monkeypatch):
+    saved: list[dict] = []
+
+    def _record(**payload):
+        saved.append(payload)
+        return True
+
+    monkeypatch.setattr(watcher_welcome.onboarding_sessions, "upsert_session", _record)
+    monkeypatch.setattr(watcher_welcome, "locate_welcome_message", AsyncMock(return_value=None))
+
+    thread = DummyThread("W0603-smurf")
+    thread.owner_id = 44444
+
+    outcome = asyncio.run(
+        watcher_welcome.post_open_questions_panel(
+            SimpleNamespace(user=SimpleNamespace(id=1)),
+            thread,
+            actor=SimpleNamespace(id=99999),
+            flow="welcome",
+            trigger_message=SimpleNamespace(mentions=[], content="no subject"),
+        )
+    )
+
+    assert outcome.panel_message_id == 9999
+    assert saved
+    payload = saved[0]
+    assert payload["user_id"] == 44444
+    assert payload["thread_id"] == thread.id
