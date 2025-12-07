@@ -256,21 +256,41 @@ Leave values blank only if a module is disabled via toggles.
 #### Feature Toggles
 Lists the current feature toggles loaded from the FeatureToggles sheet.
 
-Example:
+Example (sheet-sourced):
 
 ```
 Feature Toggles:
-  recruiter_panel = ON
   member_panel = ON
+  recruiter_panel = ON
+  clan_profile = ON
+  recruitment_welcome = ON
+  recruitment_reports = ON
+  welcome_dialog = ON
+  promo_dialog = ON
+  promo_enabled = ON
+  enable_promo_hook = ON
   placement_target_select = ON
   placement_reservations = ON
-  clan_profile = ON
+  FEATURE_RESERVATIONS = ON
+  ClusterRoleMap = ON
+  SERVER_MAP = ON
+  WELCOME_ENABLED = ON
+  ENABLE_WELCOME_HOOK = ON
+  PROMO_ENABLED = ON
+  ENABLE_PROMO_HOOK = ON
+  housekeeping_enabled = ON
+  mirralith_overview_enabled = ON
+  ops_permissions_enabled = ON
+  ops_watchers_enabled = ON
+  promo_watcher_enabled = ON
+  resume_command_enabled = ON
+  welcome_watcher_enabled = ON
 ```
 
 ### Feature toggle highlights
 
-- `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK` — control welcome watcher activation.
-- `PROMO_ENABLED`, `ENABLE_PROMO_HOOK` — control promo watcher activation (no dialogs yet).
+- `WELCOME_ENABLED`, `ENABLE_WELCOME_HOOK`, `recruitment_welcome`, `welcome_dialog` — welcome watcher activation and dialog control, all gated through `modules.common.feature_flags.is_enabled()`.
+- `PROMO_ENABLED`, `ENABLE_PROMO_HOOK`, `promo_enabled`, `enable_promo_hook`, `promo_dialog` — promo watcher activation + dialog gating.
 - `welcome_dialog`, `promo_dialog` — dialog/panel toggles; promo dialog is reserved for future onboarding steps.
 - `housekeeping_enabled`, `mirralith_overview_enabled` — gate cleanup/keepalive cadences and the Mirralith overview autoposter scheduler.
 - `ops_permissions_enabled`, `ops_watchers_enabled` — gate Permissions Sync registration and watcher telemetry commands.
@@ -301,11 +321,18 @@ Feature Toggles:
   feature_name,enabled
   member_panel,TRUE
   recruiter_panel,TRUE
+  clan_profile,TRUE
   recruitment_welcome,TRUE
   recruitment_reports,TRUE
   welcome_dialog,TRUE
+  promo_dialog,TRUE
+  promo_enabled,TRUE
+  enable_promo_hook,TRUE
   placement_target_select,TRUE
   placement_reservations,TRUE
+  FEATURE_RESERVATIONS,TRUE
+  ClusterRoleMap,TRUE
+  SERVER_MAP,TRUE
   housekeeping_enabled,TRUE
   mirralith_overview_enabled,TRUE
   ops_permissions_enabled,TRUE
@@ -313,11 +340,10 @@ Feature Toggles:
   welcome_watcher_enabled,TRUE
   promo_watcher_enabled,TRUE
   resume_command_enabled,TRUE
-    SERVER_MAP,TRUE
-    WELCOME_ENABLED,TRUE
-    ENABLE_WELCOME_HOOK,TRUE
-    PROMO_ENABLED,TRUE
-    ENABLE_PROMO_HOOK,TRUE
+  WELCOME_ENABLED,TRUE
+  ENABLE_WELCOME_HOOK,TRUE
+  PROMO_ENABLED,TRUE
+  ENABLE_PROMO_HOOK,TRUE
   ```
 
 **Behavior**
@@ -327,6 +353,7 @@ Feature Toggles:
 - Invalid value ⇒ disabled; logs one admin-ping warning per feature key.
 - Startup continues regardless; platform services (cache, scheduler, watchdog, RBAC) are never gated.
 - The `recruitment_reports` row powers the Daily Recruiter Update (scheduler + manual command). The `placement_*` rows still control stub modules that only log load state.
+- Consumption sites must use the central accessor `modules.common.feature_flags.is_enabled("<feature_name>")`. Guardrails flag any FeatureToggles row that is not referenced through that accessor.
 
 Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV variables must not be used for feature flags.
 
@@ -344,4 +371,4 @@ Feature enable/disable is always sourced from the FeatureToggles worksheet; ENV 
 
 > **Template note:** The `.env.example` file in this directory mirrors the tables below. Treat that file as the canonical template for new deployments and update both assets together.
 
-Doc last updated: 2025-12-05 (v0.9.8.2)
+Doc last updated: 2025-12-07 (v0.9.8.3)

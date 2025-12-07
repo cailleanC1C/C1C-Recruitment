@@ -54,7 +54,7 @@ Formatting, embed style, log style, help text tone, and documentation convention
 
 ## `/docs/guardrails/`
 * [`README.md`](guardrails/README.md) — high-level summary of CI-enforced guardrails surfaced on pull requests.
-* [`RepositoryGuardrails.md`](guardrails/RepositoryGuardrails.md) — canonical guardrails specification covering structure, coding, documentation, and governance rules.
+* [`RepositoryGuardrails.md`](guardrails/RepositoryGuardrails.md) — canonical guardrails specification covering structure, coding, documentation, governance rules, and sheet-backed feature toggle enforcement.
 
 ## `/docs/compliance/`
 Generated reports used by CI.
@@ -111,8 +111,8 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 
 ## 🔧 Maintenance Rules
 * Any PR touching documentation must update this index and all affected references.
-* All docs must end with:
-  `Doc last updated: YYYY-MM-DD (v0.9.8.2)`
+  * All docs must end with:
+    `Doc last updated: YYYY-MM-DD (v0.9.8.3)`
 * `.env.example` must stay in `docs/ops/`.
 * No Markdown files should remain under `docs/ops/` except the global ops SSoTs listed above.
 * Module docs must exclusively live under `docs/modules/`.
@@ -120,4 +120,4 @@ Each module has a **dedicated deep-dive file** describing its scope, flows, data
 ## Cross-References
 * [`docs/contracts/CollaborationContract.md`](contracts/CollaborationContract.md) documents contributor responsibilities and embeds this index under “Documentation Discipline.”
 
-Doc last updated: 2025-12-04 (v0.9.8.2)
+Doc last updated: 2025-12-07 (v0.9.8.3)

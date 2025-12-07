@@ -12,7 +12,7 @@ import json
 import os
 import re
 import subprocess
-import importlib.util
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -24,33 +24,6 @@ AUDIT_ROOT = ROOT / "AUDIT"
 DOCS_ROOT = ROOT / "docs"
 
 ALLOWED_EMBED_COLORS = {0xF200E5, 0x1B8009, 0x3498DB}
-DOCUMENTED_TOGGLES = {
-    "member_panel",
-    "recruiter_panel",
-    "recruitment_welcome",
-    "recruitment_reports",
-    "placement_target_select",
-    "placement_reservations",
-    "clan_profile",
-    "welcome_dialog",
-    "onboarding_rules_v2",
-    "WELCOME_ENABLED",
-    "ENABLE_WELCOME_HOOK",
-    "ENABLE_PROMO_WATCHER",
-    "housekeeping_keepalive",
-    "housekeeping_cleanup",
-    "mirralith_autoposter",
-}
-
-
-def _load_env_parity_module():
-    module_path = ROOT / "scripts" / "ci" / "check_env_parity.py"
-    spec = importlib.util.spec_from_file_location("check_env_parity", module_path)
-    if spec is None or spec.loader is None:
-        return None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @dataclass
@@ -82,6 +55,16 @@ def _iter_python_files() -> Iterable[Path]:
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT)
         if "AUDIT" in rel.parts:
+            continue
+        yield path
+
+
+def _iter_runtime_python_files() -> Iterable[Path]:
+    for path in _iter_python_files():
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith("tests/"):
+            continue
+        if rel.startswith("scripts/"):
             continue
         yield path
 
@@ -147,6 +130,116 @@ def _match_paths(paths: Iterable[Path], pattern: re.Pattern[str]) -> List[str]:
             if pattern.search(line):
                 hits.append(f"{rel}:{idx}")
     return hits
+
+
+def _env_keys_from_example(path: Path) -> List[str]:
+    keys: List[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return keys
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key:
+                keys.append(key)
+    return keys
+
+
+def _env_keys_from_docs(path: Path) -> List[str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    marker = "## Environment keys"
+    start = text.find(marker)
+    if start == -1:
+        return []
+    section = text[start + len(marker) :]
+    next_heading = section.find("\n## ")
+    if next_heading != -1:
+        section = section[:next_heading]
+    table_keys = set(
+        re.findall(r"^\|\s*`([A-Z][A-Z0-9_]+)`\s*\|", section, flags=re.MULTILINE)
+    )
+    inline_keys = {
+        match
+        for match in re.findall(r"`([A-Z][A-Z0-9_]+)`", section)
+        if "_" in match
+    }
+    keys = table_keys.union(inline_keys)
+    return sorted(keys)
+
+
+def _check_discord_token_leak(repo_root: Path) -> List[str]:
+    pattern = re.compile(r"[A-Za-z\d_-]{23,28}\.[A-Za-z\d_-]{6}\.[A-Za-z\d_-]{27}")
+    offenders: List[str] = []
+    for path in repo_root.rglob("*"):
+        if path.is_dir():
+            continue
+        if any(part.lower() == "audit" for part in path.parts):
+            continue
+        if any(part == ".git" for part in path.parts):
+            continue
+        if path.suffix.lower() in {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".mp4",
+            ".pdf",
+            ".ico",
+            ".svg",
+            ".csv",
+            ".tsv",
+            ".parquet",
+            ".feather",
+        }:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        if pattern.search(content):
+            offenders.append(str(path.relative_to(ROOT)))
+    return offenders
+
+
+def _compute_guardrail_health() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    env_example = DOCS_ROOT / "ops" / ".env.example"
+    config_md = DOCS_ROOT / "ops" / "Config.md"
+
+    example_keys = _env_keys_from_example(env_example)
+    doc_keys = _env_keys_from_docs(config_md)
+
+    config_status: Optional[str]
+    parity_status: Optional[str]
+    if example_keys and doc_keys:
+        example_set = set(example_keys)
+        doc_set = set(doc_keys)
+        missing_in_docs = sorted(example_set - doc_set)
+        missing_in_example = sorted(doc_set - example_set)
+        if missing_in_docs or missing_in_example:
+            config_status = "failure"
+            parity_status = "failure"
+        else:
+            config_status = "success"
+            parity_status = "success"
+    else:
+        config_status = None
+        parity_status = None
+
+    offenders = _check_discord_token_leak(ROOT)
+    secret_status: Optional[str]
+    if offenders:
+        secret_status = "failure"
+    else:
+        secret_status = "success"
+
+    return config_status, secret_status, parity_status
 
 
 def check_s01_s05(category: CategoryResult) -> None:
@@ -295,34 +388,99 @@ def check_c17(category: CategoryResult) -> None:
         category.add(Violation("C-17", "error", "Embed colours must use approved palette", offenders))
 
 
+def _is_feature_accessor(node: ast.Attribute) -> bool:
+    if isinstance(node.value, ast.Name) and node.value.id in {"feature_flags", "features"}:
+        return True
+    if isinstance(node.value, ast.Attribute) and node.value.attr in {"feature_flags", "features"}:
+        return True
+    return False
+
+
+def _extract_toggle_name(node: ast.Call) -> Optional[str]:
+    for arg in node.args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value.strip().lower()
+    for kw in node.keywords:
+        if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+            return kw.value.value.strip().lower()
+    return None
+
+
 def _extract_toggle_usage() -> Dict[str, List[str]]:
     usage: Dict[str, List[str]] = {}
-    pattern = re.compile(r"FeatureToggles\.[^(]*\(\s*[\"']([A-Za-z0-9_]+)[\"']")
-    for path in _iter_python_files():
+
+    for path in _iter_runtime_python_files():
         rel = path.relative_to(ROOT).as_posix()
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        for match in pattern.finditer(text):
-            name = match.group(1)
-            line_no = text[: match.start()].count("\n") + 1
-            usage.setdefault(name, []).append(f"{rel}:{line_no}")
+
+        class ToggleVisitor(ast.NodeVisitor):
+            def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "is_enabled":
+                    if _is_feature_accessor(node.func):
+                        name = _extract_toggle_name(node)
+                        if name:
+                            usage.setdefault(name, []).append(f"{rel}:{node.lineno}")
+                self.generic_visit(node)
+
+        ToggleVisitor().visit(tree)
+
     return usage
 
 
+def _load_feature_toggle_names() -> set[str]:
+    try:
+        import modules.common.feature_flags as features
+    except Exception as exc:  # pragma: no cover - import errors vary by env
+        print(f"⚠️ Unable to import feature_flags for F-04: {exc}")
+        return set()
+
+    try:
+        asyncio.run(features.refresh())
+    except Exception as exc:  # pragma: no cover - runtime fetch failures are environment-dependent
+        print(f"⚠️ Feature toggle refresh failed: {exc}")
+
+    try:
+        values = features.values()
+    except Exception as exc:  # pragma: no cover - defensive guard
+        print(f"⚠️ Unable to read feature toggle values: {exc}")
+        return set()
+
+    toggles: set[str] = set()
+    for key in values:
+        normalized = str(key or "").strip().lower()
+        if normalized:
+            toggles.add(normalized)
+    return toggles
+
+
 def check_feature_toggles(category: CategoryResult) -> None:
+    documented = _load_feature_toggle_names()
+    if not documented:
+        print("⚠️ Feature toggle registry empty; skipping F-01/F-04 guardrails.")
+        return
+
     usage = _extract_toggle_usage()
-    undocumented = [name for name in usage if name not in DOCUMENTED_TOGGLES]
+
+    undocumented = [name for name in usage if name not in documented]
     if undocumented:
         files: List[str] = []
         for toggle in undocumented:
             files.extend(usage.get(toggle, []))
         category.add(Violation("F-01", "error", "Toggle used but not documented", files))
 
-    unused_documented = [name for name in DOCUMENTED_TOGGLES if name not in usage]
+    unused_documented = [name for name in documented if name not in usage]
     if unused_documented:
-        category.add(Violation("F-04", "warning", "Documented toggles not referenced in code", unused_documented))
+        category.add(
+            Violation(
+                "F-04",
+                "warning",
+                "Documented toggles not referenced in code",
+                sorted(unused_documented),
+            )
+        )
 
 
 def check_d01(category: CategoryResult) -> None:
@@ -496,10 +654,18 @@ def _write_markdown_report(categories: Dict[str, CategoryResult], report_path: P
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_summary_json(categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]) -> None:
+def _write_summary_json(
+    categories: Dict[str, CategoryResult],
+    path: Path,
+    parity_status: Optional[str],
+    config_parity_status: Optional[str],
+    secret_scan_status: Optional[str],
+) -> None:
     payload = {
         "overall_status": "fail" if any(cat.status == "fail" for cat in categories.values()) else "warn" if any(cat.status == "warn" for cat in categories.values()) else "pass",
         "parity_status": parity_status,
+        "config_parity_status": config_parity_status,
+        "secret_scan_status": secret_scan_status,
         "categories": [
             {
                 "id": cat.identifier,
@@ -519,9 +685,12 @@ def _write_summary_json(categories: Dict[str, CategoryResult], path: Path, parit
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
-
 def _append_summary_markdown(
-    categories: Dict[str, CategoryResult], path: Path, parity_status: Optional[str]
+    categories: Dict[str, CategoryResult],
+    path: Path,
+    parity_status: Optional[str],
+    config_parity_status: Optional[str],
+    secret_scan_status: Optional[str],
 ) -> None:
     def _format_health_line(label: str, status: Optional[str], ok_text: str, fail_text: str) -> str:
         if not status:
@@ -551,9 +720,6 @@ def _append_summary_markdown(
             else:
                 formatted.append(path_part)
         return formatted
-
-    config_parity_status = os.getenv("CONFIG_PARITY_STATUS")
-    secret_scan_status = os.getenv("SECRET_SCAN_STATUS")
 
     lines: List[str] = ["# Guardrails Summary", ""]
     lines.append("Top-level checks:")
@@ -680,14 +846,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     pr_body = _load_pr_body(os.getenv("GITHUB_EVENT_PATH"))
-    parity_status = os.getenv("ENV_PARITY_STATUS")
+    config_parity_status, secret_scan_status, parity_status = _compute_guardrail_health()
+    parity_status = parity_status or os.getenv("ENV_PARITY_STATUS")
     categories = run_checks(args.base_ref, pr_body, parity_status, args.pr)
 
     report_path = _ensure_audit_report_path()
     _write_markdown_report(categories, report_path, parity_status)
-    _write_summary_json(categories, args.json, parity_status)
+    _write_summary_json(
+        categories,
+        args.json,
+        parity_status,
+        config_parity_status,
+        secret_scan_status,
+    )
     if args.summary:
-        _append_summary_markdown(categories, args.summary, parity_status)
+        _append_summary_markdown(
+            categories,
+            args.summary,
+            parity_status,
+            config_parity_status,
+            secret_scan_status,
+        )
 
     overall_status = "fail" if any(cat.status == "fail" for cat in categories.values()) else "pass"
     if args.status_file:
