@@ -34,6 +34,7 @@ from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
 from shared.logs import log_lifecycle
 from shared.sheets import onboarding as onboarding_sheets
 from shared.sheets import onboarding_sessions
+from shared.sheets import promo_tickets
 from shared.sheets.onboarding import PROMO_HEADERS
 
 UTC = dt.timezone.utc
@@ -411,6 +412,16 @@ class PromoTicketWatcher(commands.Cog):
             )
             return
 
+        ticket_number = None
+        ticket_username = None
+        try:
+            ticket_number, ticket_username = (getattr(thread, "name", "") or "").split("-", 1)
+            ticket_number = ticket_number.strip()
+            ticket_username = ticket_username.strip()
+        except ValueError:
+            ticket_number = None
+            ticket_username = None
+
         created_at = getattr(message, "created_at", None) or dt.datetime.now(UTC)
         try:
             await persist_session_for_thread(
@@ -427,6 +438,15 @@ class PromoTicketWatcher(commands.Cog):
                 "promo watcher: failed to persist onboarding session at panel creation",
                 extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
             )
+        else:
+            if ticket_number and ticket_username:
+                try:
+                    await promo_tickets.save(ticket_number, ticket_username)
+                except Exception:
+                    log.exception(
+                        "failed to persist promo ticket log",
+                        extra={"thread_id": getattr(thread, "id", None), "ticket": ticket_number},
+                    )
 
     async def finalize_from_interaction(
         self,

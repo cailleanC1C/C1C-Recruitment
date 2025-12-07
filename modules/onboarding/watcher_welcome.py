@@ -41,6 +41,7 @@ from shared.logs import log_lifecycle
 from modules.recruitment import availability
 from shared.sheets import onboarding as onboarding_sheets
 from shared.sheets import onboarding_sessions
+from shared.sheets import welcome_tickets
 from shared.sheets import reservations as reservations_sheets
 from shared.sheets import recruitment as recruitment_sheets
 from shared.sheets.cache_service import cache as sheets_cache
@@ -221,20 +222,6 @@ def _extract_subject_user_id(
             candidate = None
         if candidate is not None and candidate != bot_user_id:
             return candidate
-
-    author = getattr(message, "author", None)
-    if author is not None and not getattr(author, "bot", False):
-        try:
-            author_id = int(getattr(author, "id", None))
-        except (TypeError, ValueError):
-            author_id = None
-        if author_id is not None and author_id != bot_user_id:
-            if log_on_fallback:
-                log.warning(
-                    "welcome_trigger_missing_recruit_mention",
-                    extra={"message_id": getattr(message, "id", None)},
-                )
-            return author_id
 
     if log_on_fallback:
         log.warning(
@@ -2400,6 +2387,15 @@ class WelcomeTicketWatcher(commands.Cog):
                 context.recruit_id = None
 
         ticket_user = context.recruit_id if context.recruit_id is not None else subject_resolved
+        ticket_number = None
+        ticket_username = None
+        try:
+            ticket_number, ticket_username = (getattr(thread, "name", "") or "").split("-", 1)
+            ticket_number = ticket_number.strip()
+            ticket_username = ticket_username.strip()
+        except ValueError:
+            ticket_number = None
+            ticket_username = None
 
         try:
             result = await asyncio.to_thread(
@@ -2438,6 +2434,14 @@ class WelcomeTicketWatcher(commands.Cog):
                 username=context.username,
                 created_at=created_at,
             )
+            if ticket_number and ticket_username:
+                try:
+                    await welcome_tickets.save(ticket_number, ticket_username)
+                except Exception:
+                    log.exception(
+                        "failed to persist welcome ticket log",
+                        extra={"thread_id": getattr(thread, "id", None), "ticket": ticket_number},
+                    )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:
