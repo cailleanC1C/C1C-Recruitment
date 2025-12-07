@@ -11,6 +11,7 @@ from modules.onboarding.watcher_welcome import TicketContext, WelcomeTicketWatch
 
 def test_welcome_ticket_logs_sheets(monkeypatch):
     watcher = WelcomeTicketWatcher(bot=MagicMock())
+    watcher.bot.user = SimpleNamespace(id=999, bot=True)
     thread = SimpleNamespace(
         id=111,
         created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
@@ -19,17 +20,20 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
     context = TicketContext(thread_id=111, ticket_number="W0600", username="smurf")
 
     monkeypatch.setattr(watcher_welcome.onboarding_sheets, "find_welcome_row", lambda ticket: None)
-    starter = SimpleNamespace(mentions=[SimpleNamespace(id=222)], content="<@222>")
+    starter = SimpleNamespace(
+        mentions=[SimpleNamespace(id=222, bot=False)],
+        content="<@222>",
+        author=SimpleNamespace(id=watcher.bot.user.id, bot=True),
+    )
     monkeypatch.setattr(watcher_welcome, "locate_welcome_message", AsyncMock(return_value=starter))
-    monkeypatch.setattr(watcher_welcome, "extract_target_from_message", lambda _: (222, None))
     monkeypatch.setattr(watcher_welcome, "ensure_session_for_thread", AsyncMock())
 
     welcome_calls = []
     session_calls = []
     session_sheet_rows = []
 
-    def fake_append_welcome(ticket, username, clan_tag, date_closed):
-        welcome_calls.append((ticket, username, clan_tag, date_closed))
+    def fake_append_welcome(ticket, username, clan_tag, date_closed, **kwargs):
+        welcome_calls.append((ticket, username, clan_tag, date_closed, kwargs))
         return "inserted"
 
     def fake_append_session(**kwargs):
@@ -46,7 +50,10 @@ def test_welcome_ticket_logs_sheets(monkeypatch):
 
     asyncio.run(watcher._handle_ticket_open(thread, context))
 
-    assert welcome_calls == [("W0600", "smurf", "", "")]
+    assert welcome_calls[0][:4] == ("W0600", "smurf", "", "")
+    assert welcome_calls[0][4]["user_id"] == 222
+    assert welcome_calls[0][4]["thread_id"] == thread.id
+    assert welcome_calls[0][4]["created_at"] == thread.created_at
     assert session_calls == [
         {
             "ticket": "W0600",
@@ -87,7 +94,7 @@ def test_promo_ticket_logs_sheets(monkeypatch):
     session_sheet_rows = []
 
     def fake_append_promo(*args, **kwargs):
-        promo_calls.append(args)
+        promo_calls.append((args, kwargs))
         return "inserted"
 
     def fake_append_session(**kwargs):
@@ -104,20 +111,22 @@ def test_promo_ticket_logs_sheets(monkeypatch):
 
     asyncio.run(watcher.on_thread_create(thread))
 
-    assert promo_calls == [
-        (
-            "M0011",
-            "user",
-            "",
-            "player move request",
-            "2025-02-02 00:00:00",
-            "2025",
-            "February",
-            "",
-            "",
-            "",
-        )
-    ]
+    args, kwargs = promo_calls[0]
+    assert args == (
+        "M0011",
+        "user",
+        "",
+        "player move request",
+        "2025-02-02 00:00:00",
+        "2025",
+        "February",
+        "",
+        "",
+        "",
+    )
+    assert kwargs["user_id"] == 333
+    assert kwargs["thread_id"] == thread.id
+    assert kwargs["created_at"] == thread.created_at
     assert session_calls[0]["flow"] == "promo"
     assert session_calls[0]["status"] == "open"
     assert session_calls[0]["ticket"] == "M0011"

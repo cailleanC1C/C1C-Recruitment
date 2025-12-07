@@ -121,6 +121,10 @@ def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
         lambda row, headers: "inserted",
     )
     monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_welcome_ticket_row",
+        lambda *_, **__: "inserted",
+    )
+    monkeypatch.setattr(
         "shared.sheets.onboarding.find_welcome_row",
         lambda ticket: None,
     )
@@ -159,6 +163,10 @@ def test_welcome_ticket_open_falls_back_to_author_when_no_mentions(memory_sheet,
         lambda row, headers: "inserted",
     )
     monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_welcome_ticket_row",
+        lambda *_, **__: "inserted",
+    )
+    monkeypatch.setattr(
         "shared.sheets.onboarding.find_welcome_row",
         lambda ticket: None,
     )
@@ -189,6 +197,10 @@ def test_promo_thread_open_creates_session(memory_sheet, monkeypatch):
     monkeypatch.setattr(
         "shared.sheets.onboarding.upsert_promo",
         lambda row, headers: "inserted",
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_promo.onboarding_sheets.append_promo_ticket_row",
+        lambda *_, **__: "inserted",
     )
     monkeypatch.setattr(
         "shared.sheets.onboarding.find_promo_row",

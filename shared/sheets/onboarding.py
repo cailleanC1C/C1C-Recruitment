@@ -25,7 +25,19 @@ _CLAN_TAG_TS: float = 0.0
 
 log = logging.getLogger(__name__)
 
-WELCOME_HEADERS: List[str] = ["ticket_number", "username", "clantag", "date_closed"]
+WELCOME_HEADERS: List[str] = [
+    "ticket_number",
+    "username",
+    "clantag",
+    "date_closed",
+    "thread_name",
+    "user_id",
+    "thread_id",
+    "panel_message_id",
+    "status",
+    "created_at",
+    "updated_at",
+]
 PROMO_HEADERS: List[str] = [
     "ticket number",
     "username",
@@ -38,6 +50,13 @@ PROMO_HEADERS: List[str] = [
     "join_month",
     "clan name",
     "progression",
+    "thread_name",
+    "user_id",
+    "thread_id",
+    "panel_message_id",
+    "status",
+    "created_at",
+    "updated_at",
 ]
 WELCOME_TICKET_INDEX = 0
 WELCOME_CLAN_TAG_INDEX = 2
@@ -269,6 +288,8 @@ def _upsert(
 ) -> str:
     header = _ensure_headers(ws, headers)
     total_cols = len(header)
+    if len(row_values) < total_cols:
+        row_values = list(row_values) + ["" for _ in range(total_cols - len(row_values))]
     values = core.call_with_backoff(ws.get_all_values)
     if search_values is None:
         search_values = []
@@ -295,9 +316,91 @@ def upsert_welcome(row_values: Sequence[str], headers: Sequence[str]) -> str:
     return _upsert(ws, keys, row_values, headers)
 
 
-def append_welcome_ticket_row(ticket: str, username: str, clan_tag: str, date_closed: str) -> str:
-    row = [ticket, username, clan_tag, date_closed]
-    return upsert_welcome(row, WELCOME_HEADERS)
+def _build_ticket_row(header: Sequence[str], value_map: dict[str, str]) -> list[str]:
+    normalized_header = [_normalize_header_name(col) for col in header]
+    return [value_map.get(name, "") for name in normalized_header]
+
+
+def _ticket_key_columns(
+    header: Sequence[str],
+    ticket_value: str,
+    thread_id: int | None,
+) -> tuple[list[tuple[str, Callable[[str | None], str]]], list[str]]:
+    normalized_header = [_normalize_header_name(col) for col in header]
+    key_columns: list[tuple[str, Callable[[str | None], str]]] = []
+    search_values: list[str] = []
+
+    for column, normalized in zip(header, normalized_header):
+        if normalized in {"ticket", "ticketnumber", "ticketid"}:
+            key_columns.append((column, _fmt_ticket))
+            search_values.append(ticket_value)
+            break
+
+    if thread_id is not None:
+        for column, normalized in zip(header, normalized_header):
+            if normalized in {"thread", "threadid"}:
+                key_columns.append((column, lambda value: str(value or "").strip()))
+                search_values.append(str(thread_id))
+                break
+
+    if not key_columns:
+        raise RuntimeError("Onboarding tickets tab missing ticket identifier column")
+
+    return key_columns, search_values
+
+
+def _normalize_ticket_timestamps(
+    created_at: datetime | None, updated_at: datetime | None
+) -> tuple[datetime, datetime]:
+    created = created_at or datetime.now(timezone.utc)
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    normalized_updated = updated_at or created
+    if normalized_updated.tzinfo is None:
+        normalized_updated = normalized_updated.replace(tzinfo=timezone.utc)
+    return created, normalized_updated
+
+
+def append_welcome_ticket_row(
+    ticket: str,
+    username: str,
+    clan_tag: str,
+    date_closed: str,
+    *,
+    thread_name: str | None = None,
+    user_id: int | str | None = None,
+    thread_id: int | None = None,
+    panel_message_id: int | None = None,
+    status: str = "open",
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
+) -> str:
+    sheet_id, tab = _resolve_onboarding_and_welcome_tab()
+    ws = core.get_worksheet(sheet_id, tab)
+    header = _ensure_headers(ws, WELCOME_HEADERS)
+    ticket_value = _fmt_ticket(ticket)
+    created, updated = _normalize_ticket_timestamps(created_at, updated_at)
+
+    value_map: dict[str, str] = {
+        "ticket": ticket_value,
+        "ticketnumber": ticket_value,
+        "ticketid": ticket_value,
+        "username": str(username or "").strip(),
+        "clantag": str(clan_tag or "").strip(),
+        "dateclosed": str(date_closed or "").strip(),
+        "threadname": str(thread_name or "").strip(),
+        "userid": str(user_id) if user_id is not None else "",
+        "threadid": str(thread_id) if thread_id is not None else "",
+        "thread": str(thread_id) if thread_id is not None else "",
+        "panelmessageid": str(panel_message_id or ""),
+        "status": str(status or "").strip(),
+        "createdat": created.isoformat(),
+        "updatedat": updated.isoformat(),
+    }
+
+    row_values = _build_ticket_row(header, value_map)
+    key_columns, search_values = _ticket_key_columns(header, ticket_value, thread_id)
+    return _upsert(ws, key_columns, row_values, header, search_values=search_values)
 
 
 def find_welcome_row(ticket: str | None) -> Optional[Tuple[int, List[str]]]:
@@ -341,21 +444,48 @@ def append_promo_ticket_row(
     join_month: str,
     clan_name: str,
     progression: str,
+    *,
+    thread_name: str | None = None,
+    user_id: int | str | None = None,
+    thread_id: int | None = None,
+    panel_message_id: int | None = None,
+    status: str = "open",
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
 ) -> str:
-    row = [
-        ticket,
-        username,
-        clan_tag,
-        "",
-        promo_type,
-        thread_created,
-        year,
-        month,
-        join_month,
-        clan_name,
-        progression,
-    ]
-    return upsert_promo(row, PROMO_HEADERS)
+    sheet_id, tab = _resolve_onboarding_and_promo_tab()
+    ws = core.get_worksheet(sheet_id, tab)
+    header = _ensure_headers(ws, PROMO_HEADERS)
+    ticket_value = _fmt_ticket(ticket)
+    created, updated = _normalize_ticket_timestamps(created_at, updated_at)
+
+    value_map: dict[str, str] = {
+        "ticket": ticket_value,
+        "ticketnumber": ticket_value,
+        "ticketid": ticket_value,
+        "username": str(username or "").strip(),
+        "clantag": str(clan_tag or "").strip(),
+        "dateclosed": "",
+        "type": str(promo_type or "").strip(),
+        "threadcreated": str(thread_created or "").strip(),
+        "year": str(year or "").strip(),
+        "month": str(month or "").strip(),
+        "joinmonth": str(join_month or "").strip(),
+        "clanname": str(clan_name or "").strip(),
+        "progression": str(progression or "").strip(),
+        "threadname": str(thread_name or "").strip(),
+        "userid": str(user_id) if user_id is not None else "",
+        "threadid": str(thread_id) if thread_id is not None else "",
+        "thread": str(thread_id) if thread_id is not None else "",
+        "panelmessageid": str(panel_message_id or ""),
+        "status": str(status or "").strip(),
+        "createdat": created.isoformat(),
+        "updatedat": updated.isoformat(),
+    }
+
+    row_values = _build_ticket_row(header, value_map)
+    key_columns, search_values = _ticket_key_columns(header, ticket_value, thread_id)
+    return _upsert(ws, key_columns, row_values, header, search_values=search_values)
 
 
 def append_onboarding_session_row(

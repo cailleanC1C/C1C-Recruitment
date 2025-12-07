@@ -25,6 +25,7 @@ from modules.onboarding.watcher_welcome import (
     _channel_readable_label,
     PanelOutcome,
     parse_promo_thread_name,
+    persist_session_for_thread,
     post_open_questions_panel,
     resolve_subject_user_id,
 )
@@ -294,7 +295,15 @@ class PromoTicketWatcher(commands.Cog):
         self._tickets[thread.id] = context
         return context
 
-    async def _log_ticket_open(self, thread: discord.Thread, context: PromoTicketContext) -> None:
+    async def _log_ticket_open(
+        self,
+        thread: discord.Thread,
+        context: PromoTicketContext,
+        *,
+        user_id: int | str | None = None,
+        created_at: dt.datetime | None = None,
+    ) -> None:
+        created = created_at or getattr(thread, "created_at", None) or dt.datetime.now(UTC)
         try:
             result = await asyncio.to_thread(
                 onboarding_sheets.append_promo_ticket_row,
@@ -308,6 +317,12 @@ class PromoTicketWatcher(commands.Cog):
                 context.join_month,
                 context.clan_name,
                 context.progression,
+                thread_name=getattr(thread, "name", ""),
+                user_id=user_id,
+                thread_id=int(getattr(thread, "id", 0)),
+                panel_message_id=None,
+                status="open",
+                created_at=created,
             )
             log.info(
                 "promo_ticket_open — ticket=%s • user=%s • result=row_%s",
@@ -507,7 +522,6 @@ class PromoTicketWatcher(commands.Cog):
         context = await self._ensure_context(thread)
         if context is None:
             return
-        await self._log_ticket_open(thread, context)
 
         created_at = getattr(thread, "created_at", None) or dt.datetime.now(UTC)
 
@@ -521,61 +535,29 @@ class PromoTicketWatcher(commands.Cog):
                 "promo watcher: failed to resolve applicant on ticket open", exc_info=True, extra={"thread_id": getattr(thread, "id", None)}
             )
 
-        subject_resolved = await resolve_subject_user_id(thread)
+        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
+        subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
         if subject_resolved is None and applicant_id is not None:
             subject_resolved = applicant_id
-        subject_user_id = str(subject_resolved or "")
 
-        try:
-            onboarding_sessions.upsert_session(
-                thread_id=int(getattr(thread, "id", 0)),
-                thread_name=getattr(thread, "name", ""),
-                user_id=subject_user_id,
-                panel_message_id=None,
-                updated_at=created_at,
-            )
-        except Exception:
-            log.exception(
-                "promo watcher: failed to persist onboarding session on ticket open",
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
+        ticket_user = applicant_id if applicant_id is not None else subject_resolved
 
-        if applicant_id is not None:
-            try:
-                session_result = await asyncio.to_thread(
-                    onboarding_sheets.append_onboarding_session_row,
-                    ticket=context.ticket_number,
-                    thread_id=int(getattr(thread, "id", 0)),
-                    user_id=int(applicant_id),
-                    flow="promo",
-                    status="open",
-                    created_at=created_at,
-                )
-                log.info(
-                    "promo_session_row — ticket=%s • user=%s • result=row_%s",
-                    context.ticket_number,
-                    context.username,
-                    session_result,
-                )
-            except Exception as exc:
-                log.error(
-                    "promo_session_row — ticket=%s • user=%s • result=error • reason=%s",
-                    context.ticket_number,
-                    context.username,
-                    exc,
-                )
-            try:
-                await ensure_session_for_thread(
-                    int(applicant_id),
-                    int(getattr(thread, "id", 0)),
-                    updated_at=created_at,
-                    thread_name=getattr(thread, "name", ""),
-                )
-            except Exception:
-                log.exception(
-                    "promo watcher: failed to ensure onboarding session",
-                    extra={"thread_id": getattr(thread, "id", None), "applicant_id": applicant_id},
-                )
+        await self._log_ticket_open(
+            thread,
+            context,
+            user_id=ticket_user,
+            created_at=created_at,
+        )
+
+        if ticket_user is not None:
+            await persist_session_for_thread(
+                flow="promo",
+                ticket_number=context.ticket_number,
+                thread=thread,
+                user_id=ticket_user,
+                username=context.username,
+                created_at=created_at,
+            )
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
