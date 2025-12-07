@@ -204,17 +204,30 @@ def test_handle_ticket_open_preserves_existing_values(monkeypatch) -> None:
     def fake_find(ticket: str):  # type: ignore[no-untyped-def]
         return 3, [ticket, "Old Tester", "MART", "2025-01-01 00:00:00"]
 
-    def fake_upsert(row, headers):  # type: ignore[no-untyped-def]
-        recorded["row"] = list(row)
+    def fake_append_welcome_ticket_row(
+        ticket: str,
+        username: str,
+        clan_value: str,
+        closed_value: str,
+        **_kwargs,
+    ):  # type: ignore[no-untyped-def]
+        recorded["row"] = [ticket, username, clan_value, closed_value]
         return "updated"
+
+    async def fake_locate_welcome_message(_thread):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(mentions=[])
 
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.onboarding_sheets.find_welcome_row",
         fake_find,
     )
     monkeypatch.setattr(
-        "modules.onboarding.watcher_welcome.onboarding_sheets.upsert_welcome",
-        fake_upsert,
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_welcome_ticket_row",
+        fake_append_welcome_ticket_row,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.locate_welcome_message",
+        fake_locate_welcome_message,
     )
     monkeypatch.setattr(
         "modules.onboarding.watcher_welcome.onboarding_sessions.upsert_session",
@@ -321,6 +334,148 @@ def test_finalize_reconciles_when_row_inserted(monkeypatch) -> None:
     assert adjustments == [("C1CE", -1)]
     assert recomputed == ["C1CE"]
     assert human_logs, "human log entry should be emitted"
+
+
+def test_ticket_open_with_mention_writes_welcome_sheet(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
+
+    async def fake_locate_welcome_message(_thread):  # type: ignore[no-untyped-def]
+        class _Mention:
+            def __init__(self, user_id: int) -> None:
+                self.id = user_id
+
+        return SimpleNamespace(mentions=[_Mention(7777)])
+
+    def fake_append_welcome_ticket_row(
+        ticket: str,
+        username: str,
+        clan_value: str,
+        closed_value: str,
+        **kwargs,
+    ):  # type: ignore[no-untyped-def]
+        recorded["welcome_row"] = {
+            "ticket": ticket,
+            "username": username,
+            "clan_value": clan_value,
+            "closed_value": closed_value,
+            "user_id": kwargs.get("user_id"),
+        }
+        return "inserted"
+
+    async def fake_persist_session(**kwargs):  # type: ignore[no-untyped-def]
+        recorded.setdefault("sessions", []).append(kwargs)
+
+    async def fake_save_welcome_ticket(ticket_number: str, username: str):
+        recorded.setdefault("welcome_sheet", []).append((ticket_number, username))
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.locate_welcome_message",
+        fake_locate_welcome_message,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.find_welcome_row",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_welcome_ticket_row",
+        fake_append_welcome_ticket_row,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.persist_session_for_thread",
+        fake_persist_session,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.welcome_tickets.save",
+        fake_save_welcome_ticket,
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        thread = SimpleNamespace(
+            id=123,
+            name="W0608-smurf",
+            created_at=dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc),
+        )
+        context = TicketContext(thread_id=123, ticket_number="W0608", username="Smurf")
+        await watcher._handle_ticket_open(thread, context)
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert recorded["welcome_row"] == {
+        "ticket": "W0608",
+        "username": "Smurf",
+        "clan_value": "",
+        "closed_value": "",
+        "user_id": 7777,
+    }
+    assert recorded.get("sessions")
+    session_payload = recorded["sessions"][0]
+    assert session_payload["user_id"] == 7777
+    assert recorded.get("welcome_sheet") == [("W0608", "smurf")]
+
+
+def test_ticket_open_without_mention_avoids_fallback_user(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
+
+    async def fake_locate_welcome_message(_thread):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(mentions=[], author=SimpleNamespace(id=9999))
+
+    def fake_append_welcome_ticket_row(
+        ticket: str,
+        username: str,
+        clan_value: str,
+        closed_value: str,
+        **kwargs,
+    ):  # type: ignore[no-untyped-def]
+        recorded["welcome_row"] = kwargs.get("user_id")
+        return "inserted"
+
+    async def fake_save_welcome_ticket(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        recorded["welcome_sheet_called"] = True
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.locate_welcome_message",
+        fake_locate_welcome_message,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.find_welcome_row",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.onboarding_sheets.append_welcome_ticket_row",
+        fake_append_welcome_ticket_row,
+    )
+    async def fake_persist_session(**kwargs):  # type: ignore[no-untyped-def]
+        recorded.setdefault("sessions", []).append(kwargs)
+
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.persist_session_for_thread",
+        fake_persist_session,
+    )
+    monkeypatch.setattr(
+        "modules.onboarding.watcher_welcome.welcome_tickets.save",
+        fake_save_welcome_ticket,
+    )
+
+    async def runner() -> None:
+        bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        watcher = WelcomeTicketWatcher(bot)
+        thread = SimpleNamespace(
+            id=456,
+            name="W0707-woozy",
+            created_at=dt.datetime(2025, 2, 2, tzinfo=dt.timezone.utc),
+        )
+        context = TicketContext(thread_id=456, ticket_number="W0707", username="Woozy")
+        await watcher._handle_ticket_open(thread, context)
+        await bot.close()
+
+    asyncio.run(runner())
+
+    assert recorded["welcome_row"] is None
+    assert "sessions" not in recorded
+    assert "welcome_sheet_called" not in recorded
 
 
 def test_finalize_skips_when_upsert_unexpected(monkeypatch, caplog) -> None:

@@ -2365,7 +2365,6 @@ class WelcomeTicketWatcher(commands.Cog):
                 closed_value = existing_row[closed_idx] or ""
 
         created_at = _normalize_dt(getattr(thread, "created_at", None))
-        bot_user_id = getattr(getattr(self.bot, "user", None), "id", None)
 
         starter: discord.Message | None = None
         try:
@@ -2386,10 +2385,8 @@ class WelcomeTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
-        # Prefer the explicitly mentioned user; otherwise try resolver.
+        # Prefer the explicitly mentioned user and avoid guessing a fallback when none exists.
         subject_resolved = applicant_id
-        if subject_resolved is None:
-            subject_resolved = await resolve_subject_user_id(thread, bot_user_id=bot_user_id)
 
         if applicant_id is not None:
             try:
