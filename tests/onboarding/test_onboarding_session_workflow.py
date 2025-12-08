@@ -8,7 +8,12 @@ from modules.onboarding import sessions
 from modules.onboarding.controllers.welcome_controller import WelcomeController
 from modules.onboarding.sessions import ensure_session_for_thread
 from modules.onboarding.watcher_promo import PromoTicketWatcher
-from modules.onboarding.watcher_welcome import WelcomeTicketWatcher, TicketContext, _process_incomplete_thread
+from modules.onboarding.watcher_welcome import (
+    WelcomeTicketWatcher,
+    TicketContext,
+    _process_incomplete_thread,
+    _process_promo_thread,
+)
 
 
 class _DummyUser:
@@ -36,6 +41,8 @@ class _DummyThread:
         self.name = name
         self.created_at = created_at
         self.sent: list[_DummyMessage] = []
+        self.archived = False
+        self.locked = False
 
     async def send(self, content: str | None = None, **kwargs):
         message = _DummyMessage(0)
@@ -44,9 +51,18 @@ class _DummyThread:
         self.sent.append(message)
         return message
 
+    async def edit(self, **kwargs):
+        if "name" in kwargs and kwargs["name"] is not None:
+            self.name = kwargs["name"]
+        if "archived" in kwargs and kwargs["archived"] is not None:
+            self.archived = kwargs["archived"]
+        if "locked" in kwargs and kwargs["locked"] is not None:
+            self.locked = kwargs["locked"]
+
 
 class _DummyBot:
-    pass
+    def get_cog(self, _name: str):  # pragma: no cover - simple stub
+        return None
 
 
 @pytest.fixture()
@@ -134,7 +150,10 @@ def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
         "modules.common.feature_flags.is_enabled",
         lambda flag: True,
     )
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_welcome_channel_id", lambda: 123)
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_ticket_tool_bot_id", lambda: None)
 
+    asyncio.run(ensure_session_for_thread(99, thread.id, updated_at=created_at))
     watcher = WelcomeTicketWatcher(bot=_DummyBot())
     asyncio.run(watcher._handle_ticket_open(thread, context))
 
@@ -148,6 +167,7 @@ def test_welcome_thread_open_creates_session(memory_sheet, monkeypatch):
 def test_welcome_ticket_open_falls_back_to_author_when_no_mentions(memory_sheet, monkeypatch):
     created_at = datetime(2025, 2, 2, 12, 0, tzinfo=timezone.utc)
     thread = _DummyThread(505, "W5678-user", created_at)
+    thread.parent_id = 123
     context = TicketContext(thread_id=thread.id, ticket_number="W5678", username="user")
 
     dummy_message = _DummyMessage(99, mentions=False)
@@ -176,7 +196,10 @@ def test_welcome_ticket_open_falls_back_to_author_when_no_mentions(memory_sheet,
         "modules.common.feature_flags.is_enabled",
         lambda flag: True,
     )
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_welcome_channel_id", lambda: 123)
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_ticket_tool_bot_id", lambda: None)
 
+    asyncio.run(ensure_session_for_thread(99, thread.id, updated_at=created_at))
     watcher = WelcomeTicketWatcher(bot=_DummyBot())
     asyncio.run(watcher._handle_ticket_open(thread, context))
 
@@ -290,3 +313,57 @@ def test_inactivity_scan_creates_and_updates_single_session_row(memory_sheet, mo
     assert payload.get("first_reminder_at") is not None
     assert payload.get("warning_sent_at") is not None
     assert payload.get("auto_closed_at") is not None
+
+
+def test_promo_close_reminder_pings_recruitment(memory_sheet, monkeypatch):
+    created_at = datetime(2025, 3, 3, 15, 0, tzinfo=timezone.utc)
+    thread = _DummyThread(606, "R1234-user", created_at)
+
+    async def _resolve_target(*_args, **_kwargs):
+        return 42, "user"
+
+    monkeypatch.setattr("modules.onboarding.watcher_welcome._resolve_target_user", _resolve_target)
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_recruiter_role_ids", lambda: [999])
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_recruitment_coordinator_role_ids", lambda: [])
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.get_guardian_knight_role_ids", lambda: [])
+    monkeypatch.setattr("modules.common.feature_flags.is_enabled", lambda *_: True)
+    monkeypatch.setattr("modules.onboarding.watcher_promo.onboarding_sheets.upsert_promo", lambda *_, **__: "updated")
+
+    asyncio.run(ensure_session_for_thread(42, thread.id, updated_at=created_at, thread_name=thread.name))
+
+    reminder_time = created_at + timedelta(hours=3, minutes=5)
+    warning_time = created_at + timedelta(hours=24, minutes=10)
+    close_time = created_at + timedelta(hours=36, minutes=5)
+
+    asyncio.run(_process_promo_thread(bot=_DummyBot(), thread=thread, now=reminder_time))
+    asyncio.run(_process_promo_thread(bot=_DummyBot(), thread=thread, now=warning_time))
+    asyncio.run(_process_promo_thread(bot=_DummyBot(), thread=thread, now=close_time))
+
+    assert thread.sent, "close reminder should send a message"
+    assert any("<@&999>" in msg.content for msg in thread.sent)
+
+
+def test_auto_closed_thread_skips_manual_prompt(monkeypatch):
+    monkeypatch.setattr("modules.common.feature_flags.is_enabled", lambda *_: True)
+    monkeypatch.setattr("shared.sheets.onboarding.find_welcome_row", lambda *_: None)
+    monkeypatch.setattr("modules.onboarding.watcher_welcome.onboarding_sheets.find_welcome_row", lambda *_: None)
+
+    watcher = WelcomeTicketWatcher(bot=_DummyBot())
+    monkeypatch.setattr(watcher, "_is_ticket_thread", lambda *_: True)
+    manual_called = False
+
+    async def _fail_manual(*_args, **_kwargs):
+        nonlocal manual_called
+        manual_called = True
+
+    watcher._handle_manual_close = _fail_manual  # type: ignore[assignment]
+
+    before = _DummyThread(808, "W1234-user", datetime.now(timezone.utc))
+    after = _DummyThread(808, "closed-W1234-user-NONE", datetime.now(timezone.utc))
+    after.archived = True
+    watcher._auto_closed_threads.add(after.id)
+    watcher._tickets[after.id] = TicketContext(thread_id=after.id, ticket_number="W1234", username="user")
+
+    asyncio.run(watcher.on_thread_update(before, after))
+
+    assert manual_called is False

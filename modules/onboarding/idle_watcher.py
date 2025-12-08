@@ -136,6 +136,21 @@ async def _close_thread(
 
     await reservation_jobs.release_reservations_for_thread(thread.id, bot=bot)
 
+    if flow.startswith("promo"):
+        watcher = bot.get_cog("PromoTicketWatcher") if bot else None
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                await watcher.auto_close_ticket(thread, context)
+    else:
+        watcher = bot.get_cog("WelcomeTicketWatcher") if bot else None
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                await watcher.auto_close_ticket(
+                    thread, context, final_tag=NO_PLACEMENT_TAG, rename_thread=False
+                )
+
 
 async def _handle_row(
     bot: commands.Bot,

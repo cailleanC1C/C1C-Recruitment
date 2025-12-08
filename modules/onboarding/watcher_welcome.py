@@ -58,6 +58,7 @@ _REMINDER_TASK: asyncio.Task | None = None
 _TARGET_CACHE: dict[int, int | None] = {}
 _ONBOARDING_LOG_CHANNEL: discord.abc.Messageable | None = None
 _ONBOARDING_LOG_CHANNEL_FETCHED = False
+_AUTO_CLOSED_THREADS: set[int] = set()
 
 _TRIGGER_PHRASE = "awake by reacting with"
 _TICKET_EMOJI = "🎫"
@@ -788,6 +789,18 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
 
         _persist_reminder_state(session, action=action, timestamp=now)
+        watcher = bot.get_cog("WelcomeTicketWatcher")
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                context.recruit_id = getattr(session, "applicant_id", None)
+                context.recruit_display = parsed.username
+                await watcher.auto_close_ticket(
+                    thread,
+                    context,
+                    final_tag=_NO_PLACEMENT_TAG,
+                    rename_thread=False,
+                )
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -833,6 +846,18 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
 
         _persist_reminder_state(session, action=action, timestamp=now)
+        watcher = bot.get_cog("WelcomeTicketWatcher")
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                context.recruit_id = getattr(session, "applicant_id", None)
+                context.recruit_display = parsed.username
+                await watcher.auto_close_ticket(
+                    thread,
+                    context,
+                    final_tag=_NO_PLACEMENT_TAG,
+                    rename_thread=False,
+                )
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -1004,7 +1029,7 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
                 extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
             )
         close_notice = (
-            "Promo ticket closed due to inactivity.\n"
+            f"Promo ticket closed due to inactivity.\n{recruiter_ping or 'Recruiters'}: "
             "No move details were provided.\n"
             "If you still want to request a move later, feel free to open a new promo ticket anytime."
         )
@@ -1026,6 +1051,11 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
 
         _persist_reminder_state(session, action=action, timestamp=now)
+        watcher = bot.get_cog("PromoTicketWatcher")
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                await watcher.auto_close_ticket(thread, context)
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -1051,7 +1081,7 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
                 extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
             )
         close_notice = (
-            "Promo ticket closed due to inactivity.\n"
+            f"Promo ticket closed due to inactivity.\n{recruiter_ping or 'Recruiters'}: "
             "The move details were started but not completed.\n"
             "If you still want to request a move later, feel free to open a new promo ticket anytime."
         )
@@ -1073,6 +1103,11 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
 
         _persist_reminder_state(session, action=action, timestamp=now)
+        watcher = bot.get_cog("PromoTicketWatcher")
+        if watcher is not None:
+            context = await watcher._ensure_context(thread)
+            if context:
+                await watcher.auto_close_ticket(thread, context)
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -2286,6 +2321,7 @@ class WelcomeTicketWatcher(commands.Cog):
         self._tickets: Dict[int, TicketContext] = {}
         self._clan_tags: List[str] = []
         self._clan_tag_set: Set[str] = set()
+        self._auto_closed_threads: set[int] = set()
 
         if self.channel_id is None:
             log.warning("welcome ticket watcher disabled — invalid WELCOME_CHANNEL_ID")
@@ -2558,6 +2594,15 @@ class WelcomeTicketWatcher(commands.Cog):
         if context.state in {"awaiting_clan", "closed"}:
             return
 
+        if getattr(after, "id", None) in self._auto_closed_threads:
+            context.state = "closed"
+            return
+
+        session_row = onboarding_sessions.get_by_thread_id(getattr(after, "id", None))
+        if session_row and session_row.get("auto_closed_at"):
+            context.state = "closed"
+            return
+
         reason = ""
         parsed_state = parsed.state if parsed else "open"
         if parsed_state == "closed":
@@ -2677,6 +2722,29 @@ class WelcomeTicketWatcher(commands.Cog):
             reason,
         )
 
+    async def auto_close_ticket(
+        self,
+        thread: discord.Thread,
+        context: TicketContext,
+        *,
+        final_tag: str = _NO_PLACEMENT_TAG,
+        rename_thread: bool = True,
+    ) -> None:
+        context.close_source = "auto_close"
+        context.state = "awaiting_clan"
+        await self._finalize_clan_tag(
+            thread,
+            context,
+            final_tag,
+            actor=None,
+            source="auto_close",
+            prompt_message=None,
+            view=None,
+            notify=False,
+            rename_thread=rename_thread,
+        )
+        self._auto_closed_threads.add(getattr(thread, "id", 0))
+
     async def _handle_ticket_closed(
         self, thread: discord.Thread, context: TicketContext, *, manual: bool = False
     ) -> None:
@@ -2744,6 +2812,8 @@ class WelcomeTicketWatcher(commands.Cog):
         source: str,
         prompt_message: Optional[discord.Message],
         view: Optional[ClanSelectView],
+        notify: bool = True,
+        rename_thread: bool = True,
     ) -> None:
         if context.state == "closed":
             return
@@ -2924,28 +2994,30 @@ class WelcomeTicketWatcher(commands.Cog):
             except Exception:
                 prompt_message = None
 
-        if prompt_message is not None:
-            try:
-                await prompt_message.edit(content=confirmation, view=None)
-            except Exception:
+        if notify:
+            if prompt_message is not None:
+                try:
+                    await prompt_message.edit(content=confirmation, view=None)
+                except Exception:
+                    await thread.send(confirmation)
+            else:
                 await thread.send(confirmation)
-        else:
-            await thread.send(confirmation)
 
         if view is not None:
             view.stop()
 
-        try:
-            new_name = build_closed_thread_name(
-                context.ticket_number, context.username, final_display
-            )
-            await thread.edit(name=new_name)
-        except Exception:
-            actions_ok = False
-            log.exception(
-                "failed to rename welcome thread",
-                extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
-            )
+        if rename_thread:
+            try:
+                new_name = build_closed_thread_name(
+                    context.ticket_number, context.username, final_display
+                )
+                await thread.edit(name=new_name)
+            except Exception:
+                actions_ok = False
+                log.exception(
+                    "failed to rename welcome thread",
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+                )
 
         context.final_clan = final_display
         context.reservation_label = reservation_label
