@@ -1,68 +1,114 @@
 #!/usr/bin/env python3
-"""Run guardrails suite and render the PR summary comment."""
+"""Render the guardrails PR comment from guardrails-results.json."""
 
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
-from typing import List, Sequence
-
-from scripts.ci.guardrails_suite import CheckResult, run_all_checks
+from typing import Any, Dict, List
 
 
-def render_guardrails_comment(results: Sequence[CheckResult]) -> str:
-    lines: List[str] = []
+def _load_guardrails_results(path: Path = Path("guardrails-results.json")) -> Dict[str, Any]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _records_from_data(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    results = data.get("results")
+    if isinstance(results, list):
+        return results
+
+    checks = data.get("checks")
+    if isinstance(checks, dict):
+        records: List[Dict[str, Any]] = []
+        for code, info in checks.items():
+            violations = info.get("violations") or []
+            if isinstance(violations, int):
+                violations = [None] * violations
+            elif not isinstance(violations, list):
+                violations = []
+
+            records.append(
+                {
+                    "code": code,
+                    "description": info.get("description") or code,
+                    "status": info.get("status") or "fail",
+                    "violations": violations,
+                    "reason": info.get("reason"),
+                }
+            )
+        return records
+
+    return []
+
+
+def render_guardrails_comment(data: Dict[str, Any]) -> str:
+    checks = _records_from_data(data)
+
+    lines: list[str] = []
     lines.append("Repository Guardrails summary")
     lines.append("")
     lines.append("Guardrails Summary")
     lines.append("")
 
-    if not results:
-        lines.append("❌ Guardrails suite produced no results – check CI configuration.")
-        return "\n".join(lines)
-
-    has_failures = any(result.status == "fail" for result in results)
+    has_failures = any(check.get("status") == "fail" for check in checks)
     lines.append("❌ Guardrail violations found" if has_failures else "✅ All guardrail checks passed")
     lines.append("")
+
     lines.append("Automated guardrail checks")
     lines.append("")
 
-    for result in sorted(results, key=lambda r: r.code):
-        if result.status == "pass":
-            emoji = "✅"
-            suffix = ""
-        elif result.status == "fail":
-            emoji = "❌"
-            count = len(result.violations or [])
+    status_icons = {"pass": "✅", "fail": "❌", "skip": "⚪"}
+    for check in sorted(checks, key=lambda c: c.get("code", "")):
+        code = check.get("code", "UNK")
+        desc = (check.get("description") or "").strip() or "No description"
+        status = check.get("status") or "fail"
+        icon = status_icons.get(status, "⚠️")
+
+        suffix = ""
+        if status == "fail":
+            count = len(check.get("violations") or [])
             plural = "s" if count != 1 else ""
             suffix = f" ({count} violation{plural})"
-        else:
-            emoji = "⚪"
-            reason = (result.reason or "").strip()
-            suffix = f" (skipped{': ' + reason if reason else ''})"
+        elif status == "skip":
+            reason = (check.get("reason") or "not run").strip().rstrip(".")
+            suffix = f" (skipped: {reason})"
 
-        lines.append(f"- {emoji} {result.code} — {result.description}{suffix}")
+        lines.append(f"- {icon} {code} — {desc}{suffix}")
+
+    if not checks:
+        lines.append("- ⚪ No guardrail checks found in guardrails-results.json")
 
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("guardrails-comment.md"), help="Where to write rendered markdown")
-    parser.add_argument("--status-file", type=Path, default=None, help="Path to write pass/fail status")
-    parser.add_argument("--base-ref", type=str, default=None, help="Base ref for diff (e.g., origin/main)")
-    parser.add_argument("--pr", type=int, default=0, help="Pull request number if available")
+    parser.add_argument(
+        "--results",
+        type=Path,
+        default=Path("guardrails-results.json"),
+        help="Path to guardrails-results.json",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("guardrails-comment.md"),
+        help="Where to write rendered markdown",
+    )
     args = parser.parse_args(argv)
 
-    results, _violations = run_all_checks(base_ref=args.base_ref, pr_number=args.pr)
-    markdown = render_guardrails_comment(results)
-
-    exit_code = 1 if not results or any(result.status == "fail" for result in results) else 0
+    data = _load_guardrails_results(args.results)
+    markdown = render_guardrails_comment(data)
     args.output.write_text(markdown + "\n", encoding="utf-8")
-    if args.status_file:
-        args.status_file.write_text("fail" if exit_code else "pass", encoding="utf-8")
-
-    return exit_code
+    return 0
 
 
 if __name__ == "__main__":

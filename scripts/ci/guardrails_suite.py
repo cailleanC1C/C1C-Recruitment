@@ -1097,6 +1097,74 @@ def _write_markdown_report(suite: SuiteResult, report_path: Path, parity_status:
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _write_summary_json(
+    suite: SuiteResult,
+    path: Path,
+    parity_status: Optional[str],
+    config_parity_status: Optional[str],
+    secret_scan_status: Optional[str],
+) -> None:
+    overall_status = "pass"
+    if any(cat.status == "fail" for cat in suite.categories.values()):
+        overall_status = "fail"
+    elif any(cat.status == "warn" for cat in suite.categories.values()):
+        overall_status = "warn"
+
+    def _serialize_violation(violation: Violation) -> Dict[str, object]:
+        return {
+            "rule": violation.rule_id,
+            "severity": violation.severity,
+            "message": violation.message,
+            "files": violation.files,
+        }
+
+    serialized_results = [
+        {
+            "code": check.code,
+            "description": check.description,
+            "status": check.status,
+            "violations": [_serialize_violation(v) for v in check.violations],
+            "reason": check.reason,
+        }
+        for check in suite.check_results
+    ]
+
+    legacy_checks = {
+        entry["code"]: {
+            "status": entry["status"],
+            "violations": len(entry["violations"]),
+            "reason": entry.get("reason"),
+            "description": entry.get("description"),
+        }
+        for entry in serialized_results
+    }
+
+    payload = {
+        "overall_status": overall_status,
+        "parity_status": parity_status,
+        "config_parity_status": config_parity_status,
+        "secret_scan_status": secret_scan_status,
+        "results": serialized_results,
+        "categories": [
+            {
+                "id": cat.identifier,
+                "status": cat.status,
+                "violations": [
+                    {
+                        "rule": v.rule_id,
+                        "severity": v.severity,
+                        "message": v.message,
+                        "files": v.files,
+                    }
+                    for v in cat.violations
+                ],
+            }
+            for cat in suite.categories.values()
+        ],
+        "checks": legacy_checks,
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
 def _append_summary_markdown(suite: SuiteResult, path: Path) -> None:
     def _group_file_references(file_entries: List[str]) -> List[str]:
         grouped: Dict[str, List[str]] = {}

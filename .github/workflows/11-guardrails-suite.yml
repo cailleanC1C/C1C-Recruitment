@@ -56,6 +56,12 @@ jobs:
           fi
           # Always succeed here; the final step decides whether the job fails.
           exit 0
+      - name: Render guardrails summary comment
+        if: github.event_name == 'pull_request'
+        run: |
+          python scripts/ci/render_guardrails_comment.py \
+            --results guardrails-results.json \
+            --output guardrails-comment.md
       - name: Post guardrails summary comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
