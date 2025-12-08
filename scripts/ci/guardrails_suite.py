@@ -1276,6 +1276,22 @@ def run_checks(
     return SuiteResult(check_results=check_results, categories=categories, violations=violations)
 
 
+def run_all_checks(
+    base_ref: Optional[str] = None,
+    pr_number: int = 0,
+    pr_body: Optional[str] = None,
+    parity_status: Optional[str] = None,
+) -> Tuple[List[CheckResult], List[Violation]]:
+    event_path = get_env_path("GITHUB_EVENT_PATH")
+    resolved_pr_body = pr_body if pr_body is not None else _load_pr_body(str(event_path) if event_path else None)
+    _, _, computed_parity_status = _compute_guardrail_health()
+    resolved_parity_status = parity_status or computed_parity_status or get_env("ENV_PARITY_STATUS")
+
+    suite = run_checks(base_ref, resolved_pr_body, resolved_parity_status, pr_number)
+    updated_violations = [violation for result in suite.check_results for violation in result.violations]
+    return suite.check_results, updated_violations
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run repository guardrails suite")
     parser.add_argument(
@@ -1283,7 +1299,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--status-file", type=Path, default=None, help="Path to write overall status")
     parser.add_argument("--summary", type=Path, default=None, help="Path to append human-readable summary")
-    parser.add_argument("--json", type=Path, default=Path("guardrails-results.json"), help="Where to write JSON summary")
     parser.add_argument("--base-ref", type=str, default=None, help="Base ref for diff (e.g., origin/main)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1291,19 +1306,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     event_path = get_env_path("GITHUB_EVENT_PATH")
     pr_body = _load_pr_body(str(event_path) if event_path else None)
-    config_parity_status, secret_scan_status, parity_status = _compute_guardrail_health()
+    _, _, parity_status = _compute_guardrail_health()
     parity_status = parity_status or get_env("ENV_PARITY_STATUS")
     suite = run_checks(args.base_ref, pr_body, parity_status, args.pr)
 
     report_path = _ensure_audit_report_path()
     _write_markdown_report(suite, report_path, parity_status)
-    _write_summary_json(
-        suite,
-        args.json,
-        parity_status,
-        config_parity_status,
-        secret_scan_status,
-    )
     if args.summary:
         _append_summary_markdown(suite, args.summary)
 

@@ -36,18 +36,17 @@ jobs:
           fi
           # Always succeed here; the final step decides whether the job fails.
           exit 0
-      - name: Run Repository Guardrails suite
+      - name: Run guardrails and render summary
         id: guardrails
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           status_file=guardrails_status.txt
           exit_code=0
-          python scripts/ci/guardrails_suite.py \
+          python -m scripts.ci.render_guardrails_comment \
             --pr "${{ github.event.pull_request.number || 0 }}" \
             --status-file "$status_file" \
-            --summary guardrails-summary.md \
-            --json guardrails-results.json \
+            --output guardrails-comment.md \
             --base-ref "origin/${{ github.base_ref || 'main' }}" || exit_code=$?
           git fetch origin main --depth=1 || exit_code=$?
           if [ -f "$status_file" ]; then
