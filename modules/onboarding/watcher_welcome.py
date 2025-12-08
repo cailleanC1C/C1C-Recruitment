@@ -25,6 +25,7 @@ from modules.onboarding.controllers.welcome_controller import (
     extract_target_from_message,
     locate_welcome_message,
 )
+from modules.onboarding.sheet_logging import log_sheet_write
 from modules.onboarding.sessions import Session, ensure_session_for_thread
 from shared.config import (
     get_admin_role_ids,
@@ -637,6 +638,20 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
     if action is None:
         return
 
+    watcher = bot.get_cog("PromoTicketWatcher") if bot else None
+    context = await watcher._ensure_context(thread) if watcher is not None else None
+    if context is not None:
+        context.user_id = context.user_id or applicant_id
+        context.username = parsed.username
+        context.ticket_number = parsed.ticket_code
+        context.promo_type = context.promo_type or parsed.promo_type
+
+    watcher = bot.get_cog("WelcomeTicketWatcher") if bot else None
+    context = await watcher._ensure_context(thread) if watcher is not None else None
+    if context is not None:
+        context.recruit_id = getattr(session, "applicant_id", None)
+        context.recruit_display = parsed.username
+
     if applicant_id is None:
         log.debug(
             "welcome reminder skipped (no target)",
@@ -668,6 +683,14 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_welcome_sheet_for_reminder(
+                phase="reminder_3h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=mention,
+            )
         log.info(
             "welcome empty reminder posted",
             extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
@@ -689,6 +712,14 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_welcome_sheet_for_reminder(
+                phase="reminder_3h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=mention,
+            )
         log.info(
             "welcome incomplete reminder posted",
             extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
@@ -712,6 +743,14 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_welcome_sheet_for_reminder(
+                phase="reminder_24h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=audience,
+            )
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -742,6 +781,14 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_welcome_sheet_for_reminder(
+                phase="reminder_24h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=audience,
+            )
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -757,36 +804,11 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
         return
 
     if action == "close_empty":
-        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
-        try:
-            await thread.edit(name=new_name)
-        except Exception:
-            log.warning(
-                "welcome empty auto-close rename failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
-            )
         close_notice = (
             f"{recruiter_ping or 'Recruiters'}, this ticket was closed because onboarding never started.\n"
             f"Please remove {mention} from the server.\n"
             "If you still need a clan later, you're welcome to open a new ticket."
         )
-        try:
-            await thread.send(close_notice)
-        except Exception:
-            log.warning(
-                "welcome empty auto-close notice failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
-        try:
-            await thread.edit(archived=True, locked=True)
-        except Exception:
-            log.warning(
-                "welcome empty auto-close archive failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
 
         _persist_reminder_state(session, action=action, timestamp=now)
         watcher = bot.get_cog("WelcomeTicketWatcher")
@@ -795,12 +817,29 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             if context:
                 context.recruit_id = getattr(session, "applicant_id", None)
                 context.recruit_display = parsed.username
-                await watcher.auto_close_ticket(
+                closed_name = build_closed_thread_name(
+                    parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG
+                )
+                await watcher.auto_close_for_inactivity(
                     thread,
                     context,
+                    notice=close_notice,
+                    closed_name=closed_name,
                     final_tag=_NO_PLACEMENT_TAG,
-                    rename_thread=False,
                 )
+                await _post_inactivity_log(
+                    bot,
+                    scope="welcome",
+                    case="empty",
+                    stage="auto-close",
+                    ticket=parsed.ticket_code,
+                    user=mention,
+                )
+                log.info(
+                    "welcome empty auto-close completed",
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+                )
+                return
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -816,34 +855,10 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
         return
 
     if action == "close_incomplete":
-        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
-        try:
-            await thread.edit(name=new_name)
-        except Exception:
-            log.warning(
-                "welcome auto-close rename failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
-            )
-        try:
-            await thread.send(
-                f"{recruiter_ping or 'Recruiters'}: onboarding was started but not completed. "
-                f"Please remove {mention} from the server."
-            )
-        except Exception:
-            log.warning(
-                "welcome incomplete auto-close notice failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
-        try:
-            await thread.edit(archived=True, locked=True)
-        except Exception:
-            log.warning(
-                "welcome incomplete auto-close archive failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
+        close_notice = (
+            f"{recruiter_ping or 'Recruiters'}: onboarding was started but not completed. "
+            f"Please remove {mention} from the server."
+        )
 
         _persist_reminder_state(session, action=action, timestamp=now)
         watcher = bot.get_cog("WelcomeTicketWatcher")
@@ -852,12 +867,29 @@ async def _process_incomplete_thread(bot: commands.Bot, thread: discord.Thread, 
             if context:
                 context.recruit_id = getattr(session, "applicant_id", None)
                 context.recruit_display = parsed.username
-                await watcher.auto_close_ticket(
+                closed_name = build_closed_thread_name(
+                    parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG
+                )
+                await watcher.auto_close_for_inactivity(
                     thread,
                     context,
+                    notice=close_notice,
+                    closed_name=closed_name,
                     final_tag=_NO_PLACEMENT_TAG,
-                    rename_thread=False,
                 )
+                await _post_inactivity_log(
+                    bot,
+                    scope="welcome",
+                    case="incomplete",
+                    stage="auto-close",
+                    ticket=parsed.ticket_code,
+                    user=mention,
+                )
+                log.info(
+                    "welcome incomplete auto-close completed",
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+                )
+                return
         await _post_inactivity_log(
             bot,
             scope="welcome",
@@ -930,6 +962,14 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_promo_sheet_for_reminder(
+                phase="reminder_3h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=mention,
+            )
         log.info(
             "promo empty reminder posted",
             extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
@@ -951,6 +991,14 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_promo_sheet_for_reminder(
+                phase="reminder_3h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=mention,
+            )
         log.info(
             "promo incomplete reminder posted",
             extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
@@ -974,6 +1022,14 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_promo_sheet_for_reminder(
+                phase="reminder_24h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=audience,
+            )
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -1004,6 +1060,14 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
             )
             return
         _persist_reminder_state(session, action=action, timestamp=now)
+        if watcher and context:
+            await watcher._touch_promo_sheet_for_reminder(
+                phase="reminder_24h",
+                thread=thread,
+                context=context,
+                created_at=created_at,
+                user_ref=audience,
+            )
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -1019,43 +1083,39 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
         return
 
     if action == "close_empty":
-        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
-        try:
-            await thread.edit(name=new_name)
-        except Exception:
-            log.warning(
-                "promo empty auto-close rename failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
-            )
         close_notice = (
             f"Promo ticket closed due to inactivity.\n{recruiter_ping or 'Recruiters'}: "
             "No move details were provided.\n"
             "If you still want to request a move later, feel free to open a new promo ticket anytime."
         )
-        try:
-            await thread.send(close_notice)
-        except Exception:
-            log.warning(
-                "promo empty auto-close notice failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
-        try:
-            await thread.edit(archived=True, locked=True)
-        except Exception:
-            log.warning(
-                "promo empty auto-close archive failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
 
         _persist_reminder_state(session, action=action, timestamp=now)
         watcher = bot.get_cog("PromoTicketWatcher")
         if watcher is not None:
             context = await watcher._ensure_context(thread)
             if context:
-                await watcher.auto_close_ticket(thread, context)
+                closed_name = build_closed_thread_name(
+                    parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG
+                )
+                await watcher.auto_close_for_inactivity(
+                    thread,
+                    context,
+                    notice=close_notice,
+                    closed_name=closed_name,
+                )
+                await _post_inactivity_log(
+                    bot,
+                    scope="promo",
+                    case="empty",
+                    stage="auto-close",
+                    ticket=parsed.ticket_code,
+                    user=mention,
+                )
+                log.info(
+                    "promo empty auto-close completed",
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+                )
+                return
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -1071,43 +1131,39 @@ async def _process_promo_thread(bot: commands.Bot, thread: discord.Thread, now: 
         return
 
     if action == "close_incomplete":
-        new_name = build_closed_thread_name(parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG)
-        try:
-            await thread.edit(name=new_name)
-        except Exception:
-            log.warning(
-                "promo incomplete auto-close rename failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
-            )
         close_notice = (
             f"Promo ticket closed due to inactivity.\n{recruiter_ping or 'Recruiters'}: "
             "The move details were started but not completed.\n"
             "If you still want to request a move later, feel free to open a new promo ticket anytime."
         )
-        try:
-            await thread.send(close_notice)
-        except Exception:
-            log.warning(
-                "promo incomplete auto-close notice failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
-        try:
-            await thread.edit(archived=True, locked=True)
-        except Exception:
-            log.warning(
-                "promo incomplete auto-close archive failed",
-                exc_info=True,
-                extra={"thread_id": getattr(thread, "id", None)},
-            )
 
         _persist_reminder_state(session, action=action, timestamp=now)
         watcher = bot.get_cog("PromoTicketWatcher")
         if watcher is not None:
             context = await watcher._ensure_context(thread)
             if context:
-                await watcher.auto_close_ticket(thread, context)
+                closed_name = build_closed_thread_name(
+                    parsed.ticket_code, parsed.username, _NO_PLACEMENT_TAG
+                )
+                await watcher.auto_close_for_inactivity(
+                    thread,
+                    context,
+                    notice=close_notice,
+                    closed_name=closed_name,
+                )
+                await _post_inactivity_log(
+                    bot,
+                    scope="promo",
+                    case="incomplete",
+                    stage="auto-close",
+                    ticket=parsed.ticket_code,
+                    user=mention,
+                )
+                log.info(
+                    "promo incomplete auto-close completed",
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": parsed.ticket_code},
+                )
+                return
         await _post_inactivity_log(
             bot,
             scope="promo",
@@ -2447,18 +2503,26 @@ class WelcomeTicketWatcher(commands.Cog):
             ticket_username = None
 
         try:
-            result = await asyncio.to_thread(
-                onboarding_sheets.append_welcome_ticket_row,
-                context.ticket_number,
-                context.username,
-                clan_value,
-                closed_value,
-                thread_name=getattr(thread, "name", ""),
-                user_id=ticket_user,
-                thread_id=int(getattr(thread, "id", 0)),
-                panel_message_id=None,
-                status="open",
-                created_at=created_at,
+            result = await log_sheet_write(
+                flow="welcome",
+                phase="created",
+                tab="Welcome",
+                logger=log,
+                thread=thread,
+                user=context.username,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.append_welcome_ticket_row,
+                    context.ticket_number,
+                    context.username,
+                    clan_value,
+                    closed_value,
+                    thread_name=getattr(thread, "name", ""),
+                    user_id=ticket_user,
+                    thread_id=int(getattr(thread, "id", 0)),
+                    panel_message_id=None,
+                    status="open",
+                    created_at=created_at,
+                ),
             )
             log.info(
                 "✅ welcome_ticket_open — ticket=%s • user=%s • result=row_%s",
@@ -2474,23 +2538,79 @@ class WelcomeTicketWatcher(commands.Cog):
                 exc,
             )
 
-        if ticket_user is not None:
-            await persist_session_for_thread(
-                flow="welcome",
-                ticket_number=context.ticket_number,
-                thread=thread,
-                user_id=ticket_user,
-                username=context.username,
-                created_at=created_at,
+    async def _touch_welcome_sheet_for_reminder(
+        self,
+        *,
+        phase: str,
+        thread: discord.Thread,
+        context: TicketContext,
+        created_at: datetime,
+        user_ref: str,
+    ) -> None:
+        headers = _WELCOME_HEADERS
+        created_value = created_at.isoformat()
+        updated_value = datetime.now(timezone.utc).isoformat()
+
+        try:
+            existing = await asyncio.to_thread(
+                onboarding_sheets.find_welcome_row, context.ticket_number
             )
-            if ticket_number and ticket_username:
-                try:
-                    await welcome_tickets.save(ticket_number, ticket_username)
-                except Exception:
-                    log.exception(
-                        "failed to persist welcome ticket log",
-                        extra={"thread_id": getattr(thread, "id", None), "ticket": ticket_number},
-                    )
+        except Exception:
+            log.debug(
+                "welcome reminder: failed to load welcome row for sheet logging",
+                exc_info=True,
+                extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+            )
+            existing = None
+
+        if existing:
+            row_values = list(existing[1])
+        else:
+            row_values = [
+                context.ticket_number,
+                context.username,
+                context.final_clan or "",
+                "",
+                getattr(thread, "name", ""),
+                str(context.recruit_id or ""),
+                str(getattr(thread, "id", 0)),
+                "",
+                "open",
+                created_value,
+                "",
+            ]
+
+        if len(row_values) < len(headers):
+            row_values.extend(["" for _ in range(len(headers) - len(row_values))])
+
+        try:
+            created_idx = headers.index("created_at")
+            updated_idx = headers.index("updated_at")
+        except ValueError:
+            return
+
+        if not row_values[created_idx]:
+            row_values[created_idx] = created_value
+        row_values[updated_idx] = updated_value
+
+        try:
+            await log_sheet_write(
+                flow="welcome",
+                phase=phase,
+                tab="Welcome",
+                logger=log,
+                thread=thread,
+                user=user_ref,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.upsert_welcome, row_values, headers
+                ),
+            )
+        except Exception:
+            log.debug(
+                "welcome reminder: sheet touch failed",
+                exc_info=True,
+                extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+            )
 
     async def _load_clan_tags(self) -> List[str]:
         if self._clan_tags:
@@ -2730,6 +2850,9 @@ class WelcomeTicketWatcher(commands.Cog):
         final_tag: str = _NO_PLACEMENT_TAG,
         rename_thread: bool = True,
     ) -> None:
+        thread_id = getattr(thread, "id", 0)
+        if thread_id:
+            self._auto_closed_threads.add(int(thread_id))
         context.close_source = "auto_close"
         context.state = "awaiting_clan"
         await self._finalize_clan_tag(
@@ -2742,8 +2865,53 @@ class WelcomeTicketWatcher(commands.Cog):
             view=None,
             notify=False,
             rename_thread=rename_thread,
+            sheet_phase="auto_close",
         )
-        self._auto_closed_threads.add(getattr(thread, "id", 0))
+
+    async def auto_close_for_inactivity(
+        self,
+        thread: discord.Thread,
+        context: TicketContext,
+        *,
+        notice: str,
+        closed_name: str | None,
+        final_tag: str = _NO_PLACEMENT_TAG,
+    ) -> None:
+        thread_id = getattr(thread, "id", 0)
+        if thread_id:
+            self._auto_closed_threads.add(int(thread_id))
+
+        if closed_name:
+            try:
+                await thread.edit(name=closed_name)
+            except Exception:
+                log.warning(
+                    "welcome auto-close rename failed",
+                    exc_info=True,
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+                )
+
+        try:
+            await thread.send(notice)
+        except Exception:
+            log.warning(
+                "welcome auto-close notice failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning(
+                "welcome auto-close archive failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        await self.auto_close_ticket(
+            thread, context, final_tag=final_tag, rename_thread=False
+        )
 
     async def _handle_ticket_closed(
         self, thread: discord.Thread, context: TicketContext, *, manual: bool = False
@@ -2814,6 +2982,7 @@ class WelcomeTicketWatcher(commands.Cog):
         view: Optional[ClanSelectView],
         notify: bool = True,
         rename_thread: bool = True,
+        sheet_phase: str | None = None,
     ) -> None:
         if context.state == "closed":
             return
@@ -2858,7 +3027,17 @@ class WelcomeTicketWatcher(commands.Cog):
         row = [context.ticket_number, context.username, final_tag, timestamp]
 
         try:
-            result = await asyncio.to_thread(onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS)
+            result = await log_sheet_write(
+                flow="welcome",
+                phase=sheet_phase or source,
+                tab="Welcome",
+                logger=log,
+                thread=thread,
+                user=context.username,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.upsert_welcome, row, _WELCOME_HEADERS
+                ),
+            )
         except Exception:
             log.exception(
                 "❌ welcome_close — ticket=%s • user=%s • final=%s • result=error • reason=sheet_write",

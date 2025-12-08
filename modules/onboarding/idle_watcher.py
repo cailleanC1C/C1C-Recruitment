@@ -106,12 +106,6 @@ async def _close_thread(
     if parts is not None:
         closed_name = name_builder(parts.ticket_code, parts.username, NO_PLACEMENT_TAG)
 
-    if closed_name and name != closed_name:
-        try:
-            await thread.edit(name=closed_name)
-        except Exception:
-            log.warning("failed to rename onboarding thread for auto-close", exc_info=True)
-
     coordinator_ping = _role_ping(get_recruitment_coordinator_role_ids())
     if flow.startswith("promo"):
         message = (
@@ -124,32 +118,51 @@ async def _close_thread(
             "The onboarding ticket has been closed — please remove the user from the server."
         )
 
-    try:
-        await thread.send(message)
-    except Exception:
-        log.warning("failed to post onboarding auto-close notice", exc_info=True)
-
-    try:
-        await thread.edit(archived=True, locked=True)
-    except Exception:
-        log.warning("failed to archive onboarding thread on auto-close", exc_info=True)
-
-    await reservation_jobs.release_reservations_for_thread(thread.id, bot=bot)
-
+    handled = False
     if flow.startswith("promo"):
         watcher = bot.get_cog("PromoTicketWatcher") if bot else None
         if watcher is not None:
             context = await watcher._ensure_context(thread)
             if context:
-                await watcher.auto_close_ticket(thread, context)
+                await watcher.auto_close_for_inactivity(
+                    thread,
+                    context,
+                    notice=message,
+                    closed_name=closed_name,
+                )
+                handled = True
     else:
         watcher = bot.get_cog("WelcomeTicketWatcher") if bot else None
         if watcher is not None:
             context = await watcher._ensure_context(thread)
             if context:
-                await watcher.auto_close_ticket(
-                    thread, context, final_tag=NO_PLACEMENT_TAG, rename_thread=False
+                await watcher.auto_close_for_inactivity(
+                    thread,
+                    context,
+                    notice=message,
+                    closed_name=closed_name,
+                    final_tag=NO_PLACEMENT_TAG,
                 )
+                handled = True
+
+    if not handled:
+        if closed_name and name != closed_name:
+            try:
+                await thread.edit(name=closed_name)
+            except Exception:
+                log.warning("failed to rename onboarding thread for auto-close", exc_info=True)
+
+        try:
+            await thread.send(message)
+        except Exception:
+            log.warning("failed to post onboarding auto-close notice", exc_info=True)
+
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning("failed to archive onboarding thread on auto-close", exc_info=True)
+
+    await reservation_jobs.release_reservations_for_thread(thread.id, bot=bot)
 
 
 async def _handle_row(
