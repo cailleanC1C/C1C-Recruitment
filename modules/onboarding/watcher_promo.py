@@ -149,6 +149,7 @@ class PromoTicketWatcher(commands.Cog):
         self._tickets: Dict[int, PromoTicketContext] = {}
         self._clan_tags: List[str] = []
         self._announced = False
+        self._auto_closed_threads: set[int] = set()
 
         if self.channel_id is None:
             log.warning("promo ticket watcher disabled — invalid PROMO_CHANNEL_ID")
@@ -561,6 +562,13 @@ class PromoTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
+    async def auto_close_ticket(
+        self, thread: discord.Thread, context: PromoTicketContext
+    ) -> None:
+        context.state = "closed"
+        await self._complete_close(thread, context, progression=context.progression, clan_name=context.clan_name)
+        self._auto_closed_threads.add(getattr(thread, "id", 0))
+
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
         if not self._features_enabled():
@@ -610,6 +618,9 @@ class PromoTicketWatcher(commands.Cog):
         if context is None:
             return
         if context.state in {"awaiting_clan", "awaiting_details", "closed"}:
+            return
+        if getattr(after, "id", None) in self._auto_closed_threads:
+            context.state = "closed"
             return
         session_row = onboarding_sessions.get_by_thread_id(getattr(after, "id", None))
         if session_row and session_row.get("auto_closed_at"):
