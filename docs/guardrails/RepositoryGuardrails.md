@@ -139,6 +139,7 @@ Every audit and CI check validates against this document.
 - A follow-up CI step posts the summary comment to the PR using the generated markdown.
 - A final CI step reads `guardrails_status` and fails the workflow only when it equals `fail`.
 - This ordering guarantees the full report is published even when the workflow ends in failure.
+- The PR “Guardrails Summary” comment runs the guardrails suite directly in CI (no JSON handoff) and renders one line per automated guardrail code.
 - The PR "Guardrails Summary" comment surfaces **every automated guardrail code** with an explicit status:
   - ✅ passed (no violations)
   - ❌ failed (one or more violations)
@@ -150,4 +151,4 @@ Every audit and CI check validates against this document.
 ### Verification
 Compliance script must check: structure (S), code (C), docs (D), governance (G), feature toggles (F) and write `AUDIT/<timestamp>_GUARDRAILS/report.md`.
 
-Doc last updated: 2025-12-07 (v0.9.8.3)
+Doc last updated: 2026-05-13 (v0.9.8.3)

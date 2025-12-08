@@ -4,7 +4,6 @@ from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts" / "ci"))
-from pathlib import Path
 
 import guardrails_suite
 
@@ -110,8 +109,6 @@ def test_summary_reports_guardrail_health(tmp_path: Path, monkeypatch: object) -
         encoding="utf-8",
     )
 
-    config_status, secret_status, parity_status = guardrails_suite._compute_guardrail_health()
-
     summary_path = tmp_path / "summary.md"
     check_results = [
         guardrails_suite.CheckResult(
@@ -138,20 +135,15 @@ def test_summary_reports_guardrail_health(tmp_path: Path, monkeypatch: object) -
         violations=[violation for result in check_results for violation in result.violations],
     )
 
-    guardrails_suite._append_summary_markdown(
-        suite,
-        summary_path,
-        parity_status,
-        config_status,
-        secret_status,
-    )
+    guardrails_suite._append_summary_markdown(suite, summary_path)
 
     summary_text = summary_path.read_text(encoding="utf-8")
-    assert "Config parity: docs and .env template aligned" in summary_text
-    assert "Secret scan: no Discord token patterns detected" in summary_text
-    assert "- ✅ C-02" in summary_text
-    assert "- ❌ C-03" in summary_text
-    assert "- ⚪ D-03" in summary_text
+    assert "## Automated guardrail checks" in summary_text
+    assert "- ✅ C-02 — Use logger instead of print()" in summary_text
+    assert "- ❌ C-03 — Parent-relative imports are forbidden (1 violation)" in summary_text
+    assert "- ⚪ D-03 — ENV parity check (skipped: ENV parity status unavailable)" in summary_text
+    assert "Config parity" not in summary_text
+    assert "Secret scan" not in summary_text
 
 
 def test_run_checks_covers_all_codes(tmp_path: Path, monkeypatch: object) -> None:
@@ -190,3 +182,39 @@ def test_run_checks_covers_all_codes(tmp_path: Path, monkeypatch: object) -> Non
     assert c03_result.status == "fail"
     d03_result = next(result for result in suite.check_results if result.code == "D-03")
     assert d03_result.status == "pass"
+
+
+def test_run_all_checks_returns_results(tmp_path: Path, monkeypatch: object) -> None:
+    _configure_roots(tmp_path, monkeypatch)
+
+    docs_root = tmp_path / "docs"
+    ops_root = docs_root / "ops"
+    ops_root.mkdir(parents=True)
+    (docs_root / "README.md").write_text(
+        "# Docs\n\n- [ops/Config.md](ops/Config.md)\n\nDoc last updated: 2026-01-01 (v0.9.8.3)\n",
+        encoding="utf-8",
+    )
+    (ops_root / "Config.md").write_text(
+        "# Config\n\n## Environment keys\n\n| `DISCORD_TOKEN` | desc |\n\nDoc last updated: 2026-01-01 (v0.9.8.3)\n",
+        encoding="utf-8",
+    )
+    (ops_root / ".env.example").write_text("DISCORD_TOKEN=placeholder\n", encoding="utf-8")
+
+    modules_dir = tmp_path / "modules"
+    modules_dir.mkdir()
+    (modules_dir / "bad_import.py").write_text("from ..legacy import helper\n", encoding="utf-8")
+
+    monkeypatch.setattr(guardrails_suite, "_load_feature_toggle_names", lambda: set())
+
+    pr_body = (
+        "[meta]\nlabels: guardrails\nmilestone: Harmonize v1.0\n[/meta]\n\n"
+        "Tests:\nNot required (reason: CI-only)\nDocs:\nNot required (reason: CI-only)\n"
+    )
+
+    results, violations = guardrails_suite.run_all_checks(
+        base_ref=None, pr_number=1, pr_body=pr_body, parity_status="success"
+    )
+
+    codes = {result.code for result in results}
+    assert codes == {check.code for check in guardrails_suite.CHECKS}
+    assert any(v.rule_id == "C-03" for v in violations)

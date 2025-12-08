@@ -1097,81 +1097,7 @@ def _write_markdown_report(suite: SuiteResult, report_path: Path, parity_status:
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_summary_json(
-    suite: SuiteResult,
-    path: Path,
-    parity_status: Optional[str],
-    config_parity_status: Optional[str],
-    secret_scan_status: Optional[str],
-) -> None:
-    overall_status = "pass"
-    if any(cat.status == "fail" for cat in suite.categories.values()):
-        overall_status = "fail"
-    elif any(cat.status == "warn" for cat in suite.categories.values()):
-        overall_status = "warn"
-
-    payload = {
-        "overall_status": overall_status,
-        "parity_status": parity_status,
-        "config_parity_status": config_parity_status,
-        "secret_scan_status": secret_scan_status,
-        "categories": [
-            {
-                "id": cat.identifier,
-                "status": cat.status,
-                "violations": [
-                    {
-                        "rule": v.rule_id,
-                        "severity": v.severity,
-                        "message": v.message,
-                        "files": v.files,
-                    }
-                    for v in cat.violations
-                ],
-            }
-            for cat in suite.categories.values()
-        ],
-        "checks": [
-            {
-                "code": check.code,
-                "description": check.description,
-                "status": check.status,
-                "violations": [
-                    {
-                        "rule": v.rule_id,
-                        "severity": v.severity,
-                        "message": v.message,
-                        "files": v.files,
-                    }
-                    for v in check.violations
-                ],
-                "reason": check.reason,
-            }
-            for check in suite.check_results
-        ],
-    }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-def _append_summary_markdown(
-    suite: SuiteResult,
-    path: Path,
-    parity_status: Optional[str],
-    config_parity_status: Optional[str],
-    secret_scan_status: Optional[str],
-) -> None:
-    def _format_health_line(label: str, status: Optional[str], ok_text: str, fail_text: str) -> str:
-        if not status:
-            return f"⚪ {label}: status unavailable"
-        trimmed = status.strip()
-        if trimmed.startswith(("✅", "❌", "⚠️", "⚪")):
-            return trimmed
-        normalized = trimmed.lower()
-        if normalized in {"ok", "pass", "passed", "success", "aligned"}:
-            return f"✅ {label}: {ok_text}"
-        if normalized in {"fail", "failed", "failure", "error"}:
-            return f"❌ {label}: {fail_text}"
-        return f"⚠️ {label}: {trimmed}"
-
+def _append_summary_markdown(suite: SuiteResult, path: Path) -> None:
     def _group_file_references(file_entries: List[str]) -> List[str]:
         grouped: Dict[str, List[str]] = {}
         for entry in file_entries:
@@ -1191,33 +1117,6 @@ def _append_summary_markdown(
     lines: List[str] = ["# Guardrails Summary", ""]
     has_failures = any(result.status == "fail" for result in suite.check_results)
     lines.append("❌ Guardrail violations found" if has_failures else "✅ All guardrail checks passed")
-    lines.append("")
-    lines.append("Top-level checks:")
-    lines.append("")
-    lines.append(
-        _format_health_line(
-            "Config parity",
-            config_parity_status,
-            "docs and .env template aligned",
-            "mismatch detected",
-        )
-    )
-    lines.append(
-        _format_health_line(
-            "Secret scan",
-            secret_scan_status,
-            "no Discord token patterns detected",
-            "potential token pattern detected",
-        )
-    )
-    lines.append(
-        _format_health_line(
-            "ENV parity",
-            parity_status,
-            "success",
-            "failure",
-        )
-    )
     lines.append("")
     lines.append("## Automated guardrail checks")
     lines.append("")
@@ -1309,6 +1208,22 @@ def run_checks(
     return SuiteResult(check_results=check_results, categories=categories, violations=violations)
 
 
+def run_all_checks(
+    base_ref: Optional[str] = None,
+    pr_number: int = 0,
+    pr_body: Optional[str] = None,
+    parity_status: Optional[str] = None,
+) -> Tuple[List[CheckResult], List[Violation]]:
+    event_path = get_env_path("GITHUB_EVENT_PATH")
+    resolved_pr_body = pr_body if pr_body is not None else _load_pr_body(str(event_path) if event_path else None)
+    _, _, computed_parity_status = _compute_guardrail_health()
+    resolved_parity_status = parity_status or computed_parity_status or get_env("ENV_PARITY_STATUS")
+
+    suite = run_checks(base_ref, resolved_pr_body, resolved_parity_status, pr_number)
+    updated_violations = [violation for result in suite.check_results for violation in result.violations]
+    return suite.check_results, updated_violations
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run repository guardrails suite")
     parser.add_argument(
@@ -1316,7 +1231,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--status-file", type=Path, default=None, help="Path to write overall status")
     parser.add_argument("--summary", type=Path, default=None, help="Path to append human-readable summary")
-    parser.add_argument("--json", type=Path, default=Path("guardrails-results.json"), help="Where to write JSON summary")
     parser.add_argument("--base-ref", type=str, default=None, help="Base ref for diff (e.g., origin/main)")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1324,27 +1238,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     event_path = get_env_path("GITHUB_EVENT_PATH")
     pr_body = _load_pr_body(str(event_path) if event_path else None)
-    config_parity_status, secret_scan_status, parity_status = _compute_guardrail_health()
+    _, _, parity_status = _compute_guardrail_health()
     parity_status = parity_status or get_env("ENV_PARITY_STATUS")
     suite = run_checks(args.base_ref, pr_body, parity_status, args.pr)
 
     report_path = _ensure_audit_report_path()
     _write_markdown_report(suite, report_path, parity_status)
-    _write_summary_json(
-        suite,
-        args.json,
-        parity_status,
-        config_parity_status,
-        secret_scan_status,
-    )
     if args.summary:
-        _append_summary_markdown(
-            suite,
-            args.summary,
-            parity_status,
-            config_parity_status,
-            secret_scan_status,
-        )
+        _append_summary_markdown(suite, args.summary)
 
     overall_status = "fail" if any(res.status == "fail" for res in suite.check_results) else "pass"
     if args.status_file:
