@@ -29,6 +29,7 @@ from modules.onboarding.watcher_welcome import (
     post_open_questions_panel,
     resolve_subject_user_id,
 )
+from modules.onboarding.sheet_logging import log_sheet_write
 from modules.onboarding.ui import panels
 from shared.config import get_promo_channel_id, get_ticket_tool_bot_id
 from shared.logs import log_lifecycle
@@ -308,24 +309,32 @@ class PromoTicketWatcher(commands.Cog):
     ) -> None:
         created = created_at or getattr(thread, "created_at", None) or dt.datetime.now(UTC)
         try:
-            result = await asyncio.to_thread(
-                onboarding_sheets.append_promo_ticket_row,
-                context.ticket_number,
-                context.username,
-                context.clan_tag,
-                context.promo_type,
-                context.thread_created,
-                context.year,
-                context.month,
-                context.join_month,
-                context.clan_name,
-                context.progression,
-                thread_name=getattr(thread, "name", ""),
-                user_id=user_id,
-                thread_id=int(getattr(thread, "id", 0)),
-                panel_message_id=None,
-                status="open",
-                created_at=created,
+            result = await log_sheet_write(
+                flow="promo",
+                phase="created",
+                tab="Promo",
+                logger=log,
+                thread=thread,
+                user=context.username,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.append_promo_ticket_row,
+                    context.ticket_number,
+                    context.username,
+                    context.clan_tag,
+                    context.promo_type,
+                    context.thread_created,
+                    context.year,
+                    context.month,
+                    context.join_month,
+                    context.clan_name,
+                    context.progression,
+                    thread_name=getattr(thread, "name", ""),
+                    user_id=user_id,
+                    thread_id=int(getattr(thread, "id", 0)),
+                    panel_message_id=None,
+                    status="open",
+                    created_at=created,
+                ),
             )
             log.info(
                 "promo_ticket_open — ticket=%s • user=%s • result=row_%s",
@@ -520,6 +529,8 @@ class PromoTicketWatcher(commands.Cog):
         context: PromoTicketContext,
         progression: str,
         clan_name: str,
+        *,
+        phase: str | None = None,
     ) -> None:
         timestamp = _format_timestamp(dt.datetime.now(UTC))
         row = [
@@ -536,7 +547,17 @@ class PromoTicketWatcher(commands.Cog):
             progression,
         ]
         try:
-            result = await asyncio.to_thread(onboarding_sheets.upsert_promo, row, PROMO_HEADERS)
+            result = await log_sheet_write(
+                flow="promo",
+                phase=phase or "close",
+                tab="Promo",
+                logger=log,
+                thread=thread,
+                user=context.username,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.upsert_promo, row, PROMO_HEADERS
+                ),
+            )
         except Exception:
             log.exception(
                 "failed to finalize promo closure",
@@ -562,12 +583,142 @@ class PromoTicketWatcher(commands.Cog):
                 extra={"thread_id": getattr(thread, "id", None)},
             )
 
+    async def _touch_promo_sheet_for_reminder(
+        self,
+        *,
+        phase: str,
+        thread: discord.Thread,
+        context: PromoTicketContext,
+        created_at: dt.datetime,
+        user_ref: str,
+    ) -> None:
+        created_value = created_at.isoformat()
+        updated_value = dt.datetime.now(UTC).isoformat()
+
+        try:
+            existing = await asyncio.to_thread(
+                onboarding_sheets.find_promo_row, context.ticket_number
+            )
+        except Exception:
+            log.debug(
+                "promo reminder: failed to load promo row for sheet logging",
+                exc_info=True,
+                extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+            )
+            existing = None
+
+        if existing:
+            row_values = list(existing[1].values()) if isinstance(existing[1], dict) else list(existing[1])
+        else:
+            row_values = [
+                context.ticket_number,
+                context.username,
+                context.clan_tag,
+                "",
+                context.promo_type,
+                context.thread_created,
+                context.year,
+                context.month,
+                context.join_month,
+                context.clan_name,
+                context.progression,
+                getattr(thread, "name", ""),
+                str(context.user_id or ""),
+                str(getattr(thread, "id", 0)),
+                "",
+                context.state,
+                created_value,
+                "",
+            ]
+
+        if len(row_values) < len(PROMO_HEADERS):
+            row_values.extend(["" for _ in range(len(PROMO_HEADERS) - len(row_values))])
+
+        try:
+            created_idx = PROMO_HEADERS.index("created_at")
+            updated_idx = PROMO_HEADERS.index("updated_at")
+        except ValueError:
+            return
+
+        if not row_values[created_idx]:
+            row_values[created_idx] = created_value
+        row_values[updated_idx] = updated_value
+
+        try:
+            await log_sheet_write(
+                flow="promo",
+                phase=phase,
+                tab="Promo",
+                logger=log,
+                thread=thread,
+                user=user_ref,
+                write_coro=lambda: asyncio.to_thread(
+                    onboarding_sheets.upsert_promo, row_values, PROMO_HEADERS
+                ),
+            )
+        except Exception:
+            log.debug(
+                "promo reminder: sheet touch failed",
+                exc_info=True,
+                extra={"ticket": context.ticket_number, "thread_id": getattr(thread, "id", None)},
+            )
+
     async def auto_close_ticket(
         self, thread: discord.Thread, context: PromoTicketContext
     ) -> None:
+        thread_id = getattr(thread, "id", 0)
+        if thread_id:
+            self._auto_closed_threads.add(int(thread_id))
         context.state = "closed"
-        await self._complete_close(thread, context, progression=context.progression, clan_name=context.clan_name)
-        self._auto_closed_threads.add(getattr(thread, "id", 0))
+        await self._complete_close(
+            thread,
+            context,
+            progression=context.progression,
+            clan_name=context.clan_name,
+            phase="auto_close",
+        )
+
+    async def auto_close_for_inactivity(
+        self,
+        thread: discord.Thread,
+        context: PromoTicketContext,
+        *,
+        notice: str,
+        closed_name: str | None,
+    ) -> None:
+        thread_id = getattr(thread, "id", 0)
+        if thread_id:
+            self._auto_closed_threads.add(int(thread_id))
+
+        if closed_name:
+            try:
+                await thread.edit(name=closed_name)
+            except Exception:
+                log.warning(
+                    "promo auto-close rename failed",
+                    exc_info=True,
+                    extra={"thread_id": getattr(thread, "id", None), "ticket": context.ticket_number},
+                )
+
+        try:
+            await thread.send(notice)
+        except Exception:
+            log.warning(
+                "promo auto-close notice failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        try:
+            await thread.edit(archived=True, locked=True)
+        except Exception:
+            log.warning(
+                "promo auto-close archive failed",
+                exc_info=True,
+                extra={"thread_id": getattr(thread, "id", None)},
+            )
+
+        await self.auto_close_ticket(thread, context)
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
