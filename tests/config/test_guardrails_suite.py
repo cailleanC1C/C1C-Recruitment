@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts" / "ci"))
-from pathlib import Path
 
 import guardrails_suite
 
@@ -110,8 +110,6 @@ def test_summary_reports_guardrail_health(tmp_path: Path, monkeypatch: object) -
         encoding="utf-8",
     )
 
-    config_status, secret_status, parity_status = guardrails_suite._compute_guardrail_health()
-
     summary_path = tmp_path / "summary.md"
     check_results = [
         guardrails_suite.CheckResult(
@@ -138,20 +136,63 @@ def test_summary_reports_guardrail_health(tmp_path: Path, monkeypatch: object) -
         violations=[violation for result in check_results for violation in result.violations],
     )
 
-    guardrails_suite._append_summary_markdown(
-        suite,
-        summary_path,
-        parity_status,
-        config_status,
-        secret_status,
-    )
+    guardrails_suite._append_summary_markdown(suite, summary_path)
 
     summary_text = summary_path.read_text(encoding="utf-8")
-    assert "Config parity: docs and .env template aligned" in summary_text
-    assert "Secret scan: no Discord token patterns detected" in summary_text
-    assert "- ✅ C-02" in summary_text
-    assert "- ❌ C-03" in summary_text
-    assert "- ⚪ D-03" in summary_text
+    assert "## Automated guardrail checks" in summary_text
+    assert "- ✅ C-02 — Use logger instead of print()" in summary_text
+    assert "- ❌ C-03 — Parent-relative imports are forbidden (1 violation)" in summary_text
+    assert "- ⚪ D-03 — ENV parity check (skipped: ENV parity status unavailable)" in summary_text
+    assert "Config parity" not in summary_text
+    assert "Secret scan" not in summary_text
+
+
+def test_summary_json_includes_all_check_results(tmp_path: Path, monkeypatch: object) -> None:
+    _configure_roots(tmp_path, monkeypatch)
+
+    check_results = [
+        guardrails_suite.CheckResult(
+            code="C-02",
+            description="Use logger instead of print()",
+            status="pass",
+        ),
+        guardrails_suite.CheckResult(
+            code="C-03",
+            description="Parent-relative imports are forbidden",
+            status="fail",
+            violations=[guardrails_suite.Violation("C-03", "error", "Parent-relative imports are forbidden", [])],
+        ),
+        guardrails_suite.CheckResult(
+            code="D-03",
+            description="ENV parity check",
+            status="skip",
+            reason="ENV parity status unavailable",
+        ),
+    ]
+    suite = guardrails_suite.SuiteResult(
+        check_results=check_results,
+        categories=guardrails_suite._build_categories(check_results),
+        violations=[violation for result in check_results for violation in result.violations],
+    )
+
+    json_path = tmp_path / "guardrails-results.json"
+    guardrails_suite._write_summary_json(
+        suite, json_path, parity_status="ok", config_parity_status="success", secret_scan_status="success"
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert payload.get("results")
+    codes = [entry["code"] for entry in payload["results"]]
+    assert codes == sorted([result.code for result in check_results])
+    assert set(payload.get("checks", {}).keys()) == set(codes)
+    for code, entry in payload.get("checks", {}).items():
+        matching = next(result for result in check_results if result.code == code)
+        assert entry.get("status") == matching.status
+        assert entry.get("violations") == len(matching.violations)
+        assert entry.get("reason") == matching.reason
+    assert payload.get("config_parity_status") == "success"
+    assert payload.get("secret_scan_status") == "success"
 
 
 def test_run_checks_covers_all_codes(tmp_path: Path, monkeypatch: object) -> None:
